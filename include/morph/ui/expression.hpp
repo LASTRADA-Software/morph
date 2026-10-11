@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -18,13 +19,17 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "../render/i18n.hpp"
+#include "../render/locale_format.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
+#include "message.hpp"
 
 /// @file
 /// @brief The values, types and expressions of the UI document (`expr/1`).
@@ -1328,6 +1333,1126 @@ struct ExprParser {
 [[nodiscard]] inline std::expected<Expr, Problem> parseExpression(Json const& json, std::string path = {}) {
     detail::ExprParser parser;
     return parser.parse(json, path);
+}
+
+/// @brief The units a bundle declares: each unit's display text and default places, and the exact ratios between
+///        the units of one dimension. A client compiles in no unit enum; it converts through this table.
+class UnitTable {
+public:
+    /// @brief One unit.
+    struct Unit {
+        /// @brief The stable id a quantity names it by (for example `"mg_per_l"`).
+        std::string id;
+        /// @brief The text a display shows after the amount (for example `"mg/L"`).
+        std::string display;
+        /// @brief The places a value in this unit is shown with by default.
+        std::uint32_t places = 3;
+    };
+
+    /// @brief One declared ratio: `1 from == fromTo × to`.
+    struct Ratio {
+        /// @brief The unit converted from.
+        std::string from;
+        /// @brief The unit converted to.
+        std::string to;
+        /// @brief The exact, positive factor.
+        math::Rational fromTo;
+    };
+
+    /// @brief Declares a unit.
+    /// @param unit The unit; a later declaration of the same id replaces it.
+    void add(Unit unit) {
+        if (auto found = std::ranges::find(_units, unit.id, &Unit::id); found != _units.end()) {
+            *found = std::move(unit);
+            return;
+        }
+        _units.push_back(std::move(unit));
+    }
+
+    /// @brief Declares a ratio; the reverse direction follows from it.
+    /// @param ratio The ratio; its factor must be positive.
+    void relate(Ratio ratio) { _ratios.push_back(std::move(ratio)); }
+
+    /// @brief A unit, by id.
+    /// @param id The unit's id.
+    /// @return The unit, or null when the table does not declare it.
+    [[nodiscard]] Unit const* find(std::string_view id) const noexcept {
+        auto const found = std::ranges::find(_units, id, &Unit::id);
+        return found == _units.end() ? nullptr : &*found;
+    }
+
+    /// @brief The exact factor that converts an amount in @p from into @p to, along the declared ratios.
+    /// @param from The unit converted from.
+    /// @param to The unit converted to.
+    /// @return The factor, or nothing when no chain of ratios joins the two or the product overflows.
+    [[nodiscard]] std::optional<math::Rational> factor(std::string_view from, std::string_view to) const {
+        // A breadth-first walk over the ratios, each edge usable both ways: a dimension holds a handful of units,
+        // so the walk is short, and it lets the table declare a chain instead of every pair.
+        std::vector<std::pair<std::string_view, math::Rational>> reached{{from, math::Rational{1, {}}}};
+        for (std::size_t next = 0; next < reached.size(); ++next) {
+            auto const [unit, soFar] = reached.at(next);
+            if (unit == to) {
+                return soFar;
+            }
+            for (Ratio const& ratio : _ratios) {
+                std::optional<std::pair<std::string_view, math::Rational>> step;
+                if (ratio.from == unit) {
+                    step.emplace(ratio.to, ratio.fromTo);
+                } else if (ratio.to == unit) {
+                    std::expected<math::Rational, math::RationalError> inverse = ratio.fromTo.reciprocal();
+                    if (inverse) {
+                        step.emplace(ratio.from, *inverse);
+                    }
+                }
+                if (!step ||
+                    std::ranges::find(reached, step->first, &decltype(reached)::value_type::first) != reached.end()) {
+                    continue;
+                }
+                std::expected<math::Rational, math::RationalError> product = math::checkedMul(soFar, step->second);
+                if (product) {
+                    reached.emplace_back(step->first, *product);
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Every declared unit, in declaration order.
+    /// @return The units.
+    [[nodiscard]] std::vector<Unit> const& units() const noexcept { return _units; }
+
+    /// @brief Every declared ratio, in declaration order.
+    /// @return The ratios.
+    [[nodiscard]] std::vector<Ratio> const& ratios() const noexcept { return _ratios; }
+
+private:
+    std::vector<Unit> _units;
+    std::vector<Ratio> _ratios;
+};
+
+/// @brief Writes dates, times and money for display. morph carries no CLDR date or currency patterns, so a
+///        renderer with its toolkit's locale data supplies its own; this default writes ISO-8601 in the display
+///        zone, and an amount followed by its currency code.
+class DisplayFormatter {
+public:
+    DisplayFormatter() = default;
+    DisplayFormatter(DisplayFormatter const&) = default;
+    DisplayFormatter(DisplayFormatter&&) = default;
+    DisplayFormatter& operator=(DisplayFormatter const&) = default;
+    DisplayFormatter& operator=(DisplayFormatter&&) = default;
+    virtual ~DisplayFormatter() = default;
+
+    /// @brief A date: `YYYY-MM-DD` in the display zone.
+    /// @param instant The instant.
+    /// @param style `short`, `medium` or `long`; the default writes every style alike.
+    /// @param offset The display zone's offset from UTC at @p instant.
+    /// @param bcp47Locale The locale.
+    /// @return The text.
+    [[nodiscard]] virtual std::string date(time::DateTime instant, std::string_view style, std::chrono::minutes offset,
+                                           std::string_view bcp47Locale) const {
+        static_cast<void>(style);
+        static_cast<void>(bcp47Locale);
+        return local(instant, offset).substr(0, std::string_view{"YYYY-MM-DD"}.size());
+    }
+
+    /// @brief A date and time in the display zone: `short` writes the date, `medium` the date and minutes, `long`
+    ///        the date and seconds.
+    /// @param instant The instant.
+    /// @param style `short`, `medium` or `long`.
+    /// @param offset The display zone's offset from UTC at @p instant.
+    /// @param bcp47Locale The locale.
+    /// @return The text.
+    [[nodiscard]] virtual std::string dateTime(time::DateTime instant, std::string_view style,
+                                               std::chrono::minutes offset, std::string_view bcp47Locale) const {
+        static_cast<void>(bcp47Locale);
+        std::string const text = local(instant, offset);
+        std::size_t const length = style == "short"  ? std::string_view{"YYYY-MM-DD"}.size()
+                                   : style == "long" ? std::string_view{"YYYY-MM-DD HH:MM:SS"}.size()
+                                                     : std::string_view{"YYYY-MM-DD HH:MM"}.size();
+        return text.substr(0, length);
+    }
+
+    /// @brief An amount of money.
+    /// @param number The amount, already written with the locale's digits and separators.
+    /// @param currency The ISO 4217 code, for example `"EUR"`.
+    /// @param bcp47Locale The locale.
+    /// @return The text: the amount, a no-break space and the code.
+    [[nodiscard]] virtual std::string money(std::string const& number, std::string_view currency,
+                                            std::string_view bcp47Locale) const {
+        static_cast<void>(bcp47Locale);
+        return number + " " + std::string{currency};
+    }
+
+private:
+    // `YYYY-MM-DD HH:MM:SS` at @p offset from UTC.
+    [[nodiscard]] static std::string local(time::DateTime instant, std::chrono::minutes offset) {
+        std::string const iso = (instant + offset).toIso8601();
+        return iso.substr(0, std::string_view{"YYYY-MM-DD"}.size()) + " " +
+               iso.substr(std::string_view{"YYYY-MM-DDT"}.size(), std::string_view{"HH:MM:SS"}.size());
+    }
+};
+
+/// @brief Where an expression's runtime errors go: each expression path is reported once, however often the
+///        expression is evaluated, so a binding that re-evaluates on every change does not flood the channel.
+class Diagnostics {
+public:
+    /// @brief What receives a report.
+    using Sink = std::function<void(Problem const&)>;
+
+    /// @brief Diagnostics that keep their reports and also pass each to @p sink.
+    /// @param sink Receives each report once; empty to only keep them.
+    explicit Diagnostics(Sink sink = {}) : _sink{std::move(sink)} {}
+
+    /// @brief Reports a runtime error at @p path, unless that path has been reported already.
+    /// @param path The JSON pointer of the expression node that failed.
+    /// @param reason Why it failed.
+    void report(std::string const& path, std::string reason) {
+        if (std::ranges::find(_reported, path, &Problem::path) != _reported.end()) {
+            return;
+        }
+        _reported.push_back(Problem{.path = path, .reason = std::move(reason)});
+        if (_sink) {
+            _sink(_reported.back());
+        }
+    }
+
+    /// @brief Every report so far, in the order made.
+    /// @return The reports.
+    [[nodiscard]] std::vector<Problem> const& reported() const noexcept { return _reported; }
+
+private:
+    Sink _sink;
+    std::vector<Problem> _reported;
+};
+
+/// @brief What an expression reads from the world: the names in scope, the innermost row, the queries and mutations,
+///        and the client's permissions, preferences, environment, session and host values.
+///
+/// Every reader answers `null` for what it does not know; a context overrides the ones its caller can answer.
+class ExpressionContext {
+public:
+    ExpressionContext() = default;
+    ExpressionContext(ExpressionContext const&) = default;
+    ExpressionContext(ExpressionContext&&) = default;
+    ExpressionContext& operator=(ExpressionContext const&) = default;
+    ExpressionContext& operator=(ExpressionContext&&) = default;
+    virtual ~ExpressionContext() = default;
+
+    /// @brief A param, state, `let`, element value or app name, by its first segment.
+    /// @param name The name, without its path.
+    /// @return Its value.
+    [[nodiscard]] virtual Value name(std::string_view name) const {
+        static_cast<void>(name);
+        return {};
+    }
+
+    /// @brief The innermost row: the record a repeated node is rendering.
+    /// @return The row, or null outside one.
+    [[nodiscard]] virtual Value row() const { return {}; }
+
+    /// @brief The payload of the event whose command list is running.
+    /// @return The payload, or null outside a command list.
+    [[nodiscard]] virtual Value event() const { return {}; }
+
+    /// @brief A query's value.
+    /// @param query The query's name.
+    /// @return Its last value, or null before it has one.
+    [[nodiscard]] virtual Value query(std::string_view query) const {
+        static_cast<void>(query);
+        return {};
+    }
+
+    /// @brief A mutation's last result.
+    /// @param mutation The mutation's name.
+    /// @return Its last result, or null before it has one.
+    [[nodiscard]] virtual Value result(std::string_view mutation) const {
+        static_cast<void>(mutation);
+        return {};
+    }
+
+    /// @brief Whether a query or a mutation is in flight.
+    /// @param name The query's or mutation's name.
+    /// @return `true` or `false`.
+    [[nodiscard]] virtual Value pending(std::string_view name) const {
+        static_cast<void>(name);
+        return Value{false};
+    }
+
+    /// @brief A query's or a mutation's error text.
+    /// @param name The query's or mutation's name.
+    /// @return The text, or null when it has none.
+    [[nodiscard]] virtual Value error(std::string_view name) const {
+        static_cast<void>(name);
+        return {};
+    }
+
+    /// @brief The kind of a query's or a mutation's error: `notFound`, `validation`, `connectionLost`, `denied`,
+    ///        `conflict`, `backendChanged` or `other`.
+    /// @param name The query's or mutation's name.
+    /// @return The kind, or null when it has no error.
+    [[nodiscard]] virtual Value errorKind(std::string_view name) const {
+        static_cast<void>(name);
+        return {};
+    }
+
+    /// @brief Whether the signed-in principal may run a query or mutation.
+    /// @param name The query's or mutation's name, or `host:name` for a host command.
+    /// @return `true` or `false`; null while unknown.
+    [[nodiscard]] virtual Value can(std::string_view name) const {
+        static_cast<void>(name);
+        return {};
+    }
+
+    /// @brief The user's choice at a customization point.
+    /// @param point The point's name, without its path.
+    /// @return The choice, or the point's default.
+    [[nodiscard]] virtual Value pref(std::string_view point) const {
+        static_cast<void>(point);
+        return {};
+    }
+
+    /// @brief A client environment attribute: `widthClass`, `locale`, `platform`, `online` or `backend`.
+    /// @param attribute The attribute.
+    /// @return Its value.
+    [[nodiscard]] virtual Value env(std::string_view attribute) const {
+        static_cast<void>(attribute);
+        return {};
+    }
+
+    /// @brief A session attribute: `principal`, `userName`, `displayName`, `userKey`, `tenant` or `authenticated`.
+    /// @param attribute The attribute.
+    /// @return Its value.
+    [[nodiscard]] virtual Value session(std::string_view attribute) const {
+        static_cast<void>(attribute);
+        return {};
+    }
+
+    /// @brief A value the application registered with the client.
+    /// @param name The registered name.
+    /// @return Its value, or null when the client lacks it.
+    [[nodiscard]] virtual Value host(std::string_view name) const {
+        static_cast<void>(name);
+        return {};
+    }
+
+    /// @brief The units quantities convert through.
+    /// @return The bundle's unit table; empty by default, so only like units compare and add.
+    [[nodiscard]] virtual UnitTable const& units() const {
+        static UnitTable const kNone;
+        return kNone;
+    }
+
+    /// @brief The active locale, for plural rules, `t` and display.
+    /// @return A BCP 47 tag; `"en"` by default.
+    [[nodiscard]] virtual std::string locale() const { return "en"; }
+
+    /// @brief The active locale's digits and separators, for `number`, `decimal`, `quantity`, `money` and
+    ///        `:number`.
+    /// @return The locale's facts; the `"C"` spelling by default.
+    [[nodiscard]] virtual render::NumericLocale numericLocale() const { return {}; }
+
+    /// @brief The display zone's offset from UTC at an instant, for `date` and `dateTime`.
+    /// @param instant The instant shown.
+    /// @return The offset; zero (UTC) by default.
+    [[nodiscard]] virtual std::chrono::minutes displayOffset(time::DateTime instant) const {
+        static_cast<void>(instant);
+        return std::chrono::minutes{0};
+    }
+
+    /// @brief The message catalogue `t` reads.
+    /// @return The provider; empty by default, so every `t` shows its fallback.
+    [[nodiscard]] virtual render::TranslationProvider const& translations() const {
+        static render::TranslationProvider const kNone;
+        return kNone;
+    }
+
+    /// @brief What writes dates, times and money.
+    /// @return The formatter; the ISO-8601 default unless the renderer supplies its own.
+    [[nodiscard]] virtual DisplayFormatter const& displayFormatter() const {
+        static DisplayFormatter const kDefault;
+        return kDefault;
+    }
+};
+
+namespace detail {
+
+// The value at a dotted @p path inside @p value: each segment a record's field; null past a missing one.
+[[nodiscard]] inline Value valueAt(Value value, std::string_view path) {
+    while (!path.empty() && !value.isNull()) {
+        std::size_t const dot = path.find('.');
+        Value const* const next = value.field(path.substr(0, dot));
+        value = next == nullptr ? Value{} : *next;
+        path = dot == std::string_view::npos ? std::string_view{} : path.substr(dot + 1);
+    }
+    return value;
+}
+
+// The first segment of a dotted name and the path after it.
+[[nodiscard]] inline std::pair<std::string_view, std::string_view> splitHead(std::string_view name) {
+    std::size_t const dot = name.find('.');
+    if (dot == std::string_view::npos) {
+        return {name, {}};
+    }
+    return {name.substr(0, dot), name.substr(dot + 1)};
+}
+
+struct Evaluator {
+    ExpressionContext const& context;
+    Diagnostics& diagnostics;
+    // The comprehension variables in scope, innermost last.
+    std::vector<std::pair<std::string_view, Value>> locals;
+
+    Value fail(Expr const& node, std::string reason) {
+        diagnostics.report(node.path, std::move(reason));
+        return {};
+    }
+
+    // Kleene's and/or: a deciding operand (false for and, true for or) decides; otherwise a null makes null.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
+    Value kleene(Expr const& node, bool decider) {
+        bool unknown = false;
+        for (Expr const& operand : node.args) {
+            Value const value = eval(operand);
+            if (value.isNull()) {
+                unknown = true;
+                continue;
+            }
+            bool const* const flag = value.asBool();
+            if (flag == nullptr) {
+                return fail(operand, "`" + node.name + "` takes bools");
+            }
+            if (*flag == decider) {
+                return Value{decider};
+            }
+        }
+        return unknown ? Value{} : Value{!decider};
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
+    Value call(Expr const& node) {
+        if (node.name == "and") {
+            return kleene(node, false);
+        }
+        if (node.name == "or") {
+            return kleene(node, true);
+        }
+        if (node.name == "not") {
+            Value const value = eval(node.args.front());
+            if (value.isNull()) {
+                return value;
+            }
+            bool const* const flag = value.asBool();
+            return flag == nullptr ? fail(node.args.front(), "`not` takes a bool") : Value{!*flag};
+        }
+        std::vector<Value> operands;
+        operands.reserve(node.args.size());
+        for (Expr const& operand : node.args) {
+            operands.push_back(eval(operand));
+        }
+        return callFunction(node, operands);
+    }
+
+    Value callFunction(Expr const& node, std::vector<Value> const& operands);
+    Value format(Expr const& node, std::vector<Value> const& operands);
+    Value display(Expr const& node, std::vector<Value> const& operands);
+    Value message(Expr const& node, std::string const& key, std::string const& fallback, ValueRecord const& arguments);
+
+    // A comprehension: binds each element of the list to `as` and evaluates the body under it.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
+    Value comprehend(Expr const& node) {
+        Value const source = eval(node.args.front());
+        if (source.isNull()) {
+            return source;
+        }
+        ValueList const* const elements = source.asList();
+        if (elements == nullptr) {
+            return fail(node.args.front(),
+                        "`" + std::string{node.form == Expr::Form::Map ? "map" : "filter"} + "` takes a list");
+        }
+        ValueList out;
+        for (Value const& element : *elements) {
+            locals.emplace_back(node.name, element);
+            Value const each = eval(node.args.back());
+            locals.pop_back();
+            if (node.form == Expr::Form::Map) {
+                out.push_back(each);
+                continue;
+            }
+            if (!each.isNull() && each.asBool() == nullptr) {
+                return fail(node.args.back(), "`where` takes a bool");
+            }
+            if (each == Value{true}) {
+                out.push_back(element);
+            }
+        }
+        return Value{std::move(out)};
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one branch per form.
+    Value eval(Expr const& node) {
+        switch (node.form) {
+            case Expr::Form::Literal:
+                return node.literal;
+            case Expr::Form::Ref: {
+                auto const [head, rest] = splitHead(node.name);
+                for (auto local = locals.rbegin(); local != locals.rend(); ++local) {
+                    if (local->first == head) {
+                        return valueAt(local->second, rest);
+                    }
+                }
+                return valueAt(context.name(head), rest);
+            }
+            case Expr::Form::Event:
+                return valueAt(context.event(), node.name);
+            case Expr::Form::Row:
+                return valueAt(context.row(), node.name);
+            case Expr::Form::Query:
+                return context.query(node.name);
+            case Expr::Form::Result:
+                return context.result(node.name);
+            case Expr::Form::Pending:
+                return context.pending(node.name);
+            case Expr::Form::Error:
+                return context.error(node.name);
+            case Expr::Form::ErrorKind:
+                return context.errorKind(node.name);
+            case Expr::Form::Can:
+                return context.can(node.name);
+            case Expr::Form::Pref: {
+                auto const [head, rest] = splitHead(node.name);
+                return valueAt(context.pref(head), rest);
+            }
+            case Expr::Form::Env:
+                return context.env(node.name);
+            case Expr::Form::Session:
+                return context.session(node.name);
+            case Expr::Form::Host:
+                return context.host(node.name);
+            case Expr::Form::Call:
+                return call(node);
+            case Expr::Form::Translate: {
+                ValueRecord arguments;
+                for (std::size_t index = 0; index < node.args.size(); ++index) {
+                    arguments.emplace_back(node.keys.at(index), eval(node.args.at(index)));
+                }
+                return message(node, node.name, node.fallback, arguments);
+            }
+            case Expr::Form::If: {
+                Value const condition = eval(node.args.at(0));
+                if (condition.isNull()) {
+                    return condition;
+                }
+                bool const* const flag = condition.asBool();
+                if (flag == nullptr) {
+                    return fail(node.args.at(0), "`if` takes a bool condition");
+                }
+                return eval(node.args.at(*flag ? 1 : 2));
+            }
+            case Expr::Form::Object: {
+                ValueRecord fields;
+                for (std::size_t index = 0; index < node.args.size(); ++index) {
+                    fields.emplace_back(node.keys.at(index), eval(node.args.at(index)));
+                }
+                return Value{std::move(fields)};
+            }
+            case Expr::Form::List: {
+                ValueList elements;
+                for (Expr const& operand : node.args) {
+                    elements.push_back(eval(operand));
+                }
+                return Value{std::move(elements)};
+            }
+            case Expr::Form::Map:
+            case Expr::Form::Filter:
+            default:
+                return comprehend(node);
+        }
+    }
+};
+
+}  // namespace detail
+
+namespace detail {
+
+// An int, decimal or quantity operand as an exact amount; `unit` is empty for a plain number.
+struct Amount {
+    math::Rational value;
+    std::string unit;
+    bool integral = false;
+};
+
+[[nodiscard]] inline std::optional<Amount> amountOf(Value const& value) {
+    if (std::int64_t const* const number = value.asInt(); number != nullptr) {
+        return Amount{.value = math::Rational{*number, math::DecimalPlaces{0}}, .unit = {}, .integral = true};
+    }
+    if (math::Rational const* const decimal = value.asDecimal(); decimal != nullptr) {
+        return Amount{.value = *decimal, .unit = {}, .integral = false};
+    }
+    if (QuantityValue const* const quantity = value.asQuantity(); quantity != nullptr) {
+        return Amount{.value = quantity->amount, .unit = quantity->unit, .integral = false};
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] inline Value valueOf(Amount const& amount) {
+    if (!amount.unit.empty()) {
+        return Value{QuantityValue{.amount = amount.value, .unit = amount.unit}};
+    }
+    if (amount.integral) {
+        return Value{amount.value.numerator};
+    }
+    return Value{amount.value};
+}
+
+// The outcome of one step of arithmetic: the value, or why there is none.
+using Exact = std::expected<Amount, std::string>;
+
+// @p amount in @p unit, through the table, keeping its declared places.
+[[nodiscard]] inline Exact convert(Amount amount, std::string const& unit, UnitTable const& units) {
+    if (amount.unit == unit) {
+        return amount;
+    }
+    std::optional<math::Rational> const factor = units.factor(amount.unit, unit);
+    if (!factor) {
+        return std::unexpected("no conversion from `" + amount.unit + "` to `" + unit + "`");
+    }
+    std::expected<math::Rational, math::RationalError> converted = math::checkedMul(amount.value, *factor);
+    if (!converted) {
+        return std::unexpected("overflow");
+    }
+    math::Rational value = *converted;
+    // The factor's own places would otherwise widen the result's: a value keeps the places it was declared with.
+    value = math::Rational{math::Numerator{value.numerator}, math::Denominator{value.denominator},
+                           amount.value.getDecimalPlaces()};
+    return Amount{.value = value, .unit = unit, .integral = false};
+}
+
+// Brings two operands to one unit: a quantity's into the left one's, a plain number with a quantity is refused.
+[[nodiscard]] inline std::expected<std::pair<Amount, Amount>, std::string> aligned(Amount lhs, Amount rhs,
+                                                                                   UnitTable const& units) {
+    if (lhs.unit.empty() != rhs.unit.empty()) {
+        return std::unexpected("a quantity meets a plain number");
+    }
+    if (lhs.unit.empty()) {
+        return std::pair{std::move(lhs), std::move(rhs)};
+    }
+    Exact converted = convert(std::move(rhs), lhs.unit, units);
+    if (!converted) {
+        return std::unexpected(std::move(converted.error()));
+    }
+    return std::pair{std::move(lhs), std::move(*converted)};
+}
+
+[[nodiscard]] inline Exact arithmetic(std::string_view op, Amount const& lhs, Amount const& rhs,
+                                      UnitTable const& units) {
+    if (op == "mul" || op == "div") {
+        if (!lhs.unit.empty() && !rhs.unit.empty()) {
+            return std::unexpected("`" + std::string{op} + "` takes at most one quantity");
+        }
+        if (op == "div" && !rhs.unit.empty()) {
+            return std::unexpected("`div` divides a quantity by a number, not a number by a quantity");
+        }
+        if (op == "div" && rhs.value.isZero()) {
+            return std::unexpected("division by zero");
+        }
+        if (op == "mul" && lhs.integral && rhs.integral) {
+            if (math::detail::mulOverflows(lhs.value.numerator, rhs.value.numerator)) {
+                return std::unexpected("overflow");
+            }
+            return Amount{.value = math::Rational{lhs.value.numerator * rhs.value.numerator, math::DecimalPlaces{0}},
+                          .unit = {},
+                          .integral = true};
+        }
+        std::expected<math::Rational, math::RationalError> const product =
+            op == "mul" ? math::checkedMul(lhs.value, rhs.value) : math::checkedDiv(lhs.value, rhs.value);
+        if (!product) {
+            return std::unexpected("overflow");
+        }
+        return Amount{.value = *product, .unit = lhs.unit.empty() ? rhs.unit : lhs.unit, .integral = false};
+    }
+    std::expected<std::pair<Amount, Amount>, std::string> both = aligned(lhs, rhs, units);
+    if (!both) {
+        return std::unexpected(std::move(both.error()));
+    }
+    auto const& [left, right] = *both;
+    bool const add = op == "add";
+    if (left.integral && right.integral) {
+        std::int64_t const lhsInt = left.value.numerator;
+        std::int64_t const rhsInt = right.value.numerator;
+        if (add ? math::detail::addOverflows(lhsInt, rhsInt) : math::detail::subOverflows(lhsInt, rhsInt)) {
+            return std::unexpected("overflow");
+        }
+        return Amount{.value = math::Rational{add ? lhsInt + rhsInt : lhsInt - rhsInt, math::DecimalPlaces{0}},
+                      .unit = {},
+                      .integral = true};
+    }
+    std::expected<math::Rational, math::RationalError> const sum =
+        add ? math::checkedAdd(left.value, right.value) : math::checkedSub(left.value, right.value);
+    if (!sum) {
+        return std::unexpected("overflow");
+    }
+    return Amount{.value = *sum, .unit = left.unit, .integral = false};
+}
+
+// The order of two values of one comparable kind, or why they have none.
+[[nodiscard]] inline std::expected<std::strong_ordering, std::string> compare(Value const& lhs, Value const& rhs,
+                                                                              UnitTable const& units) {
+    std::optional<Amount> const left = amountOf(lhs);
+    std::optional<Amount> const right = amountOf(rhs);
+    if (left && right) {
+        std::expected<std::pair<Amount, Amount>, std::string> both = aligned(*left, *right, units);
+        if (!both) {
+            return std::unexpected(std::move(both.error()));
+        }
+        return both->first.value <=> both->second.value;
+    }
+    if (lhs.asString() != nullptr && rhs.asString() != nullptr) {
+        int const order = lhs.asString()->compare(*rhs.asString());
+        return order < 0   ? std::strong_ordering::less
+               : order > 0 ? std::strong_ordering::greater
+                           : std::strong_ordering::equal;
+    }
+    if (lhs.asTimestamp() != nullptr && rhs.asTimestamp() != nullptr) {
+        return *lhs.asTimestamp() <=> *rhs.asTimestamp();
+    }
+    return std::unexpected("cannot compare " + withArticle(std::string{kindName(lhs.kind())}) + " with " +
+                           withArticle(std::string{kindName(rhs.kind())}));
+}
+
+// Whether two values are equal: numbers and quantities by exact value across kinds and units, anything else as
+// `Value` compares.
+[[nodiscard]] inline std::expected<bool, std::string> equal(Value const& lhs, Value const& rhs,
+                                                            UnitTable const& units) {
+    if (amountOf(lhs) && amountOf(rhs)) {
+        return compare(lhs, rhs, units).transform([](std::strong_ordering order) { return std::is_eq(order); });
+    }
+    return lhs == rhs;
+}
+
+// The number of code points in UTF-8 @p text.
+[[nodiscard]] inline std::int64_t codePoints(std::string_view text) {
+    return static_cast<std::int64_t>(
+        std::ranges::count_if(text, [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }));
+}
+
+// @p text without leading and trailing white space (ASCII, and U+00A0 no-break space).
+[[nodiscard]] inline std::string trimmed(std::string_view text) {
+    auto const leading = [](std::string_view rest) -> std::size_t {
+        if (!rest.empty() && (rest.front() == ' ' || (rest.front() >= '\t' && rest.front() <= '\r'))) {
+            return 1;
+        }
+        return rest.starts_with("\xC2\xA0") ? 2 : 0;
+    };
+    auto const trailing = [](std::string_view rest) -> std::size_t {
+        if (!rest.empty() && (rest.back() == ' ' || (rest.back() >= '\t' && rest.back() <= '\r'))) {
+            return 1;
+        }
+        return rest.ends_with("\xC2\xA0") ? 2 : 0;
+    };
+    for (std::size_t step = leading(text); step != 0; step = leading(text)) {
+        text.remove_prefix(step);
+    }
+    for (std::size_t step = trailing(text); step != 0; step = trailing(text)) {
+        text.remove_suffix(step);
+    }
+    return std::string{text};
+}
+
+// A value as `format` writes it: a decimal at its places with `.`, a quantity followed by its unit id.
+[[nodiscard]] inline std::string plainText(Value const& value) {
+    switch (value.kind()) {
+        case Value::Kind::String:
+            return *value.asString();
+        case Value::Kind::Bool:
+            return *value.asBool() ? "true" : "false";
+        case Value::Kind::Int:
+            return std::to_string(*value.asInt());
+        case Value::Kind::Decimal:
+            return decimalText(*value.asDecimal(), value.asDecimal()->getDecimalPlaces().value);
+        case Value::Kind::Quantity:
+            return decimalText(value.asQuantity()->amount, value.asQuantity()->amount.getDecimalPlaces().value) + " " +
+                   value.asQuantity()->unit;
+        case Value::Kind::Timestamp:
+            return value.asTimestamp()->toIso8601();
+        case Value::Kind::Null:
+            return {};
+        case Value::Kind::List:
+        case Value::Kind::Record:
+        default:
+            return canonicalJson(value);
+    }
+}
+
+}  // namespace detail
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per function of the library.
+inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value> const& operands) {
+    std::string_view const name = node.name;
+    UnitTable const& units = context.units();
+    if (name == "engaged") {
+        return Value{!operands.front().isNull()};
+    }
+    if (name == "coalesce") {
+        auto const found = std::ranges::find_if(operands, [](Value const& value) { return !value.isNull(); });
+        return found == operands.end() ? Value{} : *found;
+    }
+    // Every other function needs all of its arguments: absence propagates.
+    if (std::ranges::any_of(operands, &Value::isNull)) {
+        return {};
+    }
+    auto const mismatch = [&](std::string const& wants) { return fail(node, "`" + node.name + "` takes " + wants); };
+    if (name == "eq" || name == "ne") {
+        std::expected<bool, std::string> const same = equal(operands.at(0), operands.at(1), units);
+        if (!same) {
+            return fail(node, same.error());
+        }
+        return Value{*same == (name == "eq")};
+    }
+    if (name == "lt" || name == "le" || name == "gt" || name == "ge") {
+        std::expected<std::strong_ordering, std::string> const order = compare(operands.at(0), operands.at(1), units);
+        if (!order) {
+            return fail(node, order.error());
+        }
+        bool const holds = name == "lt"   ? std::is_lt(*order)
+                           : name == "le" ? std::is_lteq(*order)
+                           : name == "gt" ? std::is_gt(*order)
+                                          : std::is_gteq(*order);
+        return Value{holds};
+    }
+    if (name == "add" || name == "sub" || name == "mul" || name == "div") {
+        std::optional<Amount> const lhs = amountOf(operands.at(0));
+        std::optional<Amount> const rhs = amountOf(operands.at(1));
+        if (!lhs || !rhs) {
+            return mismatch("numbers or quantities");
+        }
+        Exact const outcome = arithmetic(name, *lhs, *rhs, units);
+        return outcome ? valueOf(*outcome) : fail(node, outcome.error());
+    }
+    if (name == "neg") {
+        std::optional<Amount> amount = amountOf(operands.front());
+        if (!amount) {
+            return mismatch("a number or a quantity");
+        }
+        if (amount->value.numerator == std::numeric_limits<std::int64_t>::min()) {
+            return fail(node, "overflow");
+        }
+        amount->value = -amount->value;
+        return valueOf(*amount);
+    }
+    if (name == "round") {
+        std::optional<Amount> amount = amountOf(operands.at(0));
+        std::int64_t const* const places = operands.at(1).asInt();
+        if (!amount || places == nullptr || *places < 0 ||
+            *places > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+            return mismatch("a number or a quantity, and places from 0 to 18");
+        }
+        // roundToDecimalPlaces saturates instead of failing; scaling first finds the overflow it would hide.
+        std::int64_t scale = 1;
+        for (std::int64_t digit = 0; digit < *places; ++digit) {
+            scale *= 10;
+        }
+        if (!math::checkedMul(amount->value, math::Rational{scale, math::DecimalPlaces{0}})) {
+            return fail(node, "overflow");
+        }
+        amount->value = math::roundToDecimalPlaces(
+            amount->value, math::DecimalPlaces{static_cast<std::uint32_t>(*places)}, math::RoundingMode::HalfEven);
+        amount->integral = false;
+        return valueOf(*amount);
+    }
+    if (name == "concat") {
+        std::string out;
+        for (Value const& operand : operands) {
+            if (operand.asString() == nullptr) {
+                return mismatch("strings");
+            }
+            out += *operand.asString();
+        }
+        return Value{std::move(out)};
+    }
+    if (name == "format") {
+        return format(node, operands);
+    }
+    if (name == "number" || name == "decimal" || name == "quantity" || name == "money" || name == "date" ||
+        name == "dateTime") {
+        return display(node, operands);
+    }
+    if (name == "t") {
+        std::string const* const key = operands.at(0).asString();
+        std::string const* const fallback = operands.size() > 1 ? operands.at(1).asString() : nullptr;
+        ValueRecord const* const arguments = operands.size() > 2 ? operands.at(2).asRecord() : nullptr;
+        if (key == nullptr || (operands.size() > 1 && fallback == nullptr) ||
+            (operands.size() > 2 && arguments == nullptr)) {
+            return mismatch("a key, a fallback and an object of arguments");
+        }
+        return message(node, *key, fallback == nullptr ? std::string{} : *fallback,
+                       arguments == nullptr ? ValueRecord{} : *arguments);
+    }
+    if (name == "trim" || name == "length") {
+        std::string const* const text = operands.front().asString();
+        if (text == nullptr) {
+            return mismatch("a string");
+        }
+        return name == "trim" ? Value{trimmed(*text)} : Value{codePoints(*text)};
+    }
+    if (name == "contains") {
+        std::string const* const text = operands.at(0).asString();
+        std::string const* const part = operands.at(1).asString();
+        if (text == nullptr || part == nullptr) {
+            return mismatch("two strings");
+        }
+        return Value{text->find(*part) != std::string::npos};
+    }
+    if (name == "isEmpty") {
+        if (std::string const* const text = operands.front().asString(); text != nullptr) {
+            return Value{text->empty()};
+        }
+        if (ValueList const* const list = operands.front().asList(); list != nullptr) {
+            return Value{list->empty()};
+        }
+        return mismatch("a string or a list");
+    }
+    ValueList const* const list = operands.front().asList();
+    if (list == nullptr) {
+        return mismatch("a list");
+    }
+    if (name == "count") {
+        return Value{static_cast<std::int64_t>(list->size())};
+    }
+    if (name == "first") {
+        return list->empty() ? Value{} : list->front();
+    }
+    if (name == "includes" || name == "indexOf") {
+        for (std::size_t index = 0; index < list->size(); ++index) {
+            std::expected<bool, std::string> const same = equal(list->at(index), operands.at(1), units);
+            if (same && *same) {
+                return name == "includes" ? Value{true} : Value{static_cast<std::int64_t>(index)};
+            }
+        }
+        return name == "includes" ? Value{false} : Value{};
+    }
+    if (name == "any" || name == "all") {
+        // Kleene over the elements, as `or` and `and` are over their operands.
+        bool const decider = name == "any";
+        bool unknown = false;
+        for (Value const& element : *list) {
+            if (element.isNull()) {
+                unknown = true;
+                continue;
+            }
+            if (element.asBool() == nullptr) {
+                return mismatch("a list of bools");
+            }
+            if (*element.asBool() == decider) {
+                return Value{decider};
+            }
+        }
+        return unknown ? Value{} : Value{!decider};
+    }
+    if (name == "min" || name == "max") {
+        if (list->empty() || std::ranges::any_of(*list, &Value::isNull)) {
+            return {};
+        }
+        Value best = list->front();
+        for (Value const& element : *list) {
+            std::expected<std::strong_ordering, std::string> const order = compare(element, best, units);
+            if (!order) {
+                return fail(node, order.error());
+            }
+            if (name == "min" ? std::is_lt(*order) : std::is_gt(*order)) {
+                best = element;
+            }
+        }
+        return best;
+    }
+    // sum and mean.
+    if (std::ranges::any_of(*list, &Value::isNull)) {
+        return {};
+    }
+    if (list->empty()) {
+        return name == "sum" ? Value{std::int64_t{0}} : Value{};
+    }
+    std::optional<Amount> total = amountOf(list->front());
+    if (!total) {
+        return mismatch("a list of numbers or quantities");
+    }
+    std::uint32_t places = total->value.getDecimalPlaces().value;
+    for (std::size_t index = 1; index < list->size(); ++index) {
+        std::optional<Amount> const element = amountOf(list->at(index));
+        if (!element) {
+            return mismatch("a list of numbers or quantities");
+        }
+        places = std::max(places, element->value.getDecimalPlaces().value);
+        Exact const sum = arithmetic("add", *total, *element, units);
+        if (!sum) {
+            return fail(node, sum.error());
+        }
+        total = *sum;
+    }
+    if (name == "sum") {
+        return valueOf(*total);
+    }
+    // The exact quotient, rounded once at the operands' places: no double, so no binary rounding on the way.
+    std::expected<math::Rational, math::RationalError> const quotient = math::checkedDiv(
+        total->value, math::Rational{static_cast<std::int64_t>(list->size()), math::DecimalPlaces{0}});
+    if (!quotient) {
+        return fail(node, "overflow");
+    }
+    total->value = math::roundToDecimalPlaces(*quotient, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+    total->integral = false;
+    return valueOf(*total);
+}
+
+// `format(template, args...)`: `{0}` is the first argument after the template, `{{` and `}}` are braces.
+inline Value detail::Evaluator::format(Expr const& node, std::vector<Value> const& operands) {
+    std::string const* const pattern = operands.front().asString();
+    if (pattern == nullptr) {
+        return fail(node, "`format` takes a string template");
+    }
+    std::string out;
+    for (std::size_t at = 0; at < pattern->size(); ++at) {
+        char const letter = pattern->at(at);
+        if ((letter == '{' || letter == '}') && at + 1 < pattern->size() && pattern->at(at + 1) == letter) {
+            out += letter;
+            ++at;
+            continue;
+        }
+        if (letter == '}') {
+            return fail(node, "`format`'s template has an unmatched `}`");
+        }
+        if (letter != '{') {
+            out += letter;
+            continue;
+        }
+        std::size_t const close = pattern->find('}', at);
+        std::size_t index = 0;
+        std::string_view const digits = std::string_view{*pattern}.substr(at + 1, close - at - 1);
+        auto const [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), index);
+        if (close == std::string::npos || digits.empty() || error != std::errc{} ||
+            end != digits.data() + digits.size()) {
+            return fail(node, "`format`'s placeholders are written {0}, {1}, ...");
+        }
+        if (index + 1 >= operands.size()) {
+            return fail(node, "`format` has no argument {" + std::to_string(index) + "}");
+        }
+        out += plainText(operands.at(index + 1));
+        at = close;
+    }
+    return Value{std::move(out)};
+}
+
+// `number`, `decimal`, `quantity`, `money`, `date` and `dateTime`: a value as display text.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per display function.
+inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> const& operands) {
+    std::string_view const name = node.name;
+    std::string const locale = context.locale();
+    if (name == "date" || name == "dateTime") {
+        time::DateTime const* const instant = operands.front().asTimestamp();
+        std::string const* const style = operands.size() > 1 ? operands.at(1).asString() : nullptr;
+        if (instant == nullptr || (operands.size() > 1 && style == nullptr)) {
+            return fail(node, "`" + node.name + "` takes a timestamp and a style");
+        }
+        std::string_view const chosen = style == nullptr ? std::string_view{"medium"} : std::string_view{*style};
+        if (chosen != "short" && chosen != "medium" && chosen != "long") {
+            return fail(node, "a style is `short`, `medium` or `long`");
+        }
+        DisplayFormatter const& formatter = context.displayFormatter();
+        std::chrono::minutes const offset = context.displayOffset(*instant);
+        return Value{name == "date" ? formatter.date(*instant, chosen, offset, locale)
+                                    : formatter.dateTime(*instant, chosen, offset, locale)};
+    }
+    std::optional<Amount> amount = amountOf(operands.front());
+    if (!amount) {
+        return fail(node, "`" + node.name + "` takes a number or a quantity");
+    }
+    render::NumericLocale const numeric = context.numericLocale();
+    auto const digits = [&numeric](math::Rational const& value, std::uint32_t places) {
+        return render::formatCanonicalNumber(decimalText(value, places), numeric);
+    };
+    std::uint32_t const places = amount->value.getDecimalPlaces().value;
+    if (name == "number") {
+        return Value{digits(amount->value, places)};
+    }
+    if (name == "decimal") {
+        std::int64_t const* const wanted = operands.at(1).asInt();
+        if (wanted == nullptr || *wanted < 0 || *wanted > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+            return fail(node, "`decimal` takes places from 0 to 18");
+        }
+        return Value{digits(amount->value, static_cast<std::uint32_t>(*wanted))};
+    }
+    if (name == "money") {
+        std::string const* const currency = operands.at(1).asString();
+        if (currency == nullptr || !amount->unit.empty()) {
+            return fail(node, "`money` takes a number and a currency code");
+        }
+        return Value{context.displayFormatter().money(digits(amount->value, places), *currency, locale)};
+    }
+    // quantity(x, unit?): in the unit asked for, or its own, with the unit's display text.
+    if (amount->unit.empty()) {
+        return fail(node, "`quantity` takes a quantity");
+    }
+    UnitTable const& units = context.units();
+    if (operands.size() > 1) {
+        std::string const* const unit = operands.at(1).asString();
+        if (unit == nullptr) {
+            return fail(node, "`quantity`'s unit is a unit id");
+        }
+        Exact converted = convert(*amount, *unit, units);
+        if (!converted) {
+            return fail(node, converted.error());
+        }
+        amount = std::move(*converted);
+    }
+    UnitTable::Unit const* const unit = units.find(amount->unit);
+    return Value{digits(amount->value, places) + " " + (unit == nullptr ? amount->unit : unit->display)};
+}
+
+// `t(key, fallback, args)`: the catalogue's message for the key in the active locale, else the fallback, formatted
+// with the arguments. A catalogue message outside the supported subset is reported and the fallback shown.
+inline Value detail::Evaluator::message(Expr const& node, std::string const& key, std::string const& fallback,
+                                        ValueRecord const& arguments) {
+    std::string const locale = context.locale();
+    std::optional<std::string> catalogued;
+    if (render::TranslationProvider const& translations = context.translations(); translations) {
+        catalogued = translations(key, locale);
+    }
+    std::expected<Message, std::string> parsed = parseMessage(catalogued.value_or(fallback));
+    if (!parsed && catalogued) {
+        diagnostics.report(node.path, "the catalogue's `" + key + "` is refused: " + parsed.error());
+        parsed = parseMessage(fallback);
+    }
+    if (!parsed) {
+        return fail(node, "the fallback is refused: " + parsed.error());
+    }
+    std::vector<std::pair<std::string, MessageArgument>> named;
+    for (auto const& [name, value] : arguments) {
+        if (value.isNull()) {
+            continue;
+        }
+        MessageArgument argument{.number = std::nullopt, .places = 0, .text = {}};
+        if (std::optional<Amount> const amount = amountOf(value); amount && amount->unit.empty()) {
+            argument.number = amount->value;
+            argument.places = amount->value.getDecimalPlaces().value;
+        } else {
+            argument.text = plainText(value);
+        }
+        named.emplace_back(name, std::move(argument));
+    }
+    std::expected<std::string, std::string> text = formatMessage(*parsed, named, locale, context.numericLocale());
+    if (!text) {
+        return fail(node, text.error());
+    }
+    return Value{std::move(*text)};
+}
+
+/// @brief Evaluates an expression. Never throws: a runtime error (a type mismatch, an overflow, a division by zero)
+///        yields `null` and is reported once per expression path to @p diagnostics.
+/// @param expr The expression.
+/// @param context What the expression reads.
+/// @param diagnostics Where runtime errors go.
+/// @return The value.
+[[nodiscard]] inline Value evaluate(Expr const& expr, ExpressionContext const& context, Diagnostics& diagnostics) {
+    detail::Evaluator evaluator{.context = context, .diagnostics = diagnostics, .locals = {}};
+    return evaluator.eval(expr);
 }
 
 }  // namespace morph::ui

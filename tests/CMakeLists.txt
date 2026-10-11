@@ -169,6 +169,7 @@ add_executable(morph_tests
     test_ui_kinds.cpp
     test_ui_expression_values.cpp
     test_ui_expression_tree.cpp
+    test_ui_expression_eval.cpp
     test_ui_message.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
