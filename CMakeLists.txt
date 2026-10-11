@@ -429,6 +429,7 @@ target_sources(morph
         include/morph/ui/mount.hpp
         include/morph/ui/frontend.hpp
         include/morph/ui/value.hpp
+        include/morph/ui/message.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp

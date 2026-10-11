@@ -168,6 +168,7 @@ add_executable(morph_tests
     test_ui_field.cpp
     test_ui_kinds.cpp
     test_ui_value.cpp
+    test_ui_messages.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
@@ -211,6 +212,11 @@ target_compile_definitions(morph_tests PRIVATE
 target_compile_definitions(morph_tests PRIVATE
     MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/rule_corpus.json"
     MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/instance_bounds.json")
+
+# The UI document corpora: JSON files, so another implementation of the
+# document and expr/1 can run the same cases.
+target_compile_definitions(morph_tests PRIVATE
+    MORPH_UI_MESSAGES_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/messages.json")
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 

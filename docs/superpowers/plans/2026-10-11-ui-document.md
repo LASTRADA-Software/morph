@@ -40,7 +40,9 @@ builders name forms-engine and table-engine nodes.
 
 **Why `value.hpp` is a header of its own.** The document's typed value (`Value`, spec 5 §3) is what `expression.hpp`
 evaluates to and what `host.hpp` (spec 6 §4, hosting part) puts in `ParamMap`. Hosting and the Qt Quick renderer need
-the value without the expression language or the document grammar.
+the value without the expression language or the document grammar. **`message.hpp`** is separate for the same
+reason: whoever loads a message catalogue validates its patterns with `parseMessage`, without the expression
+language; `expression.hpp`'s `t` uses it.
 
 ## The `ui-*` envelope decision (open point of #885)
 
@@ -152,8 +154,9 @@ Any further disagreement found while implementing is fixed in the spec in the sa
 
 | File | Responsibility |
 |---|---|
-| `include/morph/ui/value.hpp` | `Json`, `Decimal`, `Quantity`, `Value`, `ValueKind`, `Type`, `parseType`, `valueFromJson`, `valueToJson`, `Refusal`, `jsonPointerAppend` |
-| `include/morph/ui/expression.hpp` | `Expr`, `ExprKind`, `parseExpression`, `NameResolver`, `checkExpression`, `UnitTable`, `Environment`, `StaticEnvironment`, `evaluate`, `functionNames`, `MessagePattern`, `parseMessage`, `formatMessage`, `pluralCategory` |
+| `include/morph/ui/value.hpp` | `Json`, `Decimal`, `Quantity`, `Value`, `ValueKind`, `Type`, `parseType`, `valueFromJson`, `valueToJson`, `Refusal`, `pointerAppend`, `parseJson` |
+| `include/morph/ui/message.hpp` | `PluralCategory`, `pluralCategory`, `MessagePattern`, `parseMessage`, `formatMessage`, `formatNumber` |
+| `include/morph/ui/expression.hpp` | `Expr`, `ExprKind`, `parseExpression`, `NameResolver`, `checkExpression`, `UnitTable`, `FormatContext`, `Environment`, `StaticEnvironment`, `evaluate`, `functionNames` |
 | `include/morph/ui/document.hpp` | `Catalog`, `ModelInfo`, `ActionInfo`, `LoadOptions`, the declaration structs, `Command`, `CommandKind`, `DocNode`, `Field`, `Component`, `CustomizePoint`, `Document`, `loadDocument`, `nodeKinds` |
 | `tests/test_ui_value.cpp`, `test_ui_expression.cpp`, `test_ui_messages.cpp`, `test_ui_document.cpp` | The tests |
 | `tests/ui/corpus/expressions.json`, `messages.json`, `documents.json` | The shared corpora |
@@ -189,7 +192,18 @@ checked) before the commit.
 
 Commit `ui: the document's values and types`.
 
-### Task 2: Expressions
+### Task 2: Messages
+
+**Files:** `include/morph/ui/message.hpp`, `tests/test_ui_messages.cpp`, `tests/ui/corpus/messages.json`.
+
+- [ ] `parseMessage` for the subset (text, `{$x}`, `{$x :number}`, `{$x :string}`, `.input`, `.match` with exact
+  and category keys and `*`); refusal outside it; `formatMessage`; `pluralCategory` for `en`, `de`, `nl`, `sv`,
+  `it`, `es`, `pt`, `fr`, `pl`, `ru`, `uk`, `cs`, `ar`, `ja`, `zh`, `ko`.
+- [ ] Corpus: English, Polish and Arabic categories; `=0`/`0` exact keys; `.match` on a string; a refused pattern.
+
+Commit `ui: MessageFormat 2 subset and CLDR plural rules for t()`.
+
+### Task 3: Expressions
 
 **Files:** `include/morph/ui/expression.hpp`, `tests/test_ui_expression.cpp`, `tests/ui/corpus/expressions.json`.
 
@@ -198,25 +212,14 @@ Commit `ui: the document's values and types`.
 - [ ] `checkExpression` with arity, argument-type and condition checks, and the scoped names it binds itself
   (`map`/`filter`'s `as`).
 - [ ] `evaluate` and the function library; `StaticEnvironment` with once-per-path diagnostics.
+- [ ] `t` through the environment's `TranslationProvider`: the catalogue's pattern, else the fallback; a refused
+  catalogue pattern shows the fallback and reports.
 - [ ] The corpus: one case per function at least, exact arithmetic across units, overflow and division by zero as
   `null`, null propagation, Kleene tables, comprehensions, every reading form, the size bound, `mean` exact at
   the operands' places.
 - [ ] Mutations run: `and` without Kleene's `false` dominance; `add` without the overflow check.
 
 Commit `ui: the expr/1 evaluator`.
-
-### Task 3: Messages
-
-**Files:** `expression.hpp`, `tests/test_ui_messages.cpp`, `tests/ui/corpus/messages.json`.
-
-- [ ] `parseMessage` for the subset (text, `{$x}`, `{$x :number}`, `{$x :string}`, `.input`, `.match` with exact
-  and category keys and `*`); refusal outside it; `formatMessage`; `pluralCategory` for `en`, `de`, `nl`, `sv`,
-  `it`, `es`, `pt`, `fr`, `pl`, `ru`, `uk`, `cs`, `ar`, `ja`, `zh`, `ko`.
-- [ ] `t` through the environment's `TranslationProvider`: the catalogue's pattern, else the fallback; a refused
-  catalogue pattern shows the fallback and reports.
-- [ ] Corpus: English, Polish and Arabic categories; `=0`/`0` exact keys; `.match` on a string; a refused pattern.
-
-Commit `ui: MessageFormat 2 subset and CLDR plural rules for t()`.
 
 ### Task 4: The document and its load-time validation
 
