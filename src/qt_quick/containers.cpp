@@ -70,7 +70,7 @@ void TabsImpl::setTabs(std::vector<std::string> const& labels) { write("labels",
 
 void TabsImpl::setSelected(std::size_t index) {
     int const count = static_cast<int>(read("labels").toStringList().size());
-    int const wanted = index < static_cast<std::size_t>(count) ? static_cast<int>(index) : -1;
+    int const wanted = std::cmp_less(index, count) ? static_cast<int>(index) : -1;
     if (highlighted() != wanted) {
         call("select", wanted);
     }

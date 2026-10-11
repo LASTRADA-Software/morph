@@ -61,7 +61,7 @@ TEST_CASE(
         texts.push_back(scene.backend().createText(column.get()));
         texts.back()->setText(name);
     }
-    QQuickItem* const movedItem = &Scene::itemOf(*texts.at(2));
+    QQuickItem const* const movedItem = &Scene::itemOf(*texts.at(2));
     CHECK(laidOut(scene, texts) == std::vector<std::string>{"a", "b", "c"});
     column->moveChild(*texts.at(2), 0);
     CHECK(laidOut(scene, texts) == std::vector<std::string>{"c", "a", "b"});
@@ -229,12 +229,14 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     Scene scene;
     auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
     scroll->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(5)});
+    constexpr std::size_t count = 20;
     std::vector<std::unique_ptr<ui::TextInputWidget>> inputs;
-    for (int index = 0; index < 20; ++index) {
+    inputs.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
         inputs.push_back(scene.backend().createTextInput(scroll.get(), ui::TextInputMode::SingleLine));
     }
     scene.settle();
-    QQuickItem& area = Scene::itemOf(*scroll);
+    QQuickItem const& area = Scene::itemOf(*scroll);
     QQuickItem const& last = Scene::controlOf(*inputs.back());
     CHECK(last.mapToItem(&area, QPointF{0, 0}).y() > area.height());
     inputs.back()->focus();

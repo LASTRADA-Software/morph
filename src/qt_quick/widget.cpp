@@ -53,8 +53,7 @@ ItemBase* findWidget(QString const& testId) noexcept {
 }
 
 ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* parent)
-    : _context{&context}, _relay{made.relay} {
-    _item = made.item;
+    : _context{&context}, _item{made.item}, _relay{made.relay} {
     registry().push_back(this);
     ContainerCore* const container = parent != nullptr ? containerOf(parent) : &context.roots();
     if (container != nullptr) {
@@ -155,6 +154,7 @@ struct RoleName {
     QAccessible::Role role;
 };
 
+// NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, name beside role, reads as one.
 constexpr std::array<RoleName, 16> kRoles = {{{"button", QAccessible::Button},
                                               {"checkbox", QAccessible::CheckBox},
                                               {"dialog", QAccessible::Dialog},
@@ -171,12 +171,18 @@ constexpr std::array<RoleName, 16> kRoles = {{{"button", QAccessible::Button},
                                               {"tab", QAccessible::PageTab},
                                               {"table", QAccessible::Table},
                                               {"textbox", QAccessible::EditableText}}};
+// NOLINTEND(modernize-use-designated-initializers)
 
 }  // namespace
 
 void ItemBase::showAccessibleRole(std::string_view role) const {
-    auto const found = std::ranges::find(kRoles, role, &RoleName::name);
-    write("a11yRole", found != kRoles.end() ? static_cast<int>(found->role) : 0);
+    auto const index = static_cast<std::size_t>(
+        std::ranges::distance(kRoles.begin(), std::ranges::find(kRoles, role, &RoleName::name)));
+    int value = 0;
+    if (index < kRoles.size()) {
+        value = static_cast<int>(kRoles.at(index).role);
+    }
+    write("a11yRole", value);
 }
 
 void ItemBase::showTestId(std::string_view testId) const {
@@ -279,11 +285,11 @@ void ContainerCore::reorder(ItemBase& child, std::size_t origin, std::size_t des
         return;
     }
     if (destination + 1 < _children.size()) {
-        if (QQuickItem* const next = _children.at(destination + 1)->item()) {
+        if (QQuickItem const* const next = _children.at(destination + 1)->item()) {
             item->stackBefore(next);
         }
     } else if (destination > 0) {
-        if (QQuickItem* const previous = _children.at(destination - 1)->item()) {
+        if (QQuickItem const* const previous = _children.at(destination - 1)->item()) {
             item->stackAfter(previous);
         }
     }

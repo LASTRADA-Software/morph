@@ -6,6 +6,7 @@
 #include <QGuiApplication>
 #include <QQuickWindow>
 #include <QWindow>
+#include <array>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -65,9 +66,18 @@ private:
     ui::Mounted _view;
 };
 
-int argc = 1;
-char appName[] = "morph_qt_quick_frontend_tests";       // NOLINT(cppcoreguidelines-avoid-c-arrays)
-char* argv[] = {static_cast<char*>(appName), nullptr};  // NOLINT(cppcoreguidelines-avoid-c-arrays)
+// The command line every run is given: QGuiApplication keeps a reference to the count, so both live as long as the
+// process.
+int& argCount() {
+    static int count = 1;
+    return count;
+}
+
+char** argValues() {
+    static std::array<char, 32> name{"morph_qt_quick_frontend_tests"};
+    static std::array<char*, 2> values{name.data(), nullptr};
+    return values.data();
+}
 
 qt_quick::FrontendConfig configWith(std::vector<std::string>& log, std::function<void(ui::AppContext&)> then) {
     return qt_quick::FrontendConfig{
@@ -90,7 +100,7 @@ TEST_CASE("qt_quick frontend: run opens the source, mounts the shell, and tears 
           "[qt_quick][frontend]") {
     std::vector<std::string> log;
     RecordingSource source{log};
-    qt_quick::Frontend frontend{argc, static_cast<char**>(argv), configWith(log, [](ui::AppContext& context) {
+    qt_quick::Frontend frontend{argCount(), argValues(), configWith(log, [](ui::AppContext& context) {
                                     context.executor().post([&context] { context.quit(3); });
                                 })};
     CHECK(frontend.name() == "qt");
@@ -102,7 +112,7 @@ TEST_CASE("qt_quick frontend: run opens the source, mounts the shell, and tears 
 TEST_CASE("qt_quick frontend: a quit before the loop runs still ends the run with its code", "[qt_quick][frontend]") {
     std::vector<std::string> log;
     RecordingSource source{log};
-    qt_quick::Frontend frontend{argc, static_cast<char**>(argv),
+    qt_quick::Frontend frontend{argCount(), argValues(),
                                 configWith(log, [](ui::AppContext& context) { context.quit(5); })};
     CHECK(frontend.run(source) == 5);
     CHECK(log.back() == "close");
@@ -111,7 +121,7 @@ TEST_CASE("qt_quick frontend: a quit before the loop runs still ends the run wit
 TEST_CASE("qt_quick frontend: closing the window ends the run with 0", "[qt_quick][frontend]") {
     std::vector<std::string> log;
     RecordingSource source{log};
-    qt_quick::Frontend frontend{argc, static_cast<char**>(argv), configWith(log, [](ui::AppContext& context) {
+    qt_quick::Frontend frontend{argCount(), argValues(), configWith(log, [](ui::AppContext& context) {
                                     context.executor().post([] {
                                         for (QWindow* const window : QGuiApplication::topLevelWindows()) {
                                             if (qobject_cast<QQuickWindow*>(window) != nullptr) {
@@ -133,16 +143,16 @@ TEST_CASE("qt_quick frontend: a shell factory that throws ends the run after the
         .components = nullptr,
         .title = "test",
         .onWidthClass = {}};
-    qt_quick::Frontend frontend{argc, static_cast<char**>(argv), std::move(config)};
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
     CHECK_THROWS_WITH(frontend.run(source), "no shell");
     CHECK(log.back() == "close");
-    qt_quick::Frontend empty{argc, static_cast<char**>(argv), qt_quick::FrontendConfig{}};
+    qt_quick::Frontend empty{argCount(), argValues(), qt_quick::FrontendConfig{}};
     CHECK_THROWS_AS(empty.run(source), std::invalid_argument);
 }
 
 TEST_CASE("qt_quick frontend: the option is named qt and is usable where a window can be shown",
           "[qt_quick][frontend]") {
-    ui::FrontendOption const option = qt_quick::frontendOption(argc, static_cast<char**>(argv), {});
+    ui::FrontendOption const option = qt_quick::frontendOption(argCount(), argValues(), {});
     CHECK(option.name == "qt");
     REQUIRE(option.make);
     std::unique_ptr<ui::Frontend> const made = option.make();

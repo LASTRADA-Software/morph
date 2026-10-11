@@ -325,7 +325,7 @@ public:
     void setMultiple(bool multiple) override;
     void setOnDrop(std::function<void(std::vector<std::string>)> onDrop) override;
     /// Drops files as the operating system would; returns whether the zone took them.
-    bool offer(std::vector<std::string> const& paths) const;
+    [[nodiscard]] bool offer(std::vector<std::string> const& paths) const;
     /// Whether the zone takes a drop of these paths.
     [[nodiscard]] bool takes(std::vector<std::string> const& paths) const;
 

@@ -17,6 +17,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/keys.hpp"
@@ -65,7 +66,7 @@ public:
 
     void click(ui::Widget& widget) override {
         settle();
-        QQuickItem* target = Backend::itemOf(widget);
+        QQuickItem const* target = Backend::itemOf(widget);
         if (auto* const part =
                 target != nullptr ? target->findChild<QQuickItem*>(QStringLiteral("action")) : nullptr) {
             target = part;
@@ -76,7 +77,7 @@ public:
     void type(ui::Widget& widget, std::string_view text) override {
         settle();
         detail::ItemBase const& field = base(widget);
-        QQuickItem* const control = field.focusTarget();
+        QQuickItem const* const control = field.focusTarget();
         if (control == nullptr || !control->isVisible() || _fault == Fault::DeadInput) {
             return;
         }
@@ -91,8 +92,8 @@ public:
 
     void drag(ui::Widget& source, ui::Widget& target) override {
         settle();
-        QQuickItem* const from = Backend::itemOf(source);
-        QQuickItem* const to = Backend::itemOf(target);
+        QQuickItem const* const from = Backend::itemOf(source);
+        QQuickItem const* const to = Backend::itemOf(target);
         if (from == nullptr || to == nullptr || !from->isVisible() || _fault == Fault::DeadInput) {
             return;
         }
@@ -114,7 +115,7 @@ public:
             return;
         }
         if (auto* const banner = dynamic_cast<detail::BannerImpl*>(&widget)) {
-            QQuickItem* const item = banner->item();
+            QQuickItem const* const item = banner->item();
             mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("dismiss")) : nullptr);
             return;
         }
@@ -157,8 +158,7 @@ public:
         _scene.standardKey(QKeySequence::MoveToStartOfLine);
         QString const text = morph::qt_quick::detail::toQString(input->shownText());
         qsizetype characters = 0;
-        while (characters < text.size() &&
-               static_cast<std::size_t>(text.left(characters + 1).toUtf8().size()) <= position) {
+        while (characters < text.size() && std::cmp_less_equal(text.left(characters + 1).toUtf8().size(), position)) {
             ++characters;
         }
         for (qsizetype step = 0; step < characters; ++step) {
@@ -204,7 +204,7 @@ public:
         if (collapsible.read("open").toBool() == open) {
             return;
         }
-        QQuickItem* const item = collapsible.item();
+        QQuickItem const* const item = collapsible.item();
         mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("toggle")) : nullptr);
     }
 

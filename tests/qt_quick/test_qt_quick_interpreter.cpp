@@ -82,8 +82,8 @@ struct QtHarness {
     }
 
     /// The widget whose test id is @p testId.
-    static detail::ItemBase& widget(std::string_view testId) {
-        detail::ItemBase* const found = detail::findWidget(detail::toQString(testId));
+    static detail::ItemBase const& widget(std::string_view testId) {
+        detail::ItemBase const* const found = detail::findWidget(detail::toQString(testId));
         if (found == nullptr) {
             FAIL("no widget with test id " << testId);
         }
@@ -91,9 +91,9 @@ struct QtHarness {
     }
 
     /// Every widget whose test id is @p testId, in the order the window shows them, top to bottom.
-    static std::vector<detail::ItemBase*> widgets(std::string_view testId) {
-        std::vector<detail::ItemBase*> found;
-        for (detail::ItemBase* const candidate : detail::liveWidgets()) {
+    static std::vector<detail::ItemBase const*> widgets(std::string_view testId) {
+        std::vector<detail::ItemBase const*> found;
+        for (detail::ItemBase const* const candidate : detail::liveWidgets()) {
             if (candidate->item() != nullptr && candidate->item()->objectName() == detail::toQString(testId)) {
                 found.push_back(candidate);
             }
@@ -106,9 +106,13 @@ struct QtHarness {
 
     /// Clicks a widget, at its control when it has one.
     void click(std::string_view testId) {
-        detail::ItemBase& target = widget(testId);
-        QQuickItem* const control = target.focusTarget();
-        scene.click(control != nullptr ? *control : *target.item());
+        detail::ItemBase const& target = widget(testId);
+        QQuickItem const* clicked = target.focusTarget();
+        if (clicked == nullptr) {
+            clicked = target.item();
+        }
+        REQUIRE(clicked != nullptr);
+        scene.click(*clicked);
     }
 };
 
@@ -155,8 +159,8 @@ TEST_CASE("qt_quick interpreter: a bound property follows its value", "[qt_quick
 TEST_CASE("qt_quick interpreter: a refused selection snaps back, an accepted one stays", "[qt_quick][interpreter]") {
     QtHarness h;
     auto screen = h.mount(kBehaviour);
-    auto& refused = dynamic_cast<detail::SelectImpl&>(QtHarness::widget("refused"));
-    auto& taken = dynamic_cast<detail::SelectImpl&>(QtHarness::widget("taken"));
+    auto const& refused = dynamic_cast<detail::SelectImpl const&>(QtHarness::widget("refused"));
+    auto const& taken = dynamic_cast<detail::SelectImpl const&>(QtHarness::widget("taken"));
     CHECK(refused.shownText() == "a");
     h.scene.click(*radiosOf("refused").at(1));
     CHECK(refused.shownText() == "a");
@@ -170,7 +174,7 @@ TEST_CASE("qt_quick interpreter: a refused selection snaps back, an accepted one
 TEST_CASE("qt_quick interpreter: typing into a controlled input keeps the cursor", "[qt_quick][interpreter]") {
     QtHarness h;
     auto screen = h.mount(kBehaviour);
-    auto& name = dynamic_cast<detail::TextInputImpl&>(QtHarness::widget("name"));
+    auto const& name = dynamic_cast<detail::TextInputImpl const&>(QtHarness::widget("name"));
     h.click("name");
     h.scene.type(QStringLiteral("abc"));
     CHECK(QtHarness::widget("echo").shownText() == "abc");
@@ -255,7 +259,7 @@ constexpr char const* kList = R"({
       "children": [ { "kind": "textInput", "testId": "cell", "value": { "row": "name" } } ] } ] } })";
 
 std::vector<std::string> cellTexts() {
-    std::vector<detail::ItemBase*> const cells = QtHarness::widgets("cell");
+    std::vector<detail::ItemBase const*> const cells = QtHarness::widgets("cell");
     std::vector<std::string> texts;
     texts.reserve(cells.size());
     for (detail::ItemBase const* const cell : cells) {
@@ -265,7 +269,7 @@ std::vector<std::string> cellTexts() {
 }
 
 std::vector<QQuickItem*> cellItems() {
-    std::vector<detail::ItemBase*> const cells = QtHarness::widgets("cell");
+    std::vector<detail::ItemBase const*> const cells = QtHarness::widgets("cell");
     std::vector<QQuickItem*> items;
     items.reserve(cells.size());
     for (detail::ItemBase const* const cell : cells) {
@@ -293,7 +297,7 @@ TEST_CASE("qt_quick interpreter: a list change moves the fewest rows and keeps e
     auto screen = h.mount(kList);
     CHECK(cellTexts() == std::vector<std::string>{"one", "two", "three"});
     std::vector<QQuickItem*> const before = cellItems();
-    detail::ContainerCore& rows = rowsContainer();
+    detail::ContainerCore const& rows = rowsContainer();
 
     SECTION("reversing three rows is two moves") {
         h.click("reverse");
@@ -326,13 +330,13 @@ TEST_CASE("qt_quick interpreter: a list change moves the fewest rows and keeps e
 TEST_CASE("qt_quick interpreter: focus and a half-typed edit survive a reorder", "[qt_quick][interpreter]") {
     QtHarness h;
     auto screen = h.mount(kList);
-    detail::ItemBase& two = *QtHarness::widgets("cell").at(1);
+    detail::ItemBase const& two = *QtHarness::widgets("cell").at(1);
     h.scene.click(*two.focusTarget());
     h.scene.type(QStringLiteral("!"));
     REQUIRE(two.focusTarget()->hasActiveFocus());
     // The reverse button takes no focus from a click: focus moves only when the user moves it.
     two.focusTarget()->forceActiveFocus();
-    detail::ItemBase& reverse = QtHarness::widget("reverse");
+    detail::ItemBase const& reverse = QtHarness::widget("reverse");
     reverse.relay().fire(QStringLiteral("click"));
     h.scene.settle();
     CHECK(cellTexts() == std::vector<std::string>{"three", "two!", "one"});
@@ -357,15 +361,15 @@ TEST_CASE("qt_quick interpreter: a table row keyed above 2^53 is selected and re
     QtHarness h;
     auto screen = h.mount(kKeys);
     h.reply(0, R"([{"id":9007199254740993,"name":"big"},{"id":9007199254740994,"name":"bigger"}])");
-    std::vector<detail::ItemBase*> const names = QtHarness::widgets("name");
+    std::vector<detail::ItemBase const*> const names = QtHarness::widgets("name");
     REQUIRE(names.size() == 2);
     // The row is the cell's container's container: the cell sits in the column that holds the row's scope.
     detail::ContainerCore* const holder = names.at(1)->container();
     REQUIRE(holder != nullptr);
     auto* const row = dynamic_cast<detail::TableRowImpl*>(holder);
-    detail::ItemBase* rowBase = row;
+    detail::ItemBase const* rowBase = row;
     if (rowBase == nullptr) {
-        auto* const inner = dynamic_cast<detail::ItemBase*>(holder);
+        auto const* const inner = dynamic_cast<detail::ItemBase const*>(holder);
         REQUIRE(inner != nullptr);
         rowBase = dynamic_cast<detail::TableRowImpl*>(inner->container());
     }
@@ -401,8 +405,8 @@ constexpr char const* kRows = R"([
   {"id":1,"inputs":{"mass":"10"},"mass":10,"concentration":1},
   {"id":2,"inputs":{"mass":"20"},"mass":20,"concentration":2}])";
 
-detail::ItemBase& cell(std::string_view testId, std::size_t row) {
-    std::vector<detail::ItemBase*> const found = QtHarness::widgets(testId);
+detail::ItemBase const& cell(std::string_view testId, std::size_t row) {
+    std::vector<detail::ItemBase const*> const found = QtHarness::widgets(testId);
     REQUIRE(found.size() > row);
     return *found.at(row);
 }

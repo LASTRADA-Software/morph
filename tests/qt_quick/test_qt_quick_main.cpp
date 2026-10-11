@@ -15,7 +15,7 @@
 int main(int argc, char* argv[]) {
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
-    QGuiApplication app{argc, argv};
+    QGuiApplication const app{argc, argv};
     Catch::Session session;
     int const result = morph::testkit::runSession(session, argc, argv);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);

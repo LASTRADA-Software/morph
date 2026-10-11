@@ -310,7 +310,7 @@ TEST_CASE("qt_quick widgets: the field state shows errors, required, stale", "[q
     text->setRequired(true);
     text->setStale(true);
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*text);
+    QQuickItem const& item = Scene::itemOf(*text);
     CHECK(item.property("errors").toStringList() ==
           QStringList{QStringLiteral("Too long"), QStringLiteral("Not a number")});
     CHECK(item.property("required").toBool());
@@ -358,7 +358,7 @@ TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_q
     CHECK(Scene::itemOf(*steps).property("current").toInt() == -1);
     CHECK(Scene::itemOf(*pairs).property("items").toList().size() == 1);
     CHECK(base(*empty).shownText() == "Nothing yet");
-    QQuickItem* const action = Scene::itemOf(*empty).findChild<QQuickItem*>(QStringLiteral("action"));
+    auto const* const action = Scene::itemOf(*empty).findChild<QQuickItem*>(QStringLiteral("action"));
     REQUIRE(action != nullptr);
     scene.click(*action);
     CHECK(actions == 1);
@@ -376,7 +376,7 @@ TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handler
     banner->setOnDismiss([&log] { log.emplace_back("dismiss"); });
     scene.settle();
     CHECK(base(*banner).shownText() == "Failed");
-    QQuickItem& item = Scene::itemOf(*banner);
+    QQuickItem const& item = Scene::itemOf(*banner);
     scene.click(*item.findChild<QQuickItem*>(QStringLiteral("action")));
     scene.click(*item.findChild<QQuickItem*>(QStringLiteral("dismiss")));
     CHECK(log == std::vector<std::string>{"action", "dismiss"});
@@ -422,7 +422,7 @@ TEST_CASE("qt_quick widgets: the common properties reach the item", "[qt_quick]"
     text->setVisible(false);
     text->setEnabled(false);
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*text);
+    QQuickItem const& item = Scene::itemOf(*text);
     CHECK(item.property("a11yName").toString() == QStringLiteral("Greeting"));
     CHECK(item.property("a11yRole").toInt() == 0);
     CHECK(item.objectName() == QStringLiteral("greeting"));

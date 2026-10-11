@@ -9,6 +9,8 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <algorithm>
+#include <array>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/frontend.hpp>
@@ -30,13 +32,11 @@ bool usableHere(ui::EnvironmentReader const& env) {
     if (!env) {
         return false;
     }
-    for (char const* const name : {"DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"}) {
+    std::array<char const*, 3> const names{"DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"};
+    return std::ranges::any_of(names, [&env](char const* name) {
         std::optional<std::string> const value = env(name);
-        if (value.has_value() && !value->empty()) {
-            return true;
-        }
-    }
-    return false;
+        return value.has_value() && !value->empty();
+    });
 #endif
 }
 

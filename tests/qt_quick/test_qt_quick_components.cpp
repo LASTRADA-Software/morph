@@ -208,7 +208,7 @@ TEST_CASE("qt_quick components: a restyle maps a kind to a component that declar
     int clicks = 0;
     button->setOnClick([&clicks] { ++clicks; });
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*button);
+    QQuickItem const& item = Scene::itemOf(*button);
     CHECK(item.property("brand").toBool());
     CHECK(item.property("label").toString() == QStringLiteral("Pay"));
     scene.click(item);

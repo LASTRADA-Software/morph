@@ -34,6 +34,7 @@ struct KindType {
 
 // The kinds a bundle may restyle, and the MorphUi type each one is. The layout kinds are not restyled: they place
 // other widgets and show nothing of their own.
+// NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, kind beside type, reads as one.
 constexpr std::array<KindType, 22> kRestylable = {
     {{"text", "MorphText"},           {"button", "MorphButton"},
      {"textInput", "MorphTextInput"}, {"checkbox", "MorphCheckbox"},
@@ -46,6 +47,7 @@ constexpr std::array<KindType, 22> kRestylable = {
      {"progress", "MorphProgress"},   {"steps", "MorphSteps"},
      {"keyValue", "MorphKeyValue"},   {"emptyState", "MorphEmptyState"},
      {"drawer", "MorphDrawer"},       {"collapsible", "MorphCollapsible"}}};
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::string errorsOf(QQmlComponent const& component) {
     std::string text;
@@ -198,11 +200,11 @@ std::expected<QQmlComponent*, ComponentFailure> Components::load(QQmlEngine& eng
     if (found == _state->compiled.end()) {
         found = _state->compiled.emplace(key, _state->compile(engine, name)).first;
     }
-    QQmlComponent* const component = found->second.get();
-    if (component == nullptr || !component->isReady()) {
-        return fail("component " + name + " does not compile: " + (component != nullptr ? errorsOf(*component) : ""));
+    QQmlComponent const* const compiled = found->second.get();
+    if (compiled == nullptr || !compiled->isReady()) {
+        return fail("component " + name + " does not compile: " + (compiled != nullptr ? errorsOf(*compiled) : ""));
     }
-    return component;
+    return found->second.get();
 }
 
 std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, std::string const& kind,
@@ -212,8 +214,9 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
         report(failure);
         return std::unexpected{std::move(failure)};
     };
-    auto const known = std::ranges::find(kRestylable, kind, &KindType::kind);
-    if (known == kRestylable.end()) {
+    auto const index = static_cast<std::size_t>(
+        std::ranges::distance(kRestylable.begin(), std::ranges::find(kRestylable, kind, &KindType::kind)));
+    if (index >= kRestylable.size()) {
         return fail("`" + kind + "` is not a kind that can be restyled");
     }
     if (std::optional<std::string> const refused = _state->refusal(component, 0)) {
@@ -225,7 +228,8 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
                     " does not compile: " + (loaded != nullptr ? errorsOf(*loaded) : ""));
     }
     QQmlComponent base{&engine};
-    base.loadFromModule(QStringLiteral("MorphUi"), detail::toQString(known->type), QQmlComponent::PreferSynchronous);
+    base.loadFromModule(QStringLiteral("MorphUi"), detail::toQString(kRestylable.at(index).type),
+                        QQmlComponent::PreferSynchronous);
     std::unique_ptr<QObject> const baseObject{base.create()};
     std::unique_ptr<QObject> const candidate{loaded->create()};
     if (baseObject == nullptr || candidate == nullptr) {
@@ -242,7 +246,7 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
     if (!missing.empty()) {
         return fail("restyle of `" + kind + "`: " + component + " does not declare " + missing);
     }
-    _state->restyles.insert_or_assign(std::string{known->type}, component);
+    _state->restyles.insert_or_assign(std::string{kRestylable.at(index).type}, component);
     return {};
 }
 

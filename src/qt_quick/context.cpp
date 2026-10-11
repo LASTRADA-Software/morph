@@ -67,8 +67,7 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
         throw std::runtime_error{"morph::qt_quick: the MorphRoots component did not make an item"};
     }
     // The context deletes the holder; until then the host item is its QObject parent too.
-    static_cast<void>(made.release());
-    _holder = holder;
+    _holder = qobject_cast<QQuickItem*>(made.release());
     QQmlEngine::setObjectOwnership(_holder, QQmlEngine::CppOwnership);
     _holder->setParentItem(&host);
     _holder->setParent(&host);
@@ -130,10 +129,9 @@ Context::Made Context::make(QString const& type, QVariantMap initial) {
     }
     // From here Qt's parents own both: the relay is the item's child, the item the holder's until its widget
     // deletes it.
-    QQmlEngine::setObjectOwnership(item, QQmlEngine::CppOwnership);
     relay->setParent(item);
     item->setParent(_holder);
-    static_cast<void>(object.release());
+    QQmlEngine::setObjectOwnership(object.release(), QQmlEngine::CppOwnership);
     return Made{.item = item, .relay = relay.release()};
 }
 

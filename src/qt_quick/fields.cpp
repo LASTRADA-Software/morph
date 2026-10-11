@@ -314,6 +314,7 @@ std::string DateTimeImpl::shownText() const {
 SliderImpl::SliderImpl(Context& context, ui::ContainerWidget* parent)
     : FieldItemWidget{context, QStringLiteral("MorphSlider"), parent} {}
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the signature of ui::SliderWidget::setRange, overridden.
 void SliderImpl::setRange(std::int64_t minimum, std::int64_t maximum, std::int64_t step) {
     QObject* const control = part("control");
     if (control == nullptr) {

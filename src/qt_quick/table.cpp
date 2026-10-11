@@ -53,11 +53,14 @@ void TableImpl::adopted(ItemBase& child) {
 bool TableImpl::marked(ItemBase const& row) { return row.read("selected").toBool(); }
 
 void TableImpl::mark() const {
-    for (ItemBase* const child : children()) {
+    // Every child of a table is one of its rows; the mount makes nothing else in one.
+    for (ItemBase const* const child : children()) {
         auto const* const row = dynamic_cast<TableRowImpl const*>(child);
-        bool const selected =
-            row != nullptr && row->key() && std::ranges::find(_requested, *row->key()) != _requested.end();
-        child->write("selected", selected);
+        if (row == nullptr) {
+            continue;
+        }
+        bool const selected = row->key() && std::ranges::find(_requested, *row->key()) != _requested.end();
+        row->write("selected", selected);
     }
 }
 
@@ -124,7 +127,7 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
 }
 
 void TableRowImpl::adopted(ItemBase& child) {
-    QQuickItem* const cell = child.item();
+    QQuickItem const* const cell = child.item();
     if (cell == nullptr || item() == nullptr) {
         return;
     }

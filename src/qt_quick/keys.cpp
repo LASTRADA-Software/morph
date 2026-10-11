@@ -6,6 +6,7 @@
 #include <array>
 #include <charconv>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -39,8 +40,9 @@ std::optional<ui::Key> decodeKey(QString const& text) {
     }
     std::string const digits = toUtf8(text.mid(2));
     std::int64_t number = 0;
-    auto const [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), number);
-    if (error != std::errc{} || end != digits.data() + digits.size() || digits.empty()) {
+    char const* const last = std::to_address(digits.cend());
+    auto const [end, error] = std::from_chars(digits.data(), last, number);
+    if (error != std::errc{} || end != last || digits.empty()) {
         return std::nullopt;
     }
     return ui::Key{number};
@@ -54,6 +56,7 @@ struct NamedKey {
 };
 
 // `Escape` is accepted beside the grammar's `Esc`: the interpreter binds a dialog's `cancel` under that name.
+// NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, name beside key, reads as one.
 constexpr std::array<NamedKey, 10> kNamedKeys = {{{"Enter", Qt::Key_Return},
                                                   {"Esc", Qt::Key_Escape},
                                                   {"Escape", Qt::Key_Escape},
@@ -64,6 +67,7 @@ constexpr std::array<NamedKey, 10> kNamedKeys = {{{"Enter", Qt::Key_Return},
                                                   {"Right", Qt::Key_Right},
                                                   {"Space", Qt::Key_Space},
                                                   {"Delete", Qt::Key_Delete}}};
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::optional<Qt::KeyboardModifier> modifierNamed(std::string_view name) {
     if (name == "Ctrl") {
@@ -102,8 +106,10 @@ std::optional<Qt::Key> keyNamed(std::string_view name) {
     }
     if (name.size() >= 2 && name.size() <= 3 && name.front() == 'F') {
         int number = 0;
-        auto const [end, error] = std::from_chars(name.data() + 1, name.data() + name.size(), number);
-        if (error == std::errc{} && end == name.data() + name.size() && number >= 1 && number <= 24) {
+        std::string_view const digits = name.substr(1);
+        char const* const last = std::to_address(digits.cend());
+        auto const [end, error] = std::from_chars(digits.data(), last, number);
+        if (error == std::errc{} && end == last && number >= 1 && number <= 24) {
             return static_cast<Qt::Key>(Qt::Key_F1 + (number - 1));
         }
     }

@@ -165,6 +165,9 @@ private:
 [[nodiscard]] ContainerCore* containerOf(ui::ContainerWidget* widget) noexcept;
 
 /// `ui::Widget`'s common setters, over `ItemBase`.
+// NOLINTBEGIN(portability-template-virtual-member-function): these templates exist to implement the widget
+// interfaces' virtual functions, and each is instantiated only as the base of a final widget class in kinds.hpp,
+// whose virtual functions are all used through the interface; every compiler then instantiates all of them.
 template <class Interface>
 class ItemWidget : public Interface, public ItemBase {
 public:
@@ -233,5 +236,6 @@ protected:
         return qobject_cast<QQuickItem*>(this->part("content"));
     }
 };
+// NOLINTEND(portability-template-virtual-member-function)
 
 }  // namespace morph::qt_quick::detail

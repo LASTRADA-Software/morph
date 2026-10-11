@@ -224,6 +224,7 @@ std::string EmptyStateImpl::shownText() const { return toUtf8(read("title").toSt
 CustomImpl::CustomImpl(Context& context, Context::Made made, ui::ContainerWidget* parent)
     : ItemWidget{context, made, parent} {}
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the signature of CustomWidget::setTextProp, overridden.
 void CustomImpl::setTextProp(std::string_view name, std::string_view value) {
     std::string const property{name};
     write(property.c_str(), toQString(value));
