@@ -104,8 +104,10 @@ void SplitterImpl::setSizes(std::vector<int> const& sizes) {
 
 void SplitterImpl::setOnResize(std::function<void(std::vector<int>)> onResize) {
     relay().on(QStringLiteral("resize"), [onResize = std::move(onResize)](QVariant const& payload) {
+        QVariantList const given = payload.toList();
         std::vector<int> sizes;
-        for (QVariant const& size : payload.toList()) {
+        sizes.reserve(static_cast<std::size_t>(given.size()));
+        for (QVariant const& size : given) {
             sizes.push_back(size.toInt());
         }
         if (onResize) {
@@ -128,11 +130,12 @@ void SplitterImpl::adopted(ItemBase& child) {
     }
 }
 
-void SplitterImpl::reorder(ItemBase& child, std::size_t from, std::size_t to) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
+void SplitterImpl::reorder(ItemBase& child, std::size_t origin, std::size_t destination) {
     static_cast<void>(child);
     if (QObject* const split = part("content")) {
-        QMetaObject::invokeMethod(split, "moveItem", Q_ARG(int, static_cast<int>(from)),
-                                  Q_ARG(int, static_cast<int>(to)));
+        QMetaObject::invokeMethod(split, "moveItem", Q_ARG(int, static_cast<int>(origin)),
+                                  Q_ARG(int, static_cast<int>(destination)));
     }
 }
 
@@ -186,8 +189,10 @@ void CollapsibleImpl::toggleByUser() const {
 DropZoneImpl::DropZoneImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphDropZone"), parent} {
     relay().answer(QStringLiteral("takes"), [this](QVariant const& payload) {
+        QVariantList const urls = payload.toList();
         std::vector<std::string> paths;
-        for (QVariant const& url : payload.toList()) {
+        paths.reserve(static_cast<std::size_t>(urls.size()));
+        for (QVariant const& url : urls) {
             paths.push_back(localPath(url.toString()));
         }
         return takes(paths);
@@ -200,8 +205,10 @@ void DropZoneImpl::setMultiple(bool multiple) { _multiple = multiple; }
 
 void DropZoneImpl::setOnDrop(std::function<void(std::vector<std::string>)> onDrop) {
     relay().on(QStringLiteral("files"), [onDrop = std::move(onDrop)](QVariant const& payload) {
+        QVariantList const urls = payload.toList();
         std::vector<std::string> paths;
-        for (QVariant const& url : payload.toList()) {
+        paths.reserve(static_cast<std::size_t>(urls.size()));
+        for (QVariant const& url : urls) {
             paths.push_back(localPath(url.toString()));
         }
         if (onDrop) {

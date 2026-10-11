@@ -137,8 +137,9 @@ public:
 protected:
     /// The item a new child's item is appended to; null leaves the placing to `adopted`.
     [[nodiscard]] virtual QQuickItem* contentFor(ItemBase& child) = 0;
-    /// Shows @p child, now at @p to in `children()`, in its new place: a stacking-order change by default.
-    virtual void reorder(ItemBase& child, std::size_t from, std::size_t to);
+    /// Shows @p child, now at @p destination in `children()`, in its new place: a stacking-order change by default.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
+    virtual void reorder(ItemBase& child, std::size_t origin, std::size_t destination);
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.

@@ -127,7 +127,8 @@ public:
         bool first = true;
         for (std::size_t const row : rows) {
             if (row < children.size()) {
-                mouseClick(children.at(row)->item(), first ? Qt::KeyboardModifiers{} : Qt::ControlModifier);
+                Qt::KeyboardModifiers const modifiers = first ? Qt::NoModifier : Qt::ControlModifier;
+                mouseClick(children.at(row)->item(), modifiers);
             }
             first = false;
         }

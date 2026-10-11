@@ -302,7 +302,8 @@ public:
 protected:
     [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override;
     void adopted(ItemBase& child) override;
-    void reorder(ItemBase& child, std::size_t from, std::size_t to) override;
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
+    void reorder(ItemBase& child, std::size_t origin, std::size_t destination) override;
     void releasing(ItemBase& child) noexcept override;
 };
 

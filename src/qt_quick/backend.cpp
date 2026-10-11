@@ -47,6 +47,7 @@ std::unique_ptr<CustomWidget> Backend::createCustom(ui::ContainerWidget* parent,
     }
     static_cast<void>(object.release());
     QQmlEngine::setObjectOwnership(item, QQmlEngine::CppOwnership);
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the item is the relay's QObject parent and deletes it.
     auto* const relay = new detail::Relay{item};
     if (item->metaObject()->indexOfProperty("host") >= 0) {
         item->setProperty("host", QVariant::fromValue<QObject*>(relay));

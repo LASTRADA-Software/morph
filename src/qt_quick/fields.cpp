@@ -38,12 +38,23 @@ std::string TextImpl::shownText() const { return toUtf8(read("text").toString())
 
 // ── TextInput ─────────────────────────────────────────────────────────────
 
+namespace {
+
+QVariantMap textInputProperties(ui::TextInputMode mode) {
+    QVariantMap properties;
+    if (mode == ui::TextInputMode::Password) {
+        properties.insert(QStringLiteral("password"), true);
+    }
+    return properties;
+}
+
+}  // namespace
+
 TextInputImpl::TextInputImpl(Context& context, ui::ContainerWidget* parent, ui::TextInputMode mode)
     : FieldItemWidget{
           context,
           mode == ui::TextInputMode::Multiline ? QStringLiteral("MorphTextArea") : QStringLiteral("MorphTextInput"),
-          parent,
-          mode == ui::TextInputMode::Password ? QVariantMap{{QStringLiteral("password"), true}} : QVariantMap{}},
+          parent, textInputProperties(mode)},
       _multiline{mode == ui::TextInputMode::Multiline} {}
 
 void TextInputImpl::setText(std::string_view text) {
@@ -75,7 +86,10 @@ void TextInputImpl::setOnCommit(std::function<void(std::string)> onCommit) {
 
 std::string TextInputImpl::shownText() const {
     QObject const* const control = part("control");
-    return control != nullptr ? toUtf8(control->property("text").toString()) : std::string{};
+    if (control == nullptr) {
+        return {};
+    }
+    return toUtf8(control->property("text").toString());
 }
 
 std::size_t TextInputImpl::cursor() const {
@@ -289,7 +303,10 @@ void DateTimeImpl::setOnChange(std::function<void(std::optional<morph::time::Tim
 
 std::string DateTimeImpl::shownText() const {
     QObject const* const control = part("control");
-    return control != nullptr ? toUtf8(control->property("text").toString()) : std::string{};
+    if (control == nullptr) {
+        return {};
+    }
+    return toUtf8(control->property("text").toString());
 }
 
 // ── Slider ────────────────────────────────────────────────────────────────

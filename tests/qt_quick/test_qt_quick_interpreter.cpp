@@ -255,16 +255,20 @@ constexpr char const* kList = R"({
       "children": [ { "kind": "textInput", "testId": "cell", "value": { "row": "name" } } ] } ] } })";
 
 std::vector<std::string> cellTexts() {
+    std::vector<detail::ItemBase*> const cells = QtHarness::widgets("cell");
     std::vector<std::string> texts;
-    for (detail::ItemBase const* const cell : QtHarness::widgets("cell")) {
+    texts.reserve(cells.size());
+    for (detail::ItemBase const* const cell : cells) {
         texts.push_back(cell->shownText());
     }
     return texts;
 }
 
 std::vector<QQuickItem*> cellItems() {
+    std::vector<detail::ItemBase*> const cells = QtHarness::widgets("cell");
     std::vector<QQuickItem*> items;
-    for (detail::ItemBase const* const cell : QtHarness::widgets("cell")) {
+    items.reserve(cells.size());
+    for (detail::ItemBase const* const cell : cells) {
         items.push_back(cell->item());
     }
     return items;

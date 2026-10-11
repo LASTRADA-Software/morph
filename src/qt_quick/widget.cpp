@@ -82,7 +82,12 @@ void ItemBase::detachedFrom(ContainerCore const& container) noexcept {
     }
 }
 
-QVariant ItemBase::read(char const* name) const { return _item != nullptr ? _item->property(name) : QVariant{}; }
+QVariant ItemBase::read(char const* name) const {
+    if (_item == nullptr) {
+        return {};
+    }
+    return _item->property(name);
+}
 
 void ItemBase::write(char const* name, QVariant const& value) const {
     if (_item == nullptr) {
@@ -119,7 +124,11 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
 }
 
 void ItemBase::showDragKey(std::optional<ui::Key> const& key) const {
-    write("dragKey", key ? encodeKey(*key) : QString{});
+    QString text;
+    if (key) {
+        text = encodeKey(*key);
+    }
+    write("dragKey", text);
 }
 
 void ItemBase::takeDrops(std::function<bool(ui::Key const&)> accepts, std::function<void(ui::Key)> onDrop) const {
@@ -128,12 +137,13 @@ void ItemBase::takeDrops(std::function<bool(ui::Key const&)> accepts, std::funct
         std::optional<ui::Key> const key = decodeKey(payload.toString());
         return key.has_value() && accepts && accepts(*key);
     });
-    _relay->on(QStringLiteral("drop"), [accepts, onDrop = std::move(onDrop)](QVariant const& payload) {
-        std::optional<ui::Key> const key = decodeKey(payload.toString());
-        if (key && accepts && accepts(*key) && onDrop) {
-            onDrop(*key);
-        }
-    });
+    _relay->on(QStringLiteral("drop"),
+               [accepts = std::move(accepts), onDrop = std::move(onDrop)](QVariant const& payload) {
+                   std::optional<ui::Key> const key = decodeKey(payload.toString());
+                   if (key && accepts && accepts(*key) && onDrop) {
+                       onDrop(*key);
+                   }
+               });
 }
 
 void ItemBase::showAccessibleName(std::string_view name) const { write("a11yName", toQString(name)); }
@@ -248,31 +258,32 @@ void ContainerCore::move(ItemBase& child, std::size_t index) {
     if (found == _children.end()) {
         return;
     }
-    auto const from = static_cast<std::size_t>(std::distance(_children.begin(), found));
+    auto const origin = static_cast<std::size_t>(std::distance(_children.begin(), found));
     _children.erase(found);
     // `index` counts the children without `child`, as the contract's "the child now at index" does.
-    std::size_t const to = std::min(index, _children.size());
-    _children.insert(std::next(_children.begin(), static_cast<std::ptrdiff_t>(to)), &child);
-    if (to == from) {
+    std::size_t const destination = std::min(index, _children.size());
+    _children.insert(std::next(_children.begin(), static_cast<std::ptrdiff_t>(destination)), &child);
+    if (destination == origin) {
         return;
     }
-    reorder(child, from, to);
+    reorder(child, origin, destination);
     ++_restacks;
     moved();
 }
 
-void ContainerCore::reorder(ItemBase& child, std::size_t from, std::size_t to) {
-    static_cast<void>(from);
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
+void ContainerCore::reorder(ItemBase& child, std::size_t origin, std::size_t destination) {
+    static_cast<void>(origin);
     QQuickItem* const item = child.item();
     if (item == nullptr) {
         return;
     }
-    if (to + 1 < _children.size()) {
-        if (QQuickItem* const next = _children.at(to + 1)->item()) {
+    if (destination + 1 < _children.size()) {
+        if (QQuickItem* const next = _children.at(destination + 1)->item()) {
             item->stackBefore(next);
         }
-    } else if (to > 0) {
-        if (QQuickItem* const previous = _children.at(to - 1)->item()) {
+    } else if (destination > 0) {
+        if (QQuickItem* const previous = _children.at(destination - 1)->item()) {
             item->stackAfter(previous);
         }
     }

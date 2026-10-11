@@ -65,6 +65,7 @@ public:
     /// @param name   The name a document uses.
     /// @param qml    The QML text, as the bundle delivered it.
     /// @param digest Its SHA-256, as the bundle names it: `sha256:` followed by 64 hexadecimal digits.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a name, its text and its digest, as the bundle lists them.
     void addBundle(std::string name, std::string qml, std::string digest);
 
     /// @brief Maps a built-in kind to a registered component, checking that the component declares every property
@@ -74,6 +75,7 @@ public:
     /// @param component The registered component's name.
     /// @return Nothing, or why the mapping is refused; a refusal is also reported, and the kind keeps its
     ///         `MorphUi` component.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a kind, then what restyles it, as the bundle maps them.
     [[nodiscard]] std::expected<void, ComponentFailure> restyle(QQmlEngine& engine, std::string const& kind,
                                                                 std::string const& component);
 

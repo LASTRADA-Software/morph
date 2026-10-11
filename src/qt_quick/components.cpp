@@ -200,8 +200,7 @@ std::expected<QQmlComponent*, ComponentFailure> Components::load(QQmlEngine& eng
     }
     QQmlComponent* const component = found->second.get();
     if (component == nullptr || !component->isReady()) {
-        return fail("component " + name +
-                    " does not compile: " + (component != nullptr ? errorsOf(*component) : std::string{}));
+        return fail("component " + name + " does not compile: " + (component != nullptr ? errorsOf(*component) : ""));
     }
     return component;
 }
@@ -223,7 +222,7 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
     std::unique_ptr<QQmlComponent> const loaded = _state->compile(engine, component);
     if (loaded == nullptr || !loaded->isReady()) {
         return fail("restyle of `" + kind + "`: component " + component +
-                    " does not compile: " + (loaded != nullptr ? errorsOf(*loaded) : std::string{}));
+                    " does not compile: " + (loaded != nullptr ? errorsOf(*loaded) : ""));
     }
     QQmlComponent base{&engine};
     base.loadFromModule(QStringLiteral("MorphUi"), detail::toQString(known->type), QQmlComponent::PreferSynchronous);

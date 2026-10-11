@@ -51,6 +51,7 @@ public:
 private:
     struct State;
     /// Arms @p fn @p delay from now, then every @p period; a zero @p period fires once.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the first delay, then the period, as `every` gives them.
     [[nodiscard]] reactive::TimerHandle add(std::chrono::milliseconds delay, std::chrono::milliseconds period,
                                             std::function<void()> fn);
 

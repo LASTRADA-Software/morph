@@ -33,6 +33,7 @@ detail::ContainerCore& containerCore(ui::ContainerWidget& container) {
 std::vector<std::string> laidOut(Scene& scene, std::vector<std::unique_ptr<ui::TextWidget>> const& texts) {
     scene.settle();
     std::vector<std::pair<qreal, std::string>> placed;
+    placed.reserve(texts.size());
     for (auto const& text : texts) {
         QQuickItem const& item = Scene::itemOf(*text);
         placed.emplace_back(item.mapToScene(QPointF{0, 0}).y(), detail::baseOf(*text)->shownText());

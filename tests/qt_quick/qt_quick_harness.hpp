@@ -121,6 +121,7 @@ public:
     }
 
     /// Every item inside @p item, depth first, that inherits the C++ class @p className.
+    // NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
     [[nodiscard]] static QList<QQuickItem*> itemsOf(QQuickItem& item, char const* className) {
         QList<QQuickItem*> found;
         for (QQuickItem* const child : item.childItems()) {

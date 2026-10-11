@@ -29,11 +29,16 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
     QVariantList list;
     list.reserve(static_cast<qsizetype>(entries.size()));
     for (ui::MenuEntry const& entry : entries) {
+        // A null `checked` is an entry that is not checkable.
+        QVariant checked = QVariant::fromValue(nullptr);
+        if (entry.checked) {
+            checked = *entry.checked;
+        }
         list.append(QVariantMap{
             {QStringLiteral("label"), toQString(entry.label)},
             {QStringLiteral("icon"), toQString(entry.icon)},
             {QStringLiteral("keys"), toQString(entry.keys)},
-            {QStringLiteral("checked"), entry.checked ? QVariant{*entry.checked} : QVariant::fromValue(nullptr)},
+            {QStringLiteral("checked"), checked},
             {QStringLiteral("enabled"), entry.enabled},
             {QStringLiteral("items"), menuEntries(entry.items)},
         });
@@ -88,8 +93,10 @@ void MenuImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
 
 void MenuImpl::setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) {
     relay().on(QStringLiteral("activate"), [this, onActivate = std::move(onActivate)](QVariant const& payload) {
+        QVariantList const indices = payload.toList();
         std::vector<std::size_t> path;
-        for (QVariant const& index : payload.toList()) {
+        path.reserve(static_cast<std::size_t>(indices.size()));
+        for (QVariant const& index : indices) {
             int const value = index.toInt();
             if (value < 0) {
                 return;

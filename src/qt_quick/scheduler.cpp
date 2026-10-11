@@ -30,8 +30,8 @@ struct QtScheduler::State {
 
     ~State() { cancelAll(); }
 
-    void cancel(std::uint64_t id) {
-        auto const found = timers.find(id);
+    void cancel(std::uint64_t timerId) {
+        auto const found = timers.find(timerId);
         if (found == timers.end()) {
             return;
         }
@@ -53,12 +53,12 @@ struct QtScheduler::State {
     }
 
     // Copied before it runs: the callback may cancel its own timer or destroy the scheduler.
-    void fire(std::uint64_t id, bool repeating, std::function<void()> const& fn) {
-        if (!timers.contains(id)) {
+    void fire(std::uint64_t timerId, bool repeating, std::function<void()> const& fn) {
+        if (!timers.contains(timerId)) {
             return;
         }
         if (!repeating) {
-            cancel(id);
+            cancel(timerId);
         }
         std::function<void()> const call = fn;
         ::core::async::ExecutorScope const scope{owner->coreExecutor()};
@@ -98,28 +98,31 @@ std::size_t QtScheduler::pendingTimers() const noexcept { return _state->timers.
 reactive::TimerHandle QtScheduler::add(std::chrono::milliseconds delay, std::chrono::milliseconds period,
                                        std::function<void()> fn) {
     std::shared_ptr<State> const& state = _state;
-    std::uint64_t const id = ++state->nextId;
+    std::uint64_t const timerId = ++state->nextId;
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the parent owns the timer; a cancel deletes it later.
     auto* const timer = new QTimer{state->parent};
     bool const repeating = period.count() > 0;
     timer->setSingleShot(!repeating);
     timer->setTimerType(Qt::PreciseTimer);
-    timer->setInterval(repeating ? period : std::max(delay, std::chrono::milliseconds{0}));
-    QObject::connect(timer, &QTimer::timeout, timer, [weak = std::weak_ptr{state}, id, repeating, fn = std::move(fn)] {
-        if (auto const live = weak.lock()) {
-            live->fire(id, repeating, fn);
-        }
-    });
-    state->timers.emplace(id, timer);
+    std::chrono::milliseconds const zero{0};
+    timer->setInterval(repeating ? period : std::max(delay, zero));
+    QObject::connect(timer, &QTimer::timeout, timer,
+                     [weak = std::weak_ptr{state}, timerId, repeating, fn = std::move(fn)] {
+                         if (auto const live = weak.lock()) {
+                             live->fire(timerId, repeating, fn);
+                         }
+                     });
+    state->timers.emplace(timerId, timer);
     timer->start();
     std::weak_ptr<State> const weak = state;
-    return reactive::TimerHandle{[weak, id] {
+    return reactive::TimerHandle{[weak, timerId] {
                                      if (auto const live = weak.lock()) {
-                                         live->cancel(id);
+                                         live->cancel(timerId);
                                      }
                                  },
-                                 [weak, id] {
+                                 [weak, timerId] {
                                      auto const live = weak.lock();
-                                     return live != nullptr && live->timers.contains(id);
+                                     return live != nullptr && live->timers.contains(timerId);
                                  }};
 }
 

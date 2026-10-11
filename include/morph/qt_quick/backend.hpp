@@ -49,6 +49,7 @@ public:
     ///        precision.
     /// @param name  The prop.
     /// @param value Its text.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its value, as every setter takes them.
     virtual void setTextProp(std::string_view name, std::string_view value) = 0;
 
     /// @brief Sets a `bool` prop.

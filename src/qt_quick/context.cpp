@@ -6,6 +6,7 @@
 #include <QQmlContext>
 #include <QQmlError>
 #include <QUrl>
+#include <memory>
 #include <morph/qt_quick/components.hpp>
 #include <stdexcept>
 #include <utility>
@@ -60,12 +61,14 @@ QString errorsOf(QQmlComponent const& component) {
 Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     : _engine{&engine}, _options{std::move(options)} {
     QQmlComponent& roots = component(QStringLiteral("MorphRoots"));
-    QObject* const made = roots.create();
-    _holder = qobject_cast<QQuickItem*>(made);
-    if (_holder == nullptr) {
-        delete made;
+    std::unique_ptr<QObject> made{roots.create()};
+    auto* const holder = qobject_cast<QQuickItem*>(made.get());
+    if (holder == nullptr) {
         throw std::runtime_error{"morph::qt_quick: the MorphRoots component did not make an item"};
     }
+    // The context deletes the holder; until then the host item is its QObject parent too.
+    static_cast<void>(made.release());
+    _holder = holder;
     QQmlEngine::setObjectOwnership(_holder, QQmlEngine::CppOwnership);
     _holder->setParentItem(&host);
     _holder->setParent(&host);
@@ -76,6 +79,7 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
 
 Context::~Context() {
     _roots.reset();
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the holder is the context's, made in its constructor.
     delete _holder.data();
 }
 
@@ -116,20 +120,21 @@ QQmlComponent& Context::component(QString const& type) {
 
 Context::Made Context::make(QString const& type, QVariantMap initial) {
     QQmlComponent& made = component(type);
-    auto* const relay = new Relay{};
-    initial.insert(QStringLiteral("host"), QVariant::fromValue<QObject*>(relay));
-    QObject* const object = made.createWithInitialProperties(initial);
-    auto* const item = qobject_cast<QQuickItem*>(object);
+    auto relay = std::make_unique<Relay>();
+    initial.insert(QStringLiteral("host"), QVariant::fromValue<QObject*>(relay.get()));
+    std::unique_ptr<QObject> object{made.createWithInitialProperties(initial)};
+    auto* const item = qobject_cast<QQuickItem*>(object.get());
     if (item == nullptr) {
-        delete object;
-        delete relay;
         throw std::runtime_error{"morph::qt_quick: " + toUtf8(type) + " did not make an item:\n" +
                                  toUtf8(errorsOf(made))};
     }
+    // From here Qt's parents own both: the relay is the item's child, the item the holder's until its widget
+    // deletes it.
     QQmlEngine::setObjectOwnership(item, QQmlEngine::CppOwnership);
     relay->setParent(item);
     item->setParent(_holder);
-    return Made{.item = item, .relay = relay};
+    static_cast<void>(object.release());
+    return Made{.item = item, .relay = relay.release()};
 }
 
 }  // namespace morph::qt_quick::detail
