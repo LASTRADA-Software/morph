@@ -639,6 +639,7 @@ template <typename A>
     if (std::string const reply = replySchemaJson<typename ActionTraits<A>::Result>(); !reply.empty()) {
         glz::generic_u64 replyDom{};
         if (!glz::read_json(replyDom, reply)) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): writing a key creates it.
             dom["x-reply"] = std::move(replyDom);
         }
     }

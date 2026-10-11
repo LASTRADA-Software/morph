@@ -1229,11 +1229,11 @@ struct ExprParser {
                 node.args = std::move(*operands);
             }
             if (node.args.size() < signature->minArgs || node.args.size() > signature->maxArgs) {
-                std::string wanted = std::to_string(signature->minArgs);
+                std::string wanted = std::to_string(static_cast<unsigned>(signature->minArgs));
                 if (signature->maxArgs == kVariadic) {
                     wanted = "at least " + wanted;
                 } else if (signature->maxArgs != signature->minArgs) {
-                    wanted += " to " + std::to_string(signature->maxArgs);
+                    wanted += " to " + std::to_string(static_cast<unsigned>(signature->maxArgs));
                 }
                 bool const one =
                     signature->maxArgs == 1 || (signature->maxArgs == kVariadic && signature->minArgs == 1);
@@ -2112,8 +2112,7 @@ using Exact = std::expected<Amount, std::string>;
 /// @param text The text.
 /// @return The count.
 [[nodiscard]] inline std::int64_t codePoints(std::string_view text) {
-    return static_cast<std::int64_t>(
-        std::ranges::count_if(text, [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }));
+    return std::ranges::count_if(text, [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; });
 }
 
 /// @brief Text without leading and trailing white space: ASCII, and U+00A0 no-break space.
