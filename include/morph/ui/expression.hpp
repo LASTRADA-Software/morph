@@ -493,8 +493,8 @@ struct TypeReader {
                 }
                 base = Type::list(std::move(*element));
             } else {
-                const auto* const found =
-                    std::ranges::find(kScalars, word, &std::pair<std::string_view, Type::Kind>::first);
+                // NOLINTNEXTLINE(readability-qualified-auto): an iterator, a pointer only in some standard libraries.
+                auto const found = std::ranges::find(kScalars, word, &std::pair<std::string_view, Type::Kind>::first);
                 if (found == kScalars.end()) {
                     return std::unexpected("unknown type `" + std::string{word} + "`");
                 }
@@ -1058,7 +1058,8 @@ struct Expr {
 /// @param name The function's name.
 /// @return Its signature, or null when `expr/1` has no such function.
 [[nodiscard]] inline FunctionSignature const* findFunction(std::string_view name) noexcept {
-    const auto* const found = std::ranges::find(kFunctions, name, &FunctionSignature::name);
+    // NOLINTNEXTLINE(readability-qualified-auto): an iterator, a pointer only in some standard libraries.
+    auto const found = std::ranges::find(kFunctions, name, &FunctionSignature::name);
     return found == kFunctions.end() ? nullptr : &*found;
 }
 

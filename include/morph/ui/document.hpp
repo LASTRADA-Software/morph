@@ -1311,11 +1311,11 @@ public:
                 {"latest", MutationDecl::Concurrency::Latest},
                 {"parallel", MutationDecl::Concurrency::Parallel},
             }};
-            const auto* const found =
-                concurrency->is_string()
-                    ? std::ranges::find(kPolicies, concurrency->get_string(),
-                                        &std::pair<std::string_view, MutationDecl::Concurrency>::first)
-                    : kPolicies.end();
+            // NOLINTNEXTLINE(readability-qualified-auto): an iterator, a pointer only in some standard libraries.
+            auto const found = concurrency->is_string()
+                                   ? std::ranges::find(kPolicies, concurrency->get_string(),
+                                                       &std::pair<std::string_view, MutationDecl::Concurrency>::first)
+                                   : kPolicies.end();
             if (found == kPolicies.end()) {
                 refuse(memberPath(entry, place, "concurrency"),
                        "`concurrency` is `exclusive`, `serial`, `latest` or `parallel`");
@@ -1411,7 +1411,8 @@ public:
             if (spec->entry) {
                 return nullptr;
             }
-            const auto* const common = std::ranges::find(kCommonKeys, key, &KeySpec::key);
+            // NOLINTNEXTLINE(readability-qualified-auto): an iterator, a pointer only in some standard libraries.
+            auto const common = std::ranges::find(kCommonKeys, key, &KeySpec::key);
             return common == kCommonKeys.end() ? nullptr : &*common;
         };
         for (auto const& [key, member] : json.get_object()) {
