@@ -325,10 +325,10 @@ TEST_CASE("a served schema carries the reply's schema, annotated for a struct an
     CHECK(entry["id"].contains("x-order"));  // written by the forms engine only
     std::string atSchema;
     REQUIRE_FALSE(glz::write_json(entry["at"], atSchema));
-    CHECK(atSchema.find("date-time") != std::string::npos);
+    CHECK(atSchema.contains("date-time"));
     std::string countSchema;
     REQUIRE_FALSE(glz::write_json(journal["WireSchemas_Count"]["x-reply"], countSchema));
-    CHECK(countSchema.find("integer") != std::string::npos);
+    CHECK(countSchema.contains("integer"));
 }
 
 TEST_CASE("schemas without a typeId is refused", "[remote][schemas]") {

@@ -2,10 +2,12 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -64,19 +66,6 @@ struct PluralOperands {
     std::uint64_t fraction = 0;
 };
 
-namespace detail {
-
-// 10^places, for places up to kMaxDecimalPlaces.
-[[nodiscard]] constexpr std::uint64_t powerOfTen(std::uint32_t places) noexcept {
-    std::uint64_t out = 1;
-    for (std::uint32_t digit = 0; digit < places; ++digit) {
-        out *= 10U;
-    }
-    return out;
-}
-
-}  // namespace detail
-
 /// @brief A decimal as canonical text at @p places, rounded half to even: `-?[0-9]+(\.[0-9]+)?`.
 /// @param value The decimal.
 /// @param places The places shown.
@@ -118,14 +107,65 @@ namespace detail {
     // Kept modulo 10^18: the rules read `i` modulo 10^6 at most, and a remainder is all that survives the bound.
     constexpr std::uint64_t kBound = 1'000'000'000'000'000'000ULL;
     for (char const digit : whole) {
-        out.integer = (out.integer * 10U + static_cast<std::uint64_t>(digit - '0')) % kBound;
+        out.integer = ((out.integer * 10U) + static_cast<std::uint64_t>(digit - '0')) % kBound;
     }
     out.visibleFractionDigits = static_cast<std::uint32_t>(fraction.size());
     for (char const digit : fraction.substr(0, 18)) {
-        out.fraction = out.fraction * 10U + static_cast<std::uint64_t>(digit - '0');
+        out.fraction = (out.fraction * 10U) + static_cast<std::uint64_t>(digit - '0');
     }
     return out;
 }
+
+namespace detail {
+
+/// @brief CLDR's French cardinal rule: `one` for an integer part of 0 or 1, `many` for a whole million.
+/// @param number The operands.
+/// @return The category.
+[[nodiscard]] inline PluralCategory pluralFrench(PluralOperands const& number) {
+    if (number.integer == 0 || number.integer == 1) {
+        return PluralCategory::One;
+    }
+    bool const million = number.integer % 1'000'000U == 0 && number.visibleFractionDigits == 0;
+    return million ? PluralCategory::Many : PluralCategory::Other;
+}
+
+/// @brief CLDR's Polish cardinal rule: `one`, `few` (2-4 outside 12-14), `many` for the other integers.
+/// @param number The operands.
+/// @return The category.
+[[nodiscard]] inline PluralCategory pluralPolish(PluralOperands const& number) {
+    if (number.visibleFractionDigits != 0) {
+        return PluralCategory::Other;
+    }
+    if (number.integer == 1) {
+        return PluralCategory::One;
+    }
+    std::uint64_t const lastDigit = number.integer % 10U;
+    std::uint64_t const lastTwo = number.integer % 100U;
+    bool const few = lastDigit >= 2 && lastDigit <= 4 && (lastTwo < 12 || lastTwo > 14);
+    return few ? PluralCategory::Few : PluralCategory::Many;
+}
+
+/// @brief CLDR's Arabic cardinal rule: `zero`, `one`, `two`, `few` (3-10 modulo 100), `many` (11-99 modulo 100).
+/// @param number The operands.
+/// @return The category.
+[[nodiscard]] inline PluralCategory pluralArabic(PluralOperands const& number) {
+    // `n` is the absolute value: a shown non-zero fraction makes it no integer, and every rule asks for one.
+    if (number.fraction != 0) {
+        return PluralCategory::Other;
+    }
+    static constexpr std::array<PluralCategory, 3> kSmall{PluralCategory::Zero, PluralCategory::One,
+                                                          PluralCategory::Two};
+    if (number.integer < kSmall.size()) {
+        return kSmall.at(number.integer);
+    }
+    std::uint64_t const lastTwo = number.integer % 100U;
+    if (lastTwo >= 3 && lastTwo <= 10) {
+        return PluralCategory::Few;
+    }
+    return lastTwo >= 11 ? PluralCategory::Many : PluralCategory::Other;
+}
+
+}  // namespace detail
 
 /// @brief The CLDR cardinal plural category of a number in a locale.
 ///
@@ -137,50 +177,18 @@ namespace detail {
 /// @return Its category.
 [[nodiscard]] inline PluralCategory pluralCategory(std::string_view bcp47Locale, PluralOperands const& number) {
     std::string_view const language = bcp47Locale.substr(0, bcp47Locale.find_first_of("-_"));
-    std::uint64_t const i = number.integer;  // NOLINT(readability-identifier-length): CLDR's operand names
-    bool const whole = number.visibleFractionDigits == 0;
     if (language == "en" || language == "de") {
-        return i == 1 && whole ? PluralCategory::One : PluralCategory::Other;
+        bool const one = number.integer == 1 && number.visibleFractionDigits == 0;
+        return one ? PluralCategory::One : PluralCategory::Other;
     }
     if (language == "fr") {
-        if (i == 0 || i == 1) {
-            return PluralCategory::One;
-        }
-        return i != 0 && i % 1'000'000U == 0 && whole ? PluralCategory::Many : PluralCategory::Other;
+        return detail::pluralFrench(number);
     }
     if (language == "pl") {
-        if (!whole) {
-            return PluralCategory::Other;
-        }
-        if (i == 1) {
-            return PluralCategory::One;
-        }
-        std::uint64_t const lastDigit = i % 10U;
-        std::uint64_t const lastTwo = i % 100U;
-        if (lastDigit >= 2 && lastDigit <= 4 && (lastTwo < 12 || lastTwo > 14)) {
-            return PluralCategory::Few;
-        }
-        return PluralCategory::Many;
+        return detail::pluralPolish(number);
     }
     if (language == "ar") {
-        // `n` is the absolute value: a shown non-zero fraction makes it no integer, and every rule asks for one.
-        if (number.fraction != 0) {
-            return PluralCategory::Other;
-        }
-        std::uint64_t const lastTwo = i % 100U;
-        if (i == 0) {
-            return PluralCategory::Zero;
-        }
-        if (i == 1) {
-            return PluralCategory::One;
-        }
-        if (i == 2) {
-            return PluralCategory::Two;
-        }
-        if (lastTwo >= 3 && lastTwo <= 10) {
-            return PluralCategory::Few;
-        }
-        return lastTwo >= 11 ? PluralCategory::Many : PluralCategory::Other;
+        return detail::pluralArabic(number);
     }
     return PluralCategory::Other;
 }
@@ -296,7 +304,7 @@ struct MessageReader {
     [[nodiscard]] std::expected<Message::Pattern, std::string> pattern(std::string_view end) {
         Message::Pattern out;
         std::string literal;
-        while (!done() && !(!end.empty() && text.substr(at).starts_with(end))) {
+        while (!done() && (end.empty() || !text.substr(at).starts_with(end))) {
             char const letter = peek();
             if (letter == '\\') {
                 ++at;
@@ -460,6 +468,89 @@ struct MessageArgument {
     std::string text;
 };
 
+namespace detail {
+
+/// @brief The argument @p name of a message.
+/// @param arguments The arguments.
+/// @param name The argument's name.
+/// @return The argument, or null when there is none.
+[[nodiscard]] inline MessageArgument const* messageArgument(
+    std::vector<std::pair<std::string, MessageArgument>> const& arguments, std::string const& name) {
+    auto const found = std::ranges::find(arguments, name, &std::pair<std::string, MessageArgument>::first);
+    return found == arguments.end() ? nullptr : &found->second;
+}
+
+/// @brief How a message reads an argument: as its placeholder writes it, else as its `.input` declares it.
+/// @param message The message.
+/// @param name The argument's name.
+/// @param written The function the placeholder names; `None` when it names none.
+/// @return The function.
+[[nodiscard]] inline Message::Function messageFunction(Message const& message, std::string const& name,
+                                                       Message::Function written) {
+    auto const found = std::ranges::find(message.inputs, name, &std::pair<std::string, Message::Function>::first);
+    return found == message.inputs.end() || written != Message::Function::None ? written : found->second;
+}
+
+/// @brief Writes one pattern of a message with its arguments.
+/// @param message The message the pattern belongs to.
+/// @param pattern The pattern.
+/// @param arguments The arguments.
+/// @param numeric The locale's digits and separators for `:number`.
+/// @return The text, or why the arguments do not fit the pattern.
+[[nodiscard]] inline std::expected<std::string, std::string> writePattern(
+    Message const& message, Message::Pattern const& pattern,
+    std::vector<std::pair<std::string, MessageArgument>> const& arguments, render::NumericLocale const& numeric) {
+    std::string out;
+    for (Message::Part const& part : pattern) {
+        if (part.variable.empty()) {
+            out += part.text;
+            continue;
+        }
+        MessageArgument const* const value = messageArgument(arguments, part.variable);
+        if (value == nullptr) {
+            return std::unexpected("no argument `" + part.variable + "`");
+        }
+        Message::Function const function = messageFunction(message, part.variable, part.function);
+        if (value->number && function != Message::Function::String) {
+            out += render::formatCanonicalNumber(decimalText(*value->number, value->places), numeric);
+        } else if (function == Message::Function::Number) {
+            return std::unexpected("`" + part.variable + "` is formatted `:number` but is not a number");
+        } else {
+            out += value->number ? decimalText(*value->number, value->places) : value->text;
+        }
+    }
+    return out;
+}
+
+/// @brief The variant a `.match` picks: of those whose every key matches, the one whose keys rank best, selector
+///        by selector. MessageFormat 2 prefers an exact value to a plural category, and a category to `*`.
+/// @param message The message.
+/// @param wanted Per selector, the keys that match it, best first.
+/// @return The variant, or null when none matches.
+[[nodiscard]] inline Message::Variant const* bestVariant(Message const& message,
+                                                         std::vector<std::vector<std::string>> const& wanted) {
+    Message::Variant const* best = nullptr;
+    std::vector<std::size_t> bestRank;
+    for (Message::Variant const& variant : message.variants) {
+        std::vector<std::size_t> rank;
+        bool matches = true;
+        for (std::size_t index = 0; index < variant.keys.size() && matches; ++index) {
+            std::vector<std::string> const& keys = wanted.at(index);
+            auto const found =
+                variant.keys.at(index) == "*" ? keys.end() : std::ranges::find(keys, variant.keys.at(index));
+            matches = variant.keys.at(index) == "*" || found != keys.end();
+            rank.push_back(static_cast<std::size_t>(std::distance(keys.begin(), found)));
+        }
+        if (matches && (best == nullptr || rank < bestRank)) {
+            best = &variant;
+            bestRank = std::move(rank);
+        }
+    }
+    return best;
+}
+
+}  // namespace detail
+
 /// @brief Formats a parsed message.
 /// @param message The message.
 /// @param arguments The named arguments.
@@ -470,47 +561,17 @@ struct MessageArgument {
 [[nodiscard]] inline std::expected<std::string, std::string> formatMessage(
     Message const& message, std::vector<std::pair<std::string, MessageArgument>> const& arguments,
     std::string_view bcp47Locale, render::NumericLocale const& numeric) {
-    auto const argument = [&arguments](std::string const& name) -> MessageArgument const* {
-        auto const found = std::ranges::find(arguments, name, &std::pair<std::string, MessageArgument>::first);
-        return found == arguments.end() ? nullptr : &found->second;
-    };
-    auto const declared = [&message](std::string const& name, Message::Function written) {
-        auto const found = std::ranges::find(message.inputs, name, &std::pair<std::string, Message::Function>::first);
-        return found == message.inputs.end() || written != Message::Function::None ? written : found->second;
-    };
-    auto const write = [&](Message::Pattern const& pattern) -> std::expected<std::string, std::string> {
-        std::string out;
-        for (Message::Part const& part : pattern) {
-            if (part.variable.empty()) {
-                out += part.text;
-                continue;
-            }
-            MessageArgument const* const value = argument(part.variable);
-            if (value == nullptr) {
-                return std::unexpected("no argument `" + part.variable + "`");
-            }
-            Message::Function const function = declared(part.variable, part.function);
-            if (value->number && function != Message::Function::String) {
-                out += render::formatCanonicalNumber(decimalText(*value->number, value->places), numeric);
-            } else if (function == Message::Function::Number) {
-                return std::unexpected("`" + part.variable + "` is formatted `:number` but is not a number");
-            } else {
-                out += value->number ? decimalText(*value->number, value->places) : value->text;
-            }
-        }
-        return out;
-    };
     if (message.selectors.empty()) {
-        return write(message.pattern);
+        return detail::writePattern(message, message.pattern, arguments, numeric);
     }
-    // Each selector's candidate keys, best first: an exact value, then its plural category (or its text).
+    // Each selector's matching keys, best first: an exact value, then its plural category (or its text).
     std::vector<std::vector<std::string>> wanted;
     for (std::string const& selector : message.selectors) {
-        MessageArgument const* const value = argument(selector);
+        MessageArgument const* const value = detail::messageArgument(arguments, selector);
         if (value == nullptr) {
             return std::unexpected("no argument `" + selector + "`");
         }
-        if (declared(selector, Message::Function::None) == Message::Function::Number) {
+        if (detail::messageFunction(message, selector, Message::Function::None) == Message::Function::Number) {
             if (!value->number) {
                 return std::unexpected("`" + selector + "` selects `:number` but is not a number");
             }
@@ -521,29 +582,11 @@ struct MessageArgument {
             wanted.push_back({value->number ? decimalText(*value->number, value->places) : value->text});
         }
     }
-    // The first variant whose every key matches, the best match per selector first: MessageFormat 2 orders
-    // variants by key preference, and a catalogue lists exact values before categories, categories before `*`.
-    Message::Variant const* best = nullptr;
-    std::vector<std::size_t> bestRank;
-    for (Message::Variant const& variant : message.variants) {
-        std::vector<std::size_t> rank;
-        bool matches = true;
-        for (std::size_t index = 0; index < variant.keys.size() && matches; ++index) {
-            std::string const& key = variant.keys.at(index);
-            if (key == "*") {
-                rank.push_back(wanted.at(index).size());
-                continue;
-            }
-            auto const found = std::ranges::find(wanted.at(index), key);
-            matches = found != wanted.at(index).end();
-            rank.push_back(static_cast<std::size_t>(found - wanted.at(index).begin()));
-        }
-        if (matches && (best == nullptr || rank < bestRank)) {
-            best = &variant;
-            bestRank = std::move(rank);
-        }
+    Message::Variant const* const best = detail::bestVariant(message, wanted);
+    if (best == nullptr) {
+        return std::unexpected(std::string{"no variant matches"});
     }
-    return write(best->pattern);
+    return detail::writePattern(message, best->pattern, arguments, numeric);
 }
 
 }  // namespace morph::ui

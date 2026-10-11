@@ -9,6 +9,7 @@
 #include <expected>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -42,6 +43,9 @@ struct NamedText {
     std::string text;
 };
 
+// A command holds command lists and a node holds nodes, so their copies and comparisons recurse as deep as the
+// document nests.
+// NOLINTBEGIN(misc-no-recursion)
 struct Command;
 
 /// @brief A command list: the commands one event runs, in one batch.
@@ -337,6 +341,8 @@ struct Node {
     }
 };
 
+// NOLINTEND(misc-no-recursion)
+
 /// @brief A component of the bundle (spec 5 §10): a delivered QML file or a host component, its props and events,
 ///        and the built-in subtree a renderer that cannot load it shows.
 struct ComponentDecl {
@@ -425,7 +431,7 @@ struct KeySpec {
     /// @brief What it holds.
     KeyRole role;
     /// @brief For `Entries` and `Entry`, the shape of the entries.
-    std::string_view shape = {};
+    std::string_view shape;
 };
 
 /// @brief The keys every node accepts (spec 5 §9, spec 6 §6 and §17).
@@ -465,115 +471,187 @@ struct KindSpec {
 [[nodiscard]] inline std::vector<KindSpec> const& nodeVocabulary() {
     using enum KeyRole;
     static std::vector<KindSpec> const kVocabulary{
-        {.kind = "text", .keys = {{"text", Expr}, {"role", Expr}}},
+        {.kind = "text", .keys = {{.key = "text", .role = Expr}, {.key = "role", .role = Expr}}},
         {.kind = "button",
-         .keys = {{"label", Expr}, {"icon", Expr}, {"role", Expr}, {"onClick", Commands}, {"onActivate", Commands}}},
+         .keys = {{.key = "label", .role = Expr},
+                  {.key = "icon", .role = Expr},
+                  {.key = "role", .role = Expr},
+                  {.key = "onClick", .role = Commands},
+                  {.key = "onActivate", .role = Commands}}},
         {.kind = "textInput",
-         .keys = {{"value", Expr},
-                  {"placeholder", Expr},
-                  {"mode", Expr},
-                  {"commitOn", Text},
-                  {"onChange", Commands},
-                  {"onCommit", Commands},
-                  {"onSubmit", Commands}}},
-        {.kind = "checkbox", .keys = {{"label", Expr}, {"checked", Expr}, {"onToggle", Commands}}},
-        {.kind = "select", .keys = {{"options", Expr}, {"selected", Expr}, {"onStale", Text}, {"onChoose", Commands}}},
-        {.kind = "menu", .keys = {{"label", Expr}, {"icon", Expr}, {"items", Entries, "menuItem"}}},
-        {.kind = "column", .keys = {{"gap", Expr}, {"children", Nodes}}},
-        {.kind = "row", .keys = {{"gap", Expr}, {"children", Nodes}}},
-        {.kind = "grid", .keys = {{"gap", Expr}, {"columns", Expr}, {"children", Nodes}}},
+         .keys = {{.key = "value", .role = Expr},
+                  {.key = "placeholder", .role = Expr},
+                  {.key = "mode", .role = Expr},
+                  {.key = "commitOn", .role = Text},
+                  {.key = "onChange", .role = Commands},
+                  {.key = "onCommit", .role = Commands},
+                  {.key = "onSubmit", .role = Commands}}},
+        {.kind = "checkbox",
+         .keys = {{.key = "label", .role = Expr},
+                  {.key = "checked", .role = Expr},
+                  {.key = "onToggle", .role = Commands}}},
+        {.kind = "select",
+         .keys = {{.key = "options", .role = Expr},
+                  {.key = "selected", .role = Expr},
+                  {.key = "onStale", .role = Text},
+                  {.key = "onChoose", .role = Commands}}},
+        {.kind = "menu",
+         .keys = {{.key = "label", .role = Expr},
+                  {.key = "icon", .role = Expr},
+                  {.key = "items", .role = Entries, .shape = "menuItem"}}},
+        {.kind = "column", .keys = {{.key = "gap", .role = Expr}, {.key = "children", .role = Nodes}}},
+        {.kind = "row", .keys = {{.key = "gap", .role = Expr}, {.key = "children", .role = Nodes}}},
+        {.kind = "grid",
+         .keys = {{.key = "gap", .role = Expr}, {.key = "columns", .role = Expr}, {.key = "children", .role = Nodes}}},
         {.kind = "spacer", .keys = {}},
-        {.kind = "panel", .keys = {{"title", Expr}, {"children", Nodes}}},
-        {.kind = "scroll", .keys = {{"children", Nodes}}},
-        {.kind = "switch", .keys = {{"value", Expr}, {"cases", Entries, "case"}, {"default", Nodes}}},
-        {.kind = "tabs", .keys = {{"tabs", Entries, "tab"}, {"selected", Expr}, {"onChoose", Commands}}},
+        {.kind = "panel", .keys = {{.key = "title", .role = Expr}, {.key = "children", .role = Nodes}}},
+        {.kind = "scroll", .keys = {{.key = "children", .role = Nodes}}},
+        {.kind = "switch",
+         .keys = {{.key = "value", .role = Expr},
+                  {.key = "cases", .role = Entries, .shape = "case"},
+                  {.key = "default", .role = Nodes}}},
+        {.kind = "tabs",
+         .keys = {{.key = "tabs", .role = Entries, .shape = "tab"},
+                  {.key = "selected", .role = Expr},
+                  {.key = "onChoose", .role = Commands}}},
         {.kind = "dialog",
-         .keys = {{"title", Expr},
-                  {"open", Expr},
-                  {"showErrors", Text},
-                  {"children", Nodes},
-                  {"actions", Nodes},
-                  {"onDismiss", Commands},
-                  {"scope", Scope}}},
+         .keys = {{.key = "title", .role = Expr},
+                  {.key = "open", .role = Expr},
+                  {.key = "showErrors", .role = Text},
+                  {.key = "children", .role = Nodes},
+                  {.key = "actions", .role = Nodes},
+                  {.key = "onDismiss", .role = Commands},
+                  {.key = "scope", .role = Scope}}},
         {.kind = "drawer",
-         .keys = {{"title", Expr},
-                  {"open", Expr},
-                  {"side", Text},
-                  {"showErrors", Text},
-                  {"children", Nodes},
-                  {"actions", Nodes},
-                  {"onDismiss", Commands},
-                  {"scope", Scope}}},
-        {.kind = "busy", .keys = {{"busy", Expr}, {"label", Expr}, {"children", Nodes}}},
-        {.kind = "forEach", .keys = {{"rows", Expr}, {"key", Expr}, {"scope", Scope}, {"children", Nodes}}},
+         .keys = {{.key = "title", .role = Expr},
+                  {.key = "open", .role = Expr},
+                  {.key = "side", .role = Text},
+                  {.key = "showErrors", .role = Text},
+                  {.key = "children", .role = Nodes},
+                  {.key = "actions", .role = Nodes},
+                  {.key = "onDismiss", .role = Commands},
+                  {.key = "scope", .role = Scope}}},
+        {.kind = "busy",
+         .keys = {{.key = "busy", .role = Expr}, {.key = "label", .role = Expr}, {.key = "children", .role = Nodes}}},
+        {.kind = "forEach",
+         .keys = {{.key = "rows", .role = Expr},
+                  {.key = "key", .role = Expr},
+                  {.key = "scope", .role = Scope},
+                  {.key = "children", .role = Nodes}}},
         {.kind = "table",
-         .keys = {{"rows", Expr},
-                  {"key", Expr},
-                  {"model", Text},
-                  {"action", Text},
-                  {"selection", Text},
-                  {"pageSize", Expr},
-                  {"highlightKey", Expr},
-                  {"columns", Entries, "column"},
-                  {"scope", Scope},
-                  {"onActivate", Commands}}},
-        {.kind = "dateTimeInput", .keys = {{"value", Expr}, {"onChange", Commands}, {"onCommit", Commands}}},
+         .keys = {{.key = "rows", .role = Expr},
+                  {.key = "key", .role = Expr},
+                  {.key = "model", .role = Text},
+                  {.key = "action", .role = Text},
+                  {.key = "selection", .role = Text},
+                  {.key = "pageSize", .role = Expr},
+                  {.key = "highlightKey", .role = Expr},
+                  {.key = "columns", .role = Entries, .shape = "column"},
+                  {.key = "scope", .role = Scope},
+                  {.key = "onActivate", .role = Commands}}},
+        {.kind = "dateTimeInput",
+         .keys = {{.key = "value", .role = Expr},
+                  {.key = "onChange", .role = Commands},
+                  {.key = "onCommit", .role = Commands}}},
         {.kind = "slider",
-         .keys = {{"value", Expr},
-                  {"min", Expr},
-                  {"max", Expr},
-                  {"step", Expr},
-                  {"onChange", Commands},
-                  {"onCommit", Commands}}},
-        {.kind = "filePicker", .keys = {{"accept", Expr}, {"multiple", Expr}, {"onPick", Commands}}},
+         .keys = {{.key = "value", .role = Expr},
+                  {.key = "min", .role = Expr},
+                  {.key = "max", .role = Expr},
+                  {.key = "step", .role = Expr},
+                  {.key = "onChange", .role = Commands},
+                  {.key = "onCommit", .role = Commands}}},
+        {.kind = "filePicker",
+         .keys = {{.key = "accept", .role = Expr},
+                  {.key = "multiple", .role = Expr},
+                  {.key = "onPick", .role = Commands}}},
         {.kind = "banner",
-         .keys = {{"tone", Expr},
-                  {"text", Expr},
-                  {"dismissible", Expr},
-                  {"action", Entry, "action"},
-                  {"onDismiss", Commands}}},
-        {.kind = "badge", .keys = {{"tone", Expr}, {"text", Expr}, {"icon", Expr}}},
-        {.kind = "progress", .keys = {{"value", Expr}, {"label", Expr}}},
-        {.kind = "steps", .keys = {{"items", Expr}, {"current", Expr}}},
-        {.kind = "keyValue", .keys = {{"items", Expr}}},
-        {.kind = "emptyState", .keys = {{"title", Expr}, {"text", Expr}, {"icon", Expr}, {"action", Entry, "action"}}},
-        {.kind = "splitter", .keys = {{"orientation", Expr}, {"sizes", Expr}, {"children", Nodes}}},
+         .keys = {{.key = "tone", .role = Expr},
+                  {.key = "text", .role = Expr},
+                  {.key = "dismissible", .role = Expr},
+                  {.key = "action", .role = Entry, .shape = "action"},
+                  {.key = "onDismiss", .role = Commands}}},
+        {.kind = "badge",
+         .keys = {{.key = "tone", .role = Expr}, {.key = "text", .role = Expr}, {.key = "icon", .role = Expr}}},
+        {.kind = "progress", .keys = {{.key = "value", .role = Expr}, {.key = "label", .role = Expr}}},
+        {.kind = "steps", .keys = {{.key = "items", .role = Expr}, {.key = "current", .role = Expr}}},
+        {.kind = "keyValue", .keys = {{.key = "items", .role = Expr}}},
+        {.kind = "emptyState",
+         .keys = {{.key = "title", .role = Expr},
+                  {.key = "text", .role = Expr},
+                  {.key = "icon", .role = Expr},
+                  {.key = "action", .role = Entry, .shape = "action"}}},
+        {.kind = "splitter",
+         .keys = {{.key = "orientation", .role = Expr},
+                  {.key = "sizes", .role = Expr},
+                  {.key = "children", .role = Nodes}}},
         {.kind = "collapsible",
-         .keys = {{"title", Expr}, {"open", Expr}, {"onToggle", Commands}, {"header", Nodes}, {"children", Nodes}}},
-        {.kind = "dropZone", .keys = {{"accept", Expr}, {"multiple", Expr}, {"onDrop", Commands}}},
-        {.kind = "customize", .keys = {{"point", Text}}},
-        {.kind = "boundary", .keys = {{"loading", Nodes}, {"error", Nodes}, {"children", Nodes}}},
+         .keys = {{.key = "title", .role = Expr},
+                  {.key = "open", .role = Expr},
+                  {.key = "onToggle", .role = Commands},
+                  {.key = "header", .role = Nodes},
+                  {.key = "children", .role = Nodes}}},
+        {.kind = "dropZone",
+         .keys = {{.key = "accept", .role = Expr},
+                  {.key = "multiple", .role = Expr},
+                  {.key = "onDrop", .role = Commands}}},
+        {.kind = "customize", .keys = {{.key = "point", .role = Text}}},
+        {.kind = "boundary",
+         .keys = {{.key = "loading", .role = Nodes},
+                  {.key = "error", .role = Nodes},
+                  {.key = "children", .role = Nodes}}},
         {.kind = "form",
-         .keys = {{"model", Text},
-                  {"action", Text},
-                  {"prefill", Expr},
-                  {"submit", Text},
-                  {"showErrors", Text},
-                  {"overrides", Raw},
-                  {"fields", Raw},
-                  {"onSuccess", Commands},
-                  {"onError", Commands}}},
-        {.kind = "collection", .keys = {{"model", Text}, {"action", Text}, {"overrides", Raw}}},
-        {.kind = "wizard", .keys = {{"model", Text}, {"action", Text}, {"overrides", Raw}, {"onSuccess", Commands}}},
-        {.kind = "custom", .keys = {{"name", Text}, {"props", ExprMap}, {"on", EventMap}}},
+         .keys = {{.key = "model", .role = Text},
+                  {.key = "action", .role = Text},
+                  {.key = "prefill", .role = Expr},
+                  {.key = "submit", .role = Text},
+                  {.key = "showErrors", .role = Text},
+                  {.key = "overrides", .role = Raw},
+                  {.key = "fields", .role = Raw},
+                  {.key = "onSuccess", .role = Commands},
+                  {.key = "onError", .role = Commands}}},
+        {.kind = "collection",
+         .keys = {{.key = "model", .role = Text}, {.key = "action", .role = Text}, {.key = "overrides", .role = Raw}}},
+        {.kind = "wizard",
+         .keys = {{.key = "model", .role = Text},
+                  {.key = "action", .role = Text},
+                  {.key = "overrides", .role = Raw},
+                  {.key = "onSuccess", .role = Commands}}},
+        {.kind = "custom",
+         .keys = {{.key = "name", .role = Text}, {.key = "props", .role = ExprMap}, {.key = "on", .role = EventMap}}},
         {.kind = "menuItem",
-         .keys = {{"label", Expr},
-                  {"icon", Expr},
-                  {"keys", Expr},
-                  {"checked", Expr},
-                  {"enabled", Expr},
-                  {"onClick", Commands},
-                  {"items", Entries, "menuItem"}},
+         .keys = {{.key = "label", .role = Expr},
+                  {.key = "icon", .role = Expr},
+                  {.key = "keys", .role = Expr},
+                  {.key = "checked", .role = Expr},
+                  {.key = "enabled", .role = Expr},
+                  {.key = "onClick", .role = Commands},
+                  {.key = "items", .role = Entries, .shape = "menuItem"}},
          .entry = true},
-        {.kind = "case", .keys = {{"when", Expr}, {"children", Nodes}, {"scope", Scope}}, .entry = true},
+        {.kind = "case",
+         .keys = {{.key = "when", .role = Expr}, {.key = "children", .role = Nodes}, {.key = "scope", .role = Scope}},
+         .entry = true},
         {.kind = "tab",
-         .keys = {{"id", Text}, {"label", Expr}, {"icon", Expr}, {"children", Nodes}, {"scope", Scope}},
+         .keys = {{.key = "id", .role = Text},
+                  {.key = "label", .role = Expr},
+                  {.key = "icon", .role = Expr},
+                  {.key = "children", .role = Nodes},
+                  {.key = "scope", .role = Scope}},
          .entry = true},
         {.kind = "column",
-         .keys = {{"id", Text}, {"label", Expr}, {"width", Expr}, {"sizing", Expr}, {"cell", Nodes}},
+         .keys = {{.key = "id", .role = Text},
+                  {.key = "label", .role = Expr},
+                  {.key = "width", .role = Expr},
+                  {.key = "sizing", .role = Expr},
+                  {.key = "cell", .role = Nodes}},
          .entry = true},
-        {.kind = "action", .keys = {{"label", Expr}, {"enabled", Expr}, {"onClick", Commands}}, .entry = true},
-        {.kind = "drop", .keys = {{"accepts", Expr}, {"onDrop", Commands}}, .entry = true},
+        {.kind = "action",
+         .keys = {{.key = "label", .role = Expr},
+                  {.key = "enabled", .role = Expr},
+                  {.key = "onClick", .role = Commands}},
+         .entry = true},
+        {.kind = "drop",
+         .keys = {{.key = "accepts", .role = Expr}, {.key = "onDrop", .role = Commands}},
+         .entry = true},
     };
     return kVocabulary;
 }
@@ -657,7 +735,9 @@ inline constexpr std::array<std::string_view, 5> kLifecycleKeys{"onMount", "onUn
 
 namespace detail {
 
-// A name as spec 5 §3 allows: [A-Za-z_][A-Za-z0-9_]*.
+/// @brief Whether @p name is a name as spec 5 §3 allows: `[A-Za-z_][A-Za-z0-9_]*`.
+/// @param name The candidate.
+/// @return Whether it is one.
 [[nodiscard]] inline bool isName(std::string_view name) noexcept {
     if (name.empty() || std::isdigit(static_cast<unsigned char>(name.front())) != 0) {
         return false;
@@ -747,10 +827,10 @@ public:
             return nullptr;
         }
         auto const& object = json.get_object();
-        if (auto const found = object.find(key); found != object.end()) {
+        if (const auto* const found = object.find(key); found != object.end()) {
             return &found->second;
         }
-        if (auto const found = object.find("!" + std::string{key}); found != object.end()) {
+        if (const auto* const found = object.find("!" + std::string{key}); found != object.end()) {
             return &found->second;
         }
         return nullptr;
@@ -839,7 +919,7 @@ public:
                 } else if (out.verb == "signIn") {
                     Json const* const from = member(own, "from");
                     if (from == nullptr || !from->is_string()) {
-                        refuse(ownPath, "`signIn` takes {\"from\": \"mutation\"}");
+                        refuse(ownPath, R"(`signIn` takes {"from": "mutation"})");
                         return std::nullopt;
                     }
                     out.target = from->get_string();
@@ -923,7 +1003,7 @@ public:
 
     // An object of declarations: each member a name, in order.
     template <typename Each>
-    void declarations(Json const& json, std::string const& path, std::string_view what, Each&& each) {
+    void declarations(Json const& json, std::string const& path, std::string_view what, Each const& each) {
         if (!json.is_object()) {
             refuse(path, std::string{what} + " is an object of declarations");
             return;
@@ -949,7 +1029,7 @@ public:
         Json const* const key = member(json, "key");
         Json const* const with = member(json, "with");
         if (query == nullptr || key == nullptr || with == nullptr) {
-            refuse(path, "a patch is {\"query\": \"q\", \"key\": e, \"with\": e}");
+            refuse(path, R"(a patch is {"query": "q", "key": e, "with": e})");
             return std::nullopt;
         }
         std::optional<std::string> queryName = text(*query, memberPath(json, path, "query"), "`query`");
@@ -967,57 +1047,58 @@ public:
     void scopeKeys(Json const& json, std::string const& path, Scope& scope) {
         scope.path = path;
         if (Json const* const models = member(json, "models")) {
-            declarations(
-                *models, memberPath(json, path, "models"), "`models`",
-                [&](std::string const& name, Json const& entry, std::string const& at) {
-                    if (!members(entry, at, "a model", {"type", "instance"})) {
-                        return;
-                    }
-                    Json const* const type = member(entry, "type");
-                    if (type == nullptr) {
-                        refuse(at, "a model names its `type`");
-                        return;
-                    }
-                    std::optional<std::string> typeName = text(*type, memberPath(entry, at, "type"), "`type`");
-                    if (!typeName) {
-                        return;
-                    }
-                    ModelDecl decl{.name = name, .path = at, .type = std::move(*typeName), .instance = {}, .key = {}};
-                    if (Json const* const instance = member(entry, "instance")) {
-                        if (instance->is_string() && instance->get_string() == "private") {
-                            decl.instance = ModelDecl::Instance::Private;
-                        } else if (instance->is_string() && instance->get_string() == "shared") {
-                            decl.instance = ModelDecl::Instance::Shared;
-                        } else {
-                            decl.instance = ModelDecl::Instance::Keyed;
-                            decl.key = expression(*instance, memberPath(entry, at, "instance"));
-                        }
-                    }
-                    scope.models.push_back(std::move(decl));
-                });
+            declarations(*models, memberPath(json, path, "models"), "`models`",
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             if (!members(entry, place, "a model", {"type", "instance"})) {
+                                 return;
+                             }
+                             Json const* const type = member(entry, "type");
+                             if (type == nullptr) {
+                                 refuse(place, "a model names its `type`");
+                                 return;
+                             }
+                             std::optional<std::string> typeName =
+                                 text(*type, memberPath(entry, place, "type"), "`type`");
+                             if (!typeName) {
+                                 return;
+                             }
+                             ModelDecl decl{
+                                 .name = name, .path = place, .type = std::move(*typeName), .instance = {}, .key = {}};
+                             if (Json const* const instance = member(entry, "instance")) {
+                                 if (instance->is_string() && instance->get_string() == "private") {
+                                     decl.instance = ModelDecl::Instance::Private;
+                                 } else if (instance->is_string() && instance->get_string() == "shared") {
+                                     decl.instance = ModelDecl::Instance::Shared;
+                                 } else {
+                                     decl.instance = ModelDecl::Instance::Keyed;
+                                     decl.key = expression(*instance, memberPath(entry, place, "instance"));
+                                 }
+                             }
+                             scope.models.push_back(std::move(decl));
+                         });
         }
         if (Json const* const state = member(json, "state")) {
             declarations(*state, memberPath(json, path, "state"), "`state`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             if (!members(entry, at, "a state entry", {"init", "type"})) {
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             if (!members(entry, place, "a state entry", {"init", "type"})) {
                                  return;
                              }
-                             StateDecl decl{.name = name, .path = at, .type = {}, .init = Expr{.path = at}};
+                             StateDecl decl{.name = name, .path = place, .type = {}, .init = Expr{.path = place}};
                              if (Json const* const type = member(entry, "type")) {
                                  std::optional<std::string> written =
-                                     text(*type, memberPath(entry, at, "type"), "`type`");
+                                     text(*type, memberPath(entry, place, "type"), "`type`");
                                  if (!written) {
                                      return;
                                  }
                                  std::expected<Type, std::string> parsed = parseType(*written);
                                  if (!parsed) {
-                                     refuse(memberPath(entry, at, "type"), parsed.error());
+                                     refuse(memberPath(entry, place, "type"), parsed.error());
                                      return;
                                  }
                                  decl.type = *parsed;
                              }
                              if (Json const* const init = member(entry, "init")) {
-                                 std::optional<Expr> value = expression(*init, memberPath(entry, at, "init"));
+                                 std::optional<Expr> value = expression(*init, memberPath(entry, place, "init"));
                                  if (!value) {
                                      return;
                                  }
@@ -1027,48 +1108,49 @@ public:
                          });
         }
         if (Json const* const lets = member(json, "let")) {
-            declarations(*lets, memberPath(json, path, "let"), "`let`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             if (std::optional<Expr> value = expression(entry, at)) {
-                                 scope.lets.push_back(LetDecl{.name = name, .path = at, .value = std::move(*value)});
-                             }
-                         });
+            declarations(
+                *lets, memberPath(json, path, "let"), "`let`",
+                [&](std::string const& name, Json const& entry, std::string const& place) {
+                    if (std::optional<Expr> value = expression(entry, place)) {
+                        scope.lets.push_back(LetDecl{.name = name, .path = place, .value = std::move(*value)});
+                    }
+                });
         }
         if (Json const* const queries = member(json, "queries")) {
             declarations(*queries, memberPath(json, path, "queries"), "`queries`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             if (std::optional<QueryDecl> decl = query(name, entry, at)) {
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             if (std::optional<QueryDecl> decl = query(name, entry, place)) {
                                  scope.queries.push_back(std::move(*decl));
                              }
                          });
         }
         if (Json const* const mutations = member(json, "mutations")) {
             declarations(*mutations, memberPath(json, path, "mutations"), "`mutations`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             if (std::optional<MutationDecl> decl = mutation(name, entry, at)) {
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             if (std::optional<MutationDecl> decl = mutation(name, entry, place)) {
                                  scope.mutations.push_back(std::move(*decl));
                              }
                          });
         }
         if (Json const* const watches = member(json, "watch")) {
-            std::string const at = memberPath(json, path, "watch");
+            std::string const place = memberPath(json, path, "watch");
             if (!watches->is_array()) {
-                refuse(at, "`watch` is a list of watches");
+                refuse(place, "`watch` is a list of watches");
                 return;
             }
             std::size_t index = 0;
             for (Json const& entry : watches->get_array()) {
-                std::string const entryPath = at + "/" + std::to_string(index++);
+                std::string const entryPath = place + "/" + std::to_string(index++);
                 if (!members(entry, entryPath, "a watch", {"on", "source", "do"})) {
                     return;
                 }
-                Json const* const on = member(entry, "on");
+                Json const* const onJson = member(entry, "on");
                 Json const* const run = member(entry, "do");
-                if (on == nullptr || run == nullptr) {
-                    refuse(entryPath, "a watch is {\"on\": e, \"do\": [...]}");
+                if (onJson == nullptr || run == nullptr) {
+                    refuse(entryPath, R"(a watch is {"on": e, "do": [...]})");
                     return;
                 }
-                std::optional<Expr> observed = expression(*on, memberPath(entry, entryPath, "on"));
+                std::optional<Expr> observed = expression(*onJson, memberPath(entry, entryPath, "on"));
                 if (!observed) {
                     return;
                 }
@@ -1085,14 +1167,14 @@ public:
             }
         }
         if (Json const* const checks = member(json, "checks")) {
-            std::string const at = memberPath(json, path, "checks");
+            std::string const place = memberPath(json, path, "checks");
             if (!checks->is_array()) {
-                refuse(at, "`checks` is a list of checks");
+                refuse(place, "`checks` is a list of checks");
                 return;
             }
             std::size_t index = 0;
             for (Json const& entry : checks->get_array()) {
-                std::string const entryPath = at + "/" + std::to_string(index++);
+                std::string const entryPath = place + "/" + std::to_string(index++);
                 if (!members(entry, entryPath, "a check", {"id", "assert", "message", "targets", "blocking"})) {
                     return;
                 }
@@ -1111,8 +1193,8 @@ public:
                                .message = {},
                                .targets = {},
                                .blocking = true};
-                if (Json const* const id = member(entry, "id")) {
-                    decl.id = text(*id, memberPath(entry, entryPath, "id"), "`id`").value_or(std::string{});
+                if (Json const* const checkId = member(entry, "id")) {
+                    decl.id = text(*checkId, memberPath(entry, entryPath, "id"), "`id`").value_or(std::string{});
                 }
                 if (Json const* const message = member(entry, "message")) {
                     decl.message = expression(*message, memberPath(entry, entryPath, "message"));
@@ -1132,18 +1214,18 @@ public:
         }
     }
 
-    std::optional<QueryDecl> query(std::string const& name, Json const& entry, std::string const& at) {
-        if (!members(entry, at, "a query",
+    std::optional<QueryDecl> query(std::string const& name, Json const& entry, std::string const& place) {
+        if (!members(entry, place, "a query",
                      {"model", "action", "evaluate", "body", "when", "debounce", "refreshOn", "refreshEvery",
                       "staleTime"})) {
             return std::nullopt;
         }
         QueryDecl decl{.name = name,
-                       .path = at,
+                       .path = place,
                        .model = {},
                        .action = {},
                        .evaluate = false,
-                       .body = Expr{.path = at},
+                       .body = Expr{.path = place},
                        .when = {},
                        .debounce = 0,
                        .refreshOn = {},
@@ -1153,16 +1235,16 @@ public:
         Json const* const action = member(entry, "action");
         Json const* const evaluate = member(entry, "evaluate");
         if (model == nullptr || (action == nullptr) == (evaluate == nullptr)) {
-            refuse(at, "a query names its `model` and one of `action` or `evaluate`");
+            refuse(place, "a query names its `model` and one of `action` or `evaluate`");
             return std::nullopt;
         }
-        decl.model = text(*model, memberPath(entry, at, "model"), "`model`").value_or(std::string{});
+        decl.model = text(*model, memberPath(entry, place, "model"), "`model`").value_or(std::string{});
         decl.evaluate = evaluate != nullptr;
         decl.action = text(decl.evaluate ? *evaluate : *action,
-                           memberPath(entry, at, decl.evaluate ? "evaluate" : "action"), "the action id")
+                           memberPath(entry, place, decl.evaluate ? "evaluate" : "action"), "the action id")
                           .value_or(std::string{});
         if (Json const* const body = member(entry, "body")) {
-            std::optional<Expr> parsed = expression(*body, memberPath(entry, at, "body"));
+            std::optional<Expr> parsed = expression(*body, memberPath(entry, place, "body"));
             if (!parsed) {
                 return std::nullopt;
             }
@@ -1172,17 +1254,17 @@ public:
             decl.body.form = Expr::Form::Object;
         }
         if (Json const* const when = member(entry, "when")) {
-            decl.when = expression(*when, memberPath(entry, at, "when"));
+            decl.when = expression(*when, memberPath(entry, place, "when"));
         }
         for (auto [key, field] :
              {std::pair{"debounce", &QueryDecl::debounce}, std::pair{"refreshEvery", &QueryDecl::refreshEvery},
               std::pair{"staleTime", &QueryDecl::staleTime}}) {
             if (Json const* const value = member(entry, key)) {
-                decl.*field = integer(*value, memberPath(entry, at, key), "`" + std::string{key} + "`").value_or(0);
+                decl.*field = integer(*value, memberPath(entry, place, key), "`" + std::string{key} + "`").value_or(0);
             }
         }
         if (Json const* const refreshOn = member(entry, "refreshOn")) {
-            decl.refreshOn = names(*refreshOn, memberPath(entry, at, "refreshOn"), "`refreshOn`");
+            decl.refreshOn = names(*refreshOn, memberPath(entry, place, "refreshOn"), "`refreshOn`");
         }
         if (!ok()) {
             return std::nullopt;
@@ -1191,14 +1273,14 @@ public:
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one block per key of a mutation.
-    std::optional<MutationDecl> mutation(std::string const& name, Json const& entry, std::string const& at) {
-        if (!members(entry, at, "a mutation",
+    std::optional<MutationDecl> mutation(std::string const& name, Json const& entry, std::string const& place) {
+        if (!members(entry, place, "a mutation",
                      {"model", "action", "body", "concurrency", "serialKey", "invalidates", "patch", "optimistic",
                       "onSuccess", "onError", "offline"})) {
             return std::nullopt;
         }
         MutationDecl decl{.name = name,
-                          .path = at,
+                          .path = place,
                           .model = {},
                           .action = {},
                           .body = {},
@@ -1213,13 +1295,13 @@ public:
         Json const* const model = member(entry, "model");
         Json const* const action = member(entry, "action");
         if (model == nullptr || action == nullptr) {
-            refuse(at, "a mutation names its `model` and `action`");
+            refuse(place, "a mutation names its `model` and `action`");
             return std::nullopt;
         }
-        decl.model = text(*model, memberPath(entry, at, "model"), "`model`").value_or(std::string{});
-        decl.action = text(*action, memberPath(entry, at, "action"), "`action`").value_or(std::string{});
+        decl.model = text(*model, memberPath(entry, place, "model"), "`model`").value_or(std::string{});
+        decl.action = text(*action, memberPath(entry, place, "action"), "`action`").value_or(std::string{});
         if (Json const* const body = member(entry, "body")) {
-            decl.body = expression(*body, memberPath(entry, at, "body"));
+            decl.body = expression(*body, memberPath(entry, place, "body"));
         }
         if (Json const* const concurrency = member(entry, "concurrency")) {
             static constexpr std::array<std::pair<std::string_view, MutationDecl::Concurrency>, 4> kPolicies{{
@@ -1228,38 +1310,39 @@ public:
                 {"latest", MutationDecl::Concurrency::Latest},
                 {"parallel", MutationDecl::Concurrency::Parallel},
             }};
-            auto const found = concurrency->is_string()
-                                   ? std::ranges::find(kPolicies, concurrency->get_string(),
-                                                       &std::pair<std::string_view, MutationDecl::Concurrency>::first)
-                                   : kPolicies.end();
+            const auto* const found =
+                concurrency->is_string()
+                    ? std::ranges::find(kPolicies, concurrency->get_string(),
+                                        &std::pair<std::string_view, MutationDecl::Concurrency>::first)
+                    : kPolicies.end();
             if (found == kPolicies.end()) {
-                refuse(memberPath(entry, at, "concurrency"),
+                refuse(memberPath(entry, place, "concurrency"),
                        "`concurrency` is `exclusive`, `serial`, `latest` or `parallel`");
                 return std::nullopt;
             }
             decl.concurrency = found->second;
         }
         if (Json const* const serialKey = member(entry, "serialKey")) {
-            decl.serialKey = expression(*serialKey, memberPath(entry, at, "serialKey"));
+            decl.serialKey = expression(*serialKey, memberPath(entry, place, "serialKey"));
         }
         if (Json const* const invalidates = member(entry, "invalidates")) {
-            decl.invalidates = names(*invalidates, memberPath(entry, at, "invalidates"), "`invalidates`");
+            decl.invalidates = names(*invalidates, memberPath(entry, place, "invalidates"), "`invalidates`");
         }
         if (Json const* const patchJson = member(entry, "patch")) {
-            decl.patch = patch(*patchJson, memberPath(entry, at, "patch"));
+            decl.patch = patch(*patchJson, memberPath(entry, place, "patch"));
         }
         if (Json const* const optimistic = member(entry, "optimistic")) {
-            decl.optimistic = patch(*optimistic, memberPath(entry, at, "optimistic"));
+            decl.optimistic = patch(*optimistic, memberPath(entry, place, "optimistic"));
         }
         if (Json const* const onSuccess = member(entry, "onSuccess")) {
-            decl.onSuccess = commands(*onSuccess, memberPath(entry, at, "onSuccess"));
+            decl.onSuccess = commands(*onSuccess, memberPath(entry, place, "onSuccess"));
         }
         if (Json const* const onError = member(entry, "onError")) {
-            decl.onError = commands(*onError, memberPath(entry, at, "onError"));
+            decl.onError = commands(*onError, memberPath(entry, place, "onError"));
         }
         if (Json const* const offline = member(entry, "offline")) {
             if (!offline->is_string() || offline->get_string() != "queue") {
-                refuse(memberPath(entry, at, "offline"), "`offline` is `queue`");
+                refuse(memberPath(entry, place, "offline"), "`offline` is `queue`");
                 return std::nullopt;
             }
             decl.offlineQueue = true;
@@ -1326,11 +1409,11 @@ public:
             if (spec->entry) {
                 return nullptr;
             }
-            auto const common = std::ranges::find(kCommonKeys, key, &KeySpec::key);
+            const auto* const common = std::ranges::find(kCommonKeys, key, &KeySpec::key);
             return common == kCommonKeys.end() ? nullptr : &*common;
         };
         for (auto const& [key, member] : json.get_object()) {
-            std::string const at = path + "/" + pointerToken(key);
+            std::string const place = path + "/" + pointerToken(key);
             KeySpec const* const keySpec = specOf(plain(key));
             if (keySpec == nullptr) {
                 if (key.starts_with('!')) {
@@ -1341,7 +1424,7 @@ public:
             std::string const name{keySpec->key};
             switch (keySpec->role) {
                 case KeyRole::Expr:
-                    if (std::optional<Expr> value = expression(member, at)) {
+                    if (std::optional<Expr> value = expression(member, place)) {
                         out.props.push_back(NamedExpr{.name = name, .expr = std::move(*value)});
                     }
                     break;
@@ -1349,32 +1432,32 @@ public:
                     if (name == "kind") {
                         break;
                     }
-                    if (std::optional<std::string> value = text(member, at, "`" + name + "`")) {
+                    if (std::optional<std::string> value = text(member, place, "`" + name + "`")) {
                         out.texts.push_back(NamedText{.name = name, .text = std::move(*value)});
                     }
                     break;
                 case KeyRole::Commands:
-                    out.events.push_back(NamedCommands{.name = name, .commands = commands(member, at)});
+                    out.events.push_back(NamedCommands{.name = name, .commands = commands(member, place)});
                     break;
                 case KeyRole::Nodes:
-                    out.slots.push_back(NodeSlot{.name = name, .nodes = nodes(member, at)});
+                    out.slots.push_back(NodeSlot{.name = name, .nodes = nodes(member, place)});
                     break;
                 case KeyRole::Entries:
-                    out.slots.push_back(NodeSlot{.name = name, .nodes = nodes(member, at, keySpec->shape)});
+                    out.slots.push_back(NodeSlot{.name = name, .nodes = nodes(member, place, keySpec->shape)});
                     break;
                 case KeyRole::Entry:
-                    if (std::optional<Node> entry = node(member, at, keySpec->shape)) {
+                    if (std::optional<Node> entry = node(member, place, keySpec->shape)) {
                         out.slots.push_back(NodeSlot{.name = name, .nodes = {std::move(*entry)}});
                     }
                     break;
                 case KeyRole::ExprMap: {
                     if (!member.is_object()) {
-                        refuse(at, "`" + name + "` is an object of expressions");
+                        refuse(place, "`" + name + "` is an object of expressions");
                         break;
                     }
                     std::vector<NamedExpr> entries;
                     for (auto const& [field, value] : member.get_object()) {
-                        if (std::optional<Expr> parsed = expression(value, at + "/" + pointerToken(field))) {
+                        if (std::optional<Expr> parsed = expression(value, place + "/" + pointerToken(field))) {
                             entries.push_back(NamedExpr{.name = field, .expr = std::move(*parsed)});
                         }
                     }
@@ -1383,21 +1466,21 @@ public:
                 }
                 case KeyRole::EventMap:
                     if (!member.is_object()) {
-                        refuse(at, "`on` is an object of command lists");
+                        refuse(place, "`on` is an object of command lists");
                         break;
                     }
                     for (auto const& [event, list] : member.get_object()) {
                         out.events.push_back(NamedCommands{
-                            .name = "on." + event, .commands = commands(list, at + "/" + pointerToken(event))});
+                            .name = "on." + event, .commands = commands(list, place + "/" + pointerToken(event))});
                     }
                     break;
                 case KeyRole::Scope: {
-                    if (!members(member, at, "a scope",
+                    if (!members(member, place, "a scope",
                                  {"models", "state", "let", "queries", "mutations", "watch", "checks"})) {
                         break;
                     }
                     auto scope = std::make_shared<Scope>();
-                    scopeKeys(member, at, *scope);
+                    scopeKeys(member, place, *scope);
                     out.scope = std::move(scope);
                     break;
                 }
@@ -1438,14 +1521,14 @@ public:
         }
         if (Json const* const params = member(json, "params")) {
             declarations(*params, memberPath(json, "", "params"), "`params`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             std::optional<std::string> written = text(entry, at, "a param's type");
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             std::optional<std::string> written = text(entry, place, "a param's type");
                              if (!written) {
                                  return;
                              }
                              std::expected<Type, std::string> type = parseType(*written);
                              if (!type) {
-                                 refuse(at, type.error());
+                                 refuse(place, type.error());
                                  return;
                              }
                              document.params.emplace_back(name, *type);
@@ -1463,14 +1546,14 @@ public:
         }
         if (Json const* const components = member(json, "components")) {
             declarations(*components, memberPath(json, "", "components"), "`components`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             component(name, entry, at, document);
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             component(name, entry, place, document);
                          });
         }
         if (Json const* const customize = member(json, "customize")) {
             declarations(*customize, memberPath(json, "", "customize"), "`customize`",
-                         [&](std::string const& name, Json const& entry, std::string const& at) {
-                             point(name, entry, at, document);
+                         [&](std::string const& name, Json const& entry, std::string const& place) {
+                             point(name, entry, place, document);
                          });
         }
         if (!ok()) {
@@ -1484,28 +1567,29 @@ public:
         document.view = node(*view, memberPath(json, "", "view"));
     }
 
-    void component(std::string const& name, Json const& entry, std::string const& at, Document& document) {
-        if (!members(entry, at, "a component", {"qml", "host", "version", "props", "events", "fallback"})) {
+    void component(std::string const& name, Json const& entry, std::string const& place, Document& document) {
+        if (!members(entry, place, "a component", {"qml", "host", "version", "props", "events", "fallback"})) {
             return;
         }
-        ComponentDecl decl{.name = name, .path = at, .qml = {}, .host = {}, .props = {}, .events = {}, .fallback = {}};
+        ComponentDecl decl{
+            .name = name, .path = place, .qml = {}, .host = {}, .props = {}, .events = {}, .fallback = {}};
         Json const* const qml = member(entry, "qml");
         Json const* const host = member(entry, "host");
         if ((qml == nullptr) == (host == nullptr)) {
-            refuse(at, "a component names one of `qml` or `host`");
+            refuse(place, "a component names one of `qml` or `host`");
             return;
         }
         if (qml != nullptr) {
-            decl.qml = text(*qml, memberPath(entry, at, "qml"), "`qml`").value_or(std::string{});
+            decl.qml = text(*qml, memberPath(entry, place, "qml"), "`qml`").value_or(std::string{});
         } else {
-            decl.host = text(*host, memberPath(entry, at, "host"), "`host`").value_or(std::string{});
+            decl.host = text(*host, memberPath(entry, place, "host"), "`host`").value_or(std::string{});
         }
         for (auto [key, into] : {std::pair{"props", &decl.props}, std::pair{"events", &decl.events}}) {
             Json const* const map = member(entry, key);
             if (map == nullptr) {
                 continue;
             }
-            std::string const mapPath = memberPath(entry, at, key);
+            std::string const mapPath = memberPath(entry, place, key);
             if (!map->is_object()) {
                 refuse(mapPath, "`" + std::string{key} + "` is an object of types");
                 return;
@@ -1517,37 +1601,37 @@ public:
             }
         }
         if (Json const* const fallback = member(entry, "fallback")) {
-            decl.fallback = nodes(*fallback, memberPath(entry, at, "fallback"));
+            decl.fallback = nodes(*fallback, memberPath(entry, place, "fallback"));
         }
         document.components.push_back(std::move(decl));
     }
 
-    void point(std::string const& name, Json const& entry, std::string const& at, Document& document) {
-        if (!members(entry, at, "a customization point", {"kind", "of", "options", "type", "default"})) {
+    void point(std::string const& name, Json const& entry, std::string const& place, Document& document) {
+        if (!members(entry, place, "a customization point", {"kind", "of", "options", "type", "default"})) {
             return;
         }
         CustomizePoint decl{
-            .name = name, .path = at, .kind = {}, .of = {}, .options = {}, .type = {}, .defaultValue = {}};
+            .name = name, .path = place, .kind = {}, .of = {}, .options = {}, .type = {}, .defaultValue = {}};
         Json const* const kind = member(entry, "kind");
         static constexpr std::array<std::string_view, 7> kKinds{"columns", "choice", "value",  "layout",
                                                                 "saved",   "pins",   "arrange"};
         if (kind == nullptr || !kind->is_string() || std::ranges::find(kKinds, kind->get_string()) == kKinds.end()) {
-            refuse(memberPath(entry, at, "kind"),
+            refuse(memberPath(entry, place, "kind"),
                    "a point's `kind` is `columns`, `choice`, `value`, `layout`, `saved`, `pins` or `arrange`");
             return;
         }
         decl.kind = kind->get_string();
-        if (Json const* const of = member(entry, "of")) {
-            decl.of = text(*of, memberPath(entry, at, "of"), "`of`").value_or(std::string{});
+        if (Json const* const target = member(entry, "of")) {
+            decl.of = text(*target, memberPath(entry, place, "of"), "`of`").value_or(std::string{});
         }
         if (Json const* const options = member(entry, "options")) {
-            decl.options = names(*options, memberPath(entry, at, "options"), "`options`");
+            decl.options = names(*options, memberPath(entry, place, "options"), "`options`");
         }
         if (Json const* const type = member(entry, "type")) {
             std::expected<Type, std::string> parsed =
-                parseType(text(*type, memberPath(entry, at, "type"), "`type`").value_or(std::string{}));
+                parseType(text(*type, memberPath(entry, place, "type"), "`type`").value_or(std::string{}));
             if (!parsed) {
-                refuse(memberPath(entry, at, "type"), parsed.error());
+                refuse(memberPath(entry, place, "type"), parsed.error());
                 return;
             }
             decl.type = *parsed;
@@ -1556,7 +1640,7 @@ public:
             std::expected<Value, std::string> value =
                 decl.type ? decode(*fallback, *decl.type) : decodeUntyped(*fallback);
             if (!value) {
-                refuse(memberPath(entry, at, "default"), value.error());
+                refuse(memberPath(entry, place, "default"), value.error());
                 return;
             }
             decl.defaultValue = std::move(*value);
@@ -1645,22 +1729,25 @@ struct Catalog {
     }
 
     /// @brief An action, by id.
-    /// @param id The action id.
+    /// @param actionId The action id.
     /// @return The action, or null when the catalog has none.
-    [[nodiscard]] Action const* action(std::string_view id) const noexcept {
-        auto const found = std::ranges::find(actions, id, &Action::id);
+    [[nodiscard]] Action const* action(std::string_view actionId) const noexcept {
+        auto const found = std::ranges::find(actions, actionId, &Action::id);
         return found == actions.end() ? nullptr : &*found;
     }
 
     /// @brief Adds an action from the schema the server serves for it: the request's type from the schema, the
     ///        reply's from its `x-reply`, and the calculated fields from the reply rows' `x-computed` and
     ///        `x-readonly` members.
-    /// @param id The action id.
+    /// @param actionId The action id.
     /// @param model The model type that serves it.
     /// @param schema The served schema.
     /// @param credential Whether a run sends a credential or returns a session token.
-    void addAction(std::string id, std::string model, Json const& schema, bool credential = false) {
-        Action action{.id = std::move(id),
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): glaze's DOM indexes an object by
+    // key, and each member read below is checked first.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an action id and a model type id differ in form.
+    void addAction(std::string actionId, std::string model, Json const& schema, bool credential = false) {
+        Action action{.id = std::move(actionId),
                       .model = std::move(model),
                       .request = typeFromSchema(schema, schema),
                       .reply = {},
@@ -1689,11 +1776,14 @@ struct Catalog {
         }
         actions.push_back(std::move(action));
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 };
 
 namespace detail {
 
-// The type a value has on its face.
+/// @brief The type a value has on its face.
+/// @param value The value.
+/// @return Its type; a null is an optional `any`.
 // NOLINTNEXTLINE(misc-no-recursion): a value nests as deep as its literal does.
 [[nodiscard]] inline Type typeOfValue(Value const& value) {
     switch (value.kind()) {
@@ -1724,12 +1814,26 @@ namespace detail {
     }
 }
 
-// Whether a type is known and of a kind other than the ones listed.
+/// @brief The value an optional holds, as a pointer.
+/// @tparam T The value type.
+/// @param value The optional.
+/// @return The value, or null when the optional is empty.
+template <typename T>
+[[nodiscard]] T const* engaged(std::optional<T> const& value) {
+    return value.has_value() ? &*value : nullptr;
+}
+
+/// @brief Whether a type is known and of a kind other than @p kinds.
+/// @param type The type.
+/// @param kinds The kinds it may be.
+/// @return Whether it is known to be none of them.
 [[nodiscard]] inline bool knownOtherThan(Type const& type, std::initializer_list<Type::Kind> kinds) {
     return type.kind() != Type::Kind::Any && std::ranges::find(kinds, type.kind()) == kinds.end();
 }
 
-// The kind word of a type, for a refusal: "a string", "an int".
+/// @brief A type as a refusal names it: "a string", "an int".
+/// @param type The type.
+/// @return The words.
 [[nodiscard]] inline std::string described(Type const& type) { return withArticle(type.withOptional(false).text()); }
 
 // The validator's view of one scope: its declarations, the element ids declared in it, and what it binds.
@@ -1744,28 +1848,28 @@ struct Frame {
 // NOLINTBEGIN(misc-no-recursion): a document nests as deep as its JSON does.
 class Validator {
 public:
-    Validator(Document const& document, Catalog const& catalog) : _document{document}, _catalog{catalog} {}
+    Validator(Document const& document, Catalog const& catalog) : _document{&document}, _catalog{&catalog} {}
 
     std::vector<Refusal> run() {
-        if (_document.vocab.empty()) {
+        if (_document->vocab.empty()) {
             refuse("", "a screen document names its `vocab`");
-        } else if (_document.vocab != kDocumentVocabulary) {
-            refuse("/vocab", "the document is written in `" + _document.vocab + "`; this client speaks ui/1");
+        } else if (_document->vocab != kDocumentVocabulary) {
+            refuse("/vocab", "the document is written in `" + _document->vocab + "`; this client speaks ui/1");
         }
-        if (_document.id.empty()) {
+        if (_document->id.empty()) {
             refuse("", "a screen document names its `id`");
         }
-        Frame root{.scope = &_document.scope, .names = {}, .elements = {}, .row = false, .rowType = {}};
-        for (auto const& [name, type] : _document.params) {
+        Frame root{.scope = &_document->scope, .names = {}, .elements = {}, .row = false, .rowType = {}};
+        for (auto const& [name, type] : _document->params) {
             root.names.emplace_back(name, type);
         }
-        if (_document.view) {
-            collectElements(*_document.view, root);
+        if (_document->view) {
+            collectElements(*_document->view, root);
         }
         _frames.push_back(std::move(root));
-        scope(_document.scope, false);
-        for (auto [expr, flag] : {std::pair{&_document.title, false}, std::pair{&_document.dirty, true},
-                                  std::pair{&_document.identity, false}}) {
+        scope(_document->scope, false);
+        for (auto [expr, flag] : {std::pair{&_document->title, false}, std::pair{&_document->dirty, true},
+                                  std::pair{&_document->identity, false}}) {
             if (expr->has_value()) {
                 Type const type = check(**expr);
                 if (flag) {
@@ -1773,18 +1877,19 @@ public:
                 }
             }
         }
-        for (NamedCommands const& lifecycle : _document.lifecycle) {
+        for (NamedCommands const& lifecycle : _document->lifecycle) {
             _inOnClose = lifecycle.name == "onClose";
             commands(lifecycle.commands);
             _inOnClose = false;
         }
-        for (std::string const& name : _document.prefetch) {
-            if (std::ranges::find(_document.scope.queries, name, &QueryDecl::name) == _document.scope.queries.end()) {
+        for (std::string const& name : _document->prefetch) {
+            if (std::ranges::find(_document->scope.queries, name, &QueryDecl::name) ==
+                _document->scope.queries.end()) {
                 refuse("/prefetch", "`" + name + "` is not a query of the screen");
             }
         }
         points();
-        for (ComponentDecl const& component : _document.components) {
+        for (ComponentDecl const& component : _document->components) {
             Frame props{.scope = nullptr, .names = {{"props", Type{}}}, .elements = {}, .row = false, .rowType = {}};
             for (Node const& node : component.fallback) {
                 collectElements(node, props);
@@ -1795,16 +1900,16 @@ public:
             }
             _frames.pop_back();
         }
-        if (_document.view) {
-            visit(*_document.view);
+        if (_document->view) {
+            visit(*_document->view);
         }
         cycles();
         return std::move(_out);
     }
 
 private:
-    Document const& _document;
-    Catalog const& _catalog;
+    Document const* _document;
+    Catalog const* _catalog;
     std::vector<Refusal> _out;
     std::vector<Frame> _frames;
     std::vector<std::pair<std::string, Type>> _locals;  // comprehension variables and command bindings, innermost last
@@ -1824,7 +1929,7 @@ private:
         if (_quiet) {
             return;
         }
-        Refusal refusal{.document = _document.id, .path = std::move(path), .reason = std::move(reason)};
+        Refusal refusal{.document = _document->id, .path = std::move(path), .reason = std::move(reason)};
         if (std::ranges::find(_out, refusal) == _out.end()) {
             _out.push_back(std::move(refusal));
         }
@@ -1847,30 +1952,30 @@ private:
     };
 
     Resolved resolve(std::string_view head) {
-        for (auto local = _locals.rbegin(); local != _locals.rend(); ++local) {
-            if (local->first == head) {
-                return Resolved{.kind = Resolved::Kind::Name, .type = local->second, .state = nullptr, .let = nullptr};
+        for (auto& local : std::views::reverse(_locals)) {
+            if (local.first == head) {
+                return Resolved{.kind = Resolved::Kind::Name, .type = local.second, .state = nullptr, .let = nullptr};
             }
         }
-        for (auto frame = _frames.rbegin(); frame != _frames.rend(); ++frame) {
-            if (auto const found = std::ranges::find(frame->names, head, &std::pair<std::string, Type>::first);
-                found != frame->names.end()) {
+        for (auto& frame : std::views::reverse(_frames)) {
+            if (auto const found = std::ranges::find(frame.names, head, &std::pair<std::string, Type>::first);
+                found != frame.names.end()) {
                 return Resolved{.kind = Resolved::Kind::Name, .type = found->second, .state = nullptr, .let = nullptr};
             }
-            if (frame->scope != nullptr) {
-                auto const& state = frame->scope->state;
+            if (frame.scope != nullptr) {
+                auto const& state = frame.scope->state;
                 if (auto const found = std::ranges::find(state, head, &StateDecl::name); found != state.end()) {
                     return Resolved{
                         .kind = Resolved::Kind::State, .type = stateType(*found), .state = &*found, .let = nullptr};
                 }
-                auto const& lets = frame->scope->lets;
+                auto const& lets = frame.scope->lets;
                 if (auto const found = std::ranges::find(lets, head, &LetDecl::name); found != lets.end()) {
                     return Resolved{
                         .kind = Resolved::Kind::Let, .type = letType(*found), .state = nullptr, .let = &*found};
                 }
             }
-            if (std::ranges::find(frame->elements, head, &std::pair<std::string, std::string>::first) !=
-                frame->elements.end()) {
+            if (std::ranges::find(frame.elements, head, &std::pair<std::string, std::string>::first) !=
+                frame.elements.end()) {
                 return Resolved{.kind = Resolved::Kind::Element, .type = {}, .state = nullptr, .let = nullptr};
             }
         }
@@ -1878,12 +1983,13 @@ private:
     }
 
     template <typename Decl>
-    Decl const* findDecl(std::vector<Decl> Scope::* member, std::string_view name) const {
-        for (auto frame = _frames.rbegin(); frame != _frames.rend(); ++frame) {
-            if (frame->scope == nullptr) {
+    [[nodiscard]] [[nodiscard]] [[nodiscard]] Decl const* findDecl(std::vector<Decl> Scope::* member,
+                                                                   std::string_view name) const {
+        for (const auto& frame : std::views::reverse(_frames)) {
+            if (frame.scope == nullptr) {
                 continue;
             }
-            auto const& decls = frame->scope->*member;
+            auto const& decls = frame.scope->*member;
             if (auto const found = std::ranges::find(decls, name, &Decl::name); found != decls.end()) {
                 return &*found;
             }
@@ -1891,10 +1997,11 @@ private:
         return nullptr;
     }
 
-    [[nodiscard]] std::string const* elementKind(std::string_view id) const {
-        for (auto frame = _frames.rbegin(); frame != _frames.rend(); ++frame) {
-            auto const found = std::ranges::find(frame->elements, id, &std::pair<std::string, std::string>::first);
-            if (found != frame->elements.end()) {
+    [[nodiscard]] std::string const* elementKind(std::string_view elementId) const {
+        for (const auto& frame : std::views::reverse(_frames)) {
+            auto const found =
+                std::ranges::find(frame.elements, elementId, &std::pair<std::string, std::string>::first);
+            if (found != frame.elements.end()) {
                 return &found->second;
             }
         }
@@ -1922,8 +2029,8 @@ private:
         return type;
     }
 
-    Type actionReply(std::string_view action, bool request) const {
-        Catalog::Action const* const found = _catalog.action(action);
+    [[nodiscard]] Type actionReply(std::string_view action, bool request) const {
+        Catalog::Action const* const found = _catalog->action(action);
         if (found == nullptr) {
             return {};
         }
@@ -2019,8 +2126,8 @@ private:
             }
             case Expr::Form::Pref: {
                 auto const [head, rest] = splitHead(expr.name);
-                auto const point = std::ranges::find(_document.customize, head, &CustomizePoint::name);
-                if (point == _document.customize.end()) {
+                auto const point = std::ranges::find(_document->customize, head, &CustomizePoint::name);
+                if (point == _document->customize.end()) {
                     refuse(expr.path, "`" + std::string{head} + "` is not a customization point of the screen");
                     return {};
                 }
@@ -2064,6 +2171,7 @@ private:
             }
             case Expr::Form::Object: {
                 std::vector<std::pair<std::string, Type>> fields;
+                fields.reserve(expr.args.size());
                 for (std::size_t index = 0; index < expr.args.size(); ++index) {
                     fields.emplace_back(expr.keys.at(index), check(expr.args.at(index)));
                 }
@@ -2080,7 +2188,7 @@ private:
             case Expr::Form::Map:
             case Expr::Form::Filter:
             default: {
-                Type const source = check(expr.args.at(0));
+                Type source = check(expr.args.at(0));
                 if (knownOtherThan(source, {Type::Kind::List})) {
                     refuse(expr.args.at(0).path, std::string{expr.form == Expr::Form::Map ? "`map`" : "`filter`"} +
                                                      " takes a list, not " + described(source));
@@ -2100,6 +2208,7 @@ private:
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one group per family of functions.
     Type call(Expr const& expr) {
         std::vector<Type> types;
+        types.reserve(expr.args.size());
         for (Expr const& argument : expr.args) {
             types.push_back(check(argument));
         }
@@ -2122,7 +2231,10 @@ private:
             bool const quantity =
                 std::ranges::any_of(types, [](Type const& type) { return type.kind() == K::Quantity; });
             bool const integral = std::ranges::all_of(types, [](Type const& type) { return type.kind() == K::Int; });
-            return Type{quantity ? K::Quantity : integral && name != "div" ? K::Int : K::Decimal, true};
+            if (quantity) {
+                return Type{K::Quantity, true};
+            }
+            return Type{integral && name != "div" ? K::Int : K::Decimal, true};
         }
         if (name == "eq" || name == "ne" || name == "lt" || name == "le" || name == "gt" || name == "ge" ||
             name == "engaged" || name == "isEmpty" || name == "contains" || name == "includes" || name == "any" ||
@@ -2181,8 +2293,8 @@ private:
             MutationDecl const* const mutation = findDecl(&Scope::mutations, target);
             if (mutation == nullptr) {
                 refuse(command.path, "`" + target + "` is not a mutation in scope");
-            } else if (std::string const* const as = command.text("as")) {
-                _locals.emplace_back(*as, actionReply(mutation->action, false));
+            } else if (std::string const* const binding = command.text("as")) {
+                _locals.emplace_back(*binding, actionReply(mutation->action, false));
             }
         } else if (verb == "refetch") {
             if (findDecl(&Scope::queries, target) == nullptr) {
@@ -2200,12 +2312,12 @@ private:
             }
         } else if (verb == "resetPrefs") {
             if (target != "all" &&
-                std::ranges::find(_document.customize, target, &CustomizePoint::name) == _document.customize.end()) {
+                std::ranges::find(_document->customize, target, &CustomizePoint::name) == _document->customize.end()) {
                 refuse(command.path, "`" + target + "` is not a customization point of the screen");
             }
         } else if (verb == "upload") {
-            std::string const* const to = command.text("to");
-            if (to == nullptr || findDecl(&Scope::mutations, *to) == nullptr) {
+            std::string const* const mutationName = command.text("to");
+            if (mutationName == nullptr || findDecl(&Scope::mutations, *mutationName) == nullptr) {
                 refuse(command.path, "`upload` sends to a mutation in scope");
             }
         } else if (verb == "cancelClose" && !_inOnClose) {
@@ -2231,7 +2343,7 @@ private:
         };
         for (ModelDecl const& model : scope.models) {
             name(model.name, model.path);
-            Catalog::Model const* const type = _catalog.model(model.type);
+            Catalog::Model const* const type = _catalog->model(model.type);
             if (type == nullptr) {
                 refuse(model.path + "/type", "`" + model.type + "` is not a model type of the catalog");
             } else if (model.instance == ModelDecl::Instance::Keyed && !type->keyed) {
@@ -2267,7 +2379,7 @@ private:
                 expectBool(*query.when, check(*query.when), "`when`");
             }
             for (std::string const& refresh : query.refreshOn) {
-                Catalog::Action const* const other = _catalog.action(refresh);
+                Catalog::Action const* const other = _catalog->action(refresh);
                 if (other == nullptr || (action != nullptr && other->model != action->model)) {
                     refuse(query.path + "/refreshOn",
                            "`" + refresh + "` is not an action of " +
@@ -2288,12 +2400,12 @@ private:
                     refuse(mutation.path + "/invalidates", "`" + query + "` is not a query in scope");
                 }
             }
-            if (mutation.patch) {
-                patch(*mutation.patch, "result", action == nullptr ? Type{} : action->reply);
+            if (PatchDecl const* const decl = engaged(mutation.patch)) {
+                patch(*decl, "result", action == nullptr ? Type{} : action->reply);
             }
-            if (mutation.optimistic) {
-                patch(*mutation.optimistic, "body", action == nullptr ? Type{} : action->request);
-                optimistic(*mutation.optimistic);
+            if (PatchDecl const* const decl = engaged(mutation.optimistic)) {
+                patch(*decl, "body", action == nullptr ? Type{} : action->request);
+                optimistic(*decl);
             }
             if (mutation.offlineQueue && action != nullptr && action->credential) {
                 refuse(mutation.path + "/offline", "a mutation that carries a credential is never queued offline");
@@ -2321,18 +2433,19 @@ private:
         }
     }
 
-    Catalog::Action const* modelAction(std::string const& alias, std::string const& id, std::string const& path) {
+    Catalog::Action const* modelAction(std::string const& alias, std::string const& actionId,
+                                       std::string const& path) {
         ModelDecl const* const model = findDecl(&Scope::models, alias);
         if (model == nullptr) {
             refuse(path + "/model", "`" + alias + "` is not a model alias in scope");
         }
-        Catalog::Action const* const action = _catalog.action(id);
+        Catalog::Action const* const action = _catalog->action(actionId);
         if (action == nullptr) {
-            refuse(path, "`" + id + "` is not an action of the catalog");
+            refuse(path, "`" + actionId + "` is not an action of the catalog");
             return nullptr;
         }
         if (model != nullptr && action->model != model->type) {
-            refuse(path, "`" + id + "` is not an action of `" + model->type + "`");
+            refuse(path, "`" + actionId + "` is not an action of `" + model->type + "`");
         }
         return action;
     }
@@ -2350,7 +2463,7 @@ private:
     // An optimistic write may not predict a field the server calculates.
     void optimistic(PatchDecl const& decl) {
         QueryDecl const* const query = findDecl(&Scope::queries, decl.query);
-        Catalog::Action const* const action = query == nullptr ? nullptr : _catalog.action(query->action);
+        Catalog::Action const* const action = query == nullptr ? nullptr : _catalog->action(query->action);
         if (action == nullptr || decl.with.form != Expr::Form::Object) {
             return;
         }
@@ -2371,8 +2484,8 @@ private:
 
     // Records the element ids of @p node's subtree in @p frame, stopping at a node that opens a frame of its own.
     static void collectElements(Node const& node, Frame& frame) {
-        if (std::string const* const id = node.text("id")) {
-            frame.elements.emplace_back(*id, node.kind);
+        if (std::string const* const elementId = node.text("id")) {
+            frame.elements.emplace_back(*elementId, node.kind);
         }
         if (opensFrame(node)) {
             return;
@@ -2417,9 +2530,9 @@ private:
         if (node.kind == "custom") {
             std::string const* const name = node.text("name");
             bool const declared =
-                name != nullptr &&
-                (std::ranges::find(_document.components, *name, &ComponentDecl::name) != _document.components.end() ||
-                 std::ranges::find(_catalog.components, *name) != _catalog.components.end());
+                name != nullptr && (std::ranges::find(_document->components, *name, &ComponentDecl::name) !=
+                                        _document->components.end() ||
+                                    std::ranges::find(_catalog->components, *name) != _catalog->components.end());
             if (!declared) {
                 refuse(node.path,
                        "`" + (name == nullptr ? std::string{} : *name) + "` is not a component of the bundle");
@@ -2428,7 +2541,7 @@ private:
         if (node.kind == "customize") {
             std::string const* const point = node.text("point");
             if (point == nullptr ||
-                std::ranges::find(_document.customize, *point, &CustomizePoint::name) == _document.customize.end()) {
+                std::ranges::find(_document->customize, *point, &CustomizePoint::name) == _document->customize.end()) {
                 refuse(node.path, "a `customize` node names a customization point of the screen");
             }
         }
@@ -2475,7 +2588,7 @@ private:
     }
 
     void points() {
-        for (CustomizePoint const& point : _document.customize) {
+        for (CustomizePoint const& point : _document->customize) {
             bool const needsOf = point.kind == "columns" || point.kind == "layout" || point.kind == "arrange";
             if (needsOf && !_frames.empty() &&
                 std::ranges::find(_frames.front().elements, point.of, &std::pair<std::string, std::string>::first) ==
@@ -2498,21 +2611,21 @@ private:
         std::vector<T const*> path{start};
         std::vector<std::size_t> next{0};
         while (!path.empty()) {
-            T const* const at = path.back();
+            T const* const place = path.back();
             std::size_t& cursor = next.back();
             bool advanced = false;
             for (; cursor < edges.size(); ++cursor) {
-                if (edges.at(cursor).first != at) {
+                if (edges.at(cursor).first != place) {
                     continue;
                 }
-                T const* const to = edges.at(cursor).second;
+                T const* const target = edges.at(cursor).second;
                 ++cursor;
-                if (to == start) {
-                    path.push_back(to);
+                if (target == start) {
+                    path.push_back(target);
                     return path;
                 }
-                if (std::ranges::find(path, to) == path.end()) {
-                    path.push_back(to);
+                if (std::ranges::find(path, target) == path.end()) {
+                    path.push_back(target);
                     next.push_back(0);
                     advanced = true;
                 }
@@ -2527,10 +2640,15 @@ private:
     }
 
     void cycles() {
+        letCycles();
+        watchCycles();
+    }
+
+    void letCycles() {
         std::vector<LetDecl const*> lets;
-        for (auto const& [from, to] : _letEdges) {
-            if (std::ranges::find(lets, from) == lets.end()) {
-                lets.push_back(from);
+        for (auto const& edge : _letEdges) {
+            if (std::ranges::find(lets, edge.first) == lets.end()) {
+                lets.push_back(edge.first);
             }
         }
         std::vector<LetDecl const*> reported;
@@ -2549,6 +2667,9 @@ private:
             }
             refuse(let->path, "the `let` entries form a cycle: " + chain);
         }
+    }
+
+    void watchCycles() {
         std::vector<std::pair<WatchDecl const*, WatchDecl const*>> edges;
         for (auto const& [writer, state] : _writes) {
             for (auto const& [observer, observed] : _observes) {

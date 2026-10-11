@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -182,6 +183,7 @@ public:
     ///        of equal value are different values; the `eq` function compares them by value.
     /// @param other The other value.
     /// @return Whether the two are the same value.
+    // NOLINTNEXTLINE(misc-no-recursion): a list or record compares its elements.
     [[nodiscard]] bool operator==(Value const& other) const {
         if (kind() != other.kind()) {
             return false;
@@ -330,6 +332,7 @@ public:
 
     /// @brief The type as spec 5 §3 writes it, such as `list<decimal>?` or `{id: int, name: string}`.
     /// @return The text.
+    // NOLINTNEXTLINE(misc-no-recursion): a list or record writes its element and field types.
     [[nodiscard]] std::string text() const {
         std::string out;
         switch (_kind) {
@@ -384,6 +387,7 @@ private:
 /// @param from The type a value has.
 /// @param into The type a place expects.
 /// @return Whether the value fits.
+// NOLINTNEXTLINE(misc-no-recursion): a list or record fits by its element and field types.
 [[nodiscard]] inline bool fits(Type const& from, Type const& into) {
     if (from.kind() == Type::Kind::Any || into.kind() == Type::Kind::Any) {
         return true;
@@ -396,6 +400,7 @@ private:
             return fits(from.element(), into.element());
         }
         if (from.kind() == Type::Kind::Record) {
+            // NOLINTNEXTLINE(misc-no-recursion): as above, one field down.
             return std::ranges::all_of(into.fields(), [&from](auto const& field) {
                 std::optional<Type> const own = from.field(field.first);
                 return own.has_value() ? fits(*own, field.second) : field.second.optional();
@@ -441,13 +446,13 @@ struct TypeReader {
         return text.substr(start, at - start);
     }
 
-    // NOLINTNEXTLINE(misc-no-recursion): a type nests as deep as its text does.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one branch per production.
     [[nodiscard]] std::expected<Type, std::string> type() {
         std::expected<Type, std::string> base = std::unexpected(std::string{});
         if (take("{")) {
             std::vector<std::pair<std::string, Type>> fields;
             if (!take("}")) {
-                do {
+                for (bool more = true; more; more = take(",")) {
                     std::string_view const fieldName = name();
                     if (fieldName.empty() || !take(":")) {
                         return std::unexpected("a record field must be written `name: type`");
@@ -457,7 +462,7 @@ struct TypeReader {
                         return fieldType;
                     }
                     fields.emplace_back(std::string{fieldName}, std::move(*fieldType));
-                } while (take(","));
+                }
                 if (!take("}")) {
                     return std::unexpected("a record type must end with `}`");
                 }
@@ -488,7 +493,8 @@ struct TypeReader {
                 }
                 base = Type::list(std::move(*element));
             } else {
-                auto const found = std::ranges::find(kScalars, word, &std::pair<std::string_view, Type::Kind>::first);
+                const auto* const found =
+                    std::ranges::find(kScalars, word, &std::pair<std::string_view, Type::Kind>::first);
                 if (found == kScalars.end()) {
                     return std::unexpected("unknown type `" + std::string{word} + "`");
                 }
@@ -517,6 +523,8 @@ struct TypeReader {
     return type;
 }
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): glaze's DOM indexes an object by key;
+// every read below is of a member checked first, and every write creates the member it names.
 /// @brief The type a JSON Schema describes, as the server writes an action's reply schema (`x-reply`).
 ///
 /// An object with `num`, `den` and `dp` properties is a decimal, and with a `unit` as well a quantity; a string with
@@ -525,14 +533,15 @@ struct TypeReader {
 /// @param schema The schema.
 /// @param root The document the schema belongs to, for `$ref`; the schema itself when it is the root.
 /// @return The type.
-// NOLINTNEXTLINE(misc-no-recursion): a schema nests as deep as the type it describes.
+// One branch per schema shape; a schema nests as deep as the type it describes.
+// NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
 [[nodiscard]] inline Type typeFromSchema(Json const& schema, Json const& root) {
     if (!schema.is_object()) {
         return Type{};
     }
     auto const& object = schema.get_object();
     auto const text = [&object](std::string_view key) -> std::string {
-        auto const found = object.find(key);
+        const auto* const found = object.find(key);
         return found != object.end() && found->second.is_string() ? found->second.get_string() : std::string{};
     };
     if (std::string const reference = text("$ref"); reference.starts_with("#/$defs/")) {
@@ -545,7 +554,7 @@ struct TypeReader {
     // glaze writes an optional member as `type: [T, "null"]`.
     std::string kind = text("type");
     bool nullable = false;
-    if (auto const found = object.find("type"); found != object.end() && found->second.is_array()) {
+    if (const auto* const found = object.find("type"); found != object.end() && found->second.is_array()) {
         for (auto const& entry : found->second.get_array()) {
             if (entry.is_string()) {
                 if (entry.get_string() == "null") {
@@ -564,10 +573,10 @@ struct TypeReader {
     } else if (kind == "string") {
         result = Type{text("format") == "date-time" ? Type::Kind::Timestamp : Type::Kind::String};
     } else if (kind == "array") {
-        auto const items = object.find("items");
+        const auto* const items = object.find("items");
         result = Type::list(items == object.end() ? Type{} : typeFromSchema(items->second, root));
     } else if (kind == "object") {
-        auto const properties = object.find("properties");
+        const auto* const properties = object.find("properties");
         if (properties == object.end() || !properties->second.is_object()) {
             return Type{}.withOptional(nullable);
         }
@@ -576,7 +585,7 @@ struct TypeReader {
             result = Type{members.contains("unit") ? Type::Kind::Quantity : Type::Kind::Decimal};
         } else {
             std::vector<std::string> required;
-            if (auto const found = object.find("required"); found != object.end() && found->second.is_array()) {
+            if (const auto* const found = object.find("required"); found != object.end() && found->second.is_array()) {
                 for (auto const& name : found->second.get_array()) {
                     if (name.is_string()) {
                         required.push_back(name.get_string());
@@ -596,7 +605,7 @@ struct TypeReader {
     } else {
         return Type{};
     }
-    if (auto const found = object.find("x-decimalPlaces"); found != object.end()) {
+    if (const auto* const found = object.find("x-decimalPlaces"); found != object.end()) {
         if (auto const* const places = std::get_if<std::uint64_t>(&found->second.data); places != nullptr) {
             result = result.withPlaces(static_cast<std::uint32_t>(*places));
         }
@@ -606,7 +615,9 @@ struct TypeReader {
 
 namespace detail {
 
-// The int64 a JSON number holds exactly, if it holds one.
+/// @brief The int64 a JSON number holds exactly.
+/// @param json The JSON.
+/// @return The integer, or nothing for a fraction, an out-of-range number or a non-number.
 [[nodiscard]] inline std::optional<std::int64_t> exactInt(Json const& json) {
     if (auto const* const unsignedValue = std::get_if<std::uint64_t>(&json.data); unsignedValue != nullptr) {
         if (*unsignedValue > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -620,7 +631,9 @@ namespace detail {
     return std::nullopt;
 }
 
-// A decimal written as `{num, den, dp}`; the canonicalising constructor reduces it.
+/// @brief A decimal written as `{num, den, dp}`; the canonicalising constructor reduces it.
+/// @param json The JSON object.
+/// @return The decimal, or why the object is not one.
 [[nodiscard]] inline std::expected<math::Rational, std::string> decimalFrom(Json const& json) {
     if (!json.is_object() || !json.contains("num") || !json.contains("den") || !json.contains("dp")) {
         return std::unexpected("a decimal is written {num, den, dp}");
@@ -629,7 +642,7 @@ namespace detail {
     std::optional<std::int64_t> const denominator = exactInt(json["den"]);
     std::optional<std::int64_t> const places = exactInt(json["dp"]);
     if (!numerator || !denominator || !places || *denominator <= 0 || *places < 0 ||
-        *places > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+        std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
         return std::unexpected("a decimal needs an int64 `num`, a positive `den` and `dp` from 0 to 18");
     }
     return math::Rational{math::Numerator{*numerator}, math::Denominator{*denominator},
@@ -697,9 +710,11 @@ namespace detail {
 
 namespace detail {
 
-// @p noun with its indefinite article: "an int", "a decimal".
+/// @brief @p noun with its indefinite article: "an int", "a decimal".
+/// @param noun The noun.
+/// @return The article and the noun.
 [[nodiscard]] inline std::string withArticle(std::string const& noun) {
-    bool const vowel = !noun.empty() && std::string_view{"aeiou"}.find(noun.front()) != std::string_view::npos;
+    bool const vowel = !noun.empty() && std::string_view{"aeiou"}.contains(noun.front());
     return (vowel ? "an " : "a ") + noun;
 }
 
@@ -709,7 +724,8 @@ namespace detail {
 /// @param json The JSON.
 /// @param type The type it holds; `Any` reads it as `decodeUntyped` does.
 /// @return The value, or why the JSON is not a value of @p type.
-// NOLINTNEXTLINE(misc-no-recursion): a value nests as deep as its type does.
+// One case per type; a value nests as deep as its type does.
+// NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
 [[nodiscard]] inline std::expected<Value, std::string> decode(Json const& json, Type const& type) {
     if (json.is_null()) {
         if (type.optional()) {
@@ -860,6 +876,8 @@ namespace detail {
     return json;
 }
 
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief A value's JSON with every object's keys sorted: two values with the same content, whatever their fields'
 ///        order, give the same text. The query cache keys on it.
 /// @param value The value.
@@ -895,7 +913,10 @@ namespace detail {
         for (auto const& [name, member] : sorted) {
             std::string text;
             static_cast<void>(glz::write_json(member, text));
-            out += (out.size() == 1 ? "\"" : ",\"") + name + "\":" + text;
+            out += out.size() == 1 ? "\"" : ",\"";
+            out += name;
+            out += "\":";
+            out += text;
         }
         return out + "}";
     }
@@ -1037,13 +1058,13 @@ struct Expr {
 /// @param name The function's name.
 /// @return Its signature, or null when `expr/1` has no such function.
 [[nodiscard]] inline FunctionSignature const* findFunction(std::string_view name) noexcept {
-    auto const found = std::ranges::find(kFunctions, name, &FunctionSignature::name);
+    const auto* const found = std::ranges::find(kFunctions, name, &FunctionSignature::name);
     return found == kFunctions.end() ? nullptr : &*found;
 }
 
 namespace detail {
 
-// The single-string forms, by their key.
+/// @brief The forms that take a single name, by their key.
 inline constexpr std::array<std::pair<std::string_view, Expr::Form>, 12> kNameForms{{
     {"ref", Expr::Form::Ref},
     {"row", Expr::Form::Row},
@@ -1059,7 +1080,9 @@ inline constexpr std::array<std::pair<std::string_view, Expr::Form>, 12> kNameFo
     {"host", Expr::Form::Host},
 }};
 
-// Escapes a key for a JSON pointer: `~` as `~0`, `/` as `~1`.
+/// @brief Escapes a key for a JSON pointer: `~` as `~0`, `/` as `~1`.
+/// @param key The key.
+/// @return The escaped token.
 [[nodiscard]] inline std::string pointerToken(std::string_view key) {
     std::string out;
     for (char const letter : key) {
@@ -1074,6 +1097,8 @@ inline constexpr std::array<std::pair<std::string_view, Expr::Form>, 12> kNameFo
     return out;
 }
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): glaze's DOM indexes an object by key;
+// every read below is of a member checked first.
 // Parses one node; `nodes` counts what has been parsed so far, so an oversized tree stops at the first node
 // past the bound instead of being built whole.
 struct ExprParser {
@@ -1110,8 +1135,8 @@ struct ExprParser {
         return out;
     }
 
-    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
     // Parses each member of the object @p json into @p node's `keys` and `args`.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
     [[nodiscard]] std::optional<Problem> named(Json const& json, std::string const& path, Expr& node) {
         for (auto const& [key, member] : json.get_object()) {
             std::expected<Expr, Problem> operand = parse(member, path + "/" + pointerToken(key));
@@ -1203,11 +1228,12 @@ struct ExprParser {
                 node.args = std::move(*operands);
             }
             if (node.args.size() < signature->minArgs || node.args.size() > signature->maxArgs) {
-                std::string const wanted =
-                    signature->maxArgs == kVariadic ? "at least " + std::to_string(signature->minArgs)
-                    : signature->minArgs == signature->maxArgs
-                        ? std::to_string(signature->minArgs)
-                        : std::to_string(signature->minArgs) + " to " + std::to_string(signature->maxArgs);
+                std::string wanted = std::to_string(signature->minArgs);
+                if (signature->maxArgs == kVariadic) {
+                    wanted = "at least " + wanted;
+                } else if (signature->maxArgs != signature->minArgs) {
+                    wanted += " to " + std::to_string(signature->maxArgs);
+                }
                 bool const one =
                     signature->maxArgs == 1 || (signature->maxArgs == kVariadic && signature->minArgs == 1);
                 return refuse(path, "`" + *name + "` takes " + wanted +
@@ -1323,6 +1349,8 @@ struct ExprParser {
     }
 };
 
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 }  // namespace detail
 
 /// @brief Parses an expression from a document's JSON.
@@ -1330,7 +1358,7 @@ struct ExprParser {
 /// @param path The JSON pointer of @p json in its document; every node's path extends it.
 /// @return The tree, or the first problem: an unknown form, an unknown function or a wrong argument count, a
 ///         malformed operand, a fractional number, or more than `kMaxExpressionNodes` nodes.
-[[nodiscard]] inline std::expected<Expr, Problem> parseExpression(Json const& json, std::string path = {}) {
+[[nodiscard]] inline std::expected<Expr, Problem> parseExpression(Json const& json, std::string const& path = {}) {
     detail::ExprParser parser;
     return parser.parse(json, path);
 }
@@ -1374,24 +1402,25 @@ public:
     void relate(Ratio ratio) { _ratios.push_back(std::move(ratio)); }
 
     /// @brief A unit, by id.
-    /// @param id The unit's id.
+    /// @param unitId The unit's id.
     /// @return The unit, or null when the table does not declare it.
-    [[nodiscard]] Unit const* find(std::string_view id) const noexcept {
-        auto const found = std::ranges::find(_units, id, &Unit::id);
+    [[nodiscard]] Unit const* find(std::string_view unitId) const noexcept {
+        auto const found = std::ranges::find(_units, unitId, &Unit::id);
         return found == _units.end() ? nullptr : &*found;
     }
 
-    /// @brief The exact factor that converts an amount in @p from into @p to, along the declared ratios.
+    /// @brief The exact factor that converts an amount in @p from into @p into, along the declared ratios.
     /// @param from The unit converted from.
-    /// @param to The unit converted to.
+    /// @param into The unit converted to.
     /// @return The factor, or nothing when no chain of ratios joins the two or the product overflows.
-    [[nodiscard]] std::optional<math::Rational> factor(std::string_view from, std::string_view to) const {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `from` then `into`, as the factor reads.
+    [[nodiscard]] std::optional<math::Rational> factor(std::string_view from, std::string_view into) const {
         // A breadth-first walk over the ratios, each edge usable both ways: a dimension holds a handful of units,
         // so the walk is short, and it lets the table declare a chain instead of every pair.
         std::vector<std::pair<std::string_view, math::Rational>> reached{{from, math::Rational{1, {}}}};
         for (std::size_t next = 0; next < reached.size(); ++next) {
             auto const [unit, soFar] = reached.at(next);
-            if (unit == to) {
+            if (unit == into) {
                 return soFar;
             }
             for (Ratio const& ratio : _ratios) {
@@ -1436,9 +1465,15 @@ private:
 class DisplayFormatter {
 public:
     DisplayFormatter() = default;
+    /// @brief Copies.
     DisplayFormatter(DisplayFormatter const&) = default;
+    /// @brief Moves.
     DisplayFormatter(DisplayFormatter&&) = default;
+    /// @brief Copy-assigns.
+    /// @return `*this`.
     DisplayFormatter& operator=(DisplayFormatter const&) = default;
+    /// @brief Move-assigns.
+    /// @return `*this`.
     DisplayFormatter& operator=(DisplayFormatter&&) = default;
     virtual ~DisplayFormatter() = default;
 
@@ -1466,10 +1501,13 @@ public:
                                                std::chrono::minutes offset, std::string_view bcp47Locale) const {
         static_cast<void>(bcp47Locale);
         std::string const text = local(instant, offset);
-        std::size_t const length = style == "short"  ? std::string_view{"YYYY-MM-DD"}.size()
-                                   : style == "long" ? std::string_view{"YYYY-MM-DD HH:MM:SS"}.size()
-                                                     : std::string_view{"YYYY-MM-DD HH:MM"}.size();
-        return text.substr(0, length);
+        if (style == "short") {
+            return text.substr(0, std::string_view{"YYYY-MM-DD"}.size());
+        }
+        if (style == "long") {
+            return text.substr(0, std::string_view{"YYYY-MM-DD HH:MM:SS"}.size());
+        }
+        return text.substr(0, std::string_view{"YYYY-MM-DD HH:MM"}.size());
     }
 
     /// @brief An amount of money.
@@ -1477,6 +1515,7 @@ public:
     /// @param currency The ISO 4217 code, for example `"EUR"`.
     /// @param bcp47Locale The locale.
     /// @return The text: the amount, a no-break space and the code.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a currency code and a locale tag differ in form.
     [[nodiscard]] virtual std::string money(std::string const& number, std::string_view currency,
                                             std::string_view bcp47Locale) const {
         static_cast<void>(bcp47Locale);
@@ -1532,9 +1571,15 @@ private:
 class ExpressionContext {
 public:
     ExpressionContext() = default;
+    /// @brief Copies.
     ExpressionContext(ExpressionContext const&) = default;
+    /// @brief Moves.
     ExpressionContext(ExpressionContext&&) = default;
+    /// @brief Copy-assigns.
+    /// @return `*this`.
     ExpressionContext& operator=(ExpressionContext const&) = default;
+    /// @brief Move-assigns.
+    /// @return `*this`.
     ExpressionContext& operator=(ExpressionContext&&) = default;
     virtual ~ExpressionContext() = default;
 
@@ -1676,7 +1721,10 @@ public:
 
 namespace detail {
 
-// The value at a dotted @p path inside @p value: each segment a record's field; null past a missing one.
+/// @brief The value at a dotted path inside a value: each segment a record's field.
+/// @param value The value.
+/// @param path The dotted path; empty for the value itself.
+/// @return The value there, or null past a missing field.
 [[nodiscard]] inline Value valueAt(Value value, std::string_view path) {
     while (!path.empty() && !value.isNull()) {
         std::size_t const dot = path.find('.');
@@ -1687,7 +1735,9 @@ namespace detail {
     return value;
 }
 
-// The first segment of a dotted name and the path after it.
+/// @brief Splits a dotted name at its first dot.
+/// @param name The name.
+/// @return The first segment and the path after it.
 [[nodiscard]] inline std::pair<std::string_view, std::string_view> splitHead(std::string_view name) {
     std::size_t const dot = name.find('.');
     if (dot == std::string_view::npos) {
@@ -1697,13 +1747,13 @@ namespace detail {
 }
 
 struct Evaluator {
-    ExpressionContext const& context;
-    Diagnostics& diagnostics;
+    ExpressionContext const* context;
+    Diagnostics* diagnostics;
     // The comprehension variables in scope, innermost last.
     std::vector<std::pair<std::string_view, Value>> locals;
 
-    Value fail(Expr const& node, std::string reason) {
-        diagnostics.report(node.path, std::move(reason));
+    [[nodiscard]] Value fail(Expr const& node, std::string reason) const {
+        diagnostics->report(node.path, std::move(reason));
         return {};
     }
 
@@ -1737,7 +1787,7 @@ struct Evaluator {
             return kleene(node, true);
         }
         if (node.name == "not") {
-            Value const value = eval(node.args.front());
+            Value value = eval(node.args.front());
             if (value.isNull()) {
                 return value;
             }
@@ -1752,15 +1802,16 @@ struct Evaluator {
         return callFunction(node, operands);
     }
 
-    Value callFunction(Expr const& node, std::vector<Value> const& operands);
-    Value format(Expr const& node, std::vector<Value> const& operands);
-    Value display(Expr const& node, std::vector<Value> const& operands);
-    Value message(Expr const& node, std::string const& key, std::string const& fallback, ValueRecord const& arguments);
+    [[nodiscard]] Value callFunction(Expr const& node, std::vector<Value> const& operands) const;
+    [[nodiscard]] Value format(Expr const& node, std::vector<Value> const& operands) const;
+    [[nodiscard]] Value display(Expr const& node, std::vector<Value> const& operands) const;
+    [[nodiscard]] Value message(Expr const& node, std::string const& key, std::string const& fallback,
+                                ValueRecord const& arguments) const;
 
     // A comprehension: binds each element of the list to `as` and evaluates the body under it.
     // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
     Value comprehend(Expr const& node) {
-        Value const source = eval(node.args.front());
+        Value source = eval(node.args.front());
         if (source.isNull()) {
             return source;
         }
@@ -1795,39 +1846,39 @@ struct Evaluator {
                 return node.literal;
             case Expr::Form::Ref: {
                 auto const [head, rest] = splitHead(node.name);
-                for (auto local = locals.rbegin(); local != locals.rend(); ++local) {
-                    if (local->first == head) {
-                        return valueAt(local->second, rest);
+                for (auto& local : std::views::reverse(locals)) {
+                    if (local.first == head) {
+                        return valueAt(local.second, rest);
                     }
                 }
-                return valueAt(context.name(head), rest);
+                return valueAt(context->name(head), rest);
             }
             case Expr::Form::Event:
-                return valueAt(context.event(), node.name);
+                return valueAt(context->event(), node.name);
             case Expr::Form::Row:
-                return valueAt(context.row(), node.name);
+                return valueAt(context->row(), node.name);
             case Expr::Form::Query:
-                return context.query(node.name);
+                return context->query(node.name);
             case Expr::Form::Result:
-                return context.result(node.name);
+                return context->result(node.name);
             case Expr::Form::Pending:
-                return context.pending(node.name);
+                return context->pending(node.name);
             case Expr::Form::Error:
-                return context.error(node.name);
+                return context->error(node.name);
             case Expr::Form::ErrorKind:
-                return context.errorKind(node.name);
+                return context->errorKind(node.name);
             case Expr::Form::Can:
-                return context.can(node.name);
+                return context->can(node.name);
             case Expr::Form::Pref: {
                 auto const [head, rest] = splitHead(node.name);
-                return valueAt(context.pref(head), rest);
+                return valueAt(context->pref(head), rest);
             }
             case Expr::Form::Env:
-                return context.env(node.name);
+                return context->env(node.name);
             case Expr::Form::Session:
-                return context.session(node.name);
+                return context->session(node.name);
             case Expr::Form::Host:
-                return context.host(node.name);
+                return context->host(node.name);
             case Expr::Form::Call:
                 return call(node);
             case Expr::Form::Translate: {
@@ -1838,7 +1889,7 @@ struct Evaluator {
                 return message(node, node.name, node.fallback, arguments);
             }
             case Expr::Form::If: {
-                Value const condition = eval(node.args.at(0));
+                Value condition = eval(node.args.at(0));
                 if (condition.isNull()) {
                     return condition;
                 }
@@ -1881,6 +1932,9 @@ struct Amount {
     bool integral = false;
 };
 
+/// @brief An int, decimal or quantity as an exact amount.
+/// @param value The value.
+/// @return The amount, or nothing for another kind.
 [[nodiscard]] inline std::optional<Amount> amountOf(Value const& value) {
     if (std::int64_t const* const number = value.asInt(); number != nullptr) {
         return Amount{.value = math::Rational{*number, math::DecimalPlaces{0}}, .unit = {}, .integral = true};
@@ -1894,6 +1948,9 @@ struct Amount {
     return std::nullopt;
 }
 
+/// @brief An amount as a value: a quantity when it has a unit, an int when it is integral, a decimal otherwise.
+/// @param amount The amount.
+/// @return The value.
 [[nodiscard]] inline Value valueOf(Amount const& amount) {
     if (!amount.unit.empty()) {
         return Value{QuantityValue{.amount = amount.value, .unit = amount.unit}};
@@ -1904,10 +1961,14 @@ struct Amount {
     return Value{amount.value};
 }
 
-// The outcome of one step of arithmetic: the value, or why there is none.
+/// @brief The outcome of one step of arithmetic: the amount, or why there is none.
 using Exact = std::expected<Amount, std::string>;
 
-// @p amount in @p unit, through the table, keeping its declared places.
+/// @brief An amount in another unit, through the table, keeping its declared places.
+/// @param amount The amount.
+/// @param unit The unit converted to.
+/// @param units The unit table.
+/// @return The converted amount, or why there is none.
 [[nodiscard]] inline Exact convert(Amount amount, std::string const& unit, UnitTable const& units) {
     if (amount.unit == unit) {
         return amount;
@@ -1927,7 +1988,11 @@ using Exact = std::expected<Amount, std::string>;
     return Amount{.value = value, .unit = unit, .integral = false};
 }
 
-// Brings two operands to one unit: a quantity's into the left one's, a plain number with a quantity is refused.
+/// @brief Brings two operands to one unit: the right one's into the left one's.
+/// @param lhs The left operand.
+/// @param rhs The right operand.
+/// @param units The unit table.
+/// @return Both in one unit, or why not: a plain number meets a quantity, or no ratio joins the units.
 [[nodiscard]] inline std::expected<std::pair<Amount, Amount>, std::string> aligned(Amount lhs, Amount rhs,
                                                                                    UnitTable const& units) {
     if (lhs.unit.empty() != rhs.unit.empty()) {
@@ -1943,6 +2008,13 @@ using Exact = std::expected<Amount, std::string>;
     return std::pair{std::move(lhs), std::move(*converted)};
 }
 
+/// @brief One exact step of `add`, `sub`, `mul` or `div`.
+/// @param op The function's name.
+/// @param lhs The left operand.
+/// @param rhs The right operand.
+/// @param units The unit table.
+/// @return The result, or why there is none: an overflow, a division by zero, or units that do not combine.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per operation and operand kind.
 [[nodiscard]] inline Exact arithmetic(std::string_view op, Amount const& lhs, Amount const& rhs,
                                       UnitTable const& units) {
     if (op == "mul" || op == "div") {
@@ -1994,7 +2066,12 @@ using Exact = std::expected<Amount, std::string>;
     return Amount{.value = *sum, .unit = left.unit, .integral = false};
 }
 
-// The order of two values of one comparable kind, or why they have none.
+/// @brief The order of two values of one comparable kind: numbers and quantities exactly, strings by bytes,
+///        timestamps by instant.
+/// @param lhs The left value.
+/// @param rhs The right value.
+/// @param units The unit table.
+/// @return The order, or why the two have none.
 [[nodiscard]] inline std::expected<std::strong_ordering, std::string> compare(Value const& lhs, Value const& rhs,
                                                                               UnitTable const& units) {
     std::optional<Amount> const left = amountOf(lhs);
@@ -2007,10 +2084,7 @@ using Exact = std::expected<Amount, std::string>;
         return both->first.value <=> both->second.value;
     }
     if (lhs.asString() != nullptr && rhs.asString() != nullptr) {
-        int const order = lhs.asString()->compare(*rhs.asString());
-        return order < 0   ? std::strong_ordering::less
-               : order > 0 ? std::strong_ordering::greater
-                           : std::strong_ordering::equal;
+        return *lhs.asString() <=> *rhs.asString();
     }
     if (lhs.asTimestamp() != nullptr && rhs.asTimestamp() != nullptr) {
         return *lhs.asTimestamp() <=> *rhs.asTimestamp();
@@ -2019,8 +2093,12 @@ using Exact = std::expected<Amount, std::string>;
                            withArticle(std::string{kindName(rhs.kind())}));
 }
 
-// Whether two values are equal: numbers and quantities by exact value across kinds and units, anything else as
-// `Value` compares.
+/// @brief Whether two values are equal: numbers and quantities by exact value across kinds and units, anything
+///        else as `Value` compares.
+/// @param lhs The left value.
+/// @param rhs The right value.
+/// @param units The unit table.
+/// @return Whether they are equal, or why two quantities cannot be compared.
 [[nodiscard]] inline std::expected<bool, std::string> equal(Value const& lhs, Value const& rhs,
                                                             UnitTable const& units) {
     if (amountOf(lhs) && amountOf(rhs)) {
@@ -2029,13 +2107,17 @@ using Exact = std::expected<Amount, std::string>;
     return lhs == rhs;
 }
 
-// The number of code points in UTF-8 @p text.
+/// @brief The number of code points in UTF-8 text.
+/// @param text The text.
+/// @return The count.
 [[nodiscard]] inline std::int64_t codePoints(std::string_view text) {
     return static_cast<std::int64_t>(
         std::ranges::count_if(text, [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }));
 }
 
-// @p text without leading and trailing white space (ASCII, and U+00A0 no-break space).
+/// @brief Text without leading and trailing white space: ASCII, and U+00A0 no-break space.
+/// @param text The text.
+/// @return The trimmed text.
 [[nodiscard]] inline std::string trimmed(std::string_view text) {
     auto const leading = [](std::string_view rest) -> std::size_t {
         if (!rest.empty() && (rest.front() == ' ' || (rest.front() >= '\t' && rest.front() <= '\r'))) {
@@ -2058,7 +2140,9 @@ using Exact = std::expected<Amount, std::string>;
     return std::string{text};
 }
 
-// A value as `format` writes it: a decimal at its places with `.`, a quantity followed by its unit id.
+/// @brief A value as `format` writes it: a decimal at its places with `.`, a quantity followed by its unit id.
+/// @param value The value.
+/// @return The text.
 [[nodiscard]] inline std::string plainText(Value const& value) {
     switch (value.kind()) {
         case Value::Kind::String:
@@ -2086,9 +2170,9 @@ using Exact = std::expected<Amount, std::string>;
 }  // namespace detail
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per function of the library.
-inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value> const& operands) {
+inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value> const& operands) const {
     std::string_view const name = node.name;
-    UnitTable const& units = context.units();
+    UnitTable const& units = context->units();
     if (name == "engaged") {
         return Value{!operands.front().isNull()};
     }
@@ -2113,11 +2197,13 @@ inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value
         if (!order) {
             return fail(node, order.error());
         }
-        bool const holds = name == "lt"   ? std::is_lt(*order)
-                           : name == "le" ? std::is_lteq(*order)
-                           : name == "gt" ? std::is_gt(*order)
-                                          : std::is_gteq(*order);
-        return Value{holds};
+        if (name == "lt") {
+            return Value{std::is_lt(*order)};
+        }
+        if (name == "le") {
+            return Value{std::is_lteq(*order)};
+        }
+        return Value{name == "gt" ? std::is_gt(*order) : std::is_gteq(*order)};
     }
     if (name == "add" || name == "sub" || name == "mul" || name == "div") {
         std::optional<Amount> const lhs = amountOf(operands.at(0));
@@ -2142,8 +2228,7 @@ inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value
     if (name == "round") {
         std::optional<Amount> amount = amountOf(operands.at(0));
         std::int64_t const* const places = operands.at(1).asInt();
-        if (!amount || places == nullptr || *places < 0 ||
-            *places > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+        if (!amount || places == nullptr || *places < 0 || std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
             return mismatch("a number or a quantity, and places from 0 to 18");
         }
         // roundToDecimalPlaces saturates instead of failing; scaling first finds the overflow it would hide.
@@ -2200,7 +2285,7 @@ inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value
         if (text == nullptr || part == nullptr) {
             return mismatch("two strings");
         }
-        return Value{text->find(*part) != std::string::npos};
+        return Value{text->contains(*part)};
     }
     if (name == "isEmpty") {
         if (std::string const* const text = operands.front().asString(); text != nullptr) {
@@ -2303,7 +2388,7 @@ inline Value detail::Evaluator::callFunction(Expr const& node, std::vector<Value
 }
 
 // `format(template, args...)`: `{0}` is the first argument after the template, `{{` and `}}` are braces.
-inline Value detail::Evaluator::format(Expr const& node, std::vector<Value> const& operands) {
+inline Value detail::Evaluator::format(Expr const& node, std::vector<Value> const& operands) const {
     std::string const* const pattern = operands.front().asString();
     if (pattern == nullptr) {
         return fail(node, "`format` takes a string template");
@@ -2326,9 +2411,10 @@ inline Value detail::Evaluator::format(Expr const& node, std::vector<Value> cons
         std::size_t const close = pattern->find('}', at);
         std::size_t index = 0;
         std::string_view const digits = std::string_view{*pattern}.substr(at + 1, close - at - 1);
-        auto const [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), index);
+        auto const [end, error] =
+            std::from_chars(std::to_address(digits.begin()), std::to_address(digits.end()), index);
         if (close == std::string::npos || digits.empty() || error != std::errc{} ||
-            end != digits.data() + digits.size()) {
+            end != std::to_address(digits.end())) {
             return fail(node, "`format`'s placeholders are written {0}, {1}, ...");
         }
         if (index + 1 >= operands.size()) {
@@ -2342,9 +2428,9 @@ inline Value detail::Evaluator::format(Expr const& node, std::vector<Value> cons
 
 // `number`, `decimal`, `quantity`, `money`, `date` and `dateTime`: a value as display text.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per display function.
-inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> const& operands) {
+inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> const& operands) const {
     std::string_view const name = node.name;
-    std::string const locale = context.locale();
+    std::string const locale = context->locale();
     if (name == "date" || name == "dateTime") {
         time::DateTime const* const instant = operands.front().asTimestamp();
         std::string const* const style = operands.size() > 1 ? operands.at(1).asString() : nullptr;
@@ -2355,8 +2441,8 @@ inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> con
         if (chosen != "short" && chosen != "medium" && chosen != "long") {
             return fail(node, "a style is `short`, `medium` or `long`");
         }
-        DisplayFormatter const& formatter = context.displayFormatter();
-        std::chrono::minutes const offset = context.displayOffset(*instant);
+        DisplayFormatter const& formatter = context->displayFormatter();
+        std::chrono::minutes const offset = context->displayOffset(*instant);
         return Value{name == "date" ? formatter.date(*instant, chosen, offset, locale)
                                     : formatter.dateTime(*instant, chosen, offset, locale)};
     }
@@ -2364,7 +2450,7 @@ inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> con
     if (!amount) {
         return fail(node, "`" + node.name + "` takes a number or a quantity");
     }
-    render::NumericLocale const numeric = context.numericLocale();
+    render::NumericLocale const numeric = context->numericLocale();
     auto const digits = [&numeric](math::Rational const& value, std::uint32_t places) {
         return render::formatCanonicalNumber(decimalText(value, places), numeric);
     };
@@ -2374,7 +2460,7 @@ inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> con
     }
     if (name == "decimal") {
         std::int64_t const* const wanted = operands.at(1).asInt();
-        if (wanted == nullptr || *wanted < 0 || *wanted > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+        if (wanted == nullptr || *wanted < 0 || std::cmp_greater(*wanted, math::kMaxDecimalPlaces)) {
             return fail(node, "`decimal` takes places from 0 to 18");
         }
         return Value{digits(amount->value, static_cast<std::uint32_t>(*wanted))};
@@ -2384,13 +2470,13 @@ inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> con
         if (currency == nullptr || !amount->unit.empty()) {
             return fail(node, "`money` takes a number and a currency code");
         }
-        return Value{context.displayFormatter().money(digits(amount->value, places), *currency, locale)};
+        return Value{context->displayFormatter().money(digits(amount->value, places), *currency, locale)};
     }
     // quantity(x, unit?): in the unit asked for, or its own, with the unit's display text.
     if (amount->unit.empty()) {
         return fail(node, "`quantity` takes a quantity");
     }
-    UnitTable const& units = context.units();
+    UnitTable const& units = context->units();
     if (operands.size() > 1) {
         std::string const* const unit = operands.at(1).asString();
         if (unit == nullptr) {
@@ -2409,15 +2495,15 @@ inline Value detail::Evaluator::display(Expr const& node, std::vector<Value> con
 // `t(key, fallback, args)`: the catalogue's message for the key in the active locale, else the fallback, formatted
 // with the arguments. A catalogue message outside the supported subset is reported and the fallback shown.
 inline Value detail::Evaluator::message(Expr const& node, std::string const& key, std::string const& fallback,
-                                        ValueRecord const& arguments) {
-    std::string const locale = context.locale();
+                                        ValueRecord const& arguments) const {
+    std::string const locale = context->locale();
     std::optional<std::string> catalogued;
-    if (render::TranslationProvider const& translations = context.translations(); translations) {
+    if (render::TranslationProvider const& translations = context->translations(); translations) {
         catalogued = translations(key, locale);
     }
     std::expected<Message, std::string> parsed = parseMessage(catalogued.value_or(fallback));
     if (!parsed && catalogued) {
-        diagnostics.report(node.path, "the catalogue's `" + key + "` is refused: " + parsed.error());
+        diagnostics->report(node.path, "the catalogue's `" + key + "` is refused: " + parsed.error());
         parsed = parseMessage(fallback);
     }
     if (!parsed) {
@@ -2437,7 +2523,7 @@ inline Value detail::Evaluator::message(Expr const& node, std::string const& key
         }
         named.emplace_back(name, std::move(argument));
     }
-    std::expected<std::string, std::string> text = formatMessage(*parsed, named, locale, context.numericLocale());
+    std::expected<std::string, std::string> text = formatMessage(*parsed, named, locale, context->numericLocale());
     if (!text) {
         return fail(node, text.error());
     }
@@ -2451,7 +2537,7 @@ inline Value detail::Evaluator::message(Expr const& node, std::string const& key
 /// @param diagnostics Where runtime errors go.
 /// @return The value.
 [[nodiscard]] inline Value evaluate(Expr const& expr, ExpressionContext const& context, Diagnostics& diagnostics) {
-    detail::Evaluator evaluator{.context = context, .diagnostics = diagnostics, .locals = {}};
+    detail::Evaluator evaluator{.context = &context, .diagnostics = &diagnostics, .locals = {}};
     return evaluator.eval(expr);
 }
 

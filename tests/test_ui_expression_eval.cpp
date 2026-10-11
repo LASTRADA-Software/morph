@@ -161,8 +161,12 @@ TEST_CASE("ui::evaluate: and, or and not follow Kleene's three-valued logic", "[
               (lhs.isNull() ? ui::Value{} : ui::Value{!*lhs.asBool()}));
         for (auto const& [rhsText, rhs] : truth) {
             INFO(lhsText << " " << rhsText);
-            CHECK(run(R"({"fn": "and", "args": [)" + lhsText + "," + rhsText + "]}") == kleeneAnd(lhs, rhs));
-            CHECK(run(R"({"fn": "or", "args": [)" + lhsText + "," + rhsText + "]}") == kleeneOr(lhs, rhs));
+            std::string operands = lhsText;
+            operands += ",";
+            operands += rhsText;
+            operands += "]}";
+            CHECK(run(R"({"fn": "and", "args": [)" + operands) == kleeneAnd(lhs, rhs));
+            CHECK(run(R"({"fn": "or", "args": [)" + operands) == kleeneOr(lhs, rhs));
         }
     }
     CHECK(run(R"({"fn": "and", "args": [true, null, false]})") == ui::Value{false});

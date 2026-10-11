@@ -595,7 +595,7 @@ template <typename R>
     if constexpr (::morph::forms::detail::ReflectableAggregate<R>) {
         return ::morph::forms::schemaJson<R>();
     } else if constexpr (kIsVector<R>) {
-        using Element = typename R::value_type;
+        using Element = R::value_type;
         if constexpr (::morph::forms::detail::ReflectableAggregate<Element>) {
             return R"({"type":"array","items":)" + ::morph::forms::schemaJson<Element>() + "}";
         } else {
