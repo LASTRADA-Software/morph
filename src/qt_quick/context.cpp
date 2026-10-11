@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include "qt_quick/context.hpp"
+
+#include <QObject>
+#include <QQmlContext>
+#include <QQmlError>
+#include <QUrl>
+#include <morph/qt_quick/components.hpp>
+#include <stdexcept>
+#include <utility>
+
+#include "qt_quick/keys.hpp"
+#include "qt_quick/relay.hpp"
+#include "qt_quick/widget.hpp"
+
+namespace morph::qt_quick {
+
+std::string widthClassOf(double logicalWidth) {
+    if (logicalWidth < 600.0) {
+        return "compact";
+    }
+    if (logicalWidth < 1200.0) {
+        return "medium";
+    }
+    return "expanded";
+}
+
+}  // namespace morph::qt_quick
+
+namespace morph::qt_quick::detail {
+
+namespace {
+
+/// The backend's roots, top to bottom in the column the `MorphRoots` item holds.
+class Roots final : public ContainerCore {
+public:
+    explicit Roots(QQuickItem* column) : _column{column} {}
+
+protected:
+    QQuickItem* contentFor(ItemBase& child) override {
+        static_cast<void>(child);
+        return _column;
+    }
+
+private:
+    QPointer<QQuickItem> _column;
+};
+
+QString errorsOf(QQmlComponent const& component) {
+    QString text;
+    for (QQmlError const& error : component.errors()) {
+        text += error.toString() + QLatin1Char('\n');
+    }
+    return text;
+}
+
+}  // namespace
+
+Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
+    : _engine{&engine}, _options{std::move(options)} {
+    QQmlComponent& roots = component(QStringLiteral("MorphRoots"));
+    QObject* const made = roots.create();
+    _holder = qobject_cast<QQuickItem*>(made);
+    if (_holder == nullptr) {
+        delete made;
+        throw std::runtime_error{"morph::qt_quick: the MorphRoots component did not make an item"};
+    }
+    QQmlEngine::setObjectOwnership(_holder, QQmlEngine::CppOwnership);
+    _holder->setParentItem(&host);
+    _holder->setParent(&host);
+    _roots = std::make_unique<Roots>(qobject_cast<QQuickItem*>(_holder->property("content").value<QObject*>()));
+    QObject::connect(&host, &QQuickItem::widthChanged, _holder, [this] { widthChanged(); });
+    widthChanged();
+}
+
+Context::~Context() {
+    _roots.reset();
+    delete _holder.data();
+}
+
+void Context::widthChanged() {
+    QQuickItem const* const host = _holder != nullptr ? _holder->parentItem() : nullptr;
+    if (host == nullptr) {
+        return;
+    }
+    std::string next = widthClassOf(host->width());
+    if (next == _widthClass) {
+        return;
+    }
+    _widthClass = std::move(next);
+    if (_options.onWidthClass) {
+        _options.onWidthClass(_widthClass);
+    }
+}
+
+QQmlComponent& Context::component(QString const& type) {
+    auto const found = _components.find(type);
+    if (found != _components.end()) {
+        return *found->second;
+    }
+    std::unique_ptr<QQmlComponent> made;
+    if (_options.components != nullptr) {
+        made = _options.components->restyled(*_engine, toUtf8(type));
+    }
+    if (made == nullptr) {
+        made = std::make_unique<QQmlComponent>(_engine);
+        made->loadFromModule(QStringLiteral("MorphUi"), type, QQmlComponent::PreferSynchronous);
+    }
+    if (made->isError()) {
+        throw std::runtime_error{"morph::qt_quick: " + toUtf8(type) + " does not compile:\n" +
+                                 toUtf8(errorsOf(*made))};
+    }
+    return *_components.emplace(type, std::move(made)).first->second;
+}
+
+Context::Made Context::make(QString const& type, QVariantMap initial) {
+    QQmlComponent& made = component(type);
+    auto* const relay = new Relay{};
+    initial.insert(QStringLiteral("host"), QVariant::fromValue<QObject*>(relay));
+    QObject* const object = made.createWithInitialProperties(initial);
+    auto* const item = qobject_cast<QQuickItem*>(object);
+    if (item == nullptr) {
+        delete object;
+        delete relay;
+        throw std::runtime_error{"morph::qt_quick: " + toUtf8(type) + " did not make an item:\n" +
+                                 toUtf8(errorsOf(made))};
+    }
+    QQmlEngine::setObjectOwnership(item, QQmlEngine::CppOwnership);
+    relay->setParent(item);
+    item->setParent(_holder);
+    return Made{.item = item, .relay = relay};
+}
+
+}  // namespace morph::qt_quick::detail

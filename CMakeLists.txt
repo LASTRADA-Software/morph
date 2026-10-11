@@ -56,6 +56,10 @@ if(MORPH_BUILD_TUI AND EMSCRIPTEN)
     message(WARNING "MORPH_BUILD_TUI is ignored under Emscripten: core-cpp builds no core::tui there.")
     set(MORPH_BUILD_TUI OFF)
 endif()
+option(MORPH_BUILD_QT_QUICK      "Build morph::qt_quick, the Qt Quick renderer and frontend (a compiled library; needs MORPH_BUILD_QT and Qt 6.5+ Quick)" OFF)
+if(MORPH_BUILD_QT_QUICK AND NOT MORPH_BUILD_QT)
+    message(FATAL_ERROR "MORPH_BUILD_QT_QUICK=ON needs MORPH_BUILD_QT=ON: morph::qt_quick runs its runtime on morph::qt's QtExecutor.")
+endif()
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
 # Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
@@ -110,7 +114,7 @@ option(MORPH_CLIENT_ONLY
 
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
-if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML))
+if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML OR MORPH_BUILD_QT_QUICK))
     include(cmake/FindQt.cmake)
 endif()
 
@@ -624,6 +628,18 @@ if(MORPH_BUILD_TUI)
     endif()
 endif()
 
+# ── morph::qt_quick, the Qt Quick renderer and frontend (optional, compiled) ──
+# A STATIC library over Qt Quick: its widgets are QML components compiled into
+# the private MorphUi module. Created before the public-header guard below, so
+# include/morph/qt_quick/ is checked whenever the option is on. It links
+# morph_qt (for QtExecutor), which is created further down in the
+# MORPH_BUILD_QT block and named by its plain target name, resolved at
+# generate time. Its tests are added after that block.
+if(MORPH_BUILD_QT_QUICK)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+    add_subdirectory(src/qt_quick)
+endif()
+
 # ── Guard: every public header must belong to some target's FILE_SET ─────────
 #
 # VERIFY_INTERFACE_HEADER_SETS compiles each *listed* header standalone and is
@@ -650,7 +666,8 @@ set(_morph_optional_components
     "include/morph/qt/forms/:morph_qt_forms"
     "include/morph/qt/:morph_qt"
     "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite"
-    "include/morph/tui/:morph_tui")
+    "include/morph/tui/:morph_tui"
+    "include/morph/qt_quick/:morph_qt_quick")
 
 file(GLOB_RECURSE _morph_public_headers
      RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -658,7 +675,7 @@ file(GLOB_RECURSE _morph_public_headers
 
 # Union of every header set this configuration actually created.
 set(_morph_listed_headers "")
-foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite morph_tui)
+foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite morph_tui morph_qt_quick)
     if(TARGET ${_morph_target})
         get_target_property(_morph_target_headers ${_morph_target} HEADER_SET)
         if(_morph_target_headers)
@@ -1095,6 +1112,10 @@ if(MORPH_BUILD_QT)
         add_subdirectory(tests/qt)
     endif()
 
+    if(MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
+        add_subdirectory(tests/qt_quick)
+    endif()
+
     if(MORPH_BUILD_EXAMPLES)
         add_subdirectory(examples/qt_tls_client)
     endif()
@@ -1262,6 +1283,27 @@ if(MORPH_INSTALL)
         unset(_morph_unicode_imported)
     endif()
 
+    # morph::qt_quick is a compiled archive with a static QML module beside it:
+    # the module's resource object libraries carry the MorphUi components, and
+    # without them an installed renderer links but finds no component to load.
+    if(TARGET morph_qt_quick)
+        set_target_properties(morph_qt_quick PROPERTIES EXPORT_NAME qt_quick)
+        set_target_properties(morph_qt_quick_qml PROPERTIES EXPORT_NAME qt_quick_qml)
+        foreach(_morph_qq_target IN LISTS MORPH_QT_QUICK_QML_OUTPUT_TARGETS)
+            string(REGEX REPLACE "^morph_" "" _morph_qq_export_name "${_morph_qq_target}")
+            set_target_properties(${_morph_qq_target} PROPERTIES EXPORT_NAME ${_morph_qq_export_name})
+        endforeach()
+        install(TARGETS morph_qt_quick morph_qt_quick_qml ${MORPH_QT_QUICK_QML_OUTPUT_TARGETS}
+            EXPORT morphTargets
+            FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+            OBJECTS DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        )
+        list(APPEND MORPH_INSTALLED_COMPONENTS qt_quick)
+        unset(_morph_qq_target)
+        unset(_morph_qq_export_name)
+    endif()
+
     # The MorphForms QML module (MORPH_BUILD_FORMS_QML): its backing library,
     # its plugin, and the object libraries a static QML module carries --
     # without the latter an installed module links but registers no QML types
@@ -1330,11 +1372,11 @@ if(MORPH_INSTALL)
     # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT only while every
     # installed component is header-only: without it CMake rejects an install
     # made on a differently-sized-void* machine, which is exactly right once a
-    # compiled archive (morph_qt_impl, the MorphForms module, morph::tui) is in
-    # the package.
+    # compiled archive (morph_qt_impl, the MorphForms module, morph::tui,
+    # morph::qt_quick) is in the package.
     set(_morph_arch_independent ARCH_INDEPENDENT)
     if(TARGET morph_qt_impl OR "forms_qml" IN_LIST MORPH_INSTALLED_COMPONENTS
-       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS)
+       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS OR "qt_quick" IN_LIST MORPH_INSTALLED_COMPONENTS)
         set(_morph_arch_independent "")
     endif()
     write_basic_package_version_file(
