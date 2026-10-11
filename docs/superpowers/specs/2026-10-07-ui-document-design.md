@@ -653,43 +653,55 @@ The document adds:
 
 ## 11. Authoring on the server
 
-Screens are written in C++ with typed builders that produce the document:
+Screens are written in C++ with typed builders that produce the document (`morph::ui::author`,
+`docs/spec/ui/author.md`; a screen's source writes `namespace ui = morph::ui::author;`):
 
 ```cpp
 auto screen = ui::screen<"lims.results">([](ui::Scope& s) {
     auto sampleId = s.param<int64_t>("sampleId");
     auto sample   = s.model<SampleModel>("sample", {.instance = sampleId});
-    auto results  = s.query<ListResults>(sample, {.sampleId = sampleId});
-    return ui::table(results, ui::key(&ResultView::id), [&](ui::RowScope& r) {
-        auto draft = r.state("draft", r.field(&ResultView::inputs));
-        auto calc  = r.query<EvaluateResult>(sample, {.resultId = r.field(&ResultView::id), .inputs = draft},
+    auto results  = s.query<ListResults>("results", sample, {{&ListResults::sampleId, sampleId}});
+    return ui::table(results.value(), {.key = ui::row(&ResultView::id)}, [&](ui::RowScope& r) {
+        auto draft = r.state("draft", ui::row(&ResultView::inputs));
+        auto calc  = r.query<EvaluateResult>("calc", sample,
+                                             {{&EvaluateResult::resultId, ui::row(&ResultView::id)},
+                                              {&EvaluateResult::inputs, draft}},
                                              {.debounce = 300ms});
-        return ui::cells(
-            ui::textInput({.value = draft.at(&ResultInputs::mass), .commitOn = ui::Commit::Change}),
-            ui::text({.text  = ui::fn::quantity(calc.value().at(&Evaluated::concentration)
-                                                    .orElse(r.field(&ResultView::concentration))),
-                      .stale = calc.pending()}));
-    });
+        return ui::cells({
+            ui::textInput({.value = draft.at(&ResultInputs::mass), .label = ui::t("lims.mass", "Mass"),
+                           .commitOn = ui::Commit::Change}),
+            ui::text({.text  = ui::quantity(calc.value().at(&Evaluated::concentration)
+                                                .orElse(ui::row(&ResultView::concentration))),
+                      .stale = calc.pending()})});
+    }).a11y(ui::t("lims.results", "Results"));
 });
 MORPH_REGISTER_SCREEN(screen);
 ```
 
 - Operators on expression handles build trees: `a + b`, `a < b`, `a && b`, `!a`, `x.orElse(y)`.
 - Fields are member pointers and actions are types, so a renamed field or a wrong body type is a
-  compile error on the server. Query and mutation bodies are the action's own struct with expression
-  handles in place of values.
+  compile error on the server. A query or mutation body is the action's own members with
+  expression handles in place of values, written as `{&Action::member, handle}` pairs: C++ cannot
+  synthesise the action's struct with its members retyped, which `{.sampleId = sampleId}` would
+  need. A query's `refreshOn` names actions through its model handle, `sample.actions<A, B>()`,
+  which requires the model to run each one.
 - Registration emits the JSON once and runs the load-time validation of §3; a screen that fails is a
   failing server test, never a client surprise.
 - Registration also runs the **accessibility rules**: every text input, date-time input, slider, select,
   checkbox and file picker has a label or `a11y.name` (a form field takes its field's label); a button
   without text, every `custom` node, every `table` and every `dialog` or `drawer` has `a11y.name` or a
-  title; an `icon` alone never names a node. A screen that breaks a rule fails registration, with the
-  path and the rule. The client does not repeat these rules: they guard authoring, and a client must
+  title; an `icon` alone never names a node, and neither does a label or name written as the
+  constant `""` or `null`. A screen that breaks a rule fails registration, with the path and the
+  rule. The client does not repeat these rules: they guard authoring, and a client must
   not refuse a document an older server registered.
 - The builders cover every construct of the document: the lifecycle keys (`identity`, `title`,
   `dirty`, `onMount`, `onUnmount`, `onClose`, `onBackendChange`), `refreshOn` over action types,
   `form` with its `fields` overlay, `dataTable`, `custom` and host components, and the command
-  forms. The reference screen of spec 6 §11 is the first full use and fixes the API.
+  forms. Registration answers the catalog of §3 from the types the builders saw: `keyed` from the
+  model type, an action's model from the handle it runs through, and `stateless`, the calculated
+  and secret fields and the credential flag from traits an application specialises
+  (`docs/spec/ui/author.md`). The reference screen of spec 6 §11 is the first full use, once the
+  lims example carries it.
 - Inline lambdas cannot appear in a screen. A value the library cannot express is a server-computed
   field.
 
