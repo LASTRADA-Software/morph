@@ -473,6 +473,7 @@
     { "name": "an unknown key name", "doc": { "keys": { "Alt+~": [] } }, "at": "/keys/Alt+~0", "reason": "does not end in a key name" },
     { "name": "F with a sign", "doc": { "keys": { "F!": [] } }, "at": "/keys/F!", "reason": "does not end in a key name" },
     { "name": "a punctuation key", "doc": { "keys": { "Alt+:": [] } }, "at": "/keys/Alt+:", "reason": "does not end in a key name" },
+    { "name": "a punctuation key below the digits", "doc": { "keys": { "Alt+!": [] } }, "at": "/keys/Alt+!", "reason": "does not end in a key name" },
     { "name": "F with a sign and a digit", "doc": { "keys": { "F!1": [] } }, "at": "/keys/F!1", "reason": "does not end in a key name" },
     { "name": "a hash with punctuation", "doc": { "components": { "C": { "qml": "sha256:!aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } } }, "at": "/components/C/qml", "reason": "content hash" },
     { "name": "F0", "doc": { "keys": { "F0": [] } }, "at": "/keys/F0", "reason": "does not end in a key name" },
