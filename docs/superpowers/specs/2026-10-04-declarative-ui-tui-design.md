@@ -70,8 +70,10 @@ Each layer lands in its own pull request, in this order: the bridge seams for mo
 (spec 5 §2); the reactive core and view tree; the table engine (spec 7), which the renderer's list
 model consumes; the document and its interpreter; the Qt Quick renderer; the forms engine; the
 hosting layer (spec 6: lifecycle, `ScreenHost`, the app root scope, the design package, the workspace
-shell); the generic client with delivery; the examples, a few per pull request; the terminal
-renderer whenever it is ready. The shipped QML forms renderer stays until the examples no longer use
+shell); the UI service (the `ui-*` envelope kinds of spec 5 §12 with their authorisation rules, the
+catalog and bundles), which the interpreter does not wait for because its load-time checks read the
+catalog's facts in-process (spec 5 §2); the generic client with delivery; the examples, a few per
+pull request; the terminal renderer whenever it is ready. The shipped QML forms renderer stays until the examples no longer use
 it.
 
 ### Requirements the reactive core meets
@@ -102,8 +104,10 @@ not meet, and each has a test in §7.
 **`morph::ui`** (`include/morph/ui/`)
 
 - Header-only, in the base `morph` target. Depends on `morph::reactive`, never the reverse.
-- Headers: `document.hpp` (the document model and its load-time validation, spec 5 §3),
-  `expression.hpp` (the `expr/1` evaluator), `interpreter.hpp` (document to reactive nodes),
+- Headers: `value.hpp` (the document's typed values and types, which hosting's `ParamMap` holds),
+  `document.hpp` (the document model and its load-time validation, spec 5 §3),
+  `expression.hpp` (the `expr/1` evaluator), `message.hpp` (the MessageFormat 2 subset of `t`, which a
+  catalogue loader uses alone), `interpreter.hpp` (document to reactive nodes),
   `view.hpp` (the view tree), `backend.hpp` (widget interfaces, `IViewBackend`), `mount.hpp`,
   `frontend.hpp` (§5b: `AppContext`, `AppSource`, `Frontend`, `FrontendOption`, `EnvironmentReader`,
   `Bundle`, `ConnectError`, `FrontendError`, `Backend`), `host.hpp` (spec 6 §4: `ScreenHost`,

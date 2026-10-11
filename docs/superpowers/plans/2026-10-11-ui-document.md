@@ -148,6 +148,13 @@ an `optimistic` write to a calculated field, and `"offline": "queue"` on a crede
 - **S6 — the node kinds' JSON names.** Spec 5 §9 lists the kinds in prose; A fixes their `kind` spellings
   (`dateTimeInput`, `filePicker`, `keyValue`, …) in `docs/spec/ui/document.md`.
 
+- **S7 — what implementing settled.** Spec 5 now says: element and transfer ids share a scope's
+  namespace, and `event`, `app`, `boundary`, `props`, `result`, `body` are reserved; drawers are
+  scopes like dialogs; a refusal's path is a JSON Pointer; a number literal with a fraction is
+  refused; rounding is half to even throughout; how quantities combine; exact `.match` keys are
+  written `0` (MessageFormat 2's spelling) or `=0`, and a literal placeholder is outside the subset;
+  `serialKey` is valid only with `serial`. Spec 1 §2 lists `value.hpp` and `message.hpp`.
+
 Any further disagreement found while implementing is fixed in the spec in the same commit and listed in the PR.
 
 ## Files (A)

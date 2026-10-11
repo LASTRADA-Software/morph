@@ -172,6 +172,27 @@ API surface).
 
 ### Added
 
+- **`morph::ui`: the UI document and `expr/1`.** Header-only, in the base `morph` target. A screen
+  defined as JSON on the server loads into a C++ model and is checked before anything mounts it.
+  - `ui::Value` and `ui::Type` (`value.hpp`): the document's typed values — exact `int`, `decimal`
+    and `quantity` over `math::Rational`, timestamps, lists and records — and their JSON form, which
+    refuses a number with a fraction.
+  - `ui::loadDocument` (`document.hpp`) parses a screen or the app document into `ui::Document` and
+    refuses it, with a JSON Pointer and the reason, when it breaks a rule of `ui/1`: a name that
+    does not resolve in its scope, a type that does not check, a cycle among `let` entries, state
+    inits or watches, an expression above 256 nodes, an unknown kind, command or function, an
+    unknown must-understand key, or a placement, target, component or customization rule. With the
+    application's catalog facts (`ui::Catalog`) it also refuses unknown models and actions, an
+    `instance` key on a model that is not keyed, an optimistic write to a server-calculated field
+    and an offline-queued credential.
+  - The `expr/1` evaluator (`expression.hpp`): every expression form of the document, the function
+    library — three-valued logic, exact arithmetic with unit conversion, strings, lists and the
+    display functions over `render/locale_format.hpp` — and a total `evaluate` whose runtime errors
+    are `null` values reported on the environment's diagnostic channel.
+  - `t` reads messages in a subset of MessageFormat 2 (`message.hpp`): placeholders, `:number`,
+    `:string`, and `.match` on CLDR plural categories, exact numbers and strings.
+  - Shared JSON corpora of documents, expressions and messages under `tests/ui/corpus/`.
+
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.
   - An immutable view tree of the UI document's palette (`view.hpp`): every property a constant or a

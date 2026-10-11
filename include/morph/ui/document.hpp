@@ -535,6 +535,7 @@ struct KindSpec {
     std::span<std::string_view const> values = {};
 };
 
+/// @brief The keys every node takes.
 inline constexpr std::array<KeySpec, 13> kCommonKeys = {{
     {"id", Shape::Name},
     {"visible", Shape::Condition},
@@ -551,6 +552,7 @@ inline constexpr std::array<KeySpec, 13> kCommonKeys = {{
     {"keys", Shape::Keys},
 }};
 
+/// @brief The input decorations text and the inputs take.
 inline constexpr std::array<KeySpec, 4> kFieldKeys = {{
     {"readonly", Shape::Condition},
     {"required", Shape::Condition},
@@ -558,20 +560,31 @@ inline constexpr std::array<KeySpec, 4> kFieldKeys = {{
     {"stale", Shape::Condition},
 }};
 
+/// @brief The element values every element has.
 inline constexpr std::array<std::string_view, 5> kAnyValues = {"visible", "enabled", "valid", "errors", "shownErrors"};
+/// @brief The element values of a text, date-time or slider input.
 inline constexpr std::array<std::string_view, 5> kInputValues = {"value", "draft", "dirty", "focused", "touched"};
+/// @brief The element values of a checkbox.
 inline constexpr std::array<std::string_view, 1> kCheckboxValues = {"checked"};
+/// @brief The element values of a select.
 inline constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selectedOption"};
+/// @brief The element values of a table.
 inline constexpr std::array<std::string_view, 10> kTableValues = {
     "selection",   "activeKey",     "sort",    "filters", "viewCount",
     "sourceCount", "selectedCount", "pending", "error",   "hoveredKey"};
+/// @brief The element values of a dialog or drawer.
 inline constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
+/// @brief The element values of a form, beside its fields.
 inline constexpr std::array<std::string_view, 3> kFormValues = {"ready", "body", "submitted"};
+/// @brief The values of a transfer id.
 inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", "pending", "error"};
 
+/// @brief The keys of `text`.
 inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
+/// @brief The keys of `button`.
 inline constexpr std::array<KeySpec, 4> kButtonKeys = {
     {{"label", Shape::Expr}, {"icon", Shape::Expr}, {"onClick", Shape::Commands}, {"onActivate", Shape::Commands}}};
+/// @brief The keys of `textInput`.
 inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr},
                                                            {"placeholder", Shape::Expr},
                                                            {"mode", Shape::Expr},
@@ -580,8 +593,10 @@ inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr
                                                            {"onChange", Shape::Commands},
                                                            {"onCommit", Shape::Commands},
                                                            {"onSubmit", Shape::Commands}}};
+/// @brief The keys of `checkbox`.
 inline constexpr std::array<KeySpec, 4> kCheckboxKeys = {
     {{"label", Shape::Expr}, {"checked", Shape::Expr}, {"onToggle", Shape::Commands}, {"onChange", Shape::Commands}}};
+/// @brief The keys of `select`.
 inline constexpr std::array<KeySpec, 7> kSelectKeys = {{{"options", Shape::Expr},
                                                         {"selected", Shape::Expr},
                                                         {"style", Shape::Expr},
@@ -589,7 +604,9 @@ inline constexpr std::array<KeySpec, 7> kSelectKeys = {{{"options", Shape::Expr}
                                                         {"onStale", Shape::Text},
                                                         {"onChoose", Shape::Commands},
                                                         {"onChange", Shape::Commands}}};
+/// @brief The keys of `menu`.
 inline constexpr std::array<KeySpec, 1> kMenuKeys = {{{"items", Shape::Parts, "menuItem"}}};
+/// @brief The keys of a menu item part.
 inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr},
                                                           {"icon", Shape::Expr},
                                                           {"keys", Shape::Text},
@@ -597,21 +614,30 @@ inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr}
                                                           {"enabled", Shape::Condition},
                                                           {"onClick", Shape::Commands},
                                                           {"items", Shape::Parts, "menuItem"}}};
+/// @brief The keys of `column` and `row`.
 inline constexpr std::array<KeySpec, 2> kContainerKeys = {{{"children", Shape::Nodes}, {"gap", Shape::Expr}}};
+/// @brief The keys of `grid`.
 inline constexpr std::array<KeySpec, 3> kGridKeys = {
     {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"columns", Shape::Expr}}};
+/// @brief The keys of `panel`.
 inline constexpr std::array<KeySpec, 5> kPanelKeys = {{{"title", Shape::Expr},
                                                        {"padding", Shape::Expr},
                                                        {"collapsible", Shape::Expr},
                                                        {"collapsed", Shape::Expr},
                                                        {"children", Shape::Nodes}}};
+/// @brief The keys of `scroll`.
 inline constexpr std::array<KeySpec, 2> kScrollKeys = {{{"axis", Shape::Expr}, {"children", Shape::Nodes}}};
+/// @brief The keys of `switch`.
 inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
     {{"on", Shape::Expr, {}, kRequired}, {"cases", Shape::Parts, "case"}, {"default", Shape::Nodes}}};
+/// @brief The keys of a `switch` case part.
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
+/// @brief The keys of `tabs`.
 inline constexpr std::array<KeySpec, 1> kTabsKeys = {{{"tabs", Shape::Parts, "tab"}}};
+/// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 2> kTabKeys = {{{"label", Shape::Expr}, {"children", Shape::Nodes}}};
+/// @brief The keys of `dialog` and `drawer`.
 inline constexpr std::array<KeySpec, 8> kDialogKeys = {{{"open", Shape::Condition},
                                                         {"title", Shape::Expr},
                                                         {"showErrors", Shape::Text},
@@ -620,12 +646,15 @@ inline constexpr std::array<KeySpec, 8> kDialogKeys = {{{"open", Shape::Conditio
                                                         {"default", Shape::Commands, {}, kInner},
                                                         {"cancel", Shape::Commands, {}, kInner},
                                                         {"side", Shape::Expr}}};
+/// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
+/// @brief The keys of `forEach`.
 inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {}, kRequired},
                                                          {"key", Shape::Expr, {}, kInner},
                                                          {"axis", Shape::Expr},
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
+/// @brief The keys of `table`.
 inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
@@ -640,13 +669,16 @@ inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner}}};
+/// @brief The keys of a `table` column part.
 inline constexpr std::array<KeySpec, 4> kColumnKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};
+/// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 5> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},
                                                           {"label", Shape::Expr},
                                                           {"onChange", Shape::Commands},
                                                           {"onCommit", Shape::Commands}}};
+/// @brief The keys of `slider`.
 inline constexpr std::array<KeySpec, 7> kSliderKeys = {{{"value", Shape::Expr},
                                                         {"min", Shape::Expr},
                                                         {"max", Shape::Expr},
@@ -654,36 +686,50 @@ inline constexpr std::array<KeySpec, 7> kSliderKeys = {{{"value", Shape::Expr},
                                                         {"label", Shape::Expr},
                                                         {"onChange", Shape::Commands},
                                                         {"onCommit", Shape::Commands}}};
+/// @brief The keys of `filePicker`.
 inline constexpr std::array<KeySpec, 5> kFilePickerKeys = {{{"accept", Shape::Expr},
                                                             {"multiple", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"label", Shape::Expr},
                                                             {"onPick", Shape::Commands}}};
+/// @brief The keys of `banner`.
 inline constexpr std::array<KeySpec, 5> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"text", Shape::Expr},
                                                         {"dismissible", Shape::Expr},
                                                         {"action", Shape::Part, "action"},
                                                         {"onDismiss", Shape::Commands}}};
+/// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
+/// @brief The keys of `badge`.
 inline constexpr std::array<KeySpec, 3> kBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}}};
+/// @brief The keys of `progress`.
 inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}, {"label", Shape::Expr}}};
+/// @brief The keys of `steps`.
 inline constexpr std::array<KeySpec, 2> kStepsKeys = {{{"items", Shape::Expr}, {"current", Shape::Expr}}};
+/// @brief The keys of `keyValue`.
 inline constexpr std::array<KeySpec, 1> kKeyValueKeys = {{{"items", Shape::Expr}}};
+/// @brief The keys of `emptyState`.
 inline constexpr std::array<KeySpec, 4> kEmptyStateKeys = {
     {{"title", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"action", Shape::Part, "action"}}};
+/// @brief The keys of `splitter`.
 inline constexpr std::array<KeySpec, 3> kSplitterKeys = {
     {{"orientation", Shape::Expr}, {"sizes", Shape::Expr}, {"children", Shape::Nodes}}};
+/// @brief The keys of `collapsible`.
 inline constexpr std::array<KeySpec, 5> kCollapsibleKeys = {{{"title", Shape::Expr},
                                                              {"open", Shape::Condition},
                                                              {"header", Shape::Nodes},
                                                              {"children", Shape::Nodes},
                                                              {"onToggle", Shape::Commands}}};
+/// @brief The keys of `dropZone`.
 inline constexpr std::array<KeySpec, 4> kDropZoneKeys = {
     {{"accept", Shape::Expr}, {"multiple", Shape::Expr}, {"children", Shape::Nodes}, {"onDrop", Shape::Commands}}};
+/// @brief The keys of `customize`.
 inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name, {}, kRequired}}};
+/// @brief The keys of `boundary`.
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
+/// @brief The keys of `form`.
 inline constexpr std::array<KeySpec, 9> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                       {"action", Shape::Text, {}, kRequired},
                                                       {"prefill", Shape::Expr},
@@ -693,12 +739,17 @@ inline constexpr std::array<KeySpec, 9> kFormKeys = {{{"model", Shape::Name, {},
                                                       {"onSubmit", Shape::Commands},
                                                       {"onSuccess", Shape::Commands},
                                                       {"onError", Shape::Commands}}};
+/// @brief The keys of `collection` and `wizard`.
 inline constexpr std::array<KeySpec, 2> kCollectionKeys = {
     {{"model", Shape::Name, {}, kRequired}, {"action", Shape::Text, {}, kRequired}}};
+/// @brief The keys of `custom`.
 inline constexpr std::array<KeySpec, 3> kCustomKeys = {
     {{"name", Shape::Text, {}, kRequired}, {"props", Shape::ExprRecord}, {"on", Shape::CommandRecord}}};
+/// @brief The keys of an `a11y` part.
 inline constexpr std::array<KeySpec, 2> kA11yKeys = {{{"name", Shape::Expr}, {"role", Shape::Text}}};
+/// @brief The keys of a `drag` part.
 inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kRequired}}};
+/// @brief The keys of a `drop` part.
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
