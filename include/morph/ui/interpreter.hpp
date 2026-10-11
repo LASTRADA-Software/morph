@@ -1522,6 +1522,16 @@ struct CommandCtx {
     std::shared_ptr<BoundaryRuntime> boundary;
 };
 
+/// @brief A command context without its scope: what a callback the host keeps may hold, so that the host never
+///        keeps a scope alive past its screen. The callback holds the scope weakly and puts it back.
+/// @param ctx The context.
+/// @return The context, its scope dropped.
+[[nodiscard]] inline CommandCtx detached(CommandCtx const& ctx) {
+    CommandCtx kept = ctx;
+    kept.scope = nullptr;
+    return kept;
+}
+
 /// @brief Called once when a command finishes: whether it succeeded.
 using Done = std::function<void(bool)>;
 
@@ -3143,18 +3153,23 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                 return;
             }
             std::weak_ptr<RtScope> const weak = ctx.scope;
-            auto onResult = [this, weak, ctx, list = &command.commands](Value result) {
+            CommandCtx const kept = detached(ctx);
+            auto onResult = [this, weak, kept, list = &command.commands](Value result) {
                 if (auto const held = weak.lock()) {
-                    auto bindings = std::make_shared<Bindings>(*ctx.bindings);
+                    auto bindings = std::make_shared<Bindings>(*kept.bindings);
                     bindings->push_back(Binding{.name = "event", .read = [result] { return result; }});
-                    CommandCtx const next{
-                        .scope = held, .bindings = bindings, .cancelClose = ctx.cancelClose, .boundary = ctx.boundary};
+                    CommandCtx const next{.scope = held,
+                                          .bindings = bindings,
+                                          .cancelClose = kept.cancelClose,
+                                          .boundary = kept.boundary};
                     runtime().batch([&] { runList(*list, next, {}); });
                 }
             };
-            auto onCancel = [this, weak, ctx, list = &command.alternative] {
+            auto onCancel = [this, weak, kept, list = &command.alternative] {
                 if (auto const held = weak.lock()) {
-                    runtime().batch([&] { runList(*list, ctx, {}); });
+                    CommandCtx next = kept;
+                    next.scope = held;
+                    runtime().batch([&] { runList(*list, next, {}); });
                 }
             };
             finish(host->navigate(request, std::move(onResult), std::move(onCancel)) ||
@@ -3513,7 +3528,7 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
     std::weak_ptr<RtScope> const weak = ctx.scope;
     if (command.kind == CommandKind::Download) {
         Value const name = evalIn(scope, ctx.bindings.get(), command.extra);
-        auto settled = [this, weak, ctx, target = command.target, preview = command.option == "preview",
+        auto settled = [this, weak, target = command.target, preview = command.option == "preview",
                         done](std::expected<Value, std::string> const& reply) {
             auto const held = weak.lock();
             if (!held) {
@@ -3550,7 +3565,8 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
             transfer->progress.set(std::move(fraction));
         }
     };
-    auto settled = [this, weak, ctx, transfer, command = &command, done](std::expected<Value, std::string> reply) {
+    auto settled = [this, weak, kept = detached(ctx), transfer, command = &command,
+                    done](std::expected<Value, std::string> reply) {
         auto const held = weak.lock();
         if (!held) {
             return;
@@ -3566,17 +3582,25 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
                 }
                 return;
             }
-            auto bindings = std::make_shared<Bindings>(*ctx.bindings);
-            if (!command->binding.empty()) {
-                bindings->push_back(Binding{.name = command->binding, .read = [ref = *reply] { return ref; }});
+            NameRef const* const found = held->find(command->target);
+            if (found == nullptr || found->category != NameCategory::Mutation) {
+                if (done) {
+                    done(false);
+                }
+                return;
             }
-            Command run;
-            run.kind = CommandKind::Run;
-            run.path = command->path;
-            run.target = command->target;
-            CommandCtx const next{
-                .scope = held, .bindings = bindings, .cancelClose = ctx.cancelClose, .boundary = ctx.boundary};
-            runMutation(run, next, done);
+            // The mutation's body cannot name the reference (a body is checked where the mutation is declared),
+            // so the reference is added to it under `as`, `file` by default.
+            MutationRuntime& mutation = *found->mutation;
+            Value const base = evalIn(*held, kept.bindings.get(), mutation.decl().body);
+            ValueRecord fields = base.asRecord() == nullptr ? ValueRecord{} : *base.asRecord();
+            fields.insert_or_assign(command->binding.empty() ? std::string{"file"} : command->binding, *reply);
+            mutation.run(Value{std::move(fields)}, std::make_shared<Bindings const>(*kept.bindings),
+                         [done](bool succeeded, Value const&) {
+                             if (done) {
+                                 done(succeeded);
+                             }
+                         });
         });
     };
     if (host == nullptr) {
