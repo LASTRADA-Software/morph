@@ -37,6 +37,7 @@ struct KindedError : std::runtime_error {
     /// @brief A failure.
     /// @param errorKind The error kind.
     /// @param text The text.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the only caller passes a kind and a text it names.
     KindedError(std::string errorKind, std::string const& text)
         : std::runtime_error{text}, kind{std::move(errorKind)} {}
     /// @brief The error kind.
@@ -70,10 +71,13 @@ public:
     }
 
     /// @brief Every call sent, oldest first.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double.
     std::vector<Call> calls;
     /// @brief Every bind: `type shared|private key`.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double.
     std::vector<std::string> binds;
     /// @brief Replies sent at once, by action.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double.
     std::map<std::string, std::string, std::less<>> autoReply;
 
     /// @brief The calls of an action.
@@ -93,13 +97,14 @@ public:
     /// @param action The action.
     /// @return The index.
     [[nodiscard]] std::size_t last(std::string_view action) const {
-        for (std::size_t index = calls.size(); index > 0; --index) {
-            if (calls.at(index - 1).action == action) {
-                return index - 1;
-            }
+        std::size_t index = calls.size();
+        while (index > 0 && calls.at(index - 1).action != action) {
+            --index;
         }
-        FAIL("no call of " << action);
-        return 0;
+        if (index == 0) {
+            FAIL("no call of " << action);
+        }
+        return index - 1;
     }
 
     /// @brief Answers a call.
@@ -221,10 +226,10 @@ public:
     }
     bool signIn(Value const& reply) override {
         signedIn.push_back(reply);
-        log.push_back("signIn");
+        log.emplace_back("signIn");
         return !refuseAll;
     }
-    void signOut() override { log.push_back("signOut"); }
+    void signOut() override { log.emplace_back("signOut"); }
     bool setAppValue(std::string const& name, Value const& value) override {
         log.push_back("app " + name + " " + glz::write_json(valueToJson(value)).value_or(""));
         return !refuseAll;
@@ -277,10 +282,14 @@ inline Catalog corpusCatalog() {
     };
     catalog.action = [](std::string_view action) -> std::optional<ActionInfo> {
         ActionInfo info;
-        info.modelType = action.starts_with("Lims_Client") ? "Lims_ClientModel"
-                         : action.starts_with("Auth_")     ? "Auth_SessionModel"
-                         : action.starts_with("Lims_Cat")  ? "Lims_CatalogModel"
-                                                           : "Lims_SampleModel";
+        info.modelType = "Lims_SampleModel";
+        if (action.starts_with("Lims_Client")) {
+            info.modelType = "Lims_ClientModel";
+        } else if (action.starts_with("Auth_")) {
+            info.modelType = "Auth_SessionModel";
+        } else if (action.starts_with("Lims_Cat")) {
+            info.modelType = "Lims_CatalogModel";
+        }
         if (action == "Auth_Token") {
             info.secretFields = {"token"};
         }
@@ -327,8 +336,9 @@ struct Harness {
     /// @param params  The params.
     /// @param options The mount options.
     /// @return The screen.
-    std::unique_ptr<Screen> mount(std::string_view text, ValueRecord params = {}, MountOptions options = {}) {
-        auto screen = interpreter.mount(loadOrFail(text, corpusCatalog()), params, backend, std::move(options));
+    std::unique_ptr<Screen> mount(std::string_view text, ValueRecord const& params = {},
+                                  MountOptions const& options = {}) {
+        auto screen = interpreter.mount(loadOrFail(text, corpusCatalog()), params, backend, options);
         if (!screen) {
             FAIL(screen.error().message());
         }
@@ -367,7 +377,7 @@ struct Harness {
     /// @param name  The property.
     /// @param value The value.
     /// @return Its id.
-    int find(std::string_view kind, std::string_view name, std::string_view value) {
+    int find(std::string_view kind, std::string_view name, std::string_view value) const {
         auto const found = backend.find(kind, name, value);
         if (!found) {
             FAIL("no " << kind << " with " << name << "=" << value << " in\n" << backend.dump());
@@ -379,12 +389,12 @@ struct Harness {
     /// @param kind   The kind.
     /// @param testId The test id.
     /// @return Its id.
-    int byTestId(std::string_view kind, std::string_view testId) { return find(kind, "testId", testId); }
+    int byTestId(std::string_view kind, std::string_view testId) const { return find(kind, "testId", testId); }
 
     /// @brief A widget's text.
     /// @param testId The text widget's test id.
     /// @return Its text.
-    std::string text(std::string_view testId) { return backend.prop(byTestId("Text", testId), "text"); }
+    std::string text(std::string_view testId) const { return backend.prop(byTestId("Text", testId), "text"); }
 };
 
 /// @brief Reads an expression in a screen.

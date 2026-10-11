@@ -318,7 +318,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     h.backend.setDateTime(h.byTestId("DateTimeInput", "when"), morph::time::Timestamp{morph::time::DateTime{}});
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "date"})") != "null");
-    CHECK(h.text("date").find('T') != std::string::npos);
+    CHECK(h.text("date").contains('T'));
     h.backend.selectRows(h.backend.all("Table").front(), {ui::Key{std::int64_t{1}}});
     h.settle();
     CHECK(h.text("selection") == "1");
@@ -447,6 +447,7 @@ TEST_CASE("interpreter commands: a host that refuses a request fails the command
         h.settle();
     }
     std::vector<std::string> reasons;
+    reasons.reserve(h.diagnostics.size());
     for (ui::Refusal const& refusal : h.diagnostics) {
         reasons.push_back(refusal.reason);
     }

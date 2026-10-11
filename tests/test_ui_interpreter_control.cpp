@@ -312,8 +312,7 @@ std::vector<std::string> rowTexts(Harness& h) {
 
 TEST_CASE("interpreter control: patch replaces the replied row without refetching", "[ui][interpreter]") {
     Harness h;
-    std::string doc = kRows;
-    auto screen = h.mount(doc);
+    auto screen = h.mount(kRows);
     h.reply(0, R"([{"id":1,"mass":10},{"id":2,"mass":20}])");
     CHECK(rowTexts(h) == std::vector<std::string>{"1:10", "2:20"});
     h.backend.submit(h.byTestId("TextInput", "capture"), "25");
@@ -326,8 +325,7 @@ TEST_CASE("interpreter control: patch replaces the replied row without refetchin
 TEST_CASE("interpreter control: an optimistic write shows before the reply and rolls back on failure",
           "[ui][interpreter]") {
     Harness h;
-    std::string doc = kRows;
-    auto screen = h.mount(doc);
+    auto screen = h.mount(kRows);
     h.reply(0, R"([{"id":1,"mass":10},{"id":2,"mass":20}])");
     int const guess = h.byTestId("TextInput", "guess");
 
@@ -546,7 +544,7 @@ TEST_CASE(
     h.backend.click(h.byTestId("Button", "go"));
     h.settle();
     h.reply(0, "2.5");
-    CHECK(readJson(*screen, R"({"error": "m"})").find("not a document value") != std::string::npos);
+    CHECK(readJson(*screen, R"({"error": "m"})").contains("not a document value"));
     h.backend.click(h.byTestId("Button", "go"));
     h.settle();
     h.reply(1, R"({"id":1})");

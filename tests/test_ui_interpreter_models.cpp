@@ -128,7 +128,7 @@ TEST_CASE("interpreter models: a borrowed alias uses the opener's instance, and 
     h.reply(0, "[]");
     ui::MountOptions options;
     options.borrowed.emplace("picked", opener->lend("sample"));
-    auto borrowed = h.interpreter.mount(doc, {}, other, std::move(options));
+    auto borrowed = h.interpreter.mount(doc, {}, other, options);
     REQUIRE(borrowed);
     h.settle();
     // The borrower's equal query names the opener's entry (staleTime 0 refetches it) through the opener's channel.

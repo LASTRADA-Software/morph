@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -28,7 +29,7 @@
 #include "../reactive/scheduler.hpp"
 #include "../reactive/scope.hpp"
 #include "../reactive/signal.hpp"
-#include "backend.hpp"
+#include "../ui/backend.hpp"
 #include "document.hpp"
 #include "expression.hpp"
 #include "message.hpp"
@@ -174,6 +175,9 @@ public:
     InterpreterHost& operator=(InterpreterHost&&) = delete;
     virtual ~InterpreterHost() = default;
 
+    // NOLINTBEGIN(performance-unnecessary-value-param,bugprone-easily-swappable-parameters): every default below
+    // answers "not supported" and reads nothing; an override keeps the callbacks, so they are taken by value.
+
     /// @brief Opens another screen.
     /// @param request  What to open.
     /// @param onResult Called with the value a screen opened as a dialog, drawer or window returns.
@@ -309,6 +313,7 @@ public:
     /// @brief A call was refused with error kind `denied`: the permitted set is a snapshot, so the host asks the
     ///        server again and calls `Session::setPermitted`.
     virtual void permissionsStale() {}
+    // NOLINTEND(performance-unnecessary-value-param,bugprone-easily-swappable-parameters)
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -422,6 +427,7 @@ namespace detail {
 /// @param key  The row's id.
 /// @param with The new content, merged over the row.
 /// @return The new list, or `std::nullopt` when no row matched or @p rows is not a list.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
 [[nodiscard]] inline std::optional<Value> patchRows(Value const& rows, Value const& key, Value const& with) {
     ValueList const* const items = rows.asList();
     if (items == nullptr || key.isNull()) {
@@ -445,6 +451,7 @@ namespace detail {
 /// @param value  The value.
 /// @param fields The field names.
 /// @return The value without them.
+// NOLINTNEXTLINE(misc-no-recursion): one level per nested list or record of the value.
 [[nodiscard]] inline Value withoutFields(Value const& value, std::vector<std::string> const& fields) {
     if (fields.empty()) {
         return value;
@@ -565,9 +572,9 @@ public:
     void setPermitted(std::set<std::string, std::less<>> permitted) { _permitted.set(std::move(permitted)); }
 
     /// @brief Whether the principal may run an action, or the client has a host command. A tracked read.
-    /// @param id The action id, or `host:<command>`.
+    /// @param action The action id, or `host:<command>`.
     /// @return Whether it is permitted.
-    [[nodiscard]] bool can(std::string_view id) const { return _permitted.get().contains(id); }
+    [[nodiscard]] bool can(std::string_view action) const { return _permitted.get().contains(action); }
 
     /// @brief Replaces the formatting facts; every `t` and display function re-evaluates.
     /// @param format The facts.
@@ -602,9 +609,12 @@ public:
     /// @param name The name.
     /// @return The value, or `null`.
     [[nodiscard]] Value client(ExprKind form, std::string_view name) const {
-        ValueRecord const& values = form == ExprKind::Env       ? _env.get()
-                                    : form == ExprKind::Session ? _sessionValues.get()
-                                                                : _hostValues.get();
+        ValueRecord const& values = [&]() -> ValueRecord const& {
+            if (form == ExprKind::Env) {
+                return _env.get();
+            }
+            return form == ExprKind::Session ? _sessionValues.get() : _hostValues.get();
+        }();
         auto const found = values.find(name);
         return found == values.end() ? Value{} : found->second;
     }
@@ -763,7 +773,7 @@ public:
     /// @brief Writes an entry's confirmed value and re-applies its optimistic layers over it.
     /// @param entry     The entry.
     /// @param confirmed The confirmed value.
-    void confirm(detail::CacheEntry& entry, Value confirmed) {
+    void confirm(detail::CacheEntry& entry, Value const& confirmed) {
         entry.confirmed = detail::withoutFields(confirmed, entry.secretFields);
         showLayers(entry);
     }
@@ -821,7 +831,7 @@ private:
             return;
         }
         _runtime->batch([&] {
-            confirm(entry, std::move(*value));
+            confirm(entry, *value);
             entry.hasValue.set(true);
             entry.error.set({});
             entry.errorKind.set({});
@@ -840,7 +850,7 @@ private:
         });
     }
 
-    void detachQuery(detail::QueryRuntime& query);
+    static void detachQuery(detail::QueryRuntime& query);
 
     reactive::Runtime* _runtime;
     SessionOptions _options;
@@ -1056,11 +1066,12 @@ struct BoundaryRuntime {
 class RtScope : public std::enable_shared_from_this<RtScope> {
 public:
     /// @brief An empty scope.
-    /// @param core   The screen.
-    /// @param parent The enclosing scope; `nullptr` for the screen and a component fallback.
-    /// @param row    The row of a row scope; `nullptr` otherwise.
-    /// @param depth  The reactive scope depth of what it owns.
-    RtScope(ScreenCore& core, std::shared_ptr<RtScope> parent, reactive::Signal<Value> const* row, std::size_t depth);
+    /// @param screen    The screen.
+    /// @param enclosing The enclosing scope; `nullptr` for the screen and a component fallback.
+    /// @param current   The row of a row scope; `nullptr` otherwise.
+    /// @param depth     The reactive scope depth of what it owns.
+    RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, reactive::Signal<Value> const* current,
+            std::size_t depth);
 
     RtScope(RtScope const&) = delete;
     RtScope& operator=(RtScope const&) = delete;
@@ -1614,7 +1625,7 @@ public:
         if (!reported.insert(std::move(key)).second) {
             return;
         }
-        Refusal refusal{.document = _doc->id, .path = std::string{path}, .reason = std::string{reason}};
+        Refusal const refusal{.document = _doc->id, .path = std::string{path}, .reason = std::string{reason}};
         diagnostics.push_back(refusal);
         if (onDiagnostic) {
             onDiagnostic(refusal);
@@ -1638,7 +1649,7 @@ public:
     /// @brief Makes a state's signal from its init, once.
     /// @param scope The scope that declares it.
     /// @param slot  The state.
-    void initState(RtScope const& scope, StateSlot& slot) {
+    void initState(RtScope const& scope, StateSlot& slot) const {
         if (slot.value || slot.initializing) {
             return;
         }
@@ -1702,6 +1713,7 @@ public:
     /// @param nodes The nodes.
     /// @param ctx   Where.
     /// @return The node.
+    // NOLINTNEXTLINE(misc-no-recursion): one level per nested node of the document.
     [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx) {
         if (nodes.size() == 1) {
             return lower(*nodes.front(), ctx);
@@ -1713,6 +1725,8 @@ public:
         return ui::column(std::move(column));
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the screen's shared state, which its
+    // scopes and runtimes read and write directly.
     /// @brief The session.
     Session& session;
     /// @brief The dispatcher.
@@ -1735,6 +1749,7 @@ public:
     ValueRecord prefDefaults;
     /// @brief The screen's `submitted`.
     reactive::Signal<bool> submitted;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     void wireElement(ElementState& element);
@@ -1756,10 +1771,10 @@ private:
                     std::set<std::string, std::less<>>& seen);
     void ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,
                       std::set<std::string, std::less<>>& seen);
-    void runMutation(Command const& command, CommandCtx const& ctx, Done done);
+    void runMutation(Command const& command, CommandCtx const& ctx, Done done) const;
     void runSet(Command const& command, CommandCtx const& ctx, Done const& done);
     void runReset(Command const& command, CommandCtx const& ctx, Done const& done);
-    void runHostCommand(Command const& command, CommandCtx const& ctx, Done done);
+    void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
     bool unsupported(Command const& command, std::string_view what) {
         report(command.path, std::string{what} + " is not supported by the host");
@@ -1788,7 +1803,7 @@ private:
     }
 
     /// @brief Evaluates an expression once, untracked: a property the view tree sets once.
-    Value once(LowerCtx const& ctx, ExprPtr const& expr) {
+    [[nodiscard]] Value once(LowerCtx const& ctx, ExprPtr const& expr) const {
         return runtime().untracked([&] { return evalIn(*ctx.scope, ctx.bindings.get(), expr); });
     }
 
@@ -1811,8 +1826,11 @@ public:
 
     /// @brief Runs `onUnmount`, then unmounts.
     ~Screen() {
-        if (Commands const* const commands = lifecycleList("onUnmount")) {
-            runCommands(*commands);
+        try {
+            if (Commands const* const commands = lifecycleList("onUnmount")) {
+                runCommands(*commands);
+            }
+        } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
         }
         _mounted.reset();
         _scope.reset();
@@ -1820,7 +1838,12 @@ public:
 
     /// @brief The root widget.
     /// @return It, valid as long as the screen.
-    [[nodiscard]] Widget& root() const { return _mounted->root(); }
+    [[nodiscard]] Widget& root() const {
+        if (!_mounted) {
+            throw std::logic_error{"the screen is not mounted"};
+        }
+        return _mounted->root();
+    }
 
     /// @brief The document's id.
     /// @return It.
@@ -1961,7 +1984,7 @@ public:
     [[nodiscard]] std::expected<std::unique_ptr<Screen>, Refusal> mount(std::shared_ptr<Document const> doc,
                                                                         ValueRecord const& params,
                                                                         IViewBackend& backend,
-                                                                        MountOptions options = {});
+                                                                        MountOptions const& options = {});
 
 private:
     Session* _session;
@@ -2061,6 +2084,7 @@ inline RtScope::~RtScope() {
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): an element's value can read a nested scope's readiness, one level per nesting.
 inline bool RtScope::ready() const {
     for (auto const& element : elements) {
         Value const shown = core.elementValue(*element, "visible");
@@ -2080,9 +2104,9 @@ inline bool RtScope::ready() const {
 
 inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> path) const {
     if (_bindings != nullptr) {
-        for (auto bound = _bindings->rbegin(); bound != _bindings->rend(); ++bound) {
-            if (bound->name == head) {
-                return walk(bound->read(), path);
+        for (Binding const& bound : std::views::reverse(*_bindings)) {
+            if (bound.name == head) {
+                return walk(bound.read(), path);
             }
         }
     }
@@ -2111,10 +2135,14 @@ inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> p
                 return Value{};
             }
             TransferState const& transfer = *name->transfer;
-            Value const value = path.front() == "progress"  ? transfer.progress.get()
-                                : path.front() == "pending" ? Value{transfer.pending.get()}
-                                : path.front() == "error"   ? transfer.error.get()
-                                                            : Value{};
+            Value value;
+            if (path.front() == "progress") {
+                value = transfer.progress.get();
+            } else if (path.front() == "pending") {
+                value = Value{transfer.pending.get()};
+            } else if (path.front() == "error") {
+                value = transfer.error.get();
+            }
             return walk(value, path.subspan(1));
         }
         case NameCategory::Model:
@@ -2124,8 +2152,9 @@ inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> p
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per control form and kind of name.
 inline Value ScopeEnv::control(ExprKind form, std::string_view name) const {
-    Session& session = _scope->core.session;
+    Session const& session = _scope->core.session;
     NameRef const* const found = _scope->find(name);
     if (form == ExprKind::Can) {
         if (found != nullptr && found->category == NameCategory::Query) {
@@ -2205,6 +2234,7 @@ inline QueryRuntime::~QueryRuntime() {
 
 inline std::shared_ptr<ModelChannel> QueryRuntime::channel() const { return channelOf(*_alias, _scope->core); }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the query's key, its fetch and its refresh triggers.
 inline void QueryRuntime::start() {
     RtScope& scope = *_scope;
     auto& key = scope.nodes.computed([this]() -> Target {
@@ -2368,6 +2398,8 @@ inline MutationRuntime::MutationRuntime(MutationDecl const& decl, RtScope& scope
       _error{scope.core.runtime()},
       _errorKind{scope.core.runtime()} {}
 
+// NOLINTBEGIN(misc-no-recursion): a mutation's commands can run another mutation, and a serial queue sends its next
+// run as the last one settles.
 inline void MutationRuntime::run(Value body, std::shared_ptr<Bindings const> bindings, RunDone done) {
     auto run = std::make_shared<Run>();
     run->body = std::move(body);
@@ -2457,6 +2489,7 @@ inline void MutationRuntime::dropLayers(Run& run) {
     run.layered.clear();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome a reply can have.
 inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::optional<Value> reply,
                                     std::exception_ptr const& error) {
     ScreenCore& core = _scope->core;
@@ -2471,6 +2504,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
     };
     Value delivered;
     bool succeeded = false;
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome a reply can have.
     core.runtime().batch([&] {
         _inFlight.set(_inFlight.peek() - 1);
         if (reply) {
@@ -2486,7 +2520,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                     }
                 }
                 std::erase_if(entry->layers, [&](OptimisticLayer const& layer) { return layer.run == run->id; });
-                session.confirm(*entry, std::move(confirmed));
+                session.confirm(*entry, confirmed);
             }
             run->layered.clear();
             std::vector<std::string> secret;
@@ -2514,7 +2548,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                         core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->with); });
                     if (entry) {
                         if (auto patched = patchRows(entry->confirmed, key, with)) {
-                            session.confirm(*entry, std::move(*patched));
+                            session.confirm(*entry, *patched);
                         }
                     }
                 }
@@ -2560,6 +2594,7 @@ inline void MutationRuntime::next(std::string const& serialKey) {
     found->second.pop_front();
     _scope->core.runtime().batch([&] { send(queued); });
 }
+// NOLINTEND(misc-no-recursion)
 
 }  // namespace detail
 
@@ -2595,6 +2630,7 @@ inline void transfersOf(Commands const& commands, std::vector<std::string>& out)
 }
 
 // NOLINTBEGIN(misc-no-recursion): a document is a tree of nodes and parts, and collecting descends it.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of node and part.
 inline void ScreenCore::collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands) {
     KindSpec const* const spec = findKind(node.kind, false);
     if (!node.id.empty() || statefulKind(node.kind)) {
@@ -2613,7 +2649,7 @@ inline void ScreenCore::collect(DocNode const& node, RtScope& scope, std::vector
     bool const createsScope = spec != nullptr && (spec->flags & kScope) != 0;
     for (auto const& [key, list] : node.events) {
         KeySpec const* const keyed = spec == nullptr ? nullptr : keySpec(*spec, key);
-        if (!(createsScope && keyed != nullptr && (keyed->flags & kInner) != 0)) {
+        if (!createsScope || keyed == nullptr || (keyed->flags & kInner) == 0) {
             commands.push_back(&list);
         }
     }
@@ -2655,6 +2691,7 @@ inline void ScreenCore::collect(DocNode const& node, RtScope& scope, std::vector
 }
 // NOLINTEND(misc-no-recursion)
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per kind of declaration.
 inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocNode const*> const& content,
                                 std::vector<Commands const*> const& commands) {
     std::vector<Commands const*> lists = commands;
@@ -2665,15 +2702,15 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
     for (Commands const* const list : lists) {
         transfersOf(*list, transferIds);
     }
-    for (std::string const& id : transferIds) {
-        if (scope.names.contains(id)) {
+    for (std::string const& transferId : transferIds) {
+        if (scope.names.contains(transferId)) {
             continue;
         }
         scope.transfers.push_back(std::make_unique<TransferState>(runtime()));
         NameRef name;
         name.category = NameCategory::Transfer;
         name.transfer = scope.transfers.back().get();
-        scope.names.insert_or_assign(id, name);
+        scope.names.insert_or_assign(transferId, name);
     }
     if (decl != nullptr) {
         for (ModelDecl const& model : decl->models) {
@@ -2699,14 +2736,14 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
                 case InstanceMode::Borrowed: {
                     auto const found = borrowed.find(model.name);
                     std::string token = found == borrowed.end() ? std::string{} : found->second.token;
-                    raw->token = &scope.nodes.computed([token] { return token; });
+                    raw->token = &scope.nodes.computed([token = std::move(token)] { return token; });
                     break;
                 }
                 case InstanceMode::Private:
                 case InstanceMode::Default:
                 default: {
                     std::string token = session.privateToken();
-                    raw->token = &scope.nodes.computed([token] { return token; });
+                    raw->token = &scope.nodes.computed([token = std::move(token)] { return token; });
                     break;
                 }
             }
@@ -2786,9 +2823,9 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
         query->start();
     }
     for (WatchDecl const& watch : decl->watches) {
-        auto& on = scope.nodes.computed([&scope, expr = watch.on] { return evalIn(scope, nullptr, expr); });
-        scope.nodes.effect([this, &scope, &on, watched = &watch, first = true]() mutable {
-            static_cast<void>(on.get());
+        auto& source = scope.nodes.computed([&scope, expr = watch.on] { return evalIn(scope, nullptr, expr); });
+        scope.nodes.effect([this, &scope, &source, watched = &watch, first = true]() mutable {
+            static_cast<void>(source.get());
             if (first) {
                 first = false;
                 return;
@@ -2841,6 +2878,7 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
     return Value{};
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one rule per source of an error.
 inline void ScreenCore::wireErrors(ElementState& element) {
     RtScope& scope = *element.scope;
     element.errors = &scope.nodes.computed([this, &element]() -> Value {
@@ -2880,6 +2918,7 @@ inline void ScreenCore::wireErrors(ElementState& element) {
     });
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of element.
 inline void ScreenCore::wireElement(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
@@ -2887,9 +2926,14 @@ inline void ScreenCore::wireElement(ElementState& element) {
     bool const input = kind == "textInput" || kind == "checkbox" || kind == "select" || kind == "dateTimeInput" ||
                        kind == "slider" || kind == "filePicker";
     if (input) {
-        std::string_view const key = kind == "checkbox" ? "checked" : kind == "select" ? "selected" : "value";
+        std::string_view key = "value";
+        if (kind == "checkbox") {
+            key = "checked";
+        } else if (kind == "select") {
+            key = "selected";
+        }
         ExprPtr const expr = kind == "filePicker" ? nullptr : node.prop(key);
-        bool const controlled = expr && !(expr->kind == ExprKind::Literal && expr->literal.isNull());
+        bool const controlled = expr && (expr->kind != ExprKind::Literal || !expr->literal.isNull());
         if (controlled) {
             element.bound = &scope.nodes.computed([&scope, expr] { return evalIn(scope, nullptr, expr); });
             element.draft.set(runtime().untracked([&] { return element.bound->get(); }));
@@ -2947,6 +2991,7 @@ inline Value ScreenCore::inputValue(ElementState const& element) const {
     return elementValue(element, "value");
 }
 
+// NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one case per element value.
 inline Value ScreenCore::elementValue(ElementState const& element, std::string_view name) const {
     DocNode const& node = *element.node;
     RtScope const& scope = *element.scope;
@@ -2978,7 +3023,7 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
     }
     if (name == "shownErrors") {
         RtScope const& policy = scope.policyScope();
-        std::string mode = policy.showErrors.empty() ? _doc->showErrors : policy.showErrors;
+        std::string const mode = policy.showErrors.empty() ? _doc->showErrors : policy.showErrors;
         bool const submittedNow = policy.submitted != nullptr && policy.submitted->get();
         if (mode == "always" || (mode == "submit" && submittedNow) ||
             (mode != "submit" && (submittedNow || element.touched.get()))) {
@@ -3057,6 +3102,7 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
 
 // --- Commands --------------------------------------------------------------------------------------------------
 
+// NOLINTBEGIN(misc-no-recursion): command lists nest
 inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx, Done done) {
     if (!done) {
         done = [](bool) {};
@@ -3083,7 +3129,7 @@ inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx,
     finish(true);
 }
 
-// NOLINTBEGIN(misc-no-recursion): command lists nest
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per command of ui/1.
 inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done) {
     if (!done) {
         done = [](bool) {};
@@ -3131,17 +3177,17 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             return;
         }
         case CommandKind::Navigate: {
-            NavigateRequest request{.screen = command.target,
-                                    .route = eval(command.extra),
-                                    .params = eval(command.value),
-                                    .as = command.option};
+            NavigateRequest const request{.screen = command.target,
+                                          .route = eval(command.extra),
+                                          .params = eval(command.value),
+                                          .as = command.option};
             if (host == nullptr) {
                 finish(unsupported(command, "`navigate`"));
                 return;
             }
             std::weak_ptr<RtScope> const weak = ctx.scope;
             CommandCtx const kept = detached(ctx);
-            auto onResult = [this, weak, kept, list = &command.commands](Value result) {
+            auto onResult = [this, weak, kept, list = &command.commands](Value const& result) {
                 if (auto const held = weak.lock()) {
                     auto bindings = std::make_shared<Bindings>(*kept.bindings);
                     bindings->push_back(Binding{.name = "event", .read = [result] { return result; }});
@@ -3172,7 +3218,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             finish(host != nullptr && host->focus(_doc->id, command.target) ? true : unsupported(command, "`focus`"));
             return;
         case CommandKind::Host:
-            runHostCommand(command, ctx, std::move(done));
+            runHostCommand(command, ctx, done);
             return;
         case CommandKind::SwitchBackend:
             if (host != nullptr && host->switchBackend(command.target)) {
@@ -3293,9 +3339,9 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             return;
     }
 }
-// NOLINTEND(misc-no-recursion)
 
-inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done done) {
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a single run, or a run per list item.
+inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done done) const {
     RtScope const& scope = *ctx.scope;
     MutationRuntime& mutation = *scope.find(command.target)->mutation;
     RtScope const& policy = scope.policyScope();
@@ -3326,10 +3372,10 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
     if (!command.extra) {
         Value body = bodyFor(*ctx.bindings);
         mutation.run(std::move(body), std::make_shared<Bindings const>(*ctx.bindings),
-                     [bindings = ctx.bindings, as = command.binding, done = std::move(done)](bool succeeded,
-                                                                                             Value const& reply) {
-                         if (succeeded && !as.empty()) {
-                             bindings->push_back(Binding{.name = as, .read = [reply] { return reply; }});
+                     [bindings = ctx.bindings, bindAs = command.binding, done = std::move(done)](bool succeeded,
+                                                                                                 Value const& reply) {
+                         if (succeeded && !bindAs.empty()) {
+                             bindings->push_back(Binding{.name = bindAs, .read = [reply] { return reply; }});
                          }
                          done(succeeded);
                      });
@@ -3388,6 +3434,7 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
     (*step)(0);
 }
 
+// NOLINTEND(misc-no-recursion)
 inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Done const& done) {
     RtScope const& scope = *ctx.scope;
     auto finish = [&done](bool succeeded) { done(succeeded); };
@@ -3455,7 +3502,7 @@ inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, 
             element->touched.set(false);
         }
     };
-    bool ok = true;
+    bool known = true;
     session.noteWrite();
     if (found != nullptr && found->category == NameCategory::State) {
         StateSlot& slot = *found->state;
@@ -3469,12 +3516,12 @@ inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, 
         }
     } else {
         report(command.path, "`reset` names no state or dialog here");
-        ok = false;
+        known = false;
     }
-    done(ok);
+    done(known);
 }
 
-inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done done) {
+inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done) {
     Value const args = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
     bool const known = host != nullptr && host->hostCommand(command.target, args);
     if (!known) {
@@ -3483,6 +3530,7 @@ inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const&
     done(known);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a download and an upload, each settled.
 inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
     RtScope const& scope = *ctx.scope;
     Value const file = evalIn(scope, ctx.bindings.get(), command.value);
@@ -3496,8 +3544,8 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
                 return;
             }
             runtime().batch([&] {
-                bool ok = reply.has_value();
-                if (ok && preview) {
+                bool const succeeded = reply.has_value();
+                if (succeeded && preview) {
                     NameRef const* const found = held->find(target);
                     if (found != nullptr && found->category == NameCategory::State) {
                         initState(*found->state->scope, *found->state);
@@ -3505,7 +3553,7 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
                         found->state->value->set(*reply);
                     }
                 }
-                done(ok);
+                done(succeeded);
             });
         };
         if (host == nullptr || !host->download(file, command.option, name, settled)) {
@@ -3669,6 +3717,19 @@ namespace detail {
     return text != nullptr && *text == "horizontal" ? Axis::Horizontal : Axis::Vertical;
 }
 
+/// @brief A step's state by name: `active`, `done`, `failed`, or pending for anything else.
+/// @param name The name.
+/// @return The state.
+[[nodiscard]] inline StepState stepStateOf(std::string_view name) {
+    if (name == "active") {
+        return StepState::Active;
+    }
+    if (name == "done") {
+        return StepState::Done;
+    }
+    return name == "failed" ? StepState::Failed : StepState::Pending;
+}
+
 /// @brief The options of a select, from a list of scalars or of records with a key and a `label`.
 /// @param options The list.
 /// @param format  The formatting facts.
@@ -3708,6 +3769,7 @@ namespace detail {
     return ui::column(std::move(column));
 }
 
+// NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
 inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
 }
@@ -3749,7 +3811,7 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
             }
             return accepted.isNull() || keyOf(accepted) == key;
         };
-        common.onDrop = [this, ctx, commands = drop->event("onDrop")](Key key) {
+        common.onDrop = [this, ctx, commands = drop->event("onDrop")](Key const& key) {
             runEvent(commands, ctx, valueOfKey(key));
         };
     }
@@ -3773,7 +3835,6 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
     }
 }
 
-// NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
 inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     std::vector<MenuItem> items;
     for (DocNodePtr const& part : parts) {
@@ -3801,6 +3862,7 @@ inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> p
     return items;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
     FormatContext const& format = session.formatting();
@@ -3895,20 +3957,23 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             });
             commit("change", text);
         };
-        spec.onCommit = [this, ctx, element, commit, onCommit = node.event("onCommit")](std::string text) {
+        spec.onCommit = [this, ctx, element, commit, onCommit = node.event("onCommit")](std::string const& text) {
             element->touched.set(true);
             commit("blur", text);
             runEvent(onCommit, ctx, Value{text});
         };
-        spec.onSubmit = [this, ctx, commit, onSubmit = node.event("onSubmit")](std::string text) {
+        spec.onSubmit = [this, ctx, commit, onSubmit = node.event("onSubmit")](std::string const& text) {
             commit("enter", text);
             runEvent(onSubmit, ctx, Value{text});
         };
         spec.placeholder = textProp("placeholder");
         std::string const mode = onceText("mode");
-        spec.mode = mode == "multiline"  ? TextInputMode::Multiline
-                    : mode == "password" ? TextInputMode::Password
-                                         : TextInputMode::SingleLine;
+        spec.mode = TextInputMode::SingleLine;
+        if (mode == "multiline") {
+            spec.mode = TextInputMode::Multiline;
+        } else if (mode == "password") {
+            spec.mode = TextInputMode::Password;
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::textInput(std::move(spec));
@@ -3943,7 +4008,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             return selected.isNull() ? std::nullopt : std::optional<Key>{keyOf(selected)};
         });
         spec.onSelect = [this, ctx, element, onChoose = node.event("onChoose"),
-                         onChange = node.event("onChange")](Key key) {
+                         onChange = node.event("onChange")](Key const& key) {
             Value const chosen = valueOfKey(key);
             if (element->bound == nullptr) {
                 session.asUser([&] {
@@ -4138,10 +4203,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                         std::string const name = state == nullptr ? std::string{} : textOf(*state, {});
                         steps.push_back(
                             Step{.label = label == nullptr ? std::string{} : textOf(*label, session.formatting()),
-                                 .state = name == "active"   ? StepState::Active
-                                          : name == "done"   ? StepState::Done
-                                          : name == "failed" ? StepState::Failed
-                                                             : StepState::Pending});
+                                 .state = stepStateOf(name)});
                     }
                 }
                 return steps;
@@ -4205,7 +4267,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.accept = stringsOf(node.prop("accept") ? once(ctx, node.prop("accept")) : Value{});
         spec.multiple = onceBool("multiple", false);
         if (Commands const* const commands = node.event("onDrop")) {
-            spec.onDrop = [this, ctx, commands](std::vector<std::string> paths) {
+            spec.onDrop = [this, ctx, commands](std::vector<std::string> const& paths) {
                 runEvent(commands, ctx, listOfStrings(paths));
             };
         }
@@ -4248,6 +4310,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         element->inner.set(inner.get());
         LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
         std::vector<Node> children;
+        children.reserve(content.size());
         for (DocNode const* const child : content) {
             children.push_back(lower(*child, innerCtx));
         }
@@ -4306,15 +4369,16 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
                 declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
                 LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
                 std::vector<Node> children;
+                children.reserve(content.size());
                 for (DocNode const* const child : content) {
                     children.push_back(lower(*child, innerCtx));
                 }
                 return holding(std::move(children), inner);
             })});
     }
-    spec.selector =
-        slotProp<Key>([scope = ctx.scope, bindings = ctx.bindings, on = node.prop("on"), whens = std::move(whens)] {
-            Value const value = evalIn(*scope, bindings.get(), on);
+    spec.selector = slotProp<Key>(
+        [scope = ctx.scope, bindings = ctx.bindings, selected = node.prop("on"), whens = std::move(whens)] {
+            Value const value = evalIn(*scope, bindings.get(), selected);
             for (std::size_t at = 0; at < whens.size(); ++at) {
                 if (evalIn(*scope, bindings.get(), whens.at(at)) == value) {
                     return Key{static_cast<std::int64_t>(at)};
@@ -4336,6 +4400,7 @@ inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerC
     return scope;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a list of rows and a table.
 inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     ExprPtr const rowsExpr = node.prop("rows");
     if (!rowsExpr) {
@@ -4349,8 +4414,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     };
     auto keyFn = [scope = ctx.scope, bindings = ctx.bindings, keyExpr = node.prop("key")](Value const& row) -> Key {
         if (!keyExpr) {
-            Value const id = rowId(row);
-            return keyOf(id.isNull() ? row : id);
+            Value const rowKey = rowId(row);
+            return keyOf(rowKey.isNull() ? row : rowKey);
         }
         ScopeEnv const env{*scope, bindings.get(), &row};
         return keyOf(evaluate(*keyExpr, env));
@@ -4364,6 +4429,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             auto scope = rowScope(node, ctx, row, content);
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             std::vector<Node> children;
+            children.reserve(content.size());
             for (DocNode const* const child : content) {
                 children.push_back(lower(*child, rowCtx));
             }
@@ -4383,9 +4449,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         Value const list = once(ctx, derived);
         if (ValueList const* const items = list.asList()) {
             for (Value const& item : *items) {
-                Value const* const id = item.field("id");
+                Value const* const field = item.field("id");
                 Value const* const label = item.field("label");
-                fields.push_back(id == nullptr ? std::string{} : textOf(*id, format));
+                fields.push_back(field == nullptr ? std::string{} : textOf(*field, format));
                 columns.push_back(
                     TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format)});
                 cells.push_back(nullptr);
@@ -4398,7 +4464,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
                                       .width = width ? sizingOf(once(ctx, width)) : Sizing::content()});
         cells.push_back(part.get());
-        fields.push_back(std::string{part->id});
+        fields.emplace_back(part->id);
     }
     auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
     auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn](reactive::Signal<Value> const& row) {
@@ -4435,9 +4501,12 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     TableOptions options;
     std::string const mode =
         node.prop("selectionMode") ? textOf(once(ctx, node.prop("selectionMode")), format) : std::string{};
-    options.selectionMode = mode == "single"     ? SelectionMode::Single
-                            : mode == "multiple" ? SelectionMode::Multiple
-                                                 : SelectionMode::None;
+    options.selectionMode = SelectionMode::None;
+    if (mode == "single") {
+        options.selectionMode = SelectionMode::Single;
+    } else if (mode == "multiple") {
+        options.selectionMode = SelectionMode::Multiple;
+    }
     options.selection = slotProp<std::vector<Key>>([element] {
         std::vector<Key> keys;
         if (ValueList const* const items = element->selection.get().asList()) {
@@ -4447,7 +4516,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         }
         return keys;
     });
-    options.onSelectionChange = [this, element](std::vector<Key> keys) {
+    options.onSelectionChange = [this, element](std::vector<Key> const& keys) {
         ValueList items;
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));
@@ -4457,14 +4526,14 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             element->selection.set(Value{std::move(items)});
         });
     };
-    options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key key) {
+    options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {
             session.noteWrite();
             element->activeKey.set(activated);
         });
         auto const found = registry->find(canonicalJson(activated));
-        std::shared_ptr<RtScope> scope = found == registry->end() ? nullptr : found->second.lock();
+        std::shared_ptr<RtScope> const scope = found == registry->end() ? nullptr : found->second.lock();
         LowerCtx const rowCtx{.scope = scope ? scope : ctx.scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         runEvent(commands, rowCtx, activated);
     };
@@ -4605,6 +4674,7 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
     if (spec.kind == "choice") {
         Select select;
         std::vector<SelectOption> options;
+        options.reserve(spec.options.size());
         for (std::string const& option : spec.options) {
             options.push_back(SelectOption{.key = Key{option}, .label = option});
         }
@@ -4613,7 +4683,7 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
             Value const& chosen = prefs.get().at(point);
             return chosen.isNull() ? std::nullopt : std::optional<Key>{keyOf(chosen)};
         });
-        select.onSelect = [choose](Key key) { choose(valueOfKey(key)); };
+        select.onSelect = [choose](Key const& key) { choose(valueOfKey(key)); };
         commonOf(node, ctx, nullptr, select.common);
         return ui::select(std::move(select));
     }
@@ -4646,7 +4716,7 @@ inline BorrowedModel Screen::lend(std::string_view alias) const {
 inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_ptr<Document const> doc,
                                                                           ValueRecord const& params,
                                                                           IViewBackend& backend,
-                                                                          MountOptions options) {
+                                                                          MountOptions const& options) {
     auto refuse = [&](std::string path, std::string reason) {
         return std::unexpected(Refusal{.document = doc->id, .path = std::move(path), .reason = std::move(reason)});
     };
@@ -4697,17 +4767,17 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         detail::LowerCtx const ctx{
             .scope = screen->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
         Node lowered = core.lower(*doc->view, ctx);
-        if (doc->keys.empty()) {
-            return lowered;
+        if (!doc->keys.empty()) {
+            std::vector<KeyBinding> keys;
+            for (auto const& [chord, commands] : doc->keys) {
+                keys.push_back(KeyBinding{
+                    .chord = chord, .onPress = [&core, ctx, list = &commands] { core.runEvent(list, ctx, Value{}); }});
+            }
+            Column column{.children = {std::move(lowered)}};
+            column.common.keys = std::move(keys);
+            lowered = ui::column(std::move(column));
         }
-        std::vector<KeyBinding> keys;
-        for (auto const& [chord, commands] : doc->keys) {
-            keys.push_back(KeyBinding{
-                .chord = chord, .onPress = [&core, ctx, list = &commands] { core.runEvent(list, ctx, Value{}); }});
-        }
-        Column column{.children = {std::move(lowered)}};
-        column.common.keys = std::move(keys);
-        return ui::column(std::move(column));
+        return lowered;
     });
     screen->_mounted.emplace(runtime, backend, std::move(root), options.parent, options.depth + 1);
     screen->runLifecycle("onMount");

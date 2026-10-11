@@ -45,6 +45,7 @@ constexpr char const* kRows = R"([
   {"id":1,"inputs":{"mass":"10"},"mass":10,"concentration":1},
   {"id":2,"inputs":{"mass":"20"},"mass":20,"concentration":2}])";
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a widget kind, then a test id, as the harness takes them.
 std::vector<int> widgets(Harness& h, std::string const& kind, std::string const& testId) {
     std::vector<int> out;
     for (int const id : h.backend.all(kind)) {

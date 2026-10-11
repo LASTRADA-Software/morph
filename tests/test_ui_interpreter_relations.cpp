@@ -64,7 +64,7 @@ TEST_CASE("interpreter relations: a watch cycle is refused at load", "[ui][inter
                  { "on": { "ref": "b" }, "do": [ { "set": "a", "value": 1 } ] } ],
       "view": { "kind": "spacer" } })");
     REQUIRE_FALSE(refused);
-    CHECK(refused.error().reason.find("cycle") != std::string::npos);
+    CHECK(refused.error().reason.contains("cycle"));
 }
 
 namespace {
