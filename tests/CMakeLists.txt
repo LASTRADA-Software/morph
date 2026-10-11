@@ -170,6 +170,7 @@ add_executable(morph_tests
     test_ui_value.cpp
     test_ui_messages.cpp
     test_ui_expression.cpp
+    test_ui_document.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
@@ -218,7 +219,8 @@ target_compile_definitions(morph_tests PRIVATE
 # document and expr/1 can run the same cases.
 target_compile_definitions(morph_tests PRIVATE
     MORPH_UI_MESSAGES_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/messages.json"
-    MORPH_UI_EXPRESSIONS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/expressions.json")
+    MORPH_UI_EXPRESSIONS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/expressions.json"
+    MORPH_UI_DOCUMENTS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/documents.json")
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
