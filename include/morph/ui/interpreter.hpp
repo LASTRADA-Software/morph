@@ -4668,7 +4668,9 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
         commonOf(node, ctx, nullptr, input.common);
         return ui::textInput(std::move(input));
     }
-    return ui::text(Text{.text = point, .role = TextRole::Muted});
+    Text placeholder{.text = point, .role = TextRole::Muted};
+    commonOf(node, ctx, nullptr, placeholder.common);
+    return ui::text(std::move(placeholder));
 }
 // NOLINTEND(misc-no-recursion)
 
