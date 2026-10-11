@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
@@ -10,6 +11,7 @@
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <initializer_list>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -821,8 +823,11 @@ template <typename R = Any>
 /// @param args    The values for the placeholders.
 /// @return The formatted string.
 [[nodiscard]] inline Handle<std::string> format(AnyHandle const& pattern, std::vector<AnyHandle> args) {
-    args.insert(args.begin(), pattern);
-    return call<std::string>("format", args);
+    std::vector<AnyHandle> operands;
+    operands.reserve(args.size() + 1);
+    operands.push_back(pattern);
+    std::ranges::move(args, std::back_inserter(operands));
+    return call<std::string>("format", operands);
 }
 
 /// @brief `count`: a list's length.
