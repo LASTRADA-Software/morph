@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -35,22 +37,9 @@ enum class PluralCategory : std::uint8_t {
 /// @brief The keyword of a plural category, as a `.match` key spells it.
 /// @param category The category.
 /// @return `zero`, `one`, `two`, `few`, `many` or `other`.
-[[nodiscard]] constexpr std::string_view categoryName(PluralCategory category) noexcept {
-    switch (category) {
-        case PluralCategory::Zero:
-            return "zero";
-        case PluralCategory::One:
-            return "one";
-        case PluralCategory::Two:
-            return "two";
-        case PluralCategory::Few:
-            return "few";
-        case PluralCategory::Many:
-            return "many";
-        case PluralCategory::Other:
-        default:
-            return "other";
-    }
+[[nodiscard]] constexpr std::string_view categoryName(PluralCategory category) {
+    constexpr std::array<std::string_view, 6> kNames = {"zero", "one", "two", "few", "many", "other"};
+    return kNames.at(static_cast<std::size_t>(category));
 }
 
 namespace detail {
@@ -129,7 +118,7 @@ namespace detail {
         if (chr == '-' || chr == '_') {
             break;
         }
-        language += (chr >= 'A' && chr <= 'Z') ? static_cast<char>(chr - 'A' + 'a') : chr;
+        language += static_cast<char>(std::tolower(static_cast<unsigned char>(chr)));
     }
     math::Rational const shown =
         math::roundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
@@ -300,10 +289,8 @@ private:
         return std::string{_text.substr(start, _pos - start)};
     }
 
+    /// Reads `$name`; the caller has seen the `$`.
     [[nodiscard]] std::expected<std::string, std::string> readVariable() {
-        if (atEnd() || peek() != '$') {
-            return std::unexpected(std::string{"a variable `$name` is expected"});
-        }
         ++_pos;
         std::string name = readName();
         if (name.empty()) {
@@ -423,7 +410,7 @@ private:
         if (peek() == '=') {
             ++_pos;
         }
-        while (!atEnd() && (nameChar(peek(), false) || peek() == '+')) {
+        while (!atEnd() && nameChar(peek(), false)) {
             ++_pos;
         }
         if (_pos == start) {
@@ -433,7 +420,7 @@ private:
     }
 
     [[nodiscard]] std::expected<MessagePattern, std::string> parseComplex(MessagePattern& message) {
-        while (true) {
+        for (;;) {
             skipSpace();
             if (_text.substr(_pos).starts_with(".input")) {
                 _pos += 6;
@@ -471,7 +458,7 @@ private:
     }
 
     [[nodiscard]] std::expected<MessagePattern, std::string> parseMatch(MessagePattern& message) {
-        while (true) {
+        for (;;) {
             skipSpace();
             if (atEnd() || peek() != '$') {
                 break;
@@ -494,7 +481,7 @@ private:
             return std::unexpected(std::string{"`.match` needs at least one selector"});
         }
         bool catchAll = false;
-        while (true) {
+        for (;;) {
             skipSpace();
             if (atEnd()) {
                 break;

@@ -36,14 +36,16 @@
           "catalog": { "type": "Lims_CatalogModel" },
           "clients": { "type": "Lims_ClientModel", "instance": "shared" },
           "work": { "type": "Lims_SampleModel", "instance": "private" },
-          "picker": { "type": "Lims_SampleModel", "instance": { "from": "sample" } }
+          "picker": { "type": "Lims_SampleModel", "instance": { "from": "sample" } },
+          "byName": { "type": "Lims_SampleModel", "instance": "abc" }
         },
         "state": {
           "unsaved": { "type": "bool", "init": false },
           "selectedResult": { "type": "key?" },
           "filterText": { "init": "" },
           "limit": { "type": "decimal", "init": 5 },
-          "count": { "type": "int", "init": 0 }
+          "count": { "type": "int", "init": 0 },
+          "k": { "type": "key?" }
         },
         "let": {
           "total": { "fn": "count", "args": [{ "query": "results" }] },
@@ -54,7 +56,9 @@
           "results": { "model": "sample", "action": "Lims_ListResults", "body": { "obj": { "sampleId": { "ref": "sampleId" } } },
                        "when": true, "debounce": 0, "refreshOn": ["Lims_CaptureConcentration"], "refreshEvery": 0, "staleTime": 1000 },
           "limits": { "model": "catalog", "action": "Lims_GetLimits" },
-          "calcPreview": { "model": "sample", "evaluate": "Lims_CaptureConcentration", "body": { "obj": { "sampleId": { "ref": "sampleId" } } } }
+          "calcPreview": { "model": "sample", "evaluate": "Lims_CaptureConcentration", "body": { "obj": { "sampleId": { "ref": "sampleId" } } } },
+          "prefetchable": { "model": "sample", "action": "Lims_ListResults",
+                            "body": { "obj": { "a": 1, "b": { "fn": "add", "args": [{ "ref": "sampleId" }, 1] }, "c": { "if": [true, 1, 2] }, "d": { "list": [1] } } } }
         },
         "mutations": {
           "capture": { "model": "sample", "action": "Lims_CaptureConcentration", "body": { "obj": { "sampleId": { "ref": "sampleId" } } },
@@ -70,20 +74,25 @@
                         "optimistic": { "query": "results", "key": 1, "with": { "ref": "body" } } }
         },
         "watch": [
-          { "on": { "ref": "analysis.selected" }, "source": "user", "do": [{ "set": "unit", "value": null }] },
-          { "on": { "ref": "unit.value" }, "do": [{ "set": "count", "value": 1 }] }
+          { "on": { "ref": "analysis.selected" }, "source": "user", "do": [{ "set": "unit", "value": null }, { "set": "k", "value": 1 }] },
+          { "on": { "list": [{ "ref": "unit.value" }, { "ref": "k" }] }, "do": [{ "set": "count", "value": 1 }] },
+          { "on": { "list": [{ "ref": "total" }, { "ref": "total" }, { "ref": "sampleId" }, { "ref": "app.tenant" }, { "query": "results" },
+                             { "filter": { "lit": [1] }, "as": "x", "where": { "fn": "gt", "args": [{ "ref": "x" }, 0] } },
+                             { "obj": { "a": { "ref": "limit" } } }] },
+            "do": [{ "set": "app.banner", "value": 1 }] }
         ],
         "checks": [
           { "id": "dilutionRange", "assert": { "fn": "le", "args": [{ "ref": "dilution.value" }, { "ref": "limit" }] },
             "message": { "t": "lims.dilution.tooHigh", "fallback": "Dilution above the method limit" },
             "targets": ["dilution"], "blocking": true }
         ],
-        "prefetch": ["results"],
+        "prefetch": ["results", "prefetchable"],
         "onMount": [{ "if": [{ "fn": "engaged", "args": [{ "ref": "sampleId" }] }, [{ "refetch": "results" }], []] }],
         "onClose": [{ "if": [{ "ref": "unsaved" }, [{ "open": "confirm" }, { "cancelClose": true }]] }],
         "onSave": [{ "run": "save" }],
         "onBackendChange": [{ "refetch": "results" }],
-        "keys": { "Ctrl+S": [{ "run": "save" }], "F5": [{ "refetch": "results" }], "Alt+Enter": [] },
+        "keys": { "Ctrl+S": [{ "run": "save" }], "F5": [{ "refetch": "results" }], "Alt+Enter": [], "Ctrl+Alt+Tab": [], "Alt+Shift+X": [],
+                  "Shift+Tab": [], "Ctrl+X": [], "Alt+a": [], "Alt+5": [] },
         "customize": {
           "resultColumns": { "kind": "columns", "of": "resultsTable" },
           "density": { "kind": "choice", "options": ["comfortable", "compact"], "default": "comfortable" },
@@ -115,7 +124,8 @@
           { "kind": "text", "text": { "fn": "coalesce", "args": [{ "error": "results" }, { "errorKind": "capture" }, { "result": "capture" }, { "env": "locale" }, { "session": "displayName" }, { "host": "sync.count" }] },
             "visible": { "fn": "and", "args": [{ "can": "host:openPath" }, { "fn": "not", "args": [{ "ref": "hasMany" }] }] } },
           { "kind": "boundary", "loading": [{ "kind": "busy", "active": true }],
-            "error": [{ "kind": "text", "text": { "ref": "boundary.error" } }, { "kind": "button", "label": "Retry", "onClick": [{ "retry": true }] }],
+            "error": [{ "kind": "text", "text": { "ref": "boundary.error" } }, { "kind": "button", "label": "Retry", "onClick": [{ "retry": true }] },
+                      { "kind": "column", "children": [{ "kind": "text", "text": { "ref": "boundary.error" } }] }],
             "children": [
               { "kind": "table", "id": "resultsTable", "rows": { "query": "results" }, "key": { "row": "id" }, "selectionMode": "single",
                 "onActivate": [{ "set": "selectedResult", "value": { "row": "id" } }],
@@ -181,10 +191,14 @@
                         { "all": [{ "run": "capture", "each": { "lit": [1, 2] }, "as": "a", "body": { "obj": { "id": { "ref": "a" } } } }] },
                         { "navigate": { "route": "lims.sample?sampleId=1" } }, { "download": "ref:1", "to": "preview", "as": "filterText" },
                         { "return": 1 }, { "focus": "heading" }, { "set": "app.banner", "value": "x" }, { "set": "limit", "value": 3 },
-                        { "set": "count", "value": { "ref": "event" } }] },
+                        { "set": "count", "value": { "ref": "event" } },
+                        { "seq": [{ "run": "save" }, { "run": "capture", "each": { "lit": [1] }, "as": "b", "body": { "obj": { "id": { "ref": "b" } } } }, { "set": "k", "value": 1 }] },
+                        { "run": "capture", "each": { "lit": [1] } }, { "reset": "side" }, { "open": "side" }, { "set": "k", "value": "s" }] },
           { "kind": "custom", "name": "ResultGrid", "props": { "rows": { "query": "results" } } },
           { "kind": "text", "text": { "fn": "format", "args": ["{0}", { "ref": "when.dirty" }] }, "visible": { "ref": "confirm.open" } },
-          { "kind": "text", "text": { "fn": "format", "args": ["{0}", { "ref": "resultsTable.viewCount" }] }, "enabled": { "ref": "resultsTable.pending" } }
+          { "kind": "text", "text": { "fn": "format", "args": ["{0}", { "ref": "resultsTable.viewCount" }] }, "enabled": { "ref": "resultsTable.pending" } },
+          { "kind": "text", "text": { "fn": "coalesce", "args": [{ "ref": "resultsTable.error" }, { "ref": "app.tenant" }] }, "errors": { "ref": "unit.errors" },
+            "visible": { "ref": "headerForm.visible" }, "stale": { "fn": "isEmpty", "args": [{ "ref": "unit.shownErrors" }] } }
         ] }
       }
     },
@@ -192,7 +206,7 @@
       "name": "the app document has no view and may declare pins and arrange",
       "doc": { "vocab": "ui/1", "id": "app",
                "state": { "tenant": { "type": "string?" } },
-               "customize": { "pins": { "kind": "pins" }, "arrange": { "kind": "arrange", "of": "toolbar" } } }
+               "customize": { "pins": { "kind": "pins" }, "arrange": { "kind": "arrange", "of": "toolbar" }, "cols": { "kind": "columns", "of": "anything" } } }
     },
     {
       "name": "a watch chain without a cycle",
@@ -456,6 +470,35 @@
     { "name": "prefetch of no screen query", "doc": { "prefetch": ["nope"] }, "at": "/prefetch/0", "reason": "is not a query of the screen" },
     { "name": "prefetch of a query reading state", "doc": { "models": { "m": { "type": "T" } }, "state": { "s": { "init": 1 } }, "queries": { "q": { "model": "m", "action": "A", "body": { "obj": { "s": { "ref": "s" } } } } }, "prefetch": ["q"] }, "at": "/prefetch/0", "reason": "reads more than the screen's params" },
     { "name": "prefetch of a query reading another query", "doc": { "models": { "m": { "type": "T" } }, "queries": { "r": { "model": "m", "action": "A" }, "q": { "model": "m", "action": "A", "body": { "list": [{ "query": "r" }] } } }, "prefetch": ["q"] }, "at": "/prefetch/0", "reason": "reads more than the screen's params" },
+    { "name": "an unknown key name", "doc": { "keys": { "Alt+~": [] } }, "at": "/keys/Alt+~0", "reason": "does not end in a key name" },
+    { "name": "F with a sign", "doc": { "keys": { "F!": [] } }, "at": "/keys/F!", "reason": "does not end in a key name" },
+    { "name": "a punctuation key", "doc": { "keys": { "Alt+:": [] } }, "at": "/keys/Alt+:", "reason": "does not end in a key name" },
+    { "name": "F with a sign and a digit", "doc": { "keys": { "F!1": [] } }, "at": "/keys/F!1", "reason": "does not end in a key name" },
+    { "name": "a hash with punctuation", "doc": { "components": { "C": { "qml": "sha256:!aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } } }, "at": "/components/C/qml", "reason": "content hash" },
+    { "name": "F0", "doc": { "keys": { "F0": [] } }, "at": "/keys/F0", "reason": "does not end in a key name" },
+    { "name": "Ctrl+w is reserved", "doc": { "keys": { "Ctrl+w": [] } }, "at": "/keys/Ctrl+w", "reason": "reserved" },
+    { "name": "a text debounce", "doc": { "queries": { "q": { "model": "m", "action": "A", "debounce": "x" } } }, "at": "/queries/q/debounce", "reason": "non-negative integer" },
+    { "name": "refreshOn with an empty name", "doc": { "queries": { "q": { "model": "m", "action": "A", "refreshOn": [""] } } }, "at": "/queries/q/refreshOn/0", "reason": "array of strings" },
+    { "name": "a borrowed instance of a malformed alias", "doc": { "models": { "m": { "type": "T", "instance": { "from": "1x" } } } }, "at": "/models/m/instance", "reason": "a borrowed instance is" },
+    { "name": "a patch without with", "doc": { "mutations": { "m": { "model": "x", "action": "A", "patch": { "query": "q", "key": 1 } } } }, "at": "/mutations/m/patch", "reason": "a patch is" },
+    { "name": "run of an empty name", "doc": { "view": { "kind": "button", "onClick": [{ "run": "" }] } }, "at": "/view/onClick/0/run", "reason": "`run` names a mutation" },
+    { "name": "host of a number", "doc": { "view": { "kind": "button", "onClick": [{ "host": 5 }] } }, "at": "/view/onClick/0/host", "reason": "names a registered command" },
+    { "name": "if that is not an array", "doc": { "view": { "kind": "button", "onClick": [{ "if": true }] } }, "at": "/view/onClick/0/if", "reason": "`if` takes" },
+    { "name": "if with four parts", "doc": { "view": { "kind": "button", "onClick": [{ "if": [true, [], [], []] }] } }, "at": "/view/onClick/0/if", "reason": "`if` takes" },
+    { "name": "navigate to an object without a route", "doc": { "view": { "kind": "button", "onClick": [{ "navigate": { "x": 1 } }] } }, "at": "/view/onClick/0/navigate", "reason": "`navigate` names a screen" },
+    { "name": "download both saved and previewed", "doc": { "view": { "kind": "button", "onClick": [{ "download": 1, "save": "dialog", "to": "preview", "as": "s" }] } }, "at": "/view/onClick/0", "reason": "`download` takes" },
+    { "name": "a hash of another algorithm", "doc": { "components": { "C": { "qml": "sha999:4b1e0000000000000000000000000000000000000000000000000000000000aa" } } }, "at": "/components/C/qml", "reason": "content hash" },
+    { "name": "a hash with letters past f", "doc": { "components": { "C": { "qml": "sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg" } } }, "at": "/components/C/qml", "reason": "content hash" },
+    { "name": "a prop type that is not a string", "doc": { "components": { "C": { "host": "C", "version": 1, "props": { "p": 5 } } } }, "at": "/components/C/props/p", "reason": "a prop type is" },
+    { "name": "a columns point of no element", "doc": { "customize": { "p": { "kind": "columns", "of": "nope" } } }, "at": "/customize/p/of", "reason": "a `columns` point names a table" },
+    { "name": "events on a custom node of no component", "doc": { "view": { "kind": "custom", "name": "Nope", "on": { "x": [] } } }, "at": "/view/name", "reason": "is not a component of this document" },
+    { "name": "boundary read whole", "doc": { "view": { "kind": "boundary", "error": [{ "kind": "text", "text": { "ref": "boundary" } }] } }, "at": "/view/error/0/text", "reason": "`boundary.error` is read only" },
+    { "name": "a transfer read whole", "doc": { "models": { "x": { "type": "T" } }, "mutations": { "m": { "model": "x", "action": "A" } }, "view": { "kind": "dropZone", "onDrop": [{ "upload": 1, "to": "m", "id": "t" }], "accept": { "ref": "t" } } }, "at": "/view/accept", "reason": "is read as `progress`" },
+    { "name": "a string for decimal state", "doc": { "state": { "x": { "type": "decimal", "init": 1 } }, "view": { "kind": "button", "onClick": [{ "set": "x", "value": "a" }] } }, "at": "/view/onClick/0/value", "reason": "`x` is decimal; the value is string" },
+    { "name": "a bool for key state", "doc": { "state": { "x": { "type": "key?" } }, "view": { "kind": "button", "onClick": [{ "set": "x", "value": true }] } }, "at": "/view/onClick/0/value", "reason": "`x` is key?; the value is bool" },
+    { "name": "an optimistic patch of a query whose action is unknown", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "mutations": { "c": { "model": "m", "action": "Lims_Save", "optimistic": { "query": "dq", "key": 1, "with": { "obj": { "a": 1 } } } } }, "view": { "kind": "dialog", "scope": { "queries": { "dq": { "model": "m", "action": "Nope" } } } } }, "at": "/view/scope/queries/dq", "reason": "the action `Nope` is not in the catalog" },
+    { "name": "prefetch of a list reading state", "doc": { "models": { "m": { "type": "T" } }, "state": { "s": { "init": 1 } }, "queries": { "q": { "model": "m", "action": "A", "body": { "list": [{ "ref": "s" }, 1] } } }, "prefetch": ["q"] }, "at": "/prefetch/0", "reason": "reads more than the screen's params" },
+    { "name": "prefetch of a record reading state first", "doc": { "models": { "m": { "type": "T" } }, "state": { "s": { "init": 1 } }, "queries": { "q": { "model": "m", "action": "A", "body": { "obj": { "a": { "ref": "s" }, "b": 1 } } } }, "prefetch": ["q"] }, "at": "/prefetch/0", "reason": "reads more than the screen's params" },
     { "name": "prefetch that is not an array", "doc": { "prefetch": "q" }, "at": "/prefetch", "reason": "array of strings" }
   ]
 }

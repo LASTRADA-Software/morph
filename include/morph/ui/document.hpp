@@ -914,7 +914,7 @@ private:
         std::string const keyPath = pointerAppend(path, key);
         if (value == nullptr) {
             if (required) {
-                refuse(required ? path : keyPath, "`" + std::string{key} + "` is required");
+                refuse(path, "`" + std::string{key} + "` is required");
             }
             return {};
         }
@@ -2114,11 +2114,11 @@ private:
         }
     }
 
-    void collect(DocNode const& node, ScopeInfo& scope) { collectIn(node, scope, false); }
+    void collect(DocNode const& node, ScopeInfo& scope) { collectIn(node, scope); }
 
-    void collectIn(DocNode const& node, ScopeInfo& scope, bool part) {
-        KindSpec const* const spec = findKind(node.kind, part);
-        if (!part && !node.id.empty()) {
+    void collectIn(DocNode const& node, ScopeInfo& scope) {
+        KindSpec const* const spec = findKind(node.kind, false);
+        if (!node.id.empty()) {
             NameEntry entry;
             entry.category = NameCategory::Element;
             entry.path = pointerAppend(node.path, "id");
@@ -2142,7 +2142,7 @@ private:
         }
         for (auto const& [key, nodes] : node.children) {
             for (DocNodePtr const& child : nodes) {
-                collectIn(*child, isInner(spec, key) ? *inner : scope, false);
+                collectIn(*child, isInner(spec, key) ? *inner : scope);
             }
         }
         for (auto const& [key, parts] : node.parts) {
@@ -2163,11 +2163,11 @@ private:
         }
         _innerOf.emplace(&part, inner);
         for (auto const& [key, commands] : part.events) {
-            collectTransfers(commands, isInner(spec, key) ? *inner : outer);
+            collectTransfers(commands, outer);
         }
         for (auto const& [key, nodes] : part.children) {
             for (DocNodePtr const& child : nodes) {
-                collectIn(*child, isInner(spec, key) ? *inner : outer, false);
+                collectIn(*child, isInner(spec, key) ? *inner : outer);
             }
         }
         for (auto const& [key, parts] : part.parts) {
@@ -2186,12 +2186,10 @@ private:
         return found != spec->keys.end() && (found->flags & kInner) != 0;
     }
 
-    [[nodiscard]] static std::uint8_t keyFlags(KindSpec const* spec, std::string_view key) {
-        if (spec == nullptr) {
-            return 0;
-        }
-        auto const found = std::ranges::find(spec->keys, key, &KeySpec::key);
-        return found == spec->keys.end() ? std::uint8_t{0} : found->flags;
+    /// The flags of a child-node key. The parser fills `children` only from a kind's own keys, so the kind and the key
+    /// are always found.
+    [[nodiscard]] static std::uint8_t keyFlags(KindSpec const& spec, std::string_view key) {
+        return std::ranges::find(spec.keys, key, &KeySpec::key)->flags;
     }
 
     [[nodiscard]] static bool isCondition(KindSpec const* spec, std::string_view key) {
@@ -2228,12 +2226,12 @@ private:
         return *entry;
     }
 
-    void checkModelAction(CheckContext const& context, std::string const& alias, std::string const& action,
-                          std::string const& path) {
+    std::optional<ActionInfo> checkModelAction(CheckContext const& context, std::string const& alias,
+                                               std::string const& action, std::string const& path) {
         NameEntry const& model =
             require(context, alias, pointerAppend(path, "model"), {NameCategory::Model}, "a model alias");
         if (!_options.catalog.action) {
-            return;
+            return std::nullopt;
         }
         auto const info = _options.catalog.action(action);
         if (!info) {
@@ -2243,6 +2241,7 @@ private:
             refuse(path, "the action `" + action + "` belongs to `" + info->modelType + "`, not `" +
                              model.model->type + "`");
         }
+        return info;
     }
 
     void checkScope(ScopeDecl const& decl, CheckContext const& context) {
@@ -2313,7 +2312,7 @@ private:
     }
 
     void checkMutation(MutationDecl const& mutation, CheckContext const& context) {
-        checkModelAction(context, mutation.model, mutation.action, mutation.path);
+        auto const action = checkModelAction(context, mutation.model, mutation.action, mutation.path);
         if (mutation.body) {
             checkExpr(*mutation.body, context);
         }
@@ -2345,9 +2344,8 @@ private:
             QueryDecl const* const query = patch(*mutation.optimistic, "optimistic", "body");
             checkOptimistic(*mutation.optimistic, *query, mutation.path);
         }
-        if (mutation.offlineQueue && _options.catalog.action) {
-            auto const info = _options.catalog.action(mutation.action);
-            if (info && (info->credential || !info->secretFields.empty())) {
+        if (mutation.offlineQueue && action) {
+            if (action->credential || !action->secretFields.empty()) {
                 refuse(pointerAppend(mutation.path, "offline"),
                        "a mutation that sends a credential or returns a secret is never queued offline");
             }
@@ -2445,7 +2443,7 @@ private:
             }
         }
         for (auto const& [key, commands] : node.events) {
-            if (node.kind == "custom" && key.starts_with("on.")) {
+            if (node.kind == "custom") {
                 checkCustomEvent(node, key.substr(3), node.path);
             }
             checkCommands(commands, isInner(spec, key) ? inner : outer);
@@ -2456,7 +2454,7 @@ private:
         }
         for (auto const& [key, nodes] : node.children) {
             CheckContext context = isInner(spec, key) ? inner : outer;
-            context.boundaryError = (keyFlags(spec, key) & kBoundaryError) != 0 || context.boundaryError;
+            context.boundaryError = (keyFlags(*spec, key) & kBoundaryError) != 0 || context.boundaryError;
             for (DocNodePtr const& child : nodes) {
                 checkElement(*child, context, false);
             }

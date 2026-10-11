@@ -151,10 +151,11 @@ TEST_CASE("ui document: the model holds what the document declares", "[ui][docum
     CHECK(doc.dirty != nullptr);
     CHECK(doc.showErrors == "touched");
     CHECK(doc.lifecycle.size() == 4);
-    CHECK(doc.keys.size() == 3);
-    CHECK(doc.prefetch == std::vector<std::string>{"results"});
+    CHECK(doc.keys.size() == 9);
+    CHECK(doc.prefetch == std::vector<std::string>{"results", "prefetchable"});
 
-    REQUIRE(doc.scope.models.size() == 5);
+    REQUIRE(doc.scope.models.size() == 6);
+    CHECK(doc.scope.models.at(5).instance == InstanceMode::Keyed);
     CHECK(doc.scope.models.at(0).instance == InstanceMode::Keyed);
     CHECK(doc.scope.models.at(0).key != nullptr);
     CHECK(doc.scope.models.at(1).instance == InstanceMode::Default);
@@ -163,7 +164,7 @@ TEST_CASE("ui document: the model holds what the document declares", "[ui][docum
     CHECK(doc.scope.models.at(4).instance == InstanceMode::Borrowed);
     CHECK(doc.scope.models.at(4).borrowedFrom == "sample");
 
-    REQUIRE(doc.scope.queries.size() == 3);
+    REQUIRE(doc.scope.queries.size() == 4);
     auto const& results = doc.scope.queries.at(0);
     CHECK(results.name == "results");
     CHECK(results.staleTime == 1000);
@@ -184,7 +185,7 @@ TEST_CASE("ui document: the model holds what the document declares", "[ui][docum
     CHECK(doc.scope.mutations.at(2).concurrency == Concurrency::Latest);
     CHECK(doc.scope.mutations.at(3).concurrency == Concurrency::Parallel);
 
-    REQUIRE(doc.scope.watches.size() == 2);
+    REQUIRE(doc.scope.watches.size() == 3);
     CHECK(doc.scope.watches.at(0).source == WatchSource::User);
     CHECK(doc.scope.watches.at(1).source == WatchSource::Any);
     REQUIRE(doc.scope.checks.size() == 1);

@@ -272,7 +272,7 @@ template <std::size_t N>
 [[nodiscard]] inline std::expected<std::vector<std::string>, std::string> splitPath(std::string_view text) {
     std::vector<std::string> segments;
     std::size_t start = 0;
-    while (true) {
+    for (;;) {
         std::size_t const dot = text.find('.', start);
         std::string_view const segment = text.substr(start, dot == std::string_view::npos ? text.npos : dot - start);
         if (segment.empty()) {
@@ -565,11 +565,11 @@ private:
             }
         }
         if (made.args.size() < found->minArgs || made.args.size() > found->maxArgs) {
-            std::string arity = std::to_string(found->minArgs);
+            std::string arity = std::to_string(static_cast<unsigned>(found->minArgs));
             if (found->maxArgs == 255) {
                 arity += " or more";
             } else if (found->maxArgs != found->minArgs) {
-                arity += " to " + std::to_string(found->maxArgs);
+                arity += " to " + std::to_string(static_cast<unsigned>(found->maxArgs));
             }
             return refuse(path,
                           "`" + *name + "` takes " + arity + " arguments, not " + std::to_string(made.args.size()))
@@ -744,27 +744,11 @@ namespace detail {
 /// @param value The literal.
 /// @return Its type; `any` for `null`.
 [[nodiscard]] inline Type typeOfValue(Value const& value) {
-    switch (value.kind()) {
-        case ValueKind::Bool:
-            return Type::of(TypeKind::Bool);
-        case ValueKind::Int:
-            return Type::of(TypeKind::Int);
-        case ValueKind::String:
-            return Type::of(TypeKind::String);
-        case ValueKind::Decimal:
-            return Type::of(TypeKind::Decimal);
-        case ValueKind::Quantity:
-            return Type::of(TypeKind::Quantity);
-        case ValueKind::Timestamp:
-            return Type::of(TypeKind::Timestamp);
-        case ValueKind::List:
-            return Type::of(TypeKind::List);
-        case ValueKind::Record:
-            return Type::of(TypeKind::Record);
-        case ValueKind::Null:
-        default:
-            return Type::any();
-    }
+    // The type kind of each value kind, indexed by `ValueKind`; `null` has no type of its own.
+    constexpr std::array<TypeKind, 9> kTypes = {TypeKind::Any,       TypeKind::Bool,    TypeKind::Int,
+                                                TypeKind::String,    TypeKind::Decimal, TypeKind::Quantity,
+                                                TypeKind::Timestamp, TypeKind::List,    TypeKind::Record};
+    return Type::of(kTypes.at(static_cast<std::size_t>(value.kind())));
 }
 
 /// @brief The type a field path reads from a value of a known type.
@@ -956,9 +940,8 @@ private:
     }
 
     [[nodiscard]] static Type numericResult(FunctionId function, std::vector<Type> const& types) {
-        if (types.empty() || function == FunctionId::Coalesce || function == FunctionId::Sum ||
-            function == FunctionId::Mean || function == FunctionId::Min || function == FunctionId::Max ||
-            function == FunctionId::First) {
+        if (function == FunctionId::Coalesce || function == FunctionId::Sum || function == FunctionId::Mean ||
+            function == FunctionId::Min || function == FunctionId::Max || function == FunctionId::First) {
             return Type::any();
         }
         if (function == FunctionId::Neg || function == FunctionId::Round) {
@@ -1374,7 +1357,6 @@ private:
         FunctionId const function = expr.function;
         math::Rational right = rhs->value;
         std::string const* unit = nullptr;
-        bool ratio = false;
         if (lhs->unit != nullptr && rhs->unit != nullptr) {
             if (function == FunctionId::Mul) {
                 return mismatch(expr, "a product of two quantities has no declared unit");
@@ -1385,7 +1367,6 @@ private:
             }
             right = *converted;
             unit = function == FunctionId::Div ? nullptr : lhs->unit;
-            ratio = function == FunctionId::Div;
         } else if (lhs->unit != nullptr || rhs->unit != nullptr) {
             bool const scales = function == FunctionId::Mul || (function == FunctionId::Div && lhs->unit != nullptr);
             if (!scales) {
@@ -1409,7 +1390,8 @@ private:
         if (!result) {
             return mismatch(expr, "the result overflows");
         }
-        return makeNumber(*result, lhs->integer && rhs->integer && !ratio, unit);
+        // A quantity is never an `int`, so a ratio of two quantities comes back a decimal.
+        return makeNumber(*result, lhs->integer && rhs->integer, unit);
     }
 
     /// Orders two values of one comparable kind: numbers exactly (quantities converted), timestamps, strings.

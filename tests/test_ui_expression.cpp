@@ -248,6 +248,7 @@ TEST_CASE("ui expressions: the display functions use the client's formatting", "
     CHECK_FALSE(morph::ui::isName("1a"));
     CHECK_FALSE(morph::ui::isName(""));
     CHECK_FALSE(morph::ui::isName("a-b"));
+    CHECK_FALSE(morph::ui::isName("a~"));
 }
 
 // Mutation: make PermissiveResolver refuse refs -> the comprehension check of a plain ref fails.

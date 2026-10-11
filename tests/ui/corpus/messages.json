@@ -61,6 +61,12 @@
     { "name": "a null argument shows its name", "pattern": "Hi {$name}", "args": {"name": null}, "expect": "Hi {$name}", "errors": 1 },
     { "name": "a number function over text shows its name", "pattern": "{$n :number}", "args": {"n": "x"}, "expect": "{$n}", "errors": 1 },
     { "name": "a record argument shows its name", "pattern": "{$n}", "args": {"n": {"a": 1}}, "expect": "{$n}", "errors": 1 },
+    { "name": "whitespace between the parts of a complex message", "pattern": ".input {$n :number}\n.match $n\r\n\tone {{a}} * {{b}}", "args": {"n": 1}, "expect": "a" },
+    { "name": "a variable with capitals and an underscore", "pattern": "{$My_name}", "args": {"My_name": "x"}, "expect": "x" },
+    { "name": "a variant after the catch-all", "pattern": ".input {$n :number} .match $n * {{other}} one {{one}}", "args": {"n": 1}, "expect": "one" },
+    { "name": "keys that look like numbers and are not", "pattern": ".input {$n :number} .match $n .5 {{a}} - {{b}} * {{other}}", "args": {"n": 1}, "expect": "other" },
+    { "name": "a placeholder's own function wins over its declaration", "pattern": ".input {$n :number} {{{$n :string}}}", "args": {"n": 5}, "expect": "5" },
+    { "name": "an input no placeholder uses", "pattern": ".input {$a :number} {{{$b}}}", "args": {"b": "x"}, "expect": "x" },
     { "name": "a missing selector selects the catch-all", "pattern": ".input {$n :number} .match $n one {{one}} * {{other {$n}}}", "expect": "other {$n}", "errors": 1 },
 
     { "name": "a literal placeholder is outside the subset", "pattern": "{0} outside limits", "refused": "only variable placeholders" },
@@ -90,6 +96,9 @@
     { "name": "a bad pattern in a variant", "pattern": ".input {$n :number} .match $n one {{a}b}} * {{b}}", "refused": "unescaped" },
     { "name": "a bad quoted body", "pattern": ".input {$n :number} {{a {$}}}", "refused": "needs a name" },
     { "name": "a bad input body", "pattern": ".input {$n :foo} {{a}}", "refused": ":foo" },
+    { "name": "a quoted key ending in an escape", "pattern": ".input {$g :string} .match $g |a\\", "refused": "not closed with `|`" },
+    { "name": "an input at the end", "pattern": ".input", "refused": "`.input` takes" },
+    { "name": "a match with no variants", "pattern": ".input {$n :number} .match $n", "refused": "catch-all" },
     { "name": "a complex message without a body", "pattern": ".input {$n :number}", "refused": "only `.input`" }
   ]
 }

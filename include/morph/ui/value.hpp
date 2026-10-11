@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <compare>
 #include <concepts>
 #include <cstddef>
@@ -141,28 +142,10 @@ enum class ValueKind : std::uint8_t {
 /// @brief The name of a value kind, as a document spells its type.
 /// @param kind The kind.
 /// @return `null`, `bool`, `int`, `string`, `decimal`, `quantity`, `timestamp`, `list` or `record`.
-[[nodiscard]] constexpr std::string_view kindName(ValueKind kind) noexcept {
-    switch (kind) {
-        case ValueKind::Null:
-            return "null";
-        case ValueKind::Bool:
-            return "bool";
-        case ValueKind::Int:
-            return "int";
-        case ValueKind::String:
-            return "string";
-        case ValueKind::Decimal:
-            return "decimal";
-        case ValueKind::Quantity:
-            return "quantity";
-        case ValueKind::Timestamp:
-            return "timestamp";
-        case ValueKind::List:
-            return "list";
-        case ValueKind::Record:
-        default:
-            return "record";
-    }
+[[nodiscard]] constexpr std::string_view kindName(ValueKind kind) {
+    constexpr std::array<std::string_view, 9> kNames = {"null",     "bool",      "int",  "string", "decimal",
+                                                        "quantity", "timestamp", "list", "record"};
+    return kNames.at(static_cast<std::size_t>(kind));
 }
 
 /// @brief The document's typed value (spec 5 §3): what every expression evaluates to.
@@ -349,38 +332,11 @@ struct Type {
     /// @brief The type as a document spells it.
     /// @return For example `int`, `decimal?`, `list<key>`.
     [[nodiscard]] std::string name() const {
-        std::string out;
-        switch (kind) {
-            case TypeKind::Any:
-                return "any";
-            case TypeKind::Bool:
-                out = "bool";
-                break;
-            case TypeKind::Int:
-                out = "int";
-                break;
-            case TypeKind::String:
-                out = "string";
-                break;
-            case TypeKind::Decimal:
-                out = "decimal";
-                break;
-            case TypeKind::Quantity:
-                out = "quantity";
-                break;
-            case TypeKind::Timestamp:
-                out = "timestamp";
-                break;
-            case TypeKind::Key:
-                out = "key";
-                break;
-            case TypeKind::Record:
-                out = "record";
-                break;
-            case TypeKind::List:
-            default:
-                out = "list<" + (element ? element->name() : std::string{"any"}) + ">";
-                break;
+        constexpr std::array<std::string_view, 10> kNames = {"any",      "bool",      "int", "string", "decimal",
+                                                             "quantity", "timestamp", "key", "record", "list"};
+        std::string out{kNames.at(static_cast<std::size_t>(kind))};
+        if (kind == TypeKind::List) {
+            out += "<" + (element ? element->name() : std::string{"any"}) + ">";
         }
         if (optional) {
             out += '?';
@@ -401,38 +357,31 @@ struct Type {
         if (value.isNull()) {
             return optional;
         }
-        switch (kind) {
-            case TypeKind::Bool:
-                return value.kind() == ValueKind::Bool;
-            case TypeKind::Int:
-                return value.kind() == ValueKind::Int;
-            case TypeKind::String:
-                return value.kind() == ValueKind::String;
-            case TypeKind::Decimal:
-                return value.kind() == ValueKind::Decimal || value.kind() == ValueKind::Int;
-            case TypeKind::Quantity:
-                return value.kind() == ValueKind::Quantity;
-            case TypeKind::Timestamp:
-                return value.kind() == ValueKind::Timestamp;
-            case TypeKind::Key:
-                return value.kind() == ValueKind::Int || value.kind() == ValueKind::String;
-            case TypeKind::Record:
-                return value.kind() == ValueKind::Record;
-            case TypeKind::Any:
-            case TypeKind::List:
-            default: {
-                ValueList const* const items = value.asList();
-                if (items == nullptr) {
-                    return false;
-                }
-                for (Value const& item : *items) {
-                    if (element && !element->admits(item)) {
-                        return false;
-                    }
-                }
-                return true;
+        ValueKind const held = value.kind();
+        if (kind == TypeKind::Key) {
+            return held == ValueKind::Int || held == ValueKind::String;
+        }
+        if (kind == TypeKind::Decimal && held == ValueKind::Int) {
+            return true;
+        }
+        if (kind != TypeKind::List) {
+            // The value kind each scalar or record type holds, indexed by `TypeKind`; `any` and `key` are handled
+            // above, so their entries are never read.
+            constexpr std::array<ValueKind, 10> kHolds = {
+                ValueKind::Null,     ValueKind::Bool,      ValueKind::Int,  ValueKind::String, ValueKind::Decimal,
+                ValueKind::Quantity, ValueKind::Timestamp, ValueKind::Null, ValueKind::Record, ValueKind::List};
+            return kHolds.at(static_cast<std::size_t>(kind)) == held;
+        }
+        ValueList const* const items = value.asList();
+        if (items == nullptr) {
+            return false;
+        }
+        for (Value const& item : *items) {
+            if (element && !element->admits(item)) {
+                return false;
             }
         }
+        return true;
     }
 
     /// @brief Deep equality.
@@ -563,7 +512,7 @@ namespace detail {
             return std::nullopt;
         }
     }
-    if (num == nullptr || den == nullptr || places == nullptr || (object.size() == 4 && unit == nullptr)) {
+    if (num == nullptr || den == nullptr || places == nullptr) {
         return std::nullopt;
     }
     auto const numerator = jsonInt(*num);
@@ -705,48 +654,34 @@ namespace detail {
         object.insert({"dp", Json(static_cast<std::int64_t>(rational.decimalPlaces.value))});
         return object;
     };
-    switch (value.kind()) {
-        case ValueKind::Null:
-            out.data = nullptr;
-            break;
-        case ValueKind::Bool:
-            out.data = *value.asBool();
-            break;
-        case ValueKind::Int:
-            out.data = *value.asInt();
-            break;
-        case ValueKind::String:
-            out.data = *value.asString();
-            break;
-        case ValueKind::Decimal:
-            out.data = exact(value.asDecimal()->value);
-            break;
-        case ValueKind::Quantity: {
-            auto object = exact(value.asQuantity()->value);
-            object.insert({"unit", Json(value.asQuantity()->unit)});
-            out.data = std::move(object);
-            break;
+    if (bool const* const flag = value.asBool()) {
+        out.data = *flag;
+    } else if (std::int64_t const* const number = value.asInt()) {
+        out.data = *number;
+    } else if (std::string const* const text = value.asString()) {
+        out.data = *text;
+    } else if (Decimal const* const decimal = value.asDecimal()) {
+        out.data = exact(decimal->value);
+    } else if (Quantity const* const quantity = value.asQuantity()) {
+        auto object = exact(quantity->value);
+        object.insert({"unit", Json(quantity->unit)});
+        out.data = std::move(object);
+    } else if (time::DateTime const* const instant = value.asTimestamp()) {
+        out.data = instant->toIso8601();
+    } else if (ValueList const* const items = value.asList()) {
+        Json::array_t array;
+        for (Value const& item : *items) {
+            array.push_back(valueToJson(item));
         }
-        case ValueKind::Timestamp:
-            out.data = value.asTimestamp()->toIso8601();
-            break;
-        case ValueKind::List: {
-            Json::array_t array;
-            for (Value const& item : *value.asList()) {
-                array.push_back(valueToJson(item));
-            }
-            out.data = std::move(array);
-            break;
+        out.data = std::move(array);
+    } else if (ValueRecord const* const fields = value.asRecord()) {
+        Json::object_t object;
+        for (auto const& [name, field] : *fields) {
+            object.insert({name, valueToJson(field)});
         }
-        case ValueKind::Record:
-        default: {
-            Json::object_t object;
-            for (auto const& [name, field] : *value.asRecord()) {
-                object.insert({name, valueToJson(field)});
-            }
-            out.data = std::move(object);
-            break;
-        }
+        out.data = std::move(object);
+    } else {
+        out.data = nullptr;
     }
     return out;
 }

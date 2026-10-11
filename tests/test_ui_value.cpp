@@ -182,3 +182,30 @@ TEST_CASE("ui value: refusals and JSON pointers", "[ui][value]") {
         CHECK_FALSE(morph::ui::kindName(kind).empty());
     }
 }
+
+// Mutation: compare only numerators in Decimal's equality -> the 1/2 against 1/3 check fails.
+TEST_CASE("ui value: each part of an exact value takes part in equality and decoding", "[ui][value]") {
+    CHECK_FALSE(Value{dec(1, 2, 1)} == Value{dec(1, 3, 1)});
+    CHECK_FALSE(Value{dec(1, 2, 1)} == Value{dec(3, 2, 1)});
+    CHECK_FALSE(Value{Quantity{.value = dec(1, 2, 1).value, .unit = "g"}} ==
+                Value{Quantity{.value = dec(3, 2, 1).value, .unit = "g"}});
+    CHECK_FALSE(Type::of(TypeKind::List) == Type::listOf(Type::of(TypeKind::Int)));
+    CHECK(parseType("a~").error() == "unknown type `a`");
+
+    CHECK(reasonOf(R"({"num":18446744073709551615,"den":1,"dp":0})").find("integers") != std::string::npos);
+    CHECK(reasonOf(R"({"num":1,"den":"2","dp":1})").find("integers") != std::string::npos);
+    CHECK(reasonOf(R"({"num":1,"den":2,"dp":"1"})").find("integers") != std::string::npos);
+    CHECK(fromText(R"({"den":1,"dp":1,"unit":"g"})").kind() == ValueKind::Record);
+    CHECK(fromText(R"({"num":1,"dp":1,"unit":"g"})").kind() == ValueKind::Record);
+    CHECK(fromText(R"({"num":1,"den":1,"unit":"g"})").kind() == ValueKind::Record);
+
+    auto untypedList = valueFromJson(*parseJson("[1]"), Type::of(TypeKind::List));
+    REQUIRE(untypedList.has_value());
+    CHECK(*untypedList == Value{ValueList{1}});
+    auto notAList = valueFromJson(*parseJson("5"), *parseType("list<int>"));
+    REQUIRE_FALSE(notAList.has_value());
+    CHECK(notAList.error() == "expected list<int>, got int");
+    auto decimal = valueFromJson(*parseJson(R"({"num":3,"den":2,"dp":1})"), Type::of(TypeKind::Decimal));
+    REQUIRE(decimal.has_value());
+    CHECK(*decimal == Value{dec(3, 2, 1)});
+}
