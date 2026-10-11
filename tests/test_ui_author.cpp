@@ -371,7 +371,7 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     CHECK(ui::MutationRef{capture}.name() == "capture");
 }
 
-TEST_CASE("the reference screen of spec 5 §11 matches its golden", "[ui][author][golden]") {
+TEST_CASE("the reference screen of spec 5 section 11 matches its golden", "[ui][author][golden]") {
     auto emitted = resultsScreen().emit();
     REQUIRE(emitted.has_value());
     checkGolden("results", emitted->json);
