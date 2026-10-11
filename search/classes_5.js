@@ -94,9 +94,13 @@ var searchData=
   ['foreach_91',['ForEach',['../d2/d58/structmorph_1_1ui_1_1ForEach.html',1,'morph::ui']]],
   ['foreachmodel_92',['ForEachModel',['../db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel.html',1,'morph::ui::detail']]],
   ['foreachsession_93',['ForEachSession',['../d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html',1,'morph::ui::detail']]],
-  ['formscontrollercore_94',['FormsControllerCore',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html',1,'morph::qt::forms']]],
-  ['formscreen_95',['FormScreen',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html',1,'morph::app']]],
-  ['frontend_96',['Frontend',['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui']]],
-  ['frontenderror_97',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
-  ['frontendoption_98',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]]
+  ['formatcontext_94',['FormatContext',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html',1,'morph::ui']]],
+  ['formattedmessage_95',['FormattedMessage',['../d8/d21/structmorph_1_1ui_1_1FormattedMessage.html',1,'morph::ui']]],
+  ['formkeys_96',['FormKeys',['../d8/ddc/structmorph_1_1ui_1_1detail_1_1ExprParser_1_1FormKeys.html',1,'morph::ui::detail::ExprParser']]],
+  ['formscontrollercore_97',['FormsControllerCore',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html',1,'morph::qt::forms']]],
+  ['formscreen_98',['FormScreen',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html',1,'morph::app']]],
+  ['frontend_99',['Frontend',['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui']]],
+  ['frontenderror_100',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
+  ['frontendoption_101',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]],
+  ['functionspec_102',['FunctionSpec',['../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html',1,'morph::ui::detail']]]
 ];

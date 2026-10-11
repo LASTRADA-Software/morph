@@ -1,9 +1,8 @@
 var searchData=
 [
-  ['layer_20diagram_0',['Layer diagram',['../index.html#layer-diagram',1,'']]],
-  ['library_20headers_20include_20morph_1',['Library headers (&lt;span class=&quot;tt&quot;&gt;include/morph/&lt;/span&gt;)',['../index.html#library-headers-includemorph',1,'']]],
-  ['limitations_2',['Known limitations',['../index.html#known-limitations',1,'']]],
-  ['log_3',['log',['../index.html#journal--ordered-replayable-action-log',1,'&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log'],['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'A null callback executor drops the callback (but not the orphan log)']]],
-  ['log_20—_20ordered_20coalescing_20identity_20aware_20execution_20history_4',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['logger_5',['Logger',['../index.html#logger',1,'']]]
+  ['key_20design_20decisions_0',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
+  ['keyed_20shareable_20model_20instances_1',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
+  ['kind_20of_20empty_20units_20as_20types_2',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
+  ['kit_3',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
+  ['known_20limitations_4',['Known limitations',['../index.html#known-limitations',1,'']]]
 ];

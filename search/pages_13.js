@@ -1,16 +1,16 @@
 var searchData=
 [
-  ['test_20kit_0',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
-  ['testing_20—_20the_20installed_20owner_20test_20kit_1',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
-  ['the_20callback_20but_20not_20the_20orphan_20log_2',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['the_20installed_20owner_20test_20kit_3',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
-  ['the_20orphan_20log_4',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['the_20wire_5',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
-  ['thread_20safety_6',['Thread safety',['../index.html#thread-safety',1,'']]],
-  ['time_7',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
-  ['timeout_8',['&lt;span class=&quot;tt&quot;&gt;MainThreadExecutor::runFor&lt;/span&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
-  ['topologies_9',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
-  ['tree_20mount_20frontend_20seam_10',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — view tree, mount, frontend seam',['../index.html#ui--view-tree-mount-frontend-seam',1,'']]],
-  ['type_20erasure_11',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['types_12',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
+  ['safety_0',['Thread safety',['../index.html#thread-safety',1,'']]],
+  ['schema_20driven_20forms_1',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
+  ['schema_20generation_20for_20auto_20built_20guis_2',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]],
+  ['schemas_20for_20auto_20built_20guis_3',['&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs',['../index.html#morphforms--schemas-for-auto-built-guis',1,'']]],
+  ['seam_4',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]],
+  ['session_20—_20per_20call_20context_20authentication_5',['&lt;span class=&quot;tt&quot;&gt;session/&lt;/span&gt; — per-call context + authentication',['../index.html#session--per-call-context--authentication',1,'']]],
+  ['sessions_6',['Authenticated sessions',['../index.html#authenticated-sessions',1,'']]],
+  ['shareable_20model_20instances_7',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
+  ['signal_20graph_20view_20state_20declarative_20control_8',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['state_20declarative_20control_9',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['strands_10',['Strands',['../index.html#strands',1,'']]],
+  ['subscriptions_11',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
+  ['syncworker_12',['SyncWorker',['../index.html#syncworker',1,'']]]
 ];

@@ -1,8 +1,17 @@
 var searchData=
 [
-  ['ui_20—_20view_20tree_20mount_20frontend_20seam_0',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — view tree, mount, frontend seam',['../index.html#ui--view-tree-mount-frontend-seam',1,'']]],
-  ['units_20and_20schema_20driven_20forms_1',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['units_20as_20types_2',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
-  ['units_20time_3',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
-  ['util_20—_20exact_20values_20units_20time_4',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
+  ['test_20kit_0',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
+  ['testing_20—_20the_20installed_20owner_20test_20kit_1',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
+  ['the_20callback_20but_20not_20the_20orphan_20log_2',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
+  ['the_20installed_20owner_20test_20kit_3',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
+  ['the_20orphan_20log_4',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
+  ['the_20ui_20document_20expr_201_20view_20tree_20mount_20frontend_20seam_5',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]],
+  ['the_20wire_6',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
+  ['thread_20safety_7',['Thread safety',['../index.html#thread-safety',1,'']]],
+  ['time_8',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
+  ['timeout_9',['&lt;span class=&quot;tt&quot;&gt;MainThreadExecutor::runFor&lt;/span&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['topologies_10',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
+  ['tree_20mount_20frontend_20seam_11',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]],
+  ['type_20erasure_12',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
+  ['types_13',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
 ];

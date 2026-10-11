@@ -1,13 +1,16 @@
 var searchData=
 [
-  ['empty_20units_20as_20types_0',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
-  ['erasure_1',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['error_20propagation_2',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['exact_20numbers_20on_20the_20wire_3',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
-  ['exact_20values_20units_20and_20schema_20driven_20forms_4',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['exact_20values_20units_20time_5',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
-  ['execution_20history_6',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_7',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['executors_8',['Executors',['../index.html#executors',1,'']]],
-  ['exists_9',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['dates_20and_20combo_20boxes_0',['&lt;span class=&quot;tt&quot;&gt;morph::time::Timestamp&lt;/span&gt; and &lt;span class=&quot;tt&quot;&gt;morph::forms::Choice&lt;/span&gt; — dates and combo boxes',['../index.html#morphtimetimestamp-and-morphformschoice--dates-and-combo-boxes',1,'']]],
+  ['decisions_1',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
+  ['declarative_20control_2',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['deployment_20topologies_3',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
+  ['design_20decisions_4',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
+  ['detail_5',['Component detail',['../index.html#component-detail',1,'']]],
+  ['diagram_6',['Layer diagram',['../index.html#layer-diagram',1,'']]],
+  ['document_20expr_201_20view_20tree_20mount_20frontend_20seam_7',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]],
+  ['does_20not_20drain_20on_20timeout_8',['&lt;span class=&quot;tt&quot;&gt;MainThreadExecutor::runFor&lt;/span&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['domain_20concern_20not_20a_20framework_20concern_9',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
+  ['drain_20on_20timeout_10',['&lt;span class=&quot;tt&quot;&gt;MainThreadExecutor::runFor&lt;/span&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['driven_20forms_11',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
+  ['drops_20the_20callback_20but_20not_20the_20orphan_20log_12',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]]
 ];

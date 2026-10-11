@@ -1,0 +1,45 @@
+var message_8hpp =
+[
+    [ "morph::ui::detail::PluralOperands", "d7/d43/structmorph_1_1ui_1_1detail_1_1PluralOperands.html", "d7/d43/structmorph_1_1ui_1_1detail_1_1PluralOperands" ],
+    [ "morph::ui::MessagePart", "d8/d99/structmorph_1_1ui_1_1MessagePart.html", "d8/d99/structmorph_1_1ui_1_1MessagePart" ],
+    [ "morph::ui::MessageVariant", "d2/d4d/structmorph_1_1ui_1_1MessageVariant.html", "d2/d4d/structmorph_1_1ui_1_1MessageVariant" ],
+    [ "morph::ui::MessagePattern", "de/de4/structmorph_1_1ui_1_1MessagePattern.html", "de/de4/structmorph_1_1ui_1_1MessagePattern" ],
+    [ "morph::ui::detail::MessageReader", "d8/dcf/classmorph_1_1ui_1_1detail_1_1MessageReader.html", "d8/dcf/classmorph_1_1ui_1_1detail_1_1MessageReader" ],
+    [ "morph::ui::MessageLocale", "d1/d25/structmorph_1_1ui_1_1MessageLocale.html", "d1/d25/structmorph_1_1ui_1_1MessageLocale" ],
+    [ "morph::ui::FormattedMessage", "d8/d21/structmorph_1_1ui_1_1FormattedMessage.html", "d8/d21/structmorph_1_1ui_1_1FormattedMessage" ],
+    [ "morph::ui::detail::PluralRule", "d5/d8c/message_8hpp.html#a36cd9a3d8a705e4bb37113c2d9d38d9f", null ],
+    [ "morph::ui::PluralCategory", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7", [
+      [ "Zero", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7ad7ed4ee1df437474d005188535f74875", null ],
+      [ "One", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a06c2cea18679d64399783748fa367bdd", null ],
+      [ "Two", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7aaada29daee1d64ed0fe907043855cb7e", null ],
+      [ "Few", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a8ecfbf4cc4349add09296102925c898c", null ],
+      [ "Many", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a5ae7fb3197b6fd8c723c7766a5680e2e", null ],
+      [ "Other", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a6311ae17c1ee52b36e68aaf4ad066387", null ]
+    ] ],
+    [ "morph::ui::MessageFunction", "d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337e", [
+      [ "None", "d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea6adf97f83acf6453d4a6a4b1070f3754", null ],
+      [ "Number", "d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337eab2ee912b91d69b435159c7c3f6df7f5f", null ],
+      [ "String", "d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea27118326006d3829667a400ad23d5d98", null ]
+    ] ],
+    [ "morph::ui::categoryName", "d5/d8c/message_8hpp.html#a239fc4da1acc6894a6bda8c803a283a4", null ],
+    [ "morph::ui::detail::decimalText", "d5/d8c/message_8hpp.html#ad61b936e9681cdc20ce4cf0a5ef23878", null ],
+    [ "morph::ui::detail::numberOf", "d5/d8c/message_8hpp.html#a50829ec74af84f684ae23c6e64f51c49", null ],
+    [ "morph::ui::formatNumber", "d5/d8c/message_8hpp.html#a3036024ec734f09c4b7a5a1db76466c6", null ],
+    [ "morph::ui::detail::between", "d5/d8c/message_8hpp.html#a80bd07a4e729108b0953069fae80383e", null ],
+    [ "morph::ui::detail::wholeMillion", "d5/d8c/message_8hpp.html#a544d3a71d972c819a61eb51739c7f7ff", null ],
+    [ "morph::ui::detail::germanicPlural", "d5/d8c/message_8hpp.html#ad733b4f57b34aed1912d421d45372422", null ],
+    [ "morph::ui::detail::italianPlural", "d5/d8c/message_8hpp.html#a75f7d7144a615220a650074aabf7ff47", null ],
+    [ "morph::ui::detail::spanishPlural", "d5/d8c/message_8hpp.html#a6da18630fa24cc324904ad19922c5016", null ],
+    [ "morph::ui::detail::frenchPlural", "d5/d8c/message_8hpp.html#ae26ae659fe6a60dca6e904350d8a2f8e", null ],
+    [ "morph::ui::detail::polishPlural", "d5/d8c/message_8hpp.html#a3f8f0024bfe0b788503eb9a7662631ba", null ],
+    [ "morph::ui::detail::eastSlavicPlural", "d5/d8c/message_8hpp.html#a0a284e170a6500f0604d07bc4f56709c", null ],
+    [ "morph::ui::detail::czechPlural", "d5/d8c/message_8hpp.html#ad11871f10a589aa1d164aaee1fd3a2ff", null ],
+    [ "morph::ui::detail::arabicPlural", "d5/d8c/message_8hpp.html#a54afc173b192369d2523741563a7b49b", null ],
+    [ "morph::ui::pluralCategory", "d5/d8c/message_8hpp.html#a880182bd7990fa899e27e70d0412027a", null ],
+    [ "morph::ui::parseMessage", "d5/d8c/message_8hpp.html#ad48926b7b24cb00ef8e747852d864a95", null ],
+    [ "morph::ui::detail::parseExactKey", "d5/d8c/message_8hpp.html#a252067d451664fd5803a13544ffccb48", null ],
+    [ "morph::ui::detail::matchKey", "d5/d8c/message_8hpp.html#a9e39fbca55f7b21c0c3404c3067a3922", null ],
+    [ "morph::ui::detail::formatPattern", "d5/d8c/message_8hpp.html#ac3370546cddc4627e9123327d832e71b", null ],
+    [ "morph::ui::formatMessage", "d5/d8c/message_8hpp.html#a4df104175448db66ae3efcec1ad10446", null ],
+    [ "morph::ui::detail::kPluralRules", "d5/d8c/message_8hpp.html#a785294b6243689cf34d47908dd95d811", null ]
+];

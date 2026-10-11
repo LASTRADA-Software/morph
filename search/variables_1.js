@@ -8,8 +8,13 @@ var searchData=
   ['bind_5',['bind',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#a3f26fba7ed6ce6cf13c7596d2e061fab',1,'morph::views::ActionDescriptor']]],
   ['bindaddress_6',['bindAddress',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#a9d7b4c1a0aca4414d4789738389fd0ae',1,'morph::qt::QtWebSocketServerConfig']]],
   ['bindcontext_7',['bindContext',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a82801c7aca391405f55114206d4956ab',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['blankas_8',['blankAs',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#adef93e37ac9d09fb581c645af1fccf6d',1,'morph::forms::FieldMeta']]],
-  ['body_9',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope']]],
-  ['bridge_10',['bridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html#abcbca1f1a4eeac47622ef500ef79d471',1,'morph::qt::bridge::detail::OwnedLocalBridge']]],
-  ['built_11',['built',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a95de305bcd85eac7ef683904b0a68463',1,'morph::ui::FrontendError']]]
+  ['binding_8',['binding',['../d9/d50/structmorph_1_1ui_1_1Command.html#adfa6d61a7c8f0f54f2465193e07e2130',1,'morph::ui::Command']]],
+  ['bindings_9',['bindings',['../de/d88/structmorph_1_1ui_1_1detail_1_1CheckContext.html#a35409143db6ea26b888f8cf525e33a37',1,'morph::ui::detail::CheckContext']]],
+  ['blankas_10',['blankAs',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#adef93e37ac9d09fb581c645af1fccf6d',1,'morph::forms::FieldMeta']]],
+  ['blocking_11',['blocking',['../d8/d34/structmorph_1_1ui_1_1CheckDecl.html#ae2e90dbac478f1aaab17ddd4631ae948',1,'morph::ui::CheckDecl']]],
+  ['body_12',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope::body'],['../da/db7/structmorph_1_1ui_1_1QueryDecl.html#a453f940f3c79289ff9a02681ff15215f',1,'morph::ui::QueryDecl::body'],['../d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a1783e925d2a2a4624037de9d746c26cd',1,'morph::ui::MutationDecl::body'],['../da/de0/structmorph_1_1ui_1_1WatchDecl.html#a67ce729623e4be345b9c7f215111ab19',1,'morph::ui::WatchDecl::body']]],
+  ['borrowedfrom_13',['borrowedFrom',['../dc/db8/structmorph_1_1ui_1_1ModelDecl.html#a656074432a852e36135e8e1add7ab42f',1,'morph::ui::ModelDecl']]],
+  ['boundaryerror_14',['boundaryError',['../de/d88/structmorph_1_1ui_1_1detail_1_1CheckContext.html#a6a17c789cad1957654a6104d80e58862',1,'morph::ui::detail::CheckContext']]],
+  ['bridge_15',['bridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html#abcbca1f1a4eeac47622ef500ef79d471',1,'morph::qt::bridge::detail::OwnedLocalBridge']]],
+  ['built_16',['built',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a95de305bcd85eac7ef683904b0a68463',1,'morph::ui::FrontendError']]]
 ];

@@ -1,9 +1,7 @@
 var searchData=
 [
-  ['handlerbinding_20—_20why_20it_20exists_0',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
-  ['header_20map_1',['Header map',['../index.html#header-map',1,'']]],
-  ['headers_20include_20morph_2',['Library headers (&lt;span class=&quot;tt&quot;&gt;include/morph/&lt;/span&gt;)',['../index.html#library-headers-includemorph',1,'']]],
-  ['headers_20include_20morph_20qt_3',['Qt integration headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt/&lt;/span&gt;)',['../index.html#qt-integration-headers-includemorphqt',1,'']]],
-  ['heap_20allocated_4',['&lt;span class=&quot;tt&quot;&gt;RemoteServer&lt;/span&gt; must be heap-allocated',['../index.html#remoteserver-must-be-heap-allocated',1,'']]],
-  ['history_5',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]]
+  ['generation_20for_20auto_20built_20guis_0',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]],
+  ['goals_1',['Non-goals',['../index.html#non-goals',1,'']]],
+  ['graph_20view_20state_20declarative_20control_2',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['guis_3',['GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs'],['../index.html#morphforms--schemas-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs']]]
 ];

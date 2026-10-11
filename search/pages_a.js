@@ -1,8 +1,5 @@
 var searchData=
 [
-  ['key_20design_20decisions_0',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
-  ['keyed_20shareable_20model_20instances_1',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
-  ['kind_20of_20empty_20units_20as_20types_2',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
-  ['kit_3',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
-  ['known_20limitations_4',['Known limitations',['../index.html#known-limitations',1,'']]]
+  ['journal_20—_20ordered_20replayable_20action_20log_0',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
+  ['json_20schema_20generation_20for_20auto_20built_20guis_1',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]]
 ];

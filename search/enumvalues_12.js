@@ -7,5 +7,7 @@ var searchData=
   ['unsupported_4',['Unsupported',['../d8/dcd/structmorph_1_1ui_1_1ConnectError.html#a047e4d4e99ceb30a5bc29dfa9a0b4174ab4080bdf74febf04d578ff105cce9d3f',1,'morph::ui::ConnectError']]],
   ['unsupportedoperator_5',['UnsupportedOperator',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0a4d968eb9c5db5fcb13a0a9a5faa8054c',1,'morph::table']]],
   ['unverified_6',['Unverified',['../d8/dcd/structmorph_1_1ui_1_1ConnectError.html#a047e4d4e99ceb30a5bc29dfa9a0b4174ad5ca088299d5908ca359f17692071761',1,'morph::ui::ConnectError']]],
-  ['updated_7',['Updated',['../dd/d57/data__source_8hpp.html#a326be1a73b1043a1076cfd0b907dd4a5aff0a3b7f3daef040faf89a88fdac01b7',1,'morph::table']]]
+  ['updated_7',['Updated',['../dd/d57/data__source_8hpp.html#a326be1a73b1043a1076cfd0b907dd4a5aff0a3b7f3daef040faf89a88fdac01b7',1,'morph::table']]],
+  ['upload_8',['Upload',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99',1,'morph::ui']]],
+  ['user_9',['User',['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075',1,'morph::ui']]]
 ];

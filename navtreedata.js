@@ -60,20 +60,24 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d1/d05/structmorph_1_1ui_1_1Column.html#ad66e1f42f134870150c499443261a406",
-"d2/d47/structmorph_1_1ui_1_1Button.html#a611569ffa0415b72497fe3e2c77401fe",
-"d3/d98/classmorph_1_1ui_1_1BusyWidget.html#ade66d0025db706b41c194280e75c0534",
-"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ab5694053ad981a7aae63777bf3cd29d4",
-"d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64",
-"d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html#abfc48c6677c15d1586bb1b603ccf7543",
-"d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac3bf447eabe632720a3aa1a7ce401274",
-"d9/d60/structmorph_1_1ui_1_1Switch.html#a95ddabe6d9443107714e675bc73520c3",
-"db/d00/structmorph_1_1core_1_1FileIoOps.html#a3c5a72a799fadf837c40a17b87da6fd4",
-"dc/d91/classmorph_1_1table_1_1detail_1_1ViewJob.html#a420f008caddd386f98b19f18d52dbf46",
-"dd/d5b/structmorph_1_1ui_1_1Banner.html#ab9a7091dfee5f893c185230bc0472db2",
-"de/d18/classmorph_1_1reactive_1_1TimerHandle.html#a1cc2c604b8382ed00a8269ab6dbde7a0",
-"df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#abedec619297ff9d25cb7200d8d45eb6b",
-"df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435"
+"d0/df6/structmorph_1_1ui_1_1Expr.html#a0f582d8764f5442b791d9fbb5a813753",
+"d1/df1/structmorph_1_1ui_1_1Badge.html",
+"d3/d18/structmorph_1_1table_1_1PageFetch.html",
+"d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ac4b30b19f91a79a0b6cf640b6cc01165",
+"d5/d14/classmorph_1_1ui_1_1detail_1_1DocumentValidator.html#a6ccd21d6a674fc246de016fad7afdc09",
+"d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7846e1d06f96fdad2f34c906bfe1790c",
+"d7/d25/structmorph_1_1ui_1_1TableOptions.html#a8df35adb0b84b0d383c635af2ee4bd89",
+"d7/dc5/classmorph_1_1forms_1_1InstanceConstraints.html#a85d0d07a42640d16a7769f375fe1b8c3",
+"d8/d3a/classmorph_1_1bridge_1_1RawHandler.html",
+"d9/d50/structmorph_1_1ui_1_1Command.html#a67438332d2eb86eb53d6223dc1557ac6",
+"da/d54/classmorph_1_1ui_1_1Value.html#af20178806f712b3b16b53eb2718ae3cd",
+"db/d95/classmorph_1_1table_1_1RowsSnapshot.html#a2a8ff1c5a817bb72968f8343241d5f44",
+"dc/db1/classmorph_1_1exec_1_1OwnerStrand.html",
+"dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde",
+"dd/da5/structmorph_1_1views_1_1ColumnOverride.html#afa03338e1e731ff0e88c7ef3560ca6e9",
+"de/d3d/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCheckbox.html#a0e7685016c25d7a4f61ff74e2413f94f",
+"df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#a84f4b4c14a740effb6e69795990bec01",
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

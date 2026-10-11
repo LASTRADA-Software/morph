@@ -1,9 +1,14 @@
 var searchData=
 [
-  ['for_20auto_20built_20guis_0',['for auto built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs'],['../index.html#morphforms--schemas-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs']]],
-  ['forms_1',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['forms_20—_20json_20schema_20generation_20for_20auto_20built_20guis_2',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]],
-  ['framework_20concern_3',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
-  ['from_20onbackendchanged_4',['&lt;span class=&quot;tt&quot;&gt;Bridge::switchBackend&lt;/span&gt; must not be called from &lt;span class=&quot;tt&quot;&gt;onBackendChanged&lt;/span&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]],
-  ['frontend_20seam_5',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — view tree, mount, frontend seam',['../index.html#ui--view-tree-mount-frontend-seam',1,'']]]
+  ['empty_20units_20as_20types_0',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
+  ['erasure_1',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
+  ['error_20propagation_2',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['exact_20numbers_20on_20the_20wire_3',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
+  ['exact_20values_20units_20and_20schema_20driven_20forms_4',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
+  ['exact_20values_20units_20time_5',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
+  ['execution_20history_6',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_7',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
+  ['executors_8',['Executors',['../index.html#executors',1,'']]],
+  ['exists_9',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
+  ['expr_201_20view_20tree_20mount_20frontend_20seam_10',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]]
 ];

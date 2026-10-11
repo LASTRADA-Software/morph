@@ -45,8 +45,10 @@ var searchData=
   ['trackread_42',['trackRead',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#a43dc7a6ab7ac5c7e99db1dbeef6eb3df',1,'morph::reactive::detail::Node']]],
   ['trunc_43',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]],
   ['type_44',['type',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#aeac1d773d0c71db56174dddf74fcef3e',1,'morph::ui::testing::ConformanceProbe']]],
-  ['typedbyuser_45',['typedByUser',['../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#aa58dbec222f368389bc64070c245d518',1,'morph::ui::testing::detail::FakeTextInput']]],
-  ['typedforeach_46',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html#abcdba937e1686c128e542157e9cd4bf2',1,'morph::ui::detail::TypedForEach']]],
-  ['typeid_47',['typeId',['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#a161ebd09b83a7cf848e25392e365b32f',1,'morph::bridge::RawHandler']]],
-  ['typingwithoutecho_48',['typingWithoutEcho',['../d8/d3e/backend__conformance_8hpp.html#aee5814b280608e5068b23be5fac6b417',1,'morph::ui::testing::detail']]]
+  ['typealong_45',['typeAlong',['../d8/d0e/expression_8hpp.html#a3bd16d187223dc35cc160c792e2b5445',1,'morph::ui::detail']]],
+  ['typedbyuser_46',['typedByUser',['../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#aa58dbec222f368389bc64070c245d518',1,'morph::ui::testing::detail::FakeTextInput']]],
+  ['typedforeach_47',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html#abcdba937e1686c128e542157e9cd4bf2',1,'morph::ui::detail::TypedForEach']]],
+  ['typeid_48',['typeId',['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#a161ebd09b83a7cf848e25392e365b32f',1,'morph::bridge::RawHandler']]],
+  ['typeofvalue_49',['typeOfValue',['../d8/d0e/expression_8hpp.html#ae2ba06141133aff6c7a012173174f403',1,'morph::ui::detail']]],
+  ['typingwithoutecho_50',['typingWithoutEcho',['../d8/d3e/backend__conformance_8hpp.html#aee5814b280608e5068b23be5fac6b417',1,'morph::ui::testing::detail']]]
 ];

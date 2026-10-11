@@ -1,5 +1,13 @@
 var searchData=
 [
-  ['journal_20—_20ordered_20replayable_20action_20log_0',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
-  ['json_20schema_20generation_20for_20auto_20built_20guis_1',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]]
+  ['identity_20aware_20execution_20history_0',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['include_20morph_1',['Library headers (&lt;span class=&quot;tt&quot;&gt;include/morph/&lt;/span&gt;)',['../index.html#library-headers-includemorph',1,'']]],
+  ['include_20morph_20qt_2',['Qt integration headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt/&lt;/span&gt;)',['../index.html#qt-integration-headers-includemorphqt',1,'']]],
+  ['inmemoryofflinequeue_3',['IOfflineQueue + InMemoryOfflineQueue',['../index.html#iofflinequeue--inmemoryofflinequeue',1,'']]],
+  ['installed_20owner_20test_20kit_4',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
+  ['instance_20subscriptions_5',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
+  ['instances_6',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
+  ['integration_20headers_20include_20morph_20qt_7',['Qt integration headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt/&lt;/span&gt;)',['../index.html#qt-integration-headers-includemorphqt',1,'']]],
+  ['iofflinequeue_20inmemoryofflinequeue_8',['IOfflineQueue + InMemoryOfflineQueue',['../index.html#iofflinequeue--inmemoryofflinequeue',1,'']]],
+  ['it_20exists_9',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];
