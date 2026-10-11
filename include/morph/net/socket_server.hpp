@@ -39,11 +39,11 @@ namespace detail {
 ///
 /// A socket that is no longer listening answers `EINVAL`; a closed or foreign
 /// descriptor `EBADF`/`ENOTSOCK`; a non-stream socket `EOPNOTSUPP`. core-cpp
-/// classifies these as `BadHandle` and `Unsupported`, but releases inside the
-/// supported version range still report every failed accept as `SystemError`
-/// with the `errno` in `systemCode`, so both spellings are recognised.
-/// Exhaustion (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`) is not in the list: it
-/// clears once descriptors or memory are freed, so it is retried.
+/// classifies these as `BadHandle` and `Unsupported`; a failure it leaves
+/// unclassified arrives as `SystemError` with the `errno` in `systemCode`, so
+/// that spelling is recognised too. Exhaustion (`ResourceExhausted`: `EMFILE`,
+/// `ENFILE`, `ENOBUFS`, `ENOMEM`) is not in the list: it clears once
+/// descriptors or memory are freed, so it is retried.
 /// @param error The error `IListener::accept()` reported.
 /// @return `true` when the listener can never accept again.
 [[nodiscard]] inline bool acceptListenerIsDead(::core::net::NetError const& error) noexcept {
