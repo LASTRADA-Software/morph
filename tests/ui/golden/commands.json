@@ -1,0 +1,731 @@
+{
+   "vocab": "ui/1",
+   "id": "lims.commands",
+   "models": {
+      "sample": {
+         "type": "Lims_SampleModel",
+         "instance": "private"
+      },
+      "session": {
+         "type": "Auth_SessionModel"
+      }
+   },
+   "state": {
+      "note": {
+         "type": "string"
+      },
+      "url": {
+         "type": "string"
+      },
+      "ids": {
+         "type": "list<int>",
+         "init": {
+            "lit": [
+               1,
+               2
+            ]
+         }
+      }
+   },
+   "queries": {
+      "header": {
+         "model": "sample",
+         "action": "Lims_GetHeader"
+      }
+   },
+   "mutations": {
+      "load": {
+         "model": "sample",
+         "action": "Lims_LoadSample"
+      },
+      "upload": {
+         "model": "sample",
+         "action": "Lims_UploadFile"
+      },
+      "signIn": {
+         "model": "session",
+         "action": "Auth_SignIn"
+      }
+   },
+   "onClose": [
+      {
+         "seq": [
+            {
+               "cancelClose": true
+            },
+            {
+               "signOut": true
+            }
+         ]
+      }
+   ],
+   "customize": {
+      "density": {
+         "kind": "choice",
+         "options": [
+            "comfortable",
+            "compact"
+         ]
+      }
+   },
+   "view": {
+      "kind": "column",
+      "children": [
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  0
+               ]
+            },
+            "onClick": [
+               {
+                  "set": "note",
+                  "value": "text"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  1
+               ]
+            },
+            "onClick": [
+               {
+                  "reset": "note"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  2
+               ]
+            },
+            "onClick": [
+               {
+                  "run": "load"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  3
+               ]
+            },
+            "onClick": [
+               {
+                  "run": "load",
+                  "body": {
+                     "obj": {
+                        "id": 7
+                     }
+                  },
+                  "as": "loaded"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  4
+               ]
+            },
+            "onClick": [
+               {
+                  "run": "load",
+                  "body": {
+                     "obj": {
+                        "id": {
+                           "ref": "each"
+                        }
+                     }
+                  },
+                  "each": {
+                     "ref": "ids"
+                  },
+                  "as": "each"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  5
+               ]
+            },
+            "onClick": [
+               {
+                  "refetch": "header"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  6
+               ]
+            },
+            "onClick": [
+               {
+                  "open": "details"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  7
+               ]
+            },
+            "onClick": [
+               {
+                  "close": "details"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  8
+               ]
+            },
+            "onClick": [
+               {
+                  "navigate": "lims.sample"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  9
+               ]
+            },
+            "onClick": [
+               {
+                  "navigate": "lims.sample",
+                  "params": {
+                     "obj": {
+                        "sampleId": 1
+                     }
+                  },
+                  "as": "dialog",
+                  "onResult": [
+                     {
+                        "set": "note",
+                        "value": {
+                           "ref": "event"
+                        }
+                     }
+                  ],
+                  "onCancel": [
+                     {
+                        "set": "note",
+                        "value": "cancelled"
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  10
+               ]
+            },
+            "onClick": [
+               {
+                  "navigate": "lims.tab",
+                  "as": "tab"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  11
+               ]
+            },
+            "onClick": [
+               {
+                  "navigate": "lims.drawer",
+                  "as": "drawer"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  12
+               ]
+            },
+            "onClick": [
+               {
+                  "navigate": {
+                     "route": {
+                        "fn": "concat",
+                        "args": [
+                           "/samples/",
+                           {
+                              "ref": "note"
+                           }
+                        ]
+                     }
+                  },
+                  "as": "window"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  13
+               ]
+            },
+            "onClick": [
+               {
+                  "return": {
+                     "ref": "note"
+                  }
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  14
+               ]
+            },
+            "onClick": [
+               {
+                  "focus": "noteInput"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  15
+               ]
+            },
+            "onClick": [
+               {
+                  "host": "print"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  16
+               ]
+            },
+            "onClick": [
+               {
+                  "host": "export",
+                  "args": {
+                     "obj": {
+                        "format": "csv"
+                     }
+                  }
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  17
+               ]
+            },
+            "onClick": [
+               {
+                  "switchBackend": "local"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  18
+               ]
+            },
+            "onClick": [
+               {
+                  "resetPrefs": "density"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  19
+               ]
+            },
+            "onClick": [
+               {
+                  "resetPrefs": "all"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  20
+               ]
+            },
+            "onClick": [
+               {
+                  "setLocale": "de"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  21
+               ]
+            },
+            "onClick": [
+               {
+                  "notify": "Saved"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  22
+               ]
+            },
+            "onClick": [
+               {
+                  "notify": "Done",
+                  "role": "success"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  23
+               ]
+            },
+            "onClick": [
+               {
+                  "seq": [
+                     {
+                        "run": "load",
+                        "as": "first"
+                     },
+                     {
+                        "set": "note",
+                        "value": {
+                           "ref": "first"
+                        }
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  24
+               ]
+            },
+            "onClick": [
+               {
+                  "all": [
+                     {
+                        "refetch": "header"
+                     },
+                     {
+                        "run": "load"
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  25
+               ]
+            },
+            "onClick": [
+               {
+                  "if": [
+                     {
+                        "fn": "isEmpty",
+                        "args": [
+                           {
+                              "ref": "note"
+                           }
+                        ]
+                     },
+                     [
+                        {
+                           "set": "note",
+                           "value": "empty"
+                        }
+                     ]
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  26
+               ]
+            },
+            "onClick": [
+               {
+                  "if": [
+                     {
+                        "fn": "isEmpty",
+                        "args": [
+                           {
+                              "ref": "note"
+                           }
+                        ]
+                     },
+                     [
+                        {
+                           "set": "note",
+                           "value": "empty"
+                        }
+                     ],
+                     [
+                        {
+                           "reset": "note"
+                        },
+                        {
+                           "refetch": "header"
+                        }
+                     ]
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  27
+               ]
+            },
+            "onClick": [
+               {
+                  "signIn": {
+                     "from": "signIn"
+                  }
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  28
+               ]
+            },
+            "onClick": [
+               {
+                  "upload": {
+                     "ref": "event"
+                  },
+                  "to": "upload"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  29
+               ]
+            },
+            "onClick": [
+               {
+                  "upload": {
+                     "ref": "event"
+                  },
+                  "to": "upload",
+                  "as": "uploaded",
+                  "id": "transfer"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  30
+               ]
+            },
+            "onClick": [
+               {
+                  "download": {
+                     "ref": "url"
+                  },
+                  "save": "dialog"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  31
+               ]
+            },
+            "onClick": [
+               {
+                  "download": {
+                     "ref": "url"
+                  },
+                  "save": "dialog",
+                  "name": "report.csv"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  32
+               ]
+            },
+            "onClick": [
+               {
+                  "download": {
+                     "ref": "url"
+                  },
+                  "to": "preview",
+                  "as": "url"
+               }
+            ]
+         },
+         {
+            "kind": "textInput",
+            "value": {
+               "ref": "note"
+            },
+            "label": "Note",
+            "id": "noteInput"
+         },
+         {
+            "kind": "dialog",
+            "id": "details",
+            "title": "Details",
+            "children": [
+               {
+                  "kind": "button",
+                  "label": "Close",
+                  "onClick": [
+                     {
+                        "close": "self"
+                     }
+                  ]
+               }
+            ]
+         }
+      ]
+   }
+}
