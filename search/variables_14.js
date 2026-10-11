@@ -5,5 +5,6 @@ var searchData=
   ['units_2',['units',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#ab6146fd1cd896451a944aaa9d23a77d0',1,'morph::ui::FormatContext']]],
   ['usable_3',['usable',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html#a85168f31c148fdb1d05ca6df1b2a21e3',1,'morph::ui::FrontendOption']]],
   ['used_4',['used',['../d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html#a2d634a868b486e2fb5260a0ecd2cbdc4',1,'morph::ui::detail::CommandLineChoice']]],
-  ['utcoffsetminutes_5',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]]
+  ['users_5',['users',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab6df237aa0453d5d485378ca4bfa049b',1,'morph::ui::detail::CacheEntry']]],
+  ['utcoffsetminutes_6',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]]
 ];

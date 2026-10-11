@@ -14,5 +14,7 @@ var searchData=
   ['hiddencellkeepsitscolumn_11',['hiddenCellKeepsItsColumn',['../d8/d3e/backend__conformance_8hpp.html#a495fb9c0d997bfe2f36be0c76fd7a139',1,'morph::ui::testing::detail']]],
   ['hiddenchordrunsnothing_12',['hiddenChordRunsNothing',['../d8/d3e/backend__conformance_8hpp.html#a17d70b159529b91e31a4631dcac6cf20',1,'morph::ui::testing::detail']]],
   ['hmacsha256_13',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
-  ['hmacsha256raw_14',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]]
+  ['hmacsha256raw_14',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
+  ['holding_15',['holding',['../db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf',1,'morph::ui::detail']]],
+  ['hostcommand_16',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]]
 ];

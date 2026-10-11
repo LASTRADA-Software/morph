@@ -26,7 +26,8 @@ var searchData=
   ['tokenverifier_23',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html',1,'morph::session']]],
   ['tracesink_24',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]],
   ['trackingframe_25',['TrackingFrame',['../d4/d78/classmorph_1_1reactive_1_1detail_1_1TrackingFrame.html',1,'morph::reactive::detail']]],
-  ['type_26',['Type',['../df/d58/structmorph_1_1ui_1_1Type.html',1,'morph::ui']]],
-  ['type_27',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model']]],
-  ['typedforeach_28',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html',1,'morph::ui::detail']]]
+  ['transferstate_26',['TransferState',['../da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html',1,'morph::ui::detail']]],
+  ['type_27',['Type',['../df/d58/structmorph_1_1ui_1_1Type.html',1,'morph::ui']]],
+  ['type_28',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model']]],
+  ['typedforeach_29',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html',1,'morph::ui::detail']]]
 ];

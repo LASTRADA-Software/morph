@@ -7,5 +7,6 @@ var searchData=
   ['quantitydecodeerror_4',['QuantityDecodeError',['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#acace8089d2ec9c984a06fd8a6b0a2313',1,'morph::forms::QuantityDecodeError']]],
   ['query_5',['Query',['../da/d9b/classmorph_1_1reactive_1_1Query.html#a1a93b9215c0be3fa409f0f8feb70ef89',1,'morph::reactive::Query::Query(Runtime &amp;runtime, Fetch fetch, Key key, QueryOptions options={})'],['../da/d9b/classmorph_1_1reactive_1_1Query.html#a2f7acadde2c3f8a8787c13bede4305f0',1,'morph::reactive::Query::Query(Runtime &amp;runtime, bridge::BridgeHandler&lt; M, S &gt; &amp;handler, Key key, QueryOptions options={})']]],
   ['query_6',['query',['../da/d97/classmorph_1_1table_1_1PageWindow.html#a7d0cc95159cfabcec442805f9cb18e74',1,'morph::table::PageWindow']]],
-  ['quit_7',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
+  ['queryruntime_7',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a6730b678581e1071579ff5d97257e021',1,'morph::ui::detail::QueryRuntime']]],
+  ['quit_8',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
 ];

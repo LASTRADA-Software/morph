@@ -9,5 +9,6 @@ var searchData=
   ['listeners_6',['Listeners',['../d0/d5f/classmorph_1_1table_1_1detail_1_1Listeners.html',1,'morph::table::detail']]],
   ['loadoptions_7',['LoadOptions',['../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html',1,'morph::ui']]],
   ['localbackend_8',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
-  ['logentry_9',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]]
+  ['logentry_9',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
+  ['lowerctx_10',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]]
 ];

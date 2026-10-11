@@ -41,11 +41,13 @@ var searchData=
   ['updateifnecessary_38',['updateIfNecessary',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#ac0bd97bb3a86586c4f29775c9d8b1e7b',1,'morph::reactive::detail::Node']]],
   ['updaterow_39',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
   ['upload_40',['Upload',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99',1,'morph::ui']]],
-  ['usable_41',['usable',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html#a85168f31c148fdb1d05ca6df1b2a21e3',1,'morph::ui::FrontendOption']]],
-  ['used_42',['used',['../d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html#a2d634a868b486e2fb5260a0ecd2cbdc4',1,'morph::ui::detail::CommandLineChoice']]],
-  ['user_43',['User',['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075',1,'morph::ui']]],
-  ['usescomparator_44',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
-  ['utcoffsetminutes_45',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]],
-  ['utf8length_46',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]],
-  ['util_20—_20exact_20values_20units_20time_47',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
+  ['upload_41',['upload',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48',1,'morph::ui::InterpreterHost']]],
+  ['usable_42',['usable',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html#a85168f31c148fdb1d05ca6df1b2a21e3',1,'morph::ui::FrontendOption']]],
+  ['used_43',['used',['../d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html#a2d634a868b486e2fb5260a0ecd2cbdc4',1,'morph::ui::detail::CommandLineChoice']]],
+  ['user_44',['User',['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075',1,'morph::ui']]],
+  ['users_45',['users',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab6df237aa0453d5d485378ca4bfa049b',1,'morph::ui::detail::CacheEntry']]],
+  ['usescomparator_46',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
+  ['utcoffsetminutes_47',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]],
+  ['utf8length_48',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]],
+  ['util_20—_20exact_20values_20units_20time_49',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
 ];

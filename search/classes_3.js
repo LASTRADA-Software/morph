@@ -14,13 +14,14 @@ var searchData=
   ['dialogwidget_11',['DialogWidget',['../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html',1,'morph::ui']]],
   ['digitmatch_12',['DigitMatch',['../d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch.html',1,'morph::render::detail']]],
   ['disconnectederror_13',['DisconnectedError',['../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html',1,'morph::backend']]],
-  ['docnode_14',['DocNode',['../df/d0e/structmorph_1_1ui_1_1DocNode.html',1,'morph::ui']]],
-  ['document_15',['Document',['../d4/d02/structmorph_1_1ui_1_1Document.html',1,'morph::ui']]],
-  ['documentparser_16',['DocumentParser',['../dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser.html',1,'morph::ui::detail']]],
-  ['documentrefused_17',['DocumentRefused',['../de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html',1,'morph::ui::detail']]],
-  ['documentvalidator_18',['DocumentValidator',['../d5/d14/classmorph_1_1ui_1_1detail_1_1DocumentValidator.html',1,'morph::ui::detail']]],
-  ['drawer_19',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
-  ['drawerwidget_20',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
-  ['dropzone_21',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
-  ['dropzonewidget_22',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
+  ['dispatcher_14',['Dispatcher',['../d5/d80/classmorph_1_1ui_1_1Dispatcher.html',1,'morph::ui']]],
+  ['docnode_15',['DocNode',['../df/d0e/structmorph_1_1ui_1_1DocNode.html',1,'morph::ui']]],
+  ['document_16',['Document',['../d4/d02/structmorph_1_1ui_1_1Document.html',1,'morph::ui']]],
+  ['documentparser_17',['DocumentParser',['../dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser.html',1,'morph::ui::detail']]],
+  ['documentrefused_18',['DocumentRefused',['../de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html',1,'morph::ui::detail']]],
+  ['documentvalidator_19',['DocumentValidator',['../d5/d14/classmorph_1_1ui_1_1detail_1_1DocumentValidator.html',1,'morph::ui::detail']]],
+  ['drawer_20',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
+  ['drawerwidget_21',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
+  ['dropzone_22',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
+  ['dropzonewidget_23',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
 ];

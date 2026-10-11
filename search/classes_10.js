@@ -14,5 +14,6 @@ var searchData=
   ['querydecl_11',['QueryDecl',['../da/db7/structmorph_1_1ui_1_1QueryDecl.html',1,'morph::ui']]],
   ['querylimits_12',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
   ['queryoptions_13',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive']]],
-  ['queueitem_14',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['queryruntime_14',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
+  ['queueitem_15',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];
