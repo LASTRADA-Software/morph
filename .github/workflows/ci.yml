@@ -1510,6 +1510,58 @@ jobs:
           key: sccache-gcc-debug-${{ github.sha }}
 
   # ── Linux: application ladder testkit (path-filtered) ─────────────────
+  linux-qt-quick:
+    name: Linux / Qt Quick renderer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
+      - name: Install GCC 15, ninja and catch2
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 libgl1-mesa-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+
+      # morph::qt_quick needs Qt 6.5+ Quick, which Ubuntu 24.04's packages
+      # (6.4) do not provide.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      # Only the renderer and its suites: the examples and the core suites are
+      # other jobs' work.
+      - name: Configure (gcc-debug with MORPH_BUILD_QT_QUICK=ON)
+        run: |
+          cmake --preset gcc-debug \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_QT_QUICK=ON \
+            -DMORPH_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        run: cmake --build build/gcc-debug --target morph_qt_quick_tests morph_qt_quick_frontend_tests
+
+      # `-L qt_quick` selects only the renderer's cases, qmllint over the
+      # MorphUi components among them, and `--no-tests=error` turns "selected
+      # nothing" red.
+      - name: Test (offscreen, software scene graph)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build/gcc-debug -L qt_quick --no-tests=error --output-on-failure
+
   ladder-tests:
     name: Application ladder
     needs: probe-self-hosted
@@ -2463,6 +2515,7 @@ jobs:
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_QT_QUICK=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
@@ -3056,6 +3109,7 @@ jobs:
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_QT_QUICK=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DMORPH_BUILD_LOAD_TESTS=ON \
