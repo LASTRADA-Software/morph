@@ -80,10 +80,15 @@
 /// it, so no *value* can differ. What is not accepted is the two families in
 /// one entry -- see "Digit families do not mix" on `normalizeLocaleNumber`.
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include "../util/rational.hpp"
 
 namespace morph::render {
 
@@ -735,6 +740,61 @@ struct SignMatch {
         }
     }
     return out;
+}
+
+/// @brief Parses locale-formatted decimal entry text into the exact value it spells.
+///
+/// The one decimal parser morph ships: the forms engine and any application read entry text through it. The text
+/// goes through `normalizeLocaleNumber` first, so the locale's separators, signs and digits are accepted and its
+/// grouping is validated; the canonical text must then be `-?[0-9]+(\.[0-9]+)?` (no exponent, no bare separator,
+/// no surrounding space). The value must fit `math::Rational`: at most `math::kMaxDecimalPlaces` fraction digits, and
+/// the digits read as one integer within `int64_t`. Nothing is rounded: text finer than @p maxDecimalPlaces is
+/// refused, because dropping a digit a user typed changes the value they meant.
+/// @param text             The entry, e.g. `"1.050,25"`.
+/// @param loc              The locale facts the entry was typed in.
+/// @param maxDecimalPlaces The declared precision, when there is one. The result carries it as its precision tag
+///                         (clamped to `math::kMaxDecimalPlaces`); without one the tag is the number of fraction
+///                         digits typed.
+/// @return The exact value, or `std::nullopt` for malformed, over-precise or unrepresentable text.
+[[nodiscard]] inline std::optional<math::Rational> parseDecimal(
+    std::string_view text, NumericLocale const& loc, std::optional<std::uint32_t> maxDecimalPlaces = std::nullopt) {
+    std::optional<std::string> const canonical = normalizeLocaleNumber(text, loc);
+    if (!canonical.has_value()) {
+        return std::nullopt;
+    }
+    std::string_view rest{*canonical};
+    bool const negative = rest.starts_with('-');
+    if (negative) {
+        rest.remove_prefix(1);
+    }
+    auto const dot = rest.find('.');
+    std::string_view const whole = rest.substr(0, dot);
+    std::string_view const fraction = dot == std::string_view::npos ? std::string_view{} : rest.substr(dot + 1);
+    auto const allDigits = [](std::string_view part) {
+        return !part.empty() && std::ranges::all_of(part, [](char chr) { return chr >= '0' && chr <= '9'; });
+    };
+    if (!allDigits(whole) || (dot != std::string_view::npos && !allDigits(fraction))) {
+        return std::nullopt;
+    }
+    auto const places = static_cast<std::uint32_t>(fraction.size());
+    if (places > math::kMaxDecimalPlaces || (maxDecimalPlaces.has_value() && places > *maxDecimalPlaces)) {
+        return std::nullopt;
+    }
+    constexpr auto kLimit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    std::uint64_t magnitude = 0;
+    for (std::string_view const part : {whole, fraction}) {
+        for (char const chr : part) {
+            auto const digit = static_cast<std::uint64_t>(chr - '0');
+            if (magnitude > (kLimit - digit) / 10U) {
+                return std::nullopt;
+            }
+            magnitude = (magnitude * 10U) + digit;
+        }
+    }
+    auto const signedMagnitude = static_cast<std::int64_t>(magnitude);
+    std::uint32_t const tag = std::min(maxDecimalPlaces.value_or(places), math::kMaxDecimalPlaces);
+    return math::Rational{math::Numerator{negative ? -signedMagnitude : signedMagnitude},
+                          math::Denominator{math::detail::powerOfTen(places)}, math::DecimalPlaces{tag}};
 }
 
 }  // namespace morph::render
