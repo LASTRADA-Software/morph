@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+// The root of every MorphUi component: what every widget kind shares. The C++ widget writes these properties and
+// hears the user through `host`, its relay.
+Item {
+    id: root
+
+    // The relay user actions are reported through: `host.fire(event, payload)` and `host.ask(question, payload)`.
+    property var host: null
+    // Sizing per dimension: 0 content, 1 fixed (amount units), 2 stretch (amount is the weight).
+    property int widthKind: 0
+    property int widthAmount: 0
+    property int heightKind: 0
+    property int heightAmount: 0
+    property int columnSpan: 1
+    property string tooltip: ""
+    property string a11yName: ""
+    property int a11yRole: 0
+    property string surface: ""
+    // A drag key as text (`i:<int64>` or `s:<text>`); empty when the widget cannot be dragged.
+    property string dragKey: ""
+    property bool dropEnabled: false
+    property list<string> chords: []
+    // The item keyboard focus goes to.
+    property Item focusTarget: root
+
+    function fire(event: string, payload: var) {
+        if (root.host)
+            root.host.fire(event, payload)
+    }
+
+    function question(name: string, payload: var): bool {
+        return root.host ? root.host.ask(name, payload) : false
+    }
+
+    Layout.fillWidth: widthKind === 2
+    Layout.fillHeight: heightKind === 2
+    Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
+    Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
+    Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1
+    Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
+    Layout.columnSpan: columnSpan
+
+    Accessible.name: a11yName
+    Accessible.role: a11yRole
+
+    ToolTip.text: tooltip
+    ToolTip.visible: tooltip !== "" && hover.hovered
+    ToolTip.delay: 600
+
+    // A widget the user cannot see keeps no keyboard focus, so it takes no keys.
+    onVisibleChanged: {
+        if (!visible && root.focusTarget && root.focusTarget.activeFocus)
+            root.focusTarget.focus = false
+    }
+
+    Keys.onPressed: event => {
+        if (root.chords.length > 0 && root.question("chord", [event.key, event.modifiers]))
+            event.accepted = true
+    }
+
+    HoverHandler {
+        id: hover
+    }
+
+    DragHandler {
+        id: dragHandler
+        enabled: root.dragKey !== ""
+        target: dragProxy
+        onActiveChanged: {
+            if (!active) {
+                dragProxy.Drag.drop()
+                dragProxy.x = 0
+                dragProxy.y = 0
+            }
+        }
+    }
+
+    // What moves under the pointer while the widget is dragged, carrying the key; the widget itself stays in place.
+    component DragSource: Item {
+        property string dragKey: ""
+    }
+
+    function keyOf(source: var): string {
+        const dragged = source as DragSource
+        return dragged ? dragged.dragKey : ""
+    }
+
+    DragSource {
+        id: dragProxy
+        dragKey: root.dragKey
+        width: 1
+        height: 1
+        Drag.active: dragHandler.active
+        Drag.keys: ["morph-key"]
+        Drag.source: dragProxy
+    }
+
+    DropArea {
+        id: dropArea
+        anchors.fill: parent
+        enabled: root.dropEnabled
+        keys: ["morph-key"]
+        onEntered: drag => {
+            drag.accepted = root.question("accepts", root.keyOf(drag.source))
+        }
+        onDropped: drop => {
+            const key = root.keyOf(drop.source)
+            if (root.question("accepts", key)) {
+                drop.accept()
+                root.fire("drop", key)
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 100
+        visible: dropArea.containsDrag
+        color: "transparent"
+        border.color: Theme.info
+        border.width: 2
+    }
+}

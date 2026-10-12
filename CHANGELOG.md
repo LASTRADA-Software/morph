@@ -190,6 +190,23 @@ API surface).
   - Every body is bounded (64 KiB requests, 4 MiB files, 4096 files, 64 levels of JSON), and a
     must-understand (`!`) key is refused.
 
+- **`morph::qt_quick`: the Qt Quick renderer and frontend** (`MORPH_BUILD_QT_QUICK`, default off; needs
+  `MORPH_BUILD_QT` and Qt 6.5+ Quick). A compiled STATIC library with the private QML module `MorphUi`, one
+  component per node kind. See `docs/spec/qt_quick/`.
+  - `qt_quick::Backend` implements every `ui::IViewBackend` factory with Qt Quick items and passes every case of
+    `ui::testing::conformanceCases()` on the real engine, driven by mouse and key events sent to an offscreen
+    window. Keys cross into QML as text, so an id above 2^53 is exact; a list change is the mount's fewest moves,
+    each one stacking-order change that keeps the moved item.
+  - `qt_quick::Components`: bundle components verified by SHA-256 and compiled in a contained engine, host
+    components by version, and a restyle map checked against each kind's `MorphUi` API; a component that cannot be
+    loaded leaves the fallback and is reported once. `Backend::createCustom` loads one; the view tree does not yet
+    carry a `custom` node's props and events to it (#923).
+  - `qt_quick::Frontend` (`qt_quick::frontendOption`, named `"qt"`) runs an `AppSource` in a window through
+    `ui::runApp`; `FrontendConfig::mountShell` mounts the shell on the backend. `qt_quick::QtScheduler` is the
+    runtime's `Scheduler` on `QTimer`s.
+  - Every `MorphUi` component passes `qmllint` without a warning, checked by a ctest case. The WebAssembly build
+    comes separately.
+
 - **`morph::ui`: the UI document and `expr/1`.** Header-only, in the base `morph` target. A screen
   defined as JSON on the server loads into a C++ model and is checked before anything mounts it.
   - `ui::Value` and `ui::Type` (`value.hpp`): the document's typed values — exact `int`, `decimal`
@@ -235,6 +252,16 @@ API surface).
   - Model calls go through `ui::Dispatcher`; `ui::BridgeDispatcher` sends them over the bridge's
     model-free seams (`bindByType`, `executeRaw`, `attach`).
   - `form`, `collection`, `wizard` and a model-backed `table` are reported and not yet lowered.
+- **`morph::ui::author`: screens written in C++ on the server** (`author.hpp`). Typed builders write
+  the UI document: expression handles with operators (`a + b`, `a < b`, `a && b`, `!a`,
+  `x.orElse(y)`) and member-pointer field reads; queries, evaluations and mutations named by their
+  action type, whose bodies are `{&Action::member, handle}` pairs checked at compile time; every
+  node kind and command, the lifecycle keys, `refreshOn` through the model handle, `form` with its
+  `fields` overlay, `dataTable`, `custom` and host components, and customization points.
+  `ScreenRegistry` and `MORPH_REGISTER_SCREEN` emit a screen's JSON once and register it only when
+  `loadDocument`, with catalog facts taken from the builders' model and action types, and the
+  accessibility rules of spec 5 §11 (`checkAccessibility`) both accept it; a refusal names the
+  path and the rule. Goldens of builder output are under `tests/ui/golden/`.
 
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.

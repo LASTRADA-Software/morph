@@ -309,7 +309,7 @@ Tasks, one commit each: (B1) dispatch, session and query cache, scopes, lowering
 relations corpus; (B3) server-calculated values; (B4) several models; (B5) permissions; (B6) commands; (B7) spec,
 maps, changelog; (B8) gates — coverage, GCC 16, Doxygen, clang-format, mutations.
 
-## PR C: authoring (planned here, implemented later)
+## PR C: authoring
 
 **Files:** `include/morph/ui/author.hpp`; `tests/test_ui_author.cpp`; `tests/ui/golden/*.json`;
 `docs/spec/ui/author.md`.
@@ -320,5 +320,32 @@ maps, changelog; (B8) gates — coverage, GCC 16, Doxygen, clang-format, mutatio
   `dataTable`, `custom` and host components.
 - Registration emits the JSON once and runs `loadDocument` with the registry as its `Catalog`, then the
   accessibility rules of spec 5 §11, each refusing with its path.
-- Goldens: builder output against checked-in JSON, including spec 6 §11's reference screen once the lims example
-  carries it.
+- Goldens: builder output against checked-in JSON. Spec 6 §11's reference screen is deferred: the lims example
+  does not carry `lims.sample` or the model additions it needs, and building them is the example's work.
+
+**Refinements found while planning C against the code:**
+
+- **C1: namespace.** `morph::ui` already has `text`, `button`, `column` and the other view-tree builders of
+  `view.hpp`, so the authoring builders live in `morph::ui::author`. A screen's source writes
+  `namespace ui = morph::ui::author;` and reads as spec 5 §11 does.
+- **C2: bodies.** C++23 cannot synthesise a struct whose members are an action's members retyped as handles, so
+  `{.sampleId = id}` is not expressible. A body is a list of `{&Action::member, handle}` pairs. The member
+  pointer keeps both guarantees of spec 5 §11: a renamed field and a field of another action are compile errors,
+  and a handle whose value type cannot become the member's type is one too.
+- **C3: `refreshOn`.** No trait says which model an action belongs to, so a free `actions<A, B>()` cannot check
+  that the actions are of the query's model type. They are named through the model handle,
+  `sample.actions<A, B>()`, which requires the model to `execute` each one.
+- **C4: the catalog.** The core registry has no `stateless`, `calculatedFields`, `secretFields` or `credential`
+  facts. Registration answers `ui::Catalog` from the types the builders saw: `keyed` from
+  `model::KeyedModel<M>`, the model type of an action from the model handle it ran through, and the rest from two
+  traits an application specialises, `ModelFacts<M>` and `ActionFacts<A>`.
+- **C5: names.** `if_` and `return_` break the project's identifier rule, and `switch` is a keyword: the
+  expression `if` is `cond`, the command `if` is `ifThen`, `return` is `returnWith`, the `switch` node is
+  `switchOn`, and the `host` value is `hostValue` beside the `host` command.
+- **C6: the accessibility rules** run on the loaded `Document`, as `author::checkAccessibility`, so a hand-written
+  document can be checked the same way, and a label or name written as the literal `""` or `null` does not count.
+
+**Tasks (C):** (1) this section; (2) `author.hpp` with its tests and goldens; (3) `docs/spec/ui/author.md`, the
+maps, the changelog and the spec 5 and spec 6 corrections; (4) gates: the full `morph_tests`, a clang 22 coverage
+measurement, a GCC 16 syntax check, the docs build, clang-format, and two mutations (one accessibility rule
+disabled, one builder's output changed), each confirmed to fail a test before it is reverted.

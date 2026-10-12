@@ -88,6 +88,11 @@ if("forms_qml" IN_LIST morph_KNOWN_COMPONENTS)
     set_and_check(morph_QML_IMPORT_PATH "@PACKAGE_MORPH_INSTALL_QMLDIR@")
 endif()
 
+# morph::qt_quick links Qt Quick and its Controls, and morph::qt for QtExecutor.
+if("qt_quick" IN_LIST morph_KNOWN_COMPONENTS)
+    find_dependency(Qt6 6.5 COMPONENTS Core Gui Qml Quick QuickControls2)
+endif()
+
 if(_morph_added_prefix)
     list(REMOVE_ITEM CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
 endif()

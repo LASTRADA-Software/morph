@@ -139,6 +139,8 @@ interaction a controller declares instead of sequencing
 load-time validation, and the `expr/1` language its properties are written in ·
 [`ui/interpreter.md`](ui/interpreter.md) — how a loaded document mounts: its scopes, queries and the
 session's cache, mutations, relations and commands ·
+[`ui/author.md`](ui/author.md) — the server-side builders that write it, and the
+registration that validates it once, with the accessibility rules ·
 [`ui/service.md`](ui/service.md) — the UI service: `ui-hello`, `ui-catalog` and `ui-fetch`, the catalog
 filtered for the principal, and content-addressed bundles verified into the client's cache ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
@@ -147,6 +149,12 @@ filtered for the principal, and content-addressed bundles verified into the clie
 [`tui/frontend.md`](tui/frontend.md) — the view tree a screen mounts into,
 the widgets every renderer implements, the seam that picks a renderer at
 runtime, and the terminal renderer
+
+**Qt Quick renderer**
+[`qt_quick/backend.md`](qt_quick/backend.md) ·
+[`qt_quick/frontend.md`](qt_quick/frontend.md) — the view tree's widgets as
+Qt Quick items, the application's own components and restyling, and the
+window a client runs in
 
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·

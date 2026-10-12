@@ -155,7 +155,7 @@ inline void reorderChildren(ContainerWidget& container, std::vector<Widget*>& cu
 ///        after.
 struct Pages {
     /// @brief Each page's slot; null until the tab is first selected.
-    std::vector<SlotWidget*> slots;
+    std::vector<SlotWidget*> pageSlots;
     /// @brief The page shown now, if any; may be past the last page, and then none is shown.
     std::optional<std::size_t> shown;
     /// @brief The tab the bar highlights, as far as the mount knows: the last one it set, or the user's pick since.
@@ -691,7 +691,7 @@ private:
         widget.setTabs(labels);
         auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
-        pages.slots.resize(spec.tabs.size(), nullptr);
+        pages.pageSlots.resize(spec.tabs.size(), nullptr);
         // A bound index is controlled: after a pick, the bar highlights the page that is shown, so a pick the
         // document refuses moves the highlight back. A constant index is not a slot, and the bar keeps the pick.
         std::function<void(std::size_t const&)> reassert;
@@ -721,7 +721,7 @@ private:
     void showPage(TabsWidget& widget, reactive::Scope& pageScope, Pages& pages, std::vector<Tab> const& pageSpecs,
                   std::size_t index) {
         bool const exists = index < pageSpecs.size();
-        bool const isNew = exists && pages.slots.at(index) == nullptr;
+        bool const isNew = exists && pages.pageSlots.at(index) == nullptr;
         if (isNew) {
             try {
                 mountPage(widget, pageScope, pages, pageSpecs.at(index).node, index);
@@ -733,13 +733,13 @@ private:
             }
         }
         if (pages.shown != index) {
-            if (pages.shown.has_value() && *pages.shown < pages.slots.size()) {
-                if (SlotWidget* const previous = pages.slots.at(*pages.shown); previous != nullptr) {
+            if (pages.shown.has_value() && *pages.shown < pages.pageSlots.size()) {
+                if (SlotWidget* const previous = pages.pageSlots.at(*pages.shown); previous != nullptr) {
                     previous->setVisible(false);
                 }
             }
             if (exists && !isNew) {
-                pages.slots.at(index)->setVisible(true);
+                pages.pageSlots.at(index)->setVisible(true);
             }
         }
         pages.shown = index;
@@ -787,7 +787,7 @@ private:
             return std::pair{std::move(built), &slot};
         });
         pageScope.adopt(std::move(page.first));
-        pages.slots.at(index) = page.second;
+        pages.pageSlots.at(index) = page.second;
     }
 
     // The content is built before the overlay opens and torn down before it closes. Content that fails to mount

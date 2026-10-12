@@ -60,7 +60,7 @@ This is spec 1 of a program delivered as a series of pull requests (§1, "The pr
 | 0 | `2026-10-04-core-cpp-mouse-design.md` | Standard VT mouse tracking and pointer capture, released as core-cpp 0.7.0; morph's pin moves to 0.7 |
 | 1 | `2026-10-04-declarative-ui-tui-design.md` (this) | `morph::reactive`, `morph::ui` with the frontend seam, `IoLoopDriver::Caller`, `morph::tui` |
 | 2 | `2026-10-04-forms-engine-design.md` | The C++ forms engine: schema forms, collections, wizards and the app shell as document nodes |
-| 3 | `2026-10-04-qtquick-frontend-design.md` | `morph::qt_quick`: the QML generator and renderer, native and WebAssembly |
+| 3 | `2026-10-04-qtquick-frontend-design.md` | `morph::qt_quick`: the Qt Quick renderer and frontend, native and WebAssembly |
 | 4 | `2026-10-04-examples-migration-design.md` | Every example's screens defined on its server, rendered by the generic client |
 | 5 | `2026-10-07-ui-document-design.md` | The UI document: structure, expressions, control, relations, server-calculated values, components, delivery |
 | 6 | `2026-10-08-app-hosting-design.md` | Hosting an application: screen lifecycle, the host contract, the app root scope and session, the design package, the workspace shell, application-scope preferences, offline as a backend switch |

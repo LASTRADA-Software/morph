@@ -1,0 +1,932 @@
+{
+   "vocab": "ui/1",
+   "id": "lims.palette",
+   "models": {
+      "sample": {
+         "type": "Lims_SampleModel",
+         "instance": "private"
+      }
+   },
+   "state": {
+      "choice": {
+         "type": "string"
+      },
+      "checked": {
+         "type": "bool",
+         "init": true
+      }
+   },
+   "queries": {
+      "header": {
+         "model": "sample",
+         "action": "Lims_GetHeader"
+      },
+      "results": {
+         "model": "sample",
+         "action": "Lims_ListResults"
+      }
+   },
+   "mutations": {
+      "pick": {
+         "model": "sample",
+         "action": "Lims_LoadSample"
+      }
+   },
+   "customize": {
+      "density": {
+         "kind": "choice",
+         "options": [
+            "comfortable",
+            "compact"
+         ]
+      }
+   },
+   "view": {
+      "kind": "column",
+      "children": [
+         {
+            "kind": "column",
+            "children": [
+               {
+                  "kind": "text",
+                  "text": "Plain",
+                  "role": "heading",
+                  "stale": {
+                     "pending": "header"
+                  }
+               },
+               {
+                  "kind": "textInput",
+                  "value": {
+                     "ref": "choice"
+                  },
+                  "label": "Choice",
+                  "placeholder": "Type",
+                  "mode": "multiline",
+                  "commitOn": "enter",
+                  "onChange": [
+                     {
+                        "set": "choice",
+                        "value": {
+                           "ref": "event"
+                        }
+                     }
+                  ],
+                  "onCommit": [
+                     {
+                        "set": "checked",
+                        "value": false
+                     }
+                  ],
+                  "onSubmit": [
+                     {
+                        "open": "confirm"
+                     }
+                  ],
+                  "readonly": false,
+                  "required": true,
+                  "errors": {
+                     "list": []
+                  },
+                  "stale": false
+               },
+               {
+                  "kind": "textInput",
+                  "value": {
+                     "ref": "choice"
+                  },
+                  "label": "Blur",
+                  "commitOn": "blur"
+               },
+               {
+                  "kind": "textInput",
+                  "label": "Change",
+                  "commitOn": "change"
+               },
+               {
+                  "kind": "checkbox",
+                  "label": "Checked",
+                  "checked": {
+                     "ref": "checked"
+                  },
+                  "onToggle": [
+                     {
+                        "set": "checked",
+                        "value": {
+                           "ref": "event"
+                        }
+                     }
+                  ],
+                  "onChange": [
+                     {
+                        "set": "checked",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "kind": "select",
+                  "options": {
+                     "list": [
+                        {
+                           "obj": {
+                              "key": "a",
+                              "label": "A"
+                           }
+                        }
+                     ]
+                  },
+                  "selected": {
+                     "ref": "choice"
+                  },
+                  "label": "Pick",
+                  "style": "radio",
+                  "onStale": "clear",
+                  "onChoose": [
+                     {
+                        "set": "choice",
+                        "value": {
+                           "ref": "event"
+                        }
+                     }
+                  ],
+                  "onChange": [
+                     {
+                        "set": "choice",
+                        "value": "x"
+                     }
+                  ]
+               },
+               {
+                  "kind": "select",
+                  "label": "Keep",
+                  "onStale": "keep"
+               },
+               {
+                  "kind": "dateTimeInput",
+                  "value": {
+                     "ref": "choice"
+                  },
+                  "label": "When",
+                  "onCommit": [
+                     {
+                        "set": "choice",
+                        "value": ""
+                     }
+                  ]
+               },
+               {
+                  "kind": "slider",
+                  "value": 1,
+                  "label": "Level",
+                  "min": 0,
+                  "max": 10,
+                  "step": 1,
+                  "onChange": [
+                     {
+                        "set": "checked",
+                        "value": true
+                     }
+                  ],
+                  "onCommit": [
+                     {
+                        "set": "checked",
+                        "value": false
+                     }
+                  ]
+               },
+               {
+                  "kind": "filePicker",
+                  "label": "File",
+                  "accept": ".csv",
+                  "multiple": false,
+                  "mode": "open",
+                  "onPick": [
+                     {
+                        "set": "choice",
+                        "value": "picked"
+                     }
+                  ]
+               }
+            ],
+            "gap": 8
+         },
+         {
+            "kind": "row",
+            "children": [
+               {
+                  "kind": "grid",
+                  "children": [
+                     {
+                        "kind": "spacer",
+                        "span": 2
+                     }
+                  ],
+                  "gap": 4,
+                  "columns": 3
+               },
+               {
+                  "kind": "panel",
+                  "title": "Panel",
+                  "padding": 8,
+                  "collapsible": true,
+                  "collapsed": false,
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "In a panel"
+                     }
+                  ]
+               },
+               {
+                  "kind": "scroll",
+                  "axis": "vertical",
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "Scrolled"
+                     }
+                  ]
+               },
+               {
+                  "kind": "scroll",
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               },
+               {
+                  "kind": "switch",
+                  "on": {
+                     "ref": "choice"
+                  },
+                  "cases": [
+                     {
+                        "when": "a",
+                        "children": [
+                           {
+                              "kind": "text",
+                              "text": "A"
+                           }
+                        ]
+                     },
+                     {
+                        "when": "b",
+                        "scope": {
+                           "state": {
+                              "local": {
+                                 "type": "int",
+                                 "init": 1
+                              }
+                           }
+                        },
+                        "children": [
+                           {
+                              "kind": "text",
+                              "text": {
+                                 "fn": "format",
+                                 "args": [
+                                    "{0}",
+                                    {
+                                       "ref": "local"
+                                    }
+                                 ]
+                              }
+                           }
+                        ]
+                     }
+                  ],
+                  "default": [
+                     {
+                        "kind": "text",
+                        "text": "Neither"
+                     }
+                  ]
+               },
+               {
+                  "kind": "switch",
+                  "on": {
+                     "ref": "choice"
+                  },
+                  "cases": [
+                     {
+                        "when": "c"
+                     }
+                  ]
+               },
+               {
+                  "kind": "tabs",
+                  "tabs": [
+                     {
+                        "label": "One",
+                        "children": [
+                           {
+                              "kind": "text",
+                              "text": "First"
+                           }
+                        ]
+                     },
+                     {
+                        "label": "Two",
+                        "children": [
+                           {
+                              "kind": "text",
+                              "text": "Second"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "kind": "splitter",
+                  "orientation": "horizontal",
+                  "sizes": {
+                     "list": [
+                        1,
+                        2
+                     ]
+                  },
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     },
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               },
+               {
+                  "kind": "splitter",
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               }
+            ],
+            "gap": 4
+         },
+         {
+            "kind": "menu",
+            "items": [
+               {
+                  "label": "File",
+                  "items": [
+                     {
+                        "label": "New",
+                        "icon": "plus",
+                        "keys": "Ctrl+N",
+                        "onClick": [
+                           {
+                              "open": "side"
+                           }
+                        ]
+                     },
+                     {
+                        "label": "Wrap",
+                        "checked": {
+                           "ref": "checked"
+                        },
+                        "enabled": true
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "column",
+            "children": [
+               {
+                  "kind": "dialog",
+                  "id": "confirm",
+                  "title": "Confirm",
+                  "open": false,
+                  "showErrors": "submit",
+                  "scope": {
+                     "state": {
+                        "reason": {
+                           "type": "string"
+                        }
+                     }
+                  },
+                  "children": [
+                     {
+                        "kind": "textInput",
+                        "value": {
+                           "ref": "reason"
+                        },
+                        "label": "Reason"
+                     }
+                  ],
+                  "default": [
+                     {
+                        "close": "self"
+                     }
+                  ],
+                  "cancel": [
+                     {
+                        "close": "confirm"
+                     }
+                  ],
+                  "onDismiss": [
+                     {
+                        "set": "checked",
+                        "value": false
+                     }
+                  ]
+               },
+               {
+                  "kind": "dialog",
+                  "id": "plain",
+                  "title": "Plain",
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "Plain dialog"
+                     }
+                  ]
+               },
+               {
+                  "kind": "drawer",
+                  "id": "side",
+                  "side": "end",
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "Side"
+                     }
+                  ],
+                  "a11y": {
+                     "name": "Side panel"
+                  }
+               },
+               {
+                  "kind": "busy",
+                  "active": {
+                     "pending": "header"
+                  },
+                  "label": "Loading"
+               },
+               {
+                  "kind": "busy",
+                  "active": false
+               }
+            ]
+         },
+         {
+            "kind": "column",
+            "children": [
+               {
+                  "kind": "forEach",
+                  "rows": {
+                     "ref": "results"
+                  },
+                  "key": {
+                     "row": "id"
+                  },
+                  "axis": "vertical",
+                  "gap": 2,
+                  "scope": {
+                     "models": {
+                        "rowSample": {
+                           "type": "Lims_SampleModel",
+                           "instance": {
+                              "row": "id"
+                           }
+                        }
+                     },
+                     "queries": {
+                        "rowHeader": {
+                           "model": "rowSample",
+                           "action": "Lims_GetHeader"
+                        }
+                     }
+                  },
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": {
+                           "ref": "rowHeader.sampleNumber"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "kind": "table",
+                  "rows": {
+                     "ref": "results"
+                  },
+                  "key": {
+                     "row": "id"
+                  },
+                  "columns": [
+                     {
+                        "id": "id",
+                        "label": "Id",
+                        "width": 80,
+                        "cell": [
+                           {
+                              "kind": "text",
+                              "text": {
+                                 "row": "id"
+                              }
+                           }
+                        ]
+                     },
+                     {
+                        "id": "flag"
+                     }
+                  ],
+                  "selectionMode": "multiple",
+                  "sort": {
+                     "list": []
+                  },
+                  "filters": {
+                     "list": []
+                  },
+                  "rowTone": "neutral",
+                  "highlightKey": {
+                     "ref": "choice"
+                  },
+                  "onActivate": [
+                     {
+                        "set": "choice",
+                        "value": {
+                           "row": "id"
+                        }
+                     }
+                  ],
+                  "a11y": {
+                     "name": "Results"
+                  }
+               },
+               {
+                  "kind": "table",
+                  "model": "sample",
+                  "action": "Lims_ListProjects",
+                  "body": {
+                     "obj": {
+                        "page": 0
+                     }
+                  },
+                  "mode": "server",
+                  "selectionMode": "single",
+                  "onActivate": [
+                     {
+                        "run": "pick",
+                        "body": {
+                           "obj": {
+                              "id": {
+                                 "row": "id"
+                              }
+                           }
+                        }
+                     }
+                  ],
+                  "a11y": {
+                     "name": "Projects"
+                  }
+               },
+               {
+                  "kind": "table",
+                  "model": "sample",
+                  "action": "Lims_ListProjects",
+                  "mode": "client",
+                  "selectionMode": "none",
+                  "a11y": {
+                     "name": "All projects"
+                  }
+               }
+            ]
+         },
+         {
+            "kind": "column",
+            "children": [
+               {
+                  "kind": "banner",
+                  "tone": "warning",
+                  "text": "Careful",
+                  "dismissible": true,
+                  "action": {
+                     "label": "Undo",
+                     "onClick": [
+                        {
+                           "set": "checked",
+                           "value": false
+                        }
+                     ]
+                  },
+                  "onDismiss": [
+                     {
+                        "set": "checked",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "kind": "banner",
+                  "text": "Bare",
+                  "action": {}
+               },
+               {
+                  "kind": "badge",
+                  "tone": "info",
+                  "text": "New",
+                  "icon": "star"
+               },
+               {
+                  "kind": "badge",
+                  "text": "Plain"
+               },
+               {
+                  "kind": "progress",
+                  "value": null,
+                  "label": "Working"
+               },
+               {
+                  "kind": "progress",
+                  "value": 1
+               },
+               {
+                  "kind": "steps",
+                  "items": {
+                     "list": []
+                  },
+                  "current": 0
+               },
+               {
+                  "kind": "steps",
+                  "items": {
+                     "list": []
+                  }
+               },
+               {
+                  "kind": "keyValue",
+                  "items": {
+                     "list": []
+                  }
+               },
+               {
+                  "kind": "emptyState",
+                  "title": "Nothing",
+                  "text": "No rows",
+                  "icon": "empty",
+                  "action": {
+                     "label": "Add",
+                     "onClick": [
+                        {
+                           "set": "checked",
+                           "value": true
+                        }
+                     ]
+                  }
+               },
+               {
+                  "kind": "emptyState",
+                  "title": "Bare"
+               },
+               {
+                  "kind": "collapsible",
+                  "title": "More",
+                  "open": {
+                     "ref": "checked"
+                  },
+                  "header": [
+                     {
+                        "kind": "badge",
+                        "text": "3"
+                     }
+                  ],
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "Inside"
+                     }
+                  ],
+                  "onToggle": [
+                     {
+                        "set": "checked",
+                        "value": {
+                           "ref": "event"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "kind": "collapsible",
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               },
+               {
+                  "kind": "dropZone",
+                  "accept": ".csv",
+                  "multiple": true,
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": "Drop here"
+                     }
+                  ],
+                  "onDrop": [
+                     {
+                        "set": "choice",
+                        "value": "dropped"
+                     }
+                  ]
+               },
+               {
+                  "kind": "dropZone",
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               },
+               {
+                  "kind": "customize",
+                  "point": "density"
+               },
+               {
+                  "kind": "boundary",
+                  "loading": [
+                     {
+                        "kind": "text",
+                        "text": "Loading"
+                     }
+                  ],
+                  "error": [
+                     {
+                        "kind": "text",
+                        "text": {
+                           "ref": "boundary.error"
+                        }
+                     },
+                     {
+                        "kind": "button",
+                        "label": "Retry",
+                        "onClick": [
+                           {
+                              "retry": true
+                           }
+                        ]
+                     }
+                  ],
+                  "children": [
+                     {
+                        "kind": "text",
+                        "text": {
+                           "ref": "header.sampleNumber"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "kind": "boundary",
+                  "children": [
+                     {
+                        "kind": "spacer"
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "kind": "column",
+            "children": [
+               {
+                  "kind": "form",
+                  "model": "sample",
+                  "action": "Lims_HeaderSection",
+                  "prefill": {
+                     "ref": "header"
+                  },
+                  "submit": "explicit",
+                  "showErrors": "always",
+                  "fields": {
+                     "sampleNumber": {
+                        "hidden": false,
+                        "label": {
+                           "t": "lims.number",
+                           "fallback": "Number"
+                        },
+                        "widget": "text"
+                     },
+                     "project": {
+                        "omit": false,
+                        "unit": "mg",
+                        "decimals": 2,
+                        "blankAs": null
+                     }
+                  },
+                  "onSubmit": [
+                     {
+                        "set": "checked",
+                        "value": true
+                     }
+                  ],
+                  "onSuccess": [
+                     {
+                        "set": "checked",
+                        "value": false
+                     }
+                  ],
+                  "onError": [
+                     {
+                        "notify": "Failed",
+                        "role": "warning"
+                     }
+                  ],
+                  "id": "headerForm"
+               },
+               {
+                  "kind": "form",
+                  "model": "sample",
+                  "action": "Lims_HeaderSection"
+               },
+               {
+                  "kind": "collection",
+                  "model": "sample",
+                  "action": "Lims_ListProjects"
+               },
+               {
+                  "kind": "wizard",
+                  "model": "sample",
+                  "action": "Lims_HeaderSection"
+               }
+            ]
+         },
+         {
+            "kind": "button",
+            "label": "Common",
+            "icon": "gear",
+            "onActivate": [
+               {
+                  "focus": "common"
+               }
+            ],
+            "id": "common",
+            "visible": {
+               "ref": "checked"
+            },
+            "enabled": {
+               "fn": "not",
+               "args": [
+                  {
+                     "ref": "checked"
+                  }
+               ]
+            },
+            "tooltip": "Tip",
+            "sizing": "content",
+            "autofocus": true,
+            "testId": "common-button",
+            "surface": "accent",
+            "a11y": {
+               "name": "Common",
+               "role": "button"
+            },
+            "drag": {
+               "payload": {
+                  "ref": "choice"
+               }
+            },
+            "drop": {
+               "onDrop": [
+                  {
+                     "set": "choice",
+                     "value": "any"
+                  }
+               ]
+            },
+            "keys": {
+               "Ctrl+Shift+C": [
+                  {
+                     "set": "checked",
+                     "value": true
+                  }
+               ],
+               "Alt+X": [
+                  {
+                     "set": "checked",
+                     "value": false
+                  }
+               ]
+            }
+         },
+         {
+            "kind": "button",
+            "icon": "x",
+            "a11y": {
+               "name": {
+                  "t": "lims.close",
+                  "fallback": "Close"
+               }
+            }
+         }
+      ]
+   }
+}

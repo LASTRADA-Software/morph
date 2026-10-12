@@ -5,8 +5,9 @@ Design spec for `morph::ui`'s view tree (`include/morph/ui/view.hpp`) and its mo
 constants or slots — reactive values with a stable id — and `Mounted` turns that description into
 retained widgets on any backend and keeps them current. The document interpreter builds the tree from
 a UI document, one node per document node; C++ code that uses the reactive core directly (the forms
-engine, tests, local tools) builds it with the same builders. A renderer that generates code instead
-of driving widgets (Qt Quick) reads the same tree and the same slots, and does not use `Mounted`.
+engine, tests, local tools) builds it with the same builders. Every renderer — the terminal and Qt Quick
+ones included — drives widgets through `Mounted`; a slot's id is there for a renderer that generates
+code, which names the value it reads after it.
 
 Read this before writing a view, and before changing what the mount does with a node. The widgets
 the mount drives are [`backend_contract.md`](backend_contract.md); the frontend around a mount is
