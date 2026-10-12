@@ -193,6 +193,14 @@ API surface).
   `ui-evaluate` with it, authorised as the action itself.
   `ui::evaluatorOver` sends one from the client, and `BridgeDispatcher` takes it
   for a document's `evaluate` queries.
+- **The host contract (spec 6 §3, §4, §20).** `ui/host.hpp`: `ScreenHandle`
+  (`title`, `dirty`, `identity`, `requestClose`, `forceClose`) and `ScreenHost`
+  (`mount`, `identityOf`, `onNavigate`). `DocumentScreenHost`, the framework's
+  host over documents, closes a screen by the spec's protocol: it waits for
+  `onClose`'s work, posts `done` once, joins a second request, and puts a dirty
+  screen without `onClose` to the host's `CloseGuard`. `ui/route.hpp`:
+  `routeOf` and `parseRoute`, the string form of a screen instance.
+  `Screen::pending()` and `Screen::beginClose()` are what the protocol reads.
 
 - **The UI service: `ui-hello`, `ui-catalog`, `ui-fetch` and content-addressed bundles.** Header-only, in the
   base `morph` target (`ui/bundle.hpp`, `ui/service.hpp`, `ui/service_client.hpp`). `hello` and
