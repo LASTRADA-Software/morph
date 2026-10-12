@@ -458,13 +458,23 @@ public:
     bool updateIfNecessary() {
         bool destroyed = false;
         bool* const enclosing = std::exchange(_destroyedWatch, &destroyed);
+        // Once the pull has destroyed this node, `this` is gone: not even a member call may follow.
+        auto const finish = [&] {
+            if (destroyed) {
+                if (enclosing != nullptr) {
+                    *enclosing = true;
+                }
+                return;
+            }
+            endPull(enclosing);
+        };
         try {
             pull(destroyed);
         } catch (...) {
-            endPull(destroyed, enclosing);
+            finish();
             throw;
         }
-        endPull(destroyed, enclosing);
+        finish();
         return !destroyed;
     }
 #if defined(__GNUC__) && !defined(__clang__)
@@ -617,13 +627,7 @@ private:
         }
     }
 
-    void endPull(bool destroyed, bool* enclosing) noexcept {
-        if (destroyed) {
-            if (enclosing != nullptr) {
-                *enclosing = true;
-            }
-            return;
-        }
+    void endPull(bool* enclosing) noexcept {
         _destroyedWatch = enclosing;
         _colour = Colour::Clean;
         _staleAboveClean = false;
