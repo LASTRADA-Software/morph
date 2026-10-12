@@ -4321,7 +4321,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         }
         if (Commands const* const commands = node.event("cancel")) {
             keys.push_back(KeyBinding{
-                .chord = "Escape", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
+                .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
         }
         return holding(std::move(children), inner, std::move(keys));
     });
