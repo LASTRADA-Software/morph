@@ -188,20 +188,11 @@
 
 #include "../util/quantity.hpp"
 #include "../util/rational.hpp"
+#include "blank_as.hpp"
 #include "choice.hpp"
 #include "layout.hpp"
 
 namespace morph::forms {
-
-/// @brief What a renderer submits for a string field the user left blank
-///        (`FieldMeta::blankAs`).
-enum class BlankAs : std::uint8_t {
-    /// Blank is "no value": the member is left out of the payload (the default).
-    Omit,
-    /// Blank, once the field was prefilled or edited, is an explicit `""`;
-    /// emitted as `"x-blankAs": "empty"`.
-    Empty,
-};
 
 /// @brief Per-field presentation overrides and scalar bounds: label, help,
 ///        placeholder, read-only, hidden, `minimum`/`maximum`/`multipleOf`,
