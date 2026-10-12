@@ -701,9 +701,9 @@ MORPH_REGISTER_SCREEN(screen);
 
   | Kind | Carries | Authorisation |
   |---|---|---|
-  | `ui-hello` | Request: the vocabularies the client speaks (`ui/1`, `expr/1`, `forms/1`, `ui-theme/1`, `files/1`), its Qt version, whether it loads custom components, its host components, host commands and host values with versions. Reply: the application's id and version, the vocabularies it accepts, the manifest digest | An authoriser call for the pseudo-action `ui/hello`, so an application that serves a login screen before sign-in allows it for an empty principal |
-  | `ui-catalog` | The catalog and app shell for the principal | The principal's session |
-  | `ui-fetch` | A document, component or theme by hash | The session, except for entries the catalog marks `public` (a login screen) |
+  | `ui-hello` | Request: the vocabularies the client speaks (`ui/1`, `expr/1`, `forms/1`, `ui-theme/1`, `files/1`), its Qt version, whether it loads custom components, its host components, host commands and host values with versions. Reply: the application's id and version, the vocabularies it accepts, the manifest digest | An authoriser call for the pseudo-action `ui/hello` (`authorize(session, "ui", "hello")`), so an application that serves a login screen before sign-in allows it for an empty principal |
+  | `ui-catalog` | The catalog for the principal: its entries, its permitted action ids, and the load-time facts (`ui::Catalog`) of the documents it may fetch | The principal's session: `authorize(session, "ui", "catalog")` |
+  | `ui-fetch` | The manifest, a document, component, theme or message catalogue, by hash | `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted); the manifest and the files the manifest marks `public` (a login screen) under the `ui-hello` gate |
   | `ui-evaluate` | An `evaluate` request (§7) | As the action it evaluates |
   | `ui-file` | The file side channel (`files/1`) | As the mutation that references the file |
 
@@ -714,14 +714,16 @@ MORPH_REGISTER_SCREEN(screen);
   service answers `unknown envelope kind: ui-hello`, which a client reads as "no UI service", the way
   it reads the same reply to `hello` as a peer that predates the handshake. The kinds are added to
   the wire document's kind table, with their authorisation rules, as part of the change.
-- **Catalog.** A `ui-catalog` request returns the application's screens and its app shell, filtered
-  for the signed-in principal (§12b). A screen document is fetched by id. Each entry carries `id`,
+- **Catalog.** A `ui-catalog` request returns the application's screens, filtered for the signed-in
+  principal (§12b). The app shell is the app document, one file for every user like every document;
+  the client's menu omits what the catalog omits. A screen document is fetched by id. Each entry carries `id`,
   `title`, `module`, `group`, `icon`, `singleton`, `available`, `reason` and `whenDenied` (`hide` or
   `disable`), `public`, `host` and `reuseEmpty`, so a navigator can list what an application has not built, disabled with its reason
   (spec 6 §8). The bundle may also carry an **app document** and a **theme** (spec 6 §5–6).
 - **Content addressing.** The bundle's manifest lists every document, component, theme and message catalogue by SHA-256. The
-  client verifies each file against the manifest, and the manifest against the digest from the
-  `ui-hello` reply, before using it. The digest is only as trustworthy as the channel that carried it. Verified files are cached by hash; an unchanged manifest fetches
+  client fetches the manifest by the digest from the `ui-hello` reply, verifies it against the digest
+  and each file against the manifest, before using either. A file travels as its exact bytes, so the
+  client hashes what arrived. The digest is only as trustworthy as the channel that carried it. Verified files are cached by hash; an unchanged manifest fetches
   nothing, and a client without a connection starts from its last verified bundle.
 - **Versions.** Within a vocabulary version, changes are additive: a client ignores an optional key it
   does not know, unless the key's name begins with `!` (`"!requires"`), which marks it

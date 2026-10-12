@@ -139,6 +139,8 @@ interaction a controller declares instead of sequencing
 load-time validation, and the `expr/1` language its properties are written in ·
 [`ui/interpreter.md`](ui/interpreter.md) — how a loaded document mounts: its scopes, queries and the
 session's cache, mutations, relations and commands ·
+[`ui/service.md`](ui/service.md) — the UI service: `ui-hello`, `ui-catalog` and `ui-fetch`, the catalog
+filtered for the principal, and content-addressed bundles verified into the client's cache ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·

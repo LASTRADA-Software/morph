@@ -63,7 +63,9 @@ Every call is made on the context's owner, and every callback is called there.
 
 - `ui::Bundle` carries the application's id, the manifest's SHA-256 digest, and every document — the screens, the
   app shell, and the app document (`app`) when there is one — by id, as verified JSON text. The document model and
-  the interpreter read it; the seam only carries it from the source to the shell.
+  the interpreter read it; the seam only carries it from the source to the shell. A remote source gets it from
+  `ui::UiClient` ([`service.md`](service.md#the-client)), which fills `manifestDigest` with the digest's 64
+  hexadecimal digits.
 - `ui::ConnectError{kind, message}`: `Unreachable`, `NoUiService` (the peer answers `unknown envelope kind:
   ui-hello`), `Unsupported` (a vocabulary the client does not speak, named in the message), `Unverified` (a digest
   mismatch), `Refused` (a sign-in, a licence or an authoriser refused). The frontend shows it before any screen

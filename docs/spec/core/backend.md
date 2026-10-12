@@ -41,6 +41,7 @@ and react to backend changes.
   - [Per-model execute ordering](#per-model-execute-ordering)
 - [Server-side observability](#server-side-observability)
 - [Serving action schemas](#serving-action-schemas)
+- [Envelope services](#envelope-services)
 - [`PayloadCompleteness` — enforcing the action-evolution policy](#payloadcompleteness--enforcing-the-action-evolution-policy)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
@@ -836,6 +837,34 @@ refuse *describing* a type without refusing *using* it.
 accessor, built on the same synchronous `handleInline` path as
 `registerModel`/`negotiateProtocolVersion` and opt-in in the same sense. See
 [wire.md, "Serving action schemas"](wire.md#serving-action-schemas).
+
+### Envelope services
+
+`ServerConfig::services` lists `IEnvelopeService` extensions: envelope kinds a
+layer above core adds without core including it. The UI service
+(`ui::UiService`, [ui/service.md](../ui/service.md)) is the one the library
+ships; it answers `ui-hello`, `ui-catalog` and `ui-fetch`.
+
+- **Built-in kinds first.** `dispatchEnvelope` answers every kind it knows
+  itself, and only then asks the services, in order, whether one `serves` the
+  kind. A service therefore cannot take over `execute`, `hello` or any other
+  built-in kind, and a kind nobody serves is still answered
+  `err "unknown envelope kind: <kind>"` — which is how a server without the UI
+  service answers `ui-hello`, and how a client tells it has none.
+- **The verified principal, stamped first.** Before `handle` runs, the server
+  calls `stampVerifiedPrincipal`, as it does for every built-in kind that
+  authorises: the service sees the principal the authoriser vouched for, or an
+  empty one, never the client's claim.
+- **Authorising is the service's.** `handle(request, authorizer)` is given the
+  server's `IAuthorizer`; core makes no decision about a kind it does not know.
+- **Synchronous, on the server strand.** `handle` returns the encoded reply and
+  must not block. A throw becomes an `err` reply carrying its message, through
+  the same catch every other kind uses.
+- **Not shut down.** Like `deregister` and the read kinds, a service's kinds
+  still flow after `beginShutdown()`; only `register`, `attach` and `execute`
+  are refused early.
+- **Fixed at construction.** The list is part of `ServerConfig`; a null entry
+  makes the constructor throw `std::invalid_argument`.
 
 ### `PayloadCompleteness` — enforcing the action-evolution policy
 
@@ -1928,6 +1957,7 @@ server: each call is a loop task, so the loop serialises them.
 | `healthHandler` | `std::function<void(const HealthStatus&)>`: called from the constructor, then on the server strand when readiness changes. |
 | `minProtocolVersion`, `maxProtocolVersion` | Inclusive `hello` range; default `{kProtocolVersion, kProtocolVersion}`. |
 | `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
+| `services` | `std::vector<std::shared_ptr<IEnvelopeService>>`: extensions consulted, in order, for a kind the server does not answer itself; a null entry throws `std::invalid_argument`. See [Envelope services](#envelope-services). |
 
 ### `SimulatedRemoteBackend`
 
