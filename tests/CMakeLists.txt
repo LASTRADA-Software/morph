@@ -146,6 +146,7 @@ add_executable(morph_tests
     test_forms_engine_choice.cpp
     test_forms_engine_handler_submitter.cpp
     test_forms_engine_typed.cpp
+    test_forms_engine_corpora.cpp
     test_session_auth.cpp
     test_policy_hardening.cpp
     test_register_authorization.cpp
@@ -234,13 +235,13 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_CMAKE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
-# The shared x-rules corpus. One file, two readers: this suite and
-# src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml, both pointed at it from
-# CMake so neither can quietly grow its own copy. It lives beside the QML half
-# because that half cannot be handed a path at runtime; this half can.
+# The shared forms corpora. Each is one file with several readers -- this
+# suite (the compiled evaluators and the forms engine) and the QML suite --
+# all pointed at it from CMake so none can quietly grow its own copy.
 target_compile_definitions(morph_tests PRIVATE
-    MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/rule_corpus.json"
-    MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/instance_bounds.json")
+    MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/data/rule_corpus.json"
+    MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/data/instance_bounds.json"
+    MORPH_FORMS_BODY_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/data/body_corpus.json")
 
 # The UI document corpora: JSON files, so another implementation of the
 # document and expr/1 can run the same cases.

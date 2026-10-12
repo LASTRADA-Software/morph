@@ -15,7 +15,7 @@
 // renderer read -- the two-values-for-one-concept outcome the seam exists to
 // remove, reintroduced inside the fix for it.
 //
-// `data/instance_bounds.json` is one file with two readers: this one, and
+// `tests/data/instance_bounds.json` is one file with two readers: this one, and
 // `tests/test_forms_instance_constraints.cpp`, which rebuilds the same
 // `InstanceConstraints` from the file's `constraints` block, asserts the
 // decorated schema below is what that declaration actually emits (byte for
@@ -73,7 +73,7 @@ TestCase {
         if (testCase.corpusCache !== null)
             return testCase.corpusCache
         verify(typeof instanceBoundsJson === "string" && instanceBoundsJson.length > 0,
-               "data/instance_bounds.json is unreadable or empty")
+               "tests/data/instance_bounds.json is unreadable or empty")
         testCase.corpusCache = JSON.parse(instanceBoundsJson)
         return testCase.corpusCache
     }

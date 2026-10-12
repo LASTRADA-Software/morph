@@ -10,11 +10,12 @@
 // `mutuallyExclusive`) could be disabled client-side with the whole renderer
 // suite still green.
 //
-// The pin is `src/qt/forms/tests/data/rule_corpus.json`: **one file, two
+// The pin is `tests/data/rule_corpus.json`: **one file, three
 // readers**. This file drives every row through the compiled evaluator;
-// `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` drives the same rows
-// through a real `DynamicForm`. Neither owns the cases, so the two evaluators
-// cannot be pinned to different case lists.
+// `tests/test_forms_engine_corpora.cpp` through the forms engine, and
+// `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` through a real
+// `DynamicForm`. No reader owns the cases, so the evaluators cannot be pinned
+// to different case lists.
 //
 // Three assertions here are what make the corpus non-drifting rather than
 // merely shared:

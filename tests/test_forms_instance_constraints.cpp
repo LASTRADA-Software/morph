@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "forms_engine_support.hpp"
+
 using morph::forms::ConstraintViolation;
 using morph::forms::ConstraintViolationKind;
 using morph::forms::FieldConstraint;
@@ -435,9 +437,10 @@ TEST_CASE("checkValue with no declared decimalPlaces never reports PrecisionExce
 // renderer read -- the two-values-for-one-concept outcome the seam exists to
 // remove, reintroduced inside the fix for it.
 //
-// `src/qt/forms/tests/data/instance_bounds.json` is one file with two readers:
-// this suite, and `src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml`, which
-// drives every row through a real `DynamicForm`. The declaration itself lives
+// `tests/data/instance_bounds.json` is one file with several readers:
+// this suite (`checkValue`, and every row through the forms engine), and
+// `src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml`, which drives every
+// row through a real `DynamicForm`. The declaration itself lives
 // in the file, so the schema the renderer is fed and the bound checked here are
 // provably the same declaration rather than two hand-synced copies.
 // ---------------------------------------------------------------------------
@@ -574,4 +577,26 @@ TEST_CASE("The corpus carries both verdicts", "[forms][instance-constraints]") {
     }
     CHECK(accepted > 0);
     CHECK(accepted < boundsCorpus().cases.size());
+}
+
+// The same rows, through the forms engine: the decorated schema's exact
+// x-minimum / x-maximum and precision gate the engine as checkValue gates the
+// model.
+TEST_CASE("Every corpus row's engine verdict is the one the corpus records",
+          "[forms][instance-constraints][forms-engine]") {
+    using morph::test::formsengine::Harness;
+    for (const auto& row : boundsCorpus().cases) {
+        Harness harness;
+        const auto form = harness.session("Test_ICCapture", boundsCorpus().schemas.at(row.schema));
+        harness.type(*form, "analysisVersionId", "7");
+        harness.type(*form, "value", row.value);
+        INFO("row " << row.id);
+        CHECK(form->ready() == row.ready);
+    }
+}
+
+TEST_CASE("The decorated schema drives the engine's entry precision", "[forms][instance-constraints][forms-engine]") {
+    using morph::test::formsengine::modelOf;
+    CHECK(modelOf("ICCapture", boundsCorpus().schemas.at("decorated")).find("value")->decimalPlaces == 1U);
+    CHECK(modelOf("ICCapture", boundsCorpus().schemas.at("compiled")).find("value")->decimalPlaces == 3U);
 }

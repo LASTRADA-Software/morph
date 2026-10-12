@@ -80,16 +80,19 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
         apply_sanitizers(morph_forms_qml_tests ${AF_SANITIZER})
     endif()
 
-    # The shared x-rules corpus has two readers: this suite and
-    # tests/test_forms_rule_corpus.cpp. Both are pointed at the one file from
-    # CMake so neither can quietly grow its own copy. tst_main.cpp reads it and
+    # The shared forms corpora under tests/data/ are read by this suite and by
+    # morph_tests (the compiled evaluators and the forms engine), all pointed at
+    # the one file from CMake so none can quietly grow its own copy. The body
+    # corpus is written from this suite: its bodies are what DynamicForm sends,
+    # and the engine must send the same bytes. tst_main.cpp reads each file and
     # publishes it to the QML engine -- QML's own XMLHttpRequest refuses a
     # `file:` URL unless QML_XHR_ALLOW_FILE_READ is exported, and a suite whose
     # coverage depends on how it was invoked is exactly the "control that
     # measures nothing" this corpus exists to rule out.
     target_compile_definitions(morph_forms_qml_tests PRIVATE
-        MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/rule_corpus.json"
-        MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/instance_bounds.json")
+        MORPH_FORMS_RULE_CORPUS="${PROJECT_SOURCE_DIR}/tests/data/rule_corpus.json"
+        MORPH_FORMS_INSTANCE_BOUNDS="${PROJECT_SOURCE_DIR}/tests/data/instance_bounds.json"
+        MORPH_FORMS_BODY_CORPUS="${PROJECT_SOURCE_DIR}/tests/data/body_corpus.json")
 
     if(WIN32)
         find_program(MORPH_WINDEPLOYQT_EXECUTABLE windeployqt
