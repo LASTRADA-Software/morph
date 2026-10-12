@@ -2860,10 +2860,13 @@ before trusting either:
 
 They are different code over different representations, so agreement is a
 property to be measured. It is measured by a single shared artifact —
-`src/qt/forms/tests/data/rule_corpus.json`, **one file with two readers**:
+`tests/data/rule_corpus.json`, **one file with three readers**:
 
 - `tests/test_forms_rule_corpus.cpp` drives every row through
   `allRulesSatisfied`;
+- `tests/test_forms_engine_corpora.cpp` drives the same rows through the forms
+  engine's `FormSession` (`docs/spec/forms/engine.md`), and requires its verdict
+  to equal `allRulesSatisfied`'s;
 - `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` drives the same rows
   through a real `DynamicForm`.
 
