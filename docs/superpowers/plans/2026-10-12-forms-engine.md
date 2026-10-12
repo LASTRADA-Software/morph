@@ -21,7 +21,7 @@ workspace shell.
      interpreter (with the `{"ref": "<form>.<field>.value"}` element values), every QuickTest view claim on
      `RecordingBackend`, and a form document mounted on the terminal and the Qt Quick backends.
    - **(c) composites.** `collection.hpp`, `wizard.hpp`, `app_shell.hpp`, `workspace.hpp` and the interpreter's
-     `collection` and `wizard` nodes; `Closes #892`.
+     `collection` and `wizard` nodes; that pull request is the one that completes the issue.
 2. **(b) cannot start on this branch.** Lowering a `form` node is a change to `include/morph/ui/interpreter.hpp`,
    which an open pull request also edits; (b) is planned after that lands. Nothing in (a) touches the interpreter.
 3. **Rules go through the one evaluator.** The old plan evaluates `x-rules` with its own three-valued evaluator.
