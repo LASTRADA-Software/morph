@@ -220,6 +220,12 @@ API surface).
   - The interpreter lowers `form` nodes: the schema from the new `Catalog::schema`, submissions through the
     node's model alias, the prefill followed, `onSubmit`/`onSuccess`/`onError`, and the form's values as elements
     (`{"ref": "<form>.<field>.value"}`). A form document renders on Qt Quick and on the terminal.
+  - `CollectionSession` (`collection.hpp`) lists a `v-*` view's rows through a query, keeps them as a
+    `table::VectorSource` for the table engine, runs row and collection actions with exact bound bodies, holds a
+    `confirm` action until answered, and edits a row in a prefilled `FormSession`.
+  - `WizardSession` (`wizard.hpp`) runs a `w-*` wizard as one `FormSession` per step: a step is done while its
+    body is the one that succeeded, Next waits for that, and entering a step applies its prefill from what earlier
+    steps resolved.
   - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
     renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
 - **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared
