@@ -202,6 +202,25 @@ API surface).
   `routeOf` and `parseRoute`, the string form of a screen instance.
   `Screen::pending()` and `Screen::beginClose()` are what the protocol reads.
 
+- **The forms engine, headless: `include/morph/forms/engine/`.** Header-only, in the base `morph` target; it
+  depends on `morph::reactive` and the UI document's values and expressions, never on a renderer. See
+  `docs/spec/forms/engine.md`.
+  - `FormModel::fromSchema` reads the schema JSON the emitters write into a form's model; `forAction<A>()` reads
+    `schemaJson<A>()` through the same reader. Nested objects and collections of objects are fields, and the
+    `epochSeconds` / `epochDays` widgets are date-time and date kinds over an integer.
+  - `x-rules` are translated into `expr/1` and evaluated by `ui::evaluate`, three-valued and exactly; a
+    presentation rule applies to every field it names.
+  - `FormSession`: per-field drafts, exact encodings, readiness, the body in `x-order`, automatic and explicit
+    submission as an `Exclusive` mutation, prefill, reset, and Choice options as a query keyed on the parents.
+  - `handlerSubmitter` / `handlerChoiceFetcher` route a form to the application's own `BridgeHandler`s;
+    `Form<A, M, S>` adds typed `set<>`, `value()` and `lastResult()` and joins `A`'s `validate()` to readiness.
+  - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
+    renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
+- **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared
+  rather than rounding.
+- **`forms/blank_as.hpp`** holds `BlankAs`, which `forms.hpp` includes, so code naming it need not include the
+  schema emitters.
+
 - **The UI service: `ui-hello`, `ui-catalog`, `ui-fetch` and content-addressed bundles.** Header-only, in the
   base `morph` target (`ui/bundle.hpp`, `ui/service.hpp`, `ui/service_client.hpp`). `hello` and
   `kProtocolVersion` are unchanged; a server without the service answers `unknown envelope kind: ui-hello`.
