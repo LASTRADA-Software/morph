@@ -6,8 +6,9 @@ action as schema JSON; the engine reads that JSON back into a form a user can fi
 body the action takes. The program design is spec 2 (`docs/superpowers/specs/2026-10-04-forms-engine-design.md`).
 
 Read this before changing a header under `forms/engine/`. The headers here are the headless half of spec 2:
-the model, rules, values, `FormSession`, the submitters and `Form<A>`. Rendering a session through the view tree
-(`formView`, overrides), collections, wizards and the app shell are not in the tree yet.
+the model, rules, values, `FormSession`, the submitters, `Form<A>`, and the collection and wizard sessions.
+Rendering through the view tree (`formView`, overrides, `collectionView`, `wizardView`) and the app shell are not
+in the tree yet.
 
 ## Contents
 
@@ -17,6 +18,8 @@ the model, rules, values, `FormSession`, the submitters and `Form<A>`. Rendering
 - [Values and exactness](#values-and-exactness)
 - [FormSession](#formsession)
 - [Submitters and typed forms](#submitters-and-typed-forms)
+- [Collections](#collections)
+- [Wizards](#wizards)
 - [Parity with the QML renderer](#parity-with-the-qml-renderer)
 - [Design decisions](#design-decisions)
 
@@ -32,6 +35,8 @@ Header-only, in the base `morph` target:
 | `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession` |
 | `handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` |
 | `typed_form.hpp` | `Form<A, M, S>`, and the definition of `FormModel::forAction<A>()` |
+| `collection.hpp` | `CollectionModel`, `CollectionColumn`, `CollectionAction`, `CollectionRow`, `PendingConfirm`, `SchemaLookup`, `CollectionSession` |
+| `wizard.hpp` | `WizardModel`, `WizardStepSpec`, `WizardSession` |
 | `detail/text.hpp` | JSON reading and quoting, exact decimal text, ISO-8601 wall-clock text |
 
 The engine depends on `morph::reactive` and on the UI document's values and expressions
@@ -195,6 +200,49 @@ the schema's literal (`render::resolveText`).
   readiness through `accepts`; `set<&A::member>(v)` is a programmatic change; `value()` is the body decoded;
   `lastResult()` is the session's last reply decoded, so the typed result and the JSON reply change together.
 
+## Collections
+
+`CollectionModel::fromSchema(viewJson)` reads the `v-*` view document (`docs/spec/forms/views.md`): the kind
+(`collection`, `master-detail`), title, query, row key, the columns (field, label, the table `kind` by
+`table::ColumnKind`'s JSON names, `v-hidden`, places, unit), the row action and the actions with their `bind`,
+`scope` and `confirm`. An unknown `v-kind` or column `kind`, a missing `v-query`, `field` or `action` is a
+`SchemaError`.
+
+`CollectionSession(runtime, model, schemas, submit, choices, options)`:
+
+- **The list** is a `reactive::Query` executing `v-query` with `{}`. `rows()` reads the reply (an array, or its
+  first array member): each row's exact key text, its JSON with every digit, and the visible columns' cells — an
+  exact `{num, den}` at its `dp` (else the column's places) with the column's unit, anything else as its text.
+- **The table source.** `source()` is a `table::VectorSource` with one column per `v-columns` entry (hidden ones
+  included), kept in step with `rows()`: integers as `int64` (row keys too, so ids past 2^53 stay distinct), exact
+  values as `Rational`, text, bools. Sorting, filtering and selection are the table engine's over it
+  (`docs/spec/table/engine.md`); the session keeps no order of its own.
+- **Actions** are one `Exclusive` `reactive::Mutation`: a row action's body is its `bind` entries with the row's
+  exact JSON values, a collection action's is `{}`. A `confirm` action waits in `pendingConfirm()` until
+  `confirm()` runs it or `cancelConfirm()` drops it. A success refetches the list.
+- **The editor** is a `FormSession` over the row action's schema (from `schemas`; none when it is unknown).
+  `open(rowKey)` prefills it from the row's bound values; a prefill replaces every field, so nothing typed for
+  another row carries over, and it submits nothing. Each success of the editor (its `successCount`) closes it and
+  refetches; a failure keeps it open.
+
+## Wizards
+
+`WizardModel::fromSchema(wizardId, wizardJson)` reads `w-title` and `w-steps` (each step's `action`, `title` and
+`prefill` of `"<Action>.<member>"` paths); a wizard without steps is refused.
+
+`WizardSession(runtime, model, schemas, submit, choices, options)` keeps one `FormSession` per step, alive for the
+wizard's lifetime, and throws `std::invalid_argument` when a step's schema is unknown or does not read.
+
+- **Done.** A step is done while its current body is the one whose submission last succeeded; an edit makes it not
+  done until the new body succeeds, and a failed submission leaves it not done.
+- **Next** moves on at once from a done step; from a step that is ready and not in flight it submits and moves on
+  when that submission succeeds. `canNext()` says which. **Back** always returns, every step keeping its values.
+- **Resolved values.** Each success records its body's members, then its reply's, as JSON under
+  `"<Action>.<member>"`, so the reply wins on a name collision. Entering a step assigns its prefill from them as
+  JSON values, programmatically; a step the prefill leaves ready and not done submits once in automatic mode, and
+  returning to a done step submits nothing.
+- `title()` and `stepTitle(i)` resolve `<id>.title` and `<id>.step.<i>.title` through the translations.
+
 ## Parity with the QML renderer
 
 Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus cases of the existing suites:
@@ -207,6 +255,10 @@ Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus 
   requires the committed bodies). The engine must send the same bytes, case by case.
 - **Instance bounds and conformance**: every row of `tests/data/instance_bounds.json` and every conformance fixture
   through a session.
+- **Collections and wizards**: the claims of `tst_collectionview.qml`, the collection half of
+  `tst_LargeIdPrecision.qml`, `tst_wizardview.qml` and the confirm gate of `tst_ViewChrome.qml`, on the same
+  fixtures, against `CollectionSession` and `WizardSession` (`tests/test_forms_engine_collection.cpp`,
+  `tests/test_forms_engine_wizard.cpp`). What those files assert about drawn widgets comes with the views.
 
 ### Differences from the QML renderer
 

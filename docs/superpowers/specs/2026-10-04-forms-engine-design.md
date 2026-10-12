@@ -263,7 +263,7 @@ public:
   cells formatted exactly — not through a double as today) plus the action buttons, or master-detail
   with a side form.
 - **`WizardModel`** (`w-*`), **`WizardSession`**: one `FormSession` per step, kept alive; a step is
-  done when its submission succeeded; Back/Next; entering a step applies its prefill from the
+  done while its current body is the one whose submission succeeded; Back/Next; entering a step applies its prefill from the
   resolved values (draft first, then the reply, the reply winning on a name collision — the rule
   `FlowSession` documents) as JSON values, not as re-encoded text. Returning to a step that already
   succeeded shows its submitted values and does not submit it again; Next resubmits it only when its

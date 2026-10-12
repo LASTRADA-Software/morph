@@ -198,6 +198,12 @@ API surface).
     submission as an `Exclusive` mutation, prefill, reset, and Choice options as a query keyed on the parents.
   - `handlerSubmitter` / `handlerChoiceFetcher` route a form to the application's own `BridgeHandler`s;
     `Form<A, M, S>` adds typed `set<>`, `value()` and `lastResult()` and joins `A`'s `validate()` to readiness.
+  - `CollectionSession` (`collection.hpp`) lists a `v-*` view's rows through a query, keeps them as a
+    `table::VectorSource` for the table engine, runs row and collection actions with exact bound bodies, holds a
+    `confirm` action until answered, and edits a row in a prefilled `FormSession`.
+  - `WizardSession` (`wizard.hpp`) runs a `w-*` wizard as one `FormSession` per step: a step is done while its
+    body is the one that succeeded, Next waits for that, and entering a step applies its prefill from what earlier
+    steps resolved.
   - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
     renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
 - **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared
