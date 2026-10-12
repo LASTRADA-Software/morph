@@ -137,6 +137,15 @@ add_executable(morph_tests
     test_render_locale_format.cpp
     test_render_parse_decimal.cpp
     test_forms_conformance_corpus.cpp
+    test_forms_engine_text.cpp
+    test_forms_engine_rules.cpp
+    test_forms_engine_model.cpp
+    test_forms_engine_values.cpp
+    test_forms_engine_session.cpp
+    test_forms_engine_nested.cpp
+    test_forms_engine_choice.cpp
+    test_forms_engine_handler_submitter.cpp
+    test_forms_engine_typed.cpp
     test_session_auth.cpp
     test_policy_hardening.cpp
     test_register_authorization.cpp
