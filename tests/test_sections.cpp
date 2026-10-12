@@ -162,6 +162,20 @@ std::size_t drain(morph::testing::StepExecutor& exec) {
     }
     return ran;
 }
+
+// Delivers queued completions on the test thread until @p done holds. Work
+// reaches the callback executor before the pool has run a failing action, so
+// drain can stop waiting before the failure exists: its 50 ms grace for
+// follow-up work bounds nothing about how long the action takes. A check on a
+// failure's outcome waits for that outcome instead.
+template <typename Done>
+void drainUntil(morph::testing::StepExecutor& exec, Done done) {
+    REQUIRE(morph::testing::waitUntil([&exec, &done] {
+        exec.runAll();
+        return done();
+    }));
+    exec.runAll();
+}
 }  // namespace
 
 TEST_CASE("sectionGroupSchemaJson carries each section's title, action and binds", "[sections]") {
@@ -344,7 +358,7 @@ TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[secti
 
     recorder().clear();
     sections.set<&SecExplodes::label>("boom");
-    drain(cbExec);
+    drainUntil(cbExec, [&errors] { return errors.load() != 0; });
     CHECK(errors.load() == 1);
 
     // A section that succeeds does not route to onError, so the count above is
@@ -378,7 +392,7 @@ TEST_CASE("SectionSet: an unhandled failure logs instead of escaping", "[section
 
         recorder().clear();
         REQUIRE_NOTHROW(sections.set<&SecExplodes::label>("boom"));
-        REQUIRE_NOTHROW(drain(cbExec));
+        REQUIRE_NOTHROW(drainUntil(cbExec, [&logged] { return logged.load(); }));
         CHECK(logged.load());
 
         // The set survives its own failed section: an unrelated one still works.
