@@ -39,7 +39,12 @@ bool driveUntil(IoLoop& loop, Pred done, std::chrono::milliseconds budget = 2000
         if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
-        static_cast<void>(loop.loop().runOnce(5ms));
+        // An idle turn does not wait, whatever its maxWait: with nothing parked it returns at once. Sleeping
+        // instead of spinning leaves the other threads room to post; under Valgrind's serialised scheduler a
+        // spinning turn starves them outright.
+        if (loop.loop().runOnce(5ms).idle) {
+            std::this_thread::sleep_for(1ms);
+        }
     }
     return true;
 }

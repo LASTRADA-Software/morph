@@ -293,9 +293,30 @@ TEST_CASE("interpreter relations: reset of a dialog restores its content and cle
     CHECK(h.text("count") == "0");
     CHECK(h.backend.prop(h.byTestId("TextInput", "t"), "text").empty());
     CHECK(readJson(*screen, R"({"ref": "dlg.submitted"})") == "false");
-    h.backend.press(input, "Escape");
+    h.backend.press(input, "Esc");
     h.backend.click(h.byTestId("Button", "close"));
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "dlg.open"})") == "false");
     CHECK(readJson(*screen, R"({"ref": "dlg.ready"})") == "false");
+}
+
+// Mutation: bind a dialog's `cancel` under any chord but the grammar's `Esc` (count stays 1).
+TEST_CASE("interpreter relations: Esc, as a document spells it, runs a dialog's cancel", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "canceldlg",
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "dialog", "id": "dlg",
+          "scope": { "state": { "count": { "init": 1 } } },
+          "cancel": [ { "set": "count", "value": 2 } ],
+          "children": [
+            { "kind": "textInput", "id": "t", "testId": "t" },
+            { "kind": "text", "testId": "count", "text": { "fn": "format", "args": [ "{0}", { "ref": "count" } ] } } ] } ] } })");
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    CHECK(h.text("count") == "1");
+    CHECK(h.backend.press(h.byTestId("TextInput", "t"), "Esc"));
+    h.settle();
+    CHECK(h.text("count") == "2");
 }
