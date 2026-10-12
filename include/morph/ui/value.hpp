@@ -284,6 +284,12 @@ private:
         _data;
 };
 
+// GCC's -Wshadow reports `Key` as shadowing `morph::ui::Key` (view.hpp) whenever that alias is
+// declared first. A scoped enumerator is only ever named as `TypeKind::Key`, so nothing is shadowed.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 /// @brief The kinds of a `Type`.
 enum class TypeKind : std::uint8_t {
     Any,        ///< Not known to the document: a query result, a reply, an element's value.
@@ -297,6 +303,9 @@ enum class TypeKind : std::uint8_t {
     Record,     ///< `record`: a record whose fields the document does not declare.
     List,       ///< `list<T>`.
 };
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 /// @brief A document type (spec 5 §3): a kind, whether `null` is allowed, and a list's element type.
 struct Type {

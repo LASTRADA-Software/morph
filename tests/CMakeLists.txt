@@ -168,6 +168,7 @@ add_executable(morph_tests
     test_ui_field.cpp
     test_ui_kinds.cpp
     test_ui_value.cpp
+    test_ui_include_order.cpp
     test_ui_messages.cpp
     test_ui_expression.cpp
     test_ui_document.cpp
