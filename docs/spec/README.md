@@ -148,6 +148,12 @@ registration that validates it once, with the accessibility rules ·
 the widgets every renderer implements, the seam that picks a renderer at
 runtime, and the terminal renderer
 
+**Qt Quick renderer**
+[`qt_quick/backend.md`](qt_quick/backend.md) ·
+[`qt_quick/frontend.md`](qt_quick/frontend.md) — the view tree's widgets as
+Qt Quick items, the application's own components and restyling, and the
+window a client runs in
+
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·
 [`util/quantity_type.md`](util/quantity_type.md) ·

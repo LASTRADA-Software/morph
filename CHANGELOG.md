@@ -172,6 +172,23 @@ API surface).
 
 ### Added
 
+- **`morph::qt_quick`: the Qt Quick renderer and frontend** (`MORPH_BUILD_QT_QUICK`, default off; needs
+  `MORPH_BUILD_QT` and Qt 6.5+ Quick). A compiled STATIC library with the private QML module `MorphUi`, one
+  component per node kind. See `docs/spec/qt_quick/`.
+  - `qt_quick::Backend` implements every `ui::IViewBackend` factory with Qt Quick items and passes every case of
+    `ui::testing::conformanceCases()` on the real engine, driven by mouse and key events sent to an offscreen
+    window. Keys cross into QML as text, so an id above 2^53 is exact; a list change is the mount's fewest moves,
+    each one stacking-order change that keeps the moved item.
+  - `qt_quick::Components`: bundle components verified by SHA-256 and compiled in a contained engine, host
+    components by version, and a restyle map checked against each kind's `MorphUi` API; a component that cannot be
+    loaded leaves the fallback and is reported once. `Backend::createCustom` loads one; the view tree does not yet
+    carry a `custom` node's props and events to it (#923).
+  - `qt_quick::Frontend` (`qt_quick::frontendOption`, named `"qt"`) runs an `AppSource` in a window through
+    `ui::runApp`; `FrontendConfig::mountShell` mounts the shell on the backend. `qt_quick::QtScheduler` is the
+    runtime's `Scheduler` on `QTimer`s.
+  - Every `MorphUi` component passes `qmllint` without a warning, checked by a ctest case. The WebAssembly build
+    comes separately.
+
 - **`morph::ui`: the UI document and `expr/1`.** Header-only, in the base `morph` target. A screen
   defined as JSON on the server loads into a C++ model and is checked before anything mounts it.
   - `ui::Value` and `ui::Type` (`value.hpp`): the document's typed values — exact `int`, `decimal`

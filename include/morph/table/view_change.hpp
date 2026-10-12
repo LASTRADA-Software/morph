@@ -229,7 +229,7 @@ struct ViewPositions {
     for (std::size_t gap = 0; gap <= stationaryCount; ++gap) {
         gapBase[gap + 1] = gapBase[gap] + movedInGap[gap] + unmovedInGap[gap] + (gap < stationaryCount ? 1 : 0);
     }
-    SlotCounter slots{gapBase[stationaryCount + 1]};
+    SlotCounter occupancy{gapBase[stationaryCount + 1]};
     std::vector<std::size_t> unmovedSlot(kept, 0);
     std::vector<std::size_t> nextUnmoved(stationaryCount + 1, 0);
     std::vector<std::size_t> indexOfRank(kept, 0);
@@ -237,10 +237,10 @@ struct ViewPositions {
         auto const gap = oldGap[i];
         indexOfRank[ranks[i]] = i;
         if (stationary[i]) {
-            slots.occupy(gapBase[gap] + movedInGap[gap] + unmovedInGap[gap]);
+            occupancy.occupy(gapBase[gap] + movedInGap[gap] + unmovedInGap[gap]);
         } else {
             unmovedSlot[i] = gapBase[gap] + movedInGap[gap] + nextUnmoved[gap]++;
-            slots.occupy(unmovedSlot[i]);
+            occupancy.occupy(unmovedSlot[i]);
         }
     }
     std::vector<std::size_t> nextMoved(stationaryCount + 1, 0);
@@ -249,12 +249,12 @@ struct ViewPositions {
         if (stationary[i]) {
             continue;
         }
-        auto const from = slots.before(unmovedSlot[i]);
-        slots.release(unmovedSlot[i]);
+        auto const from = occupancy.before(unmovedSlot[i]);
+        occupancy.release(unmovedSlot[i]);
         auto const gap = stationaryBeforeRank[rank];
         auto const movedSlot = gapBase[gap] + nextMoved[gap]++;
-        auto const destination = slots.before(movedSlot);
-        slots.occupy(movedSlot);
+        auto const destination = occupancy.before(movedSlot);
+        occupancy.occupy(movedSlot);
         out.push_back(ViewOp{.kind = ViewOp::Kind::Moved, .first = from, .count = 1, .to = destination});
     }
     return true;
