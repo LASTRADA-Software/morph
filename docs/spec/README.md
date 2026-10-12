@@ -123,6 +123,8 @@ before writing a durability test
 [`forms/choice.md`](forms/choice.md) ·
 [`forms/widget_hints.md`](forms/widget_hints.md) ·
 [`forms/workflows_navigation.md`](forms/workflows_navigation.md) ·
+[`forms/engine.md`](forms/engine.md) — the C++ forms engine: a form's model,
+rules, exact values and reactive session, headless ·
 [`table/engine.md`](table/engine.md) — sorting, filtering and view
 mapping for a table, on and off the owner thread, and `table::apply` for a
 server
