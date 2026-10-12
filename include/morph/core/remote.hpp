@@ -202,6 +202,44 @@ struct HealthStatus {
 using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
                                                                                 std::string_view contextKey)>;
 
+/// @brief Envelope kinds a `RemoteServer` answers through an extension, such as
+///        the UI service's `ui-*` kinds.
+///
+/// Core does not know the kinds a higher layer adds, and must not include that
+/// layer. A server consults its services only for a kind it does not answer
+/// itself, so a service cannot take over `execute`, `hello` or any other
+/// built-in kind; a kind no service serves is still answered
+/// `err "unknown envelope kind: <kind>"`. See `docs/spec/core/backend.md`,
+/// "Envelope services".
+class IEnvelopeService {
+public:
+    IEnvelopeService() = default;
+    virtual ~IEnvelopeService() = default;
+    IEnvelopeService(const IEnvelopeService&) = delete;
+    IEnvelopeService& operator=(const IEnvelopeService&) = delete;
+    IEnvelopeService(IEnvelopeService&&) = delete;
+    IEnvelopeService& operator=(IEnvelopeService&&) = delete;
+
+    /// @brief Whether this service answers @p kind.
+    /// @param kind The envelope's `kind`.
+    /// @return `true` to have `handle` answer it.
+    [[nodiscard]] virtual bool serves(std::string_view kind) const = 0;
+
+    /// @brief Answers one envelope of a kind `serves` accepted.
+    ///
+    /// Runs on the server strand, so it must not block. The server has already
+    /// stamped the verified principal onto `request.session` (the client's
+    /// claim is never seen here); authorising the request is the service's,
+    /// through @p authorizer. A throw becomes an `err` reply carrying its
+    /// message.
+    /// @param request    The decoded envelope.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply envelope (`wire::encode`), addressed to
+    ///         `request.callId`.
+    [[nodiscard]] virtual std::string handle(const ::morph::wire::Envelope& request,
+                                             const ::morph::session::IAuthorizer& authorizer) = 0;
+};
+
 /// @brief Everything about a `RemoteServer` that is configured rather than
 ///        learned: given once, at construction, and never changed.
 ///
@@ -244,6 +282,12 @@ struct ServerConfig {
     ///        served schema marks `required`. See `PayloadCompleteness` for why
     ///        `Lenient` is the default.
     PayloadCompleteness payloadCompleteness = PayloadCompleteness::Lenient;
+
+    /// @brief Extensions that answer envelope kinds the server does not know
+    ///        itself, consulted in order. Empty: none, and every unknown kind is
+    ///        answered `err "unknown envelope kind: <kind>"`. A null entry is
+    ///        refused by the constructor.
+    std::vector<std::shared_ptr<IEnvelopeService>> services;
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -325,7 +369,8 @@ public:
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
-    ///         `config.maxProtocolVersion`.
+    ///         `config.maxProtocolVersion`, or `config.services` holds a null
+    ///         entry.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultDispatcher(),
@@ -349,7 +394,8 @@ public:
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
-    ///         `config.maxProtocolVersion`.
+    ///         `config.maxProtocolVersion`, or `config.services` holds a null
+    ///         entry.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                  std::shared_ptr<::morph::session::IAuthorizer> authorizer, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
@@ -640,7 +686,22 @@ private:
         if (config.minProtocolVersion > config.maxProtocolVersion) {
             throw std::invalid_argument("ServerConfig: minProtocolVersion must not exceed maxProtocolVersion");
         }
+        if (std::ranges::find(config.services, nullptr) != config.services.end()) {
+            throw std::invalid_argument("ServerConfig: services must not hold a null entry");
+        }
         return config;
+    }
+
+    /// @brief The service that answers @p kind, if any.
+    /// @param kind The envelope's `kind`.
+    /// @return The first configured service that serves it, or null.
+    [[nodiscard]] IEnvelopeService* serviceFor(std::string_view kind) const {
+        for (const auto& service : _config.services) {
+            if (service->serves(kind)) {
+                return service.get();
+            }
+        }
+        return nullptr;
     }
 
     /// @brief Decodes @p msg, keeping the message and the error when it fails.
@@ -1373,6 +1434,12 @@ private:
                         body);
                     reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
                 }
+            } else if (IEnvelopeService* const service = serviceFor(env.kind); service != nullptr) {
+                // Stamped first, as for every built-in kind that authorises:
+                // the service decides on the verified principal, never on the
+                // client's claim.
+                stampVerifiedPrincipal(env);
+                reply(service->handle(env, *_authorizer));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
