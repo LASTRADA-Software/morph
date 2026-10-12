@@ -41,6 +41,8 @@ inline constexpr std::string_view kHelloKind = "ui-hello";
 inline constexpr std::string_view kCatalogKind = "ui-catalog";
 /// @brief The envelope kind that fetches a file by its hash.
 inline constexpr std::string_view kFetchKind = "ui-fetch";
+/// @brief The envelope kind that evaluates an action body without running it (spec 5 §7).
+inline constexpr std::string_view kEvaluateKind = "ui-evaluate";
 
 /// @brief The pseudo-model the service's envelopes are authorised under: `authorize(session, "ui", <action>)`.
 inline constexpr std::string_view kServiceModel = "ui";
@@ -173,6 +175,16 @@ struct HelloReply {
     std::vector<std::string> vocabularies;
     /// @brief The manifest's content hash.
     std::string digest;
+};
+
+/// @brief The body of a `ui-evaluate` reply: what `ActionDispatcher::evaluate` answered.
+struct EvaluateReply {
+    /// @brief The action body, reconciled, with its computed fields filled.
+    Json body;
+    /// @brief The field errors, by field name.
+    std::map<std::string, std::string, std::less<>> errors;
+    /// @brief Whether an `execute` of this body would reach the model.
+    bool ready = false;
 };
 
 /// @brief One catalog entry (spec 6 §8).
@@ -536,6 +548,27 @@ template <typename T>
     }
     if (!isContentHash(reply->digest)) {
         return std::unexpected("the ui-hello reply's digest is not a content hash");
+    }
+    return reply;
+}
+
+/// @brief Reads a `ui-evaluate` reply body.
+///
+/// Refused: text that is not JSON or nests too deep, a must-understand key at the top, a body that is not an object,
+/// or more than `kMaxCatalogFacts` field errors.
+/// @param text The reply body.
+/// @return The reply, or why it was refused.
+[[nodiscard]] inline std::expected<EvaluateReply, std::string> parseEvaluateReply(std::string_view text) {
+    auto reply = detail::readMessage<EvaluateReply>(text, "the ui-evaluate reply", {}, {});
+    if (!reply) {
+        return std::unexpected(std::move(reply.error()));
+    }
+    if (!reply->body.is_object()) {
+        return std::unexpected("the ui-evaluate reply's body is not an object");
+    }
+    if (reply->errors.size() > kMaxCatalogFacts) {
+        return std::unexpected("the ui-evaluate reply carries more than " + std::to_string(kMaxCatalogFacts) +
+                               " field errors");
     }
     return reply;
 }

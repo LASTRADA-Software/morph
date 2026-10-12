@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <map>
 #include <memory>
 #include <morph/util/rational.hpp>
 #include <stdexcept>
@@ -18,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
 #include "model.hpp"
 #include "payload_schema.hpp"
@@ -664,6 +666,23 @@ public:
     /// @brief Type-erased action runner: deserialises, executes, and serialises the result.
     using Runner = std::function<std::string(IModelHolder&, std::string_view)>;
 
+    /// @brief What `evaluate` answers for one action body.
+    struct Evaluation {
+        /// @brief The action, reconciled and recomputed, as `ActionTraits<Action>::toJson` writes it.
+        std::string body;
+        /// @brief `forms::fieldErrors` of the recomputed action: field name to message.
+        std::map<std::string, std::string, std::less<>> errors;
+        /// @brief Whether `dispatch` would hand this body to `Model::execute`: its `Quantity` fields are within
+        ///        their units' bounds and `ActionValidator<Action>::ready` holds.
+        ///
+        /// Can hold while `errors` is not empty: a required field is reported even for an action whose validator
+        /// does not require it, and `dispatch` checks only the validator.
+        bool ready = false;
+    };
+
+    /// @brief Type-erased evaluator: deserialises, reconciles, recomputes and checks, without executing.
+    using Evaluator = Evaluation (*)(std::string_view);
+
     /// @brief Receives the outcome of an asynchronous dispatch: the JSON result,
     ///        or the exception (with an empty result).
     using DispatchDone = std::function<void(std::string, std::exception_ptr)>;
@@ -726,6 +745,7 @@ public:
         } else {
             entry.runner = &runHandler<Model, Action>;
         }
+        entry.evaluator = &evaluateAction<Model, Action>;
         entry.coalesce = ActionLogPolicy<Action>::coalesce;
         entry.schema = detail::actionPayloadSchema<Action>();
         // Deliberately a thunk, not the description itself: registration runs
@@ -786,6 +806,26 @@ private:
             throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
         }
         return action;
+    }
+
+    /// @brief The evaluator of `(Model, Action)`: the gates `prepareAction` applies, made as checks rather than
+    ///        refusals, with no `Model::execute`, no journal entry and no model instance.
+    /// @tparam Model  Concrete model type.
+    /// @tparam Action Concrete action type.
+    /// @param payloadJson The action's JSON body.
+    /// @return The recomputed body, its field errors and whether `dispatch` would execute it.
+    template <typename Model, typename Action>
+    static Evaluation evaluateAction(std::string_view payloadJson) {
+        MORPH_ZONE("ActionDispatcher::evaluateAction");
+        auto action = ActionTraits<Action>::fromJson(payloadJson);
+        ::morph::forms::reconcileDeclaredPrecision(action);
+        ::morph::forms::recomputeAll(action);
+        Evaluation evaluation;
+        evaluation.errors = ::morph::forms::fieldErrors(action);
+        evaluation.ready =
+            !::morph::forms::checkQuantityBounds(action).has_value() && ActionValidator<Action>::ready(action);
+        evaluation.body = ActionTraits<Action>::toJson(action);
+        return evaluation;
     }
 
     /// @brief The runner of an ordinary handler: prepares the action, runs
@@ -969,6 +1009,28 @@ public:
             throw std::runtime_error("unknown action: " + std::string{modelId} + "/" + std::string{actionId});
         }
         return iter->second.runner(holder, payload);
+    }
+
+    /// @brief Evaluates a body of `(modelId, actionId)` without running it.
+    ///
+    /// Decodes @p payload, reconciles its `Quantity` precision, recomputes its computed fields, and reports the
+    /// result with its field errors and whether `dispatch` would execute it. No model instance is involved, nothing
+    /// is journalled, and nothing changes, so an evaluation can be repeated freely. The answer for a body the
+    /// gates refuse is a value, not a throw; only a body that does not decode throws.
+    /// @param modelId  The model's registered type id.
+    /// @param actionId The action's registered type id.
+    /// @param payload  The action's JSON body.
+    /// @return The evaluation.
+    /// @throws std::runtime_error for an unregistered pair, or a body `ActionTraits<Action>::fromJson` refuses.
+    [[nodiscard]] Evaluation evaluate(std::string_view modelId, std::string_view actionId,
+                                      std::string_view payload) const {
+        MORPH_ZONE("ActionDispatcher::evaluate");
+        detail::noteRegistryRead(this == &defaultDispatcher());
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        if (iter == _actions.end()) {
+            throw std::runtime_error("unknown action: " + std::string{modelId} + "/" + std::string{actionId});
+        }
+        return iter->second.evaluator(payload);
     }
 
     /// @brief Dispatches an action against @p holder and hands its JSON result,
@@ -1160,6 +1222,8 @@ private:
         Runner runner;
         /// @brief The Task handler runner, or null for an ordinary handler.
         AsyncRunner asyncRunner = nullptr;
+        /// @brief The evaluator `evaluate` runs.
+        Evaluator evaluator = nullptr;
         /// @brief `ActionLogPolicy<Action>::coalesce` as registered.
         bool coalesce = false;
         /// @brief `payloadFingerprint<Action>()` as registered.

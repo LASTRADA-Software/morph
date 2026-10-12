@@ -97,20 +97,27 @@ public:
                                                              std::string const& instanceKey) = 0;
 };
 
+/// @brief Evaluates an action body without running it: the model's type id, the action id and the JSON body in, the
+///        query's value out (spec 5 §7). `ui::evaluatorOver` builds one over the UI service's `ui-evaluate`.
+using Evaluator = std::function<async::Completion<std::string>(std::string const& typeId, std::string const& actionId,
+                                                               std::string const& bodyJson)>;
+
 /// @brief A `Dispatcher` over the bridge's model-free seams: `bindByType`, `executeRaw` and the string-keyed
 ///        `attach`, through `RawHandler`.
 ///
-/// It sends no `evaluate` request (that envelope belongs to the UI service) and has no offline queue: an evaluation
-/// is refused with a `std::runtime_error`, and `queueOffline` is ignored. A shared binding without a key is bound
-/// unattached, which the bridge refuses at the first call; a document reaches it only for a stateful model whose
-/// alias says `"shared"`.
+/// An evaluation goes through the `Evaluator` it was given, since that envelope belongs to the UI service, not the
+/// bridge; without one it is refused with a `std::runtime_error`. It has no offline queue: `queueOffline` is ignored.
+/// A shared binding without a key is bound unattached, which the bridge refuses at the first call; a document
+/// reaches it only for a stateful model whose alias says `"shared"`.
 class BridgeDispatcher final : public Dispatcher {
 public:
-    /// @brief Dispatches through @p bridge.
-    /// @param bridge The bridge. Borrowed: it must outlive every channel.
-    /// @param cbExec The executor replies are delivered on: the runtime's owner. Borrowed.
-    BridgeDispatcher(bridge::Bridge& bridge MORPH_LIFETIMEBOUND, exec::IExecutor* cbExec MORPH_LIFETIMEBOUND)
-        : _bridge{&bridge}, _cbExec{cbExec} {}
+    /// @brief Dispatches through @p bridge, and evaluates through @p evaluator.
+    /// @param bridge    The bridge. Borrowed: it must outlive every channel.
+    /// @param cbExec    The executor replies are delivered on: the runtime's owner. Borrowed.
+    /// @param evaluator What answers an `evaluate` query; empty to refuse them.
+    BridgeDispatcher(bridge::Bridge& bridge MORPH_LIFETIMEBOUND, exec::IExecutor* cbExec MORPH_LIFETIMEBOUND,
+                     Evaluator evaluator = {})
+        : _bridge{&bridge}, _cbExec{cbExec}, _evaluator{std::move(evaluator)} {}
 
     /// @brief Binds through a `RawHandler`.
     /// @param typeId      The model's registered type id.
@@ -119,19 +126,26 @@ public:
     /// @return The channel; destroying it deregisters the binding.
     [[nodiscard]] std::shared_ptr<ModelChannel> bind(std::string const& typeId, bridge::BindSharing sharing,
                                                      std::string const& instanceKey) override {
-        return std::make_shared<Channel>(*_bridge, _cbExec, typeId, sharing, instanceKey);
+        return std::make_shared<Channel>(*_bridge, _cbExec, _evaluator, typeId, sharing, instanceKey);
     }
 
 private:
     class Channel final : public ModelChannel {
     public:
-        Channel(bridge::Bridge& bridge, exec::IExecutor* cbExec, std::string const& typeId,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type id, then the key, as `bind` takes them.
+        Channel(bridge::Bridge& bridge, exec::IExecutor* cbExec, Evaluator evaluator, std::string const& typeId,
                 bridge::BindSharing sharing, std::string const& instanceKey)
-            : _cbExec{cbExec}, _handler{bridge, cbExec, typeId, sharing, instanceKey} {}
+            : _cbExec{cbExec},
+              _evaluator{std::move(evaluator)},
+              _typeId{typeId},
+              _handler{bridge, cbExec, typeId, sharing, instanceKey} {}
 
         [[nodiscard]] async::Completion<std::string> execute(std::string const& actionId, std::string const& bodyJson,
                                                              CallOptions options) override {
             if (options.evaluate) {
+                if (_evaluator) {
+                    return _evaluator(_typeId, actionId, bodyJson);
+                }
                 auto [refused, promise] = async::Completion<std::string>::makeSettleable(_cbExec);
                 promise.reject(std::make_exception_ptr(std::runtime_error{"evaluate needs the UI service"}));
                 return std::move(refused);
@@ -141,11 +155,14 @@ private:
 
     private:
         exec::IExecutor* _cbExec;
+        Evaluator _evaluator;
+        std::string _typeId;
         bridge::RawHandler _handler;
     };
 
     bridge::Bridge* _bridge;
     exec::IExecutor* _cbExec;
+    Evaluator _evaluator;
 };
 
 // ---------------------------------------------------------------------------------------------------------------

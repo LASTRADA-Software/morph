@@ -285,12 +285,13 @@ TEST_CASE("UiRegistry::build refuses a bundle it cannot serve", "[ui-service][re
 
 // ── The service ─────────────────────────────────────────────────────────────
 
-TEST_CASE("UiService serves the three ui kinds and nothing else", "[ui-service]") {
+TEST_CASE("UiService serves the four ui kinds and nothing else", "[ui-service]") {
     UiService const service{uiservice::bundle()};
     REQUIRE(service.serves("ui-hello"));
     REQUIRE(service.serves("ui-catalog"));
     REQUIRE(service.serves("ui-fetch"));
-    REQUIRE_FALSE(service.serves("ui-evaluate"));
+    REQUIRE(service.serves("ui-evaluate"));
+    REQUIRE_FALSE(service.serves("ui-file"));
     REQUIRE_FALSE(service.serves("hello"));
     REQUIRE_THROWS_AS(UiService{nullptr}, std::invalid_argument);
 }
