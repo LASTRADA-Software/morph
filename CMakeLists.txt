@@ -480,6 +480,7 @@ target_sources(morph
         include/morph/ui/expression.hpp
         include/morph/ui/document.hpp
         include/morph/ui/interpreter.hpp
+        include/morph/ui/bundle.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
