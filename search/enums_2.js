@@ -6,6 +6,7 @@ var searchData=
   ['columnkind_3',['ColumnKind',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895c',1,'morph::table']]],
   ['combine_4',['Combine',['../d1/dd2/filter_8hpp.html#a96046fd74330a53f1e1767abae73d519',1,'morph::table']]],
   ['commandkind_5',['CommandKind',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0e',1,'morph::ui']]],
-  ['concurrency_6',['Concurrency',['../dc/dfd/control_8hpp.html#ac9b5149b64e788db3c18d8c5be3d552c',1,'morph::reactive::Concurrency'],['../dd/d39/document_8hpp.html#a0876310d8741d2490f5e6df05ee936c2',1,'morph::ui::Concurrency']]],
-  ['constraintviolationkind_7',['ConstraintViolationKind',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7',1,'morph::forms']]]
+  ['commit_6',['Commit',['../d1/dc0/author_8hpp.html#af481855c6c30bd6eee085818733d43df',1,'morph::ui::author']]],
+  ['concurrency_7',['Concurrency',['../dc/dfd/control_8hpp.html#ac9b5149b64e788db3c18d8c5be3d552c',1,'morph::reactive::Concurrency'],['../dd/d39/document_8hpp.html#a0876310d8741d2490f5e6df05ee936c2',1,'morph::ui::Concurrency']]],
+  ['constraintviolationkind_8',['ConstraintViolationKind',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7',1,'morph::forms']]]
 ];

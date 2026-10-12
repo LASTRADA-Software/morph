@@ -124,14 +124,15 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d00/classmo
 <p>Runs callbacks after a delay or on a period, on the runtime's owner executor.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>&gt;</code></p>
 <div class="dynheader">
 Inheritance diagram for morph::reactive::Scheduler:</div>
 <div class="dyncontent">
  <div class="center">
   <img src="../../d3/d00/classmorph_1_1reactive_1_1Scheduler.png" usemap="#morph_3A_3Areactive_3A_3AScheduler_map" alt=""/>
   <map id="morph_3A_3Areactive_3A_3AScheduler_map" name="morph_3A_3Areactive_3A_3AScheduler_map">
-<area href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html" title="A deterministic Scheduler: its clock moves only in advance(), which fires what falls due on the calli..." alt="morph::reactive::testing::ManualScheduler" shape="rect" coords="0,56,247,80"/>
+<area href="../../da/d56/classmorph_1_1qt__quick_1_1QtScheduler.html" title="reactive::Scheduler on QTimers, for a runtime whose owner is the Qt event loop&#39;s thread." alt="morph::qt_quick::QtScheduler" shape="rect" coords="0,56,247,80"/>
+<area href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html" title="A deterministic Scheduler: its clock moves only in advance(), which fires what falls due on the calli..." alt="morph::reactive::testing::ManualScheduler" shape="rect" coords="257,56,504,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -162,7 +163,7 @@ Scheduler &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Scheduler &
 <li><span class="tt"><a class="el" href="#a8878fbe8f50ce6d979e5e11571a641c5" title="Runs fn every period, starting one period from now.">every()</a></span> fires once per period while the owner runs. If the owner is blocked past several periods, a frontend fires once and counts the next deadline from that firing: no burst of missed firings. </li>
 </ul>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="af8fe06e736a2c5922f720b81eab8a579" name="af8fe06e736a2c5922f720b81eab8a579"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af8fe06e736a2c5922f720b81eab8a579">&#9670;&#160;</a></span>after()</h2>
@@ -201,7 +202,7 @@ Scheduler &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Scheduler &
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The handle; destroying it before the deadline cancels the call. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html#a78c8eea8ed2047a6777031d647a19325">morph::reactive::testing::ManualScheduler</a>.</p>
+<p>Implemented in <a class="el" href="../../da/d56/classmorph_1_1qt__quick_1_1QtScheduler.html#a99fa8d4b9b634887d8e1ff7aee210216">morph::qt_quick::QtScheduler</a>, and <a class="el" href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html#a78c8eea8ed2047a6777031d647a19325">morph::reactive::testing::ManualScheduler</a>.</p>
 
 </div>
 </div>
@@ -248,12 +249,12 @@ Scheduler &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Scheduler &
   </dd>
 </dl>
 
-<p>Implemented in <a class="el" href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html#ac02a8f65e0f24971b9ea3605a8bb04ff">morph::reactive::testing::ManualScheduler</a>.</p>
+<p>Implemented in <a class="el" href="../../da/d56/classmorph_1_1qt__quick_1_1QtScheduler.html#a8ace958eb4995eff5b3f4f6071031fe9">morph::qt_quick::QtScheduler</a>, and <a class="el" href="../../d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html#ac02a8f65e0f24971b9ea3605a8bb04ff">morph::reactive::testing::ManualScheduler</a>.</p>
 
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>morph/reactive/<a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a></li>
+<li>morph/reactive/<a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

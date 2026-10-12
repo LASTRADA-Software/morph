@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d18/classmo
 <p>Owns one scheduled timer and cancels it when destroyed. Move-only.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -152,7 +152,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Owns one scheduled timer and cancels it when destroyed. Move-only. </p>
 <p>A scheduler hands it two functions: one that cancels the timer and one that says whether the timer is still scheduled. So <span class="tt"><a class="el" href="#a42cdbd68e8625563591aca1a239a7f1b" title="Whether this handle still owns a scheduled timer.">active()</a></span> turns false once a one-shot timer has fired, and cancelling a fired timer does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00019">19</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00019">19</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a08264e50f96cbc0131fffd054c422681" name="a08264e50f96cbc0131fffd054c422681"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a08264e50f96cbc0131fffd054c422681">&#9670;&#160;</a></span>TimerHandle() <span class="overload">[1/2]</span></h2>
@@ -190,7 +190,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00029">29</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00029">29</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +219,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Cancels the timer, if this handle still owns one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +254,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +291,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +320,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Cancels the timer, if this handle still owns one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
@@ -350,12 +350,12 @@ Public Member Functions</h2></td></tr>
 <p>Whether this handle still owns a scheduled timer. </p>
 <dl class="section return"><dt>Returns</dt><dd>False after <span class="tt"><a class="el" href="#a9e25c2fd9ab974efe118eb1cab12b4c5" title="Cancels the timer, if this handle still owns one.">cancel()</a></span>, after a move from it, for a default-constructed handle, and once a one-shot timer has fired or its scheduler is gone (when the scheduler can say so). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/de8/scheduler_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a>.</p>
 
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>morph/reactive/<a class="el" href="../../d6/de8/scheduler_8hpp_source.html">scheduler.hpp</a></li>
+<li>morph/reactive/<a class="el" href="../../d1/dc9/reactive_2scheduler_8hpp_source.html">scheduler.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

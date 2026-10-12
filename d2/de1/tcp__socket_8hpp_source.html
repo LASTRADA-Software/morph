@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de1/tcp__so
 <div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        <span class="comment">// letting the integral promotion pick one trips GCC&#39;s -Wsign-promo</span></div>
 <div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>        <span class="comment">// (it would choose the signed `int` overload over `unsigned`).</span></div>
 <div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>        std::string <span class="keyword">const</span> portStr = std::to_string(<span class="keyword">static_cast&lt;</span><span class="keywordtype">unsigned</span><span class="keyword">&gt;</span>(port));</div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>        <span class="keywordtype">int</span> <span class="keyword">const</span> rc = ::getaddrinfo(host.c_str(), portStr.c_str(), &amp;hints, &amp;resolved);</div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>        <span class="keywordtype">int</span> <span class="keyword">const</span> rc = ::getaddrinfo(<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699">host</a>.c_str(), portStr.c_str(), &amp;hints, &amp;resolved);</div>
 <div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>        <span class="keywordflow">if</span> (rc != 0 || resolved == <span class="keyword">nullptr</span>) {</div>
 <div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>            <span class="comment">// `::gai_strerror`, and NOT `errnoMessage()`: `rc` is an `EAI_*`</span></div>
 <div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>            <span class="comment">// code, not an `errno`, so `std::system_category().message(rc)`</span></div>
@@ -703,6 +703,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de1/tcp__so
 <div class="line"><a id="l00581" name="l00581"></a><span class="lineno">  581</span>};</div>
 <div class="line"><a id="l00582" name="l00582"></a><span class="lineno">  582</span> </div>
 <div class="line"><a id="l00583" name="l00583"></a><span class="lineno">  583</span>}  <span class="comment">// namespace morph::net::detail</span></div>
+<div class="ttc" id="aauthor_8hpp_html_a43f619a034a1943138185f0cef94e699"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699">morph::ui::author::host</a></div><div class="ttdeci">Command host(std::string const &amp;name, AnyHandle const &amp;args={})</div><div class="ttdoc">host: a command the application registered with the client.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l02525">author.hpp:2525</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

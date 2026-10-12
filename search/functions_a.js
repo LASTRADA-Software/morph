@@ -1,14 +1,15 @@
 var searchData=
 [
-  ['keyfromstring_0',['keyFromString',['../d1/dd8/model__key_8hpp.html#a7cb86a665506d392f1155ad862327be0',1,'morph::model']]],
-  ['keyof_1',['keyOf',['../db/d42/interpreter_8hpp.html#a0e0ee3fe67103a35969b5cef4dfc5852',1,'morph::ui::detail']]],
-  ['keys_2',['keys',['../d9/da0/classmorph_1_1table_1_1Selection.html#ae1d06efd72891196628f537b72d78dbe',1,'morph::table::Selection']]],
-  ['keyspec_3',['keySpec',['../db/d42/interpreter_8hpp.html#a662f9404d02589d2803929713d51b316',1,'morph::ui::detail']]],
-  ['keytexts_4',['keyTexts',['../d8/d3e/backend__conformance_8hpp.html#aeaf1993315f6b293bb6d43053eb65e96',1,'morph::ui::testing::detail']]],
-  ['keytostring_5',['keyToString',['../d1/dd8/model__key_8hpp.html#a82926874cf943bdaa4765b8204a70b56',1,'morph::model']]],
-  ['keyvalue_6',['keyValue',['../d8/d11/view_8hpp.html#a11e6866463705be091166f191ed9f49b',1,'morph::ui']]],
-  ['kind_7',['kind',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html#a64139b645936663cd5632869f978e6bc',1,'morph::app::FormScreen::kind()'],['../dc/d11/structmorph_1_1app_1_1WizardScreen.html#ad67e7ed4e651deea85d2122fc3c78884',1,'morph::app::WizardScreen::kind()'],['../da/d54/classmorph_1_1ui_1_1Value.html#abf0c801389e89ecdd4de18ba4b67975a',1,'morph::ui::Value::kind()']]],
-  ['kindbit_8',['kindBit',['../d8/d0e/expression_8hpp.html#aee7de3e89ec2578bacebb5772b15c2ab',1,'morph::ui::detail']]],
-  ['kindname_9',['kindName',['../d6/dda/value_8hpp.html#afad8aad98f9ce979904b43175740949c',1,'morph::ui']]],
-  ['kindof_10',['kindOf',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aedbe32905066b90d0c0aa16bfbc6df4a',1,'morph::ui::testing::RecordingBackend::kindOf()'],['../dd/def/query_8hpp.html#aa1e33980540e56dd86cbda2028f95981',1,'morph::table::detail::kindOf()']]]
+  ['key_0',['key',['../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#ab34abdb1271de777ea93dc8f171b1cac',1,'morph::ui::author::Node::key()'],['../d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a61130ac78fb4f4d16714e91a89d29210',1,'morph::ui::author::Scope::key()']]],
+  ['keyfromstring_1',['keyFromString',['../d1/dd8/model__key_8hpp.html#a7cb86a665506d392f1155ad862327be0',1,'morph::model']]],
+  ['keyof_2',['keyOf',['../db/d42/interpreter_8hpp.html#a0e0ee3fe67103a35969b5cef4dfc5852',1,'morph::ui::detail']]],
+  ['keys_3',['keys',['../d9/da0/classmorph_1_1table_1_1Selection.html#ae1d06efd72891196628f537b72d78dbe',1,'morph::table::Selection']]],
+  ['keyspec_4',['keySpec',['../db/d42/interpreter_8hpp.html#a662f9404d02589d2803929713d51b316',1,'morph::ui::detail']]],
+  ['keytexts_5',['keyTexts',['../d8/d3e/backend__conformance_8hpp.html#aeaf1993315f6b293bb6d43053eb65e96',1,'morph::ui::testing::detail']]],
+  ['keytostring_6',['keyToString',['../d1/dd8/model__key_8hpp.html#a82926874cf943bdaa4765b8204a70b56',1,'morph::model']]],
+  ['keyvalue_7',['keyValue',['../d1/dc0/author_8hpp.html#a97c28f9d5f943d1051a7daf687e59114',1,'morph::ui::author::keyValue()'],['../d8/d11/view_8hpp.html#a11e6866463705be091166f191ed9f49b',1,'morph::ui::keyValue()']]],
+  ['kind_8',['kind',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html#a64139b645936663cd5632869f978e6bc',1,'morph::app::FormScreen::kind()'],['../dc/d11/structmorph_1_1app_1_1WizardScreen.html#ad67e7ed4e651deea85d2122fc3c78884',1,'morph::app::WizardScreen::kind()'],['../da/d54/classmorph_1_1ui_1_1Value.html#abf0c801389e89ecdd4de18ba4b67975a',1,'morph::ui::Value::kind()']]],
+  ['kindbit_9',['kindBit',['../d8/d0e/expression_8hpp.html#aee7de3e89ec2578bacebb5772b15c2ab',1,'morph::ui::detail']]],
+  ['kindname_10',['kindName',['../d6/dda/value_8hpp.html#afad8aad98f9ce979904b43175740949c',1,'morph::ui']]],
+  ['kindof_11',['kindOf',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aedbe32905066b90d0c0aa16bfbc6df4a',1,'morph::ui::testing::RecordingBackend::kindOf()'],['../dd/def/query_8hpp.html#aa1e33980540e56dd86cbda2028f95981',1,'morph::table::detail::kindOf()']]]
 ];

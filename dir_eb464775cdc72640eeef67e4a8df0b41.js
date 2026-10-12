@@ -7,6 +7,7 @@ var dir_eb464775cdc72640eeef67e4a8df0b41 =
     [ "net", "dir_c45115ca617597ec13666b7791b40bdb.html", "dir_c45115ca617597ec13666b7791b40bdb" ],
     [ "offline", "dir_18789a54f15bba00e905b34a191f9101.html", "dir_18789a54f15bba00e905b34a191f9101" ],
     [ "qt", "dir_24b31c4691f70f951d289a2995ea210c.html", "dir_24b31c4691f70f951d289a2995ea210c" ],
+    [ "qt_quick", "dir_0c85c859b6bc7a32c66100eb804b6740.html", "dir_0c85c859b6bc7a32c66100eb804b6740" ],
     [ "reactive", "dir_4935bcc7c3aaa03153e81680e1a5636c.html", "dir_4935bcc7c3aaa03153e81680e1a5636c" ],
     [ "render", "dir_5b797ed37428e5712e0ca1b2a2557ee8.html", "dir_5b797ed37428e5712e0ca1b2a2557ee8" ],
     [ "session", "dir_94b209676680ba6e0fc855344bbac0af.html", "dir_94b209676680ba6e0fc855344bbac0af" ],

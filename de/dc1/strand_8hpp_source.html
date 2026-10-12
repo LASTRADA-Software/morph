@@ -447,7 +447,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dc1/strand_
 <div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span><span class="comment">    /// @param key     The model instance whose strand resumptions are queued on.</span></div>
 <div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span><span class="comment">    /// @param session The action&#39;s session context, installed for each resumption.</span></div>
 <div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>    TaskResumer(std::shared_ptr&lt;ModelStrands&gt; strands, ModelId key, ::morph::session::Context session)</div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>        : _strands{std::move(strands)}, _key{key}, _session{std::move(session)} {}</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>        : _strands{std::move(strands)}, _key{key}, _session{std::move(<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a662edcb8297606c5b53091072098b896">session</a>)} {}</div>
 <div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span> </div>
 <div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>    <span class="keyword">using </span>::core::async::IExecutor::submit;</div>
 <div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment"></span> </div>
@@ -509,9 +509,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dc1/strand_
 <div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>    <span class="comment">// Every task a model strand runs passes through here, on the thread that</span></div>
 <div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>    <span class="comment">// runs it, so this zone is one strand task and nothing more.</span></div>
 <div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>    <a class="code hl_define" href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a>(<span class="stringliteral">&quot;ModelStrands::task&quot;</span>);</div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>    <span class="keywordflow">if</span> (run.kind() != ::core::async::TaskKind::Resumption ||</div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>    <span class="keywordflow">if</span> (<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a4c086fb8615dd5f363aaf96d9615d60a">run</a>.kind() != ::core::async::TaskKind::Resumption ||</div>
 <div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>        self-&gt;_enrolledCount.load(std::memory_order_acquire) == 0) {</div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>        run();</div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>        <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a4c086fb8615dd5f363aaf96d9615d60a">run</a>();</div>
 <div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>        <span class="keywordflow">return</span>;</div>
 <div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>    }</div>
 <div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>    std::shared_ptr&lt;TaskResumer&gt; resumer;</div>
@@ -522,13 +522,15 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dc1/strand_
 <div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>        }</div>
 <div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>    }</div>
 <div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>    <span class="keywordflow">if</span> (!resumer) {</div>
-<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>        run();</div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>        <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a4c086fb8615dd5f363aaf96d9615d60a">run</a>();</div>
 <div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span>        <span class="keywordflow">return</span>;</div>
 <div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span>    }</div>
 <div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span>    resumer-&gt;within(run);</div>
 <div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>}</div>
 <div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span> </div>
 <div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>}  <span class="comment">// namespace morph::exec::detail</span></div>
+<div class="ttc" id="aauthor_8hpp_html_a4c086fb8615dd5f363aaf96d9615d60a"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a4c086fb8615dd5f363aaf96d9615d60a">morph::ui::author::run</a></div><div class="ttdeci">Command run(MutationHandle&lt; Action &gt; const &amp;mutation, Body&lt; Action &gt; const &amp;body={}, RunOptions const &amp;options={})</div><div class="ttdoc">run: runs a mutation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l02410">author.hpp:2410</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_a662edcb8297606c5b53091072098b896"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a662edcb8297606c5b53091072098b896">morph::ui::author::session</a></div><div class="ttdeci">AnyHandle session(std::string const &amp;name)</div><div class="ttdoc">A session attribute, {&quot;session&quot;: name}.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l01017">author.hpp:1017</a></div></div>
 <div class="ttc" id="aprofiler_8hpp_html"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html">profiler.hpp</a></div><div class="ttdoc">Compile-time profiler instrumentation: Tracy zones, plots, messages and thread names,...</div></div>
 <div class="ttc" id="aprofiler_8hpp_html_a93ffe544de2fbcdfd94eda78aabfcb71"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a></div><div class="ttdeci">#define MORPH_ZONE(name)</div><div class="ttdoc">Opens a profiler zone named name that ends with the enclosing scope. At most one per scope.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/ddc/profiler_8hpp_source.html#l00118">profiler.hpp:118</a></div></div>
 </div><!-- fragment --></div><!-- contents -->

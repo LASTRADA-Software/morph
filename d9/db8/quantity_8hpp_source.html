@@ -506,11 +506,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span>    <span class="keyword">constexpr</span> std::size_t capacity = 2 * relationCount + 1;</div>
 <div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>    std::array&lt;E, capacity&gt; nodes{};</div>
 <div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>    std::array&lt;Rational, capacity&gt; ratios{};</div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>    std::size_t count = 0;</div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>    std::size_t <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a> = 0;</div>
 <div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>    std::size_t head = 0;</div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>    nodes[count] = from;</div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>    ratios[count] = Rational::one(morph::math::DecimalPlaces{1});</div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>    ++count;</div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>    nodes[<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>] = from;</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>    ratios[<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>] = Rational::one(morph::math::DecimalPlaces{1});</div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>    ++<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>;</div>
 <div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>    <span class="keywordflow">while</span> (head &lt; count) {</div>
 <div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span>        E <span class="keyword">const</span> current = nodes[head];</div>
 <div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>        Rational <span class="keyword">const</span> currentRatio = ratios[head];</div>
@@ -533,7 +533,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>                <span class="keywordflow">continue</span>;</div>
 <div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>            }</div>
 <div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>            <span class="keywordtype">bool</span> seen = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>            <span class="keywordflow">for</span> (std::size_t i = 0; i &lt; count; ++i) {</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>            <span class="keywordflow">for</span> (std::size_t i = 0; i &lt; <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>; ++i) {</div>
 <div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>                <span class="keywordflow">if</span> (nodes[i] == neighbour) {</div>
 <div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>                    seen = <span class="keyword">true</span>;</div>
 <div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>                    <span class="keywordflow">break</span>;</div>
@@ -546,9 +546,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>            <span class="keywordflow">if</span> (neighbour == to) {</div>
 <div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>                <span class="keywordflow">return</span> RatioResult&lt;E&gt;{<span class="keyword">true</span>, neighbourRatio};</div>
 <div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>            }</div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>            nodes[count] = neighbour;</div>
-<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>            ratios[count] = neighbourRatio;</div>
-<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>            ++count;</div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>            nodes[<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>] = neighbour;</div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>            ratios[<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>] = neighbourRatio;</div>
+<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>            ++<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">count</a>;</div>
 <div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>        }</div>
 <div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>    }</div>
 <div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>    <span class="keywordflow">return</span> RatioResult&lt;E&gt;{<span class="keyword">false</span>, Rational{}};</div>
@@ -1410,7 +1410,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l01214" name="l01214"></a><span class="lineno"> 1214</span><span class="keyword">template</span> &lt;auto U, std::u<span class="keywordtype">int</span>32_t Dec&gt;</div>
 <div class="foldopen" id="foldopen01215" data-start="{" data-end="}">
 <div class="line"><a id="l01215" name="l01215"></a><span class="lineno"><a class="line" href="../../d9/db8/quantity_8hpp.html#a2c81a76e847c19a25e8e315015f4713d"> 1215</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../d9/db8/quantity_8hpp.html#a2c81a76e847c19a25e8e315015f4713d">toDecimalString</a>(<span class="keyword">const</span> <a class="code hl_struct" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity&lt;U, Dec&gt;</a>&amp; quantity) {</div>
-<div class="line"><a id="l01216" name="l01216"></a><span class="lineno"> 1216</span>    <span class="keywordflow">return</span> detail::formatOptionalDecimal(quantity.<a class="code hl_function" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee">value</a>());</div>
+<div class="line"><a id="l01216" name="l01216"></a><span class="lineno"> 1216</span>    <span class="keywordflow">return</span> detail::formatOptionalDecimal(quantity.value());</div>
 <div class="line"><a id="l01217" name="l01217"></a><span class="lineno"> 1217</span>}</div>
 </div>
 <div class="line"><a id="l01218" name="l01218"></a><span class="lineno"> 1218</span><span class="comment"></span> </div>
@@ -1469,7 +1469,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l01269" name="l01269"></a><span class="lineno"> 1269</span><span class="comment">    /// @param quantity The value to format.</span></div>
 <div class="line"><a id="l01270" name="l01270"></a><span class="lineno"> 1270</span><span class="comment">    /// @param ctx      Format context.</span></div>
 <div class="line"><a id="l01271" name="l01271"></a><span class="lineno"> 1271</span><span class="comment">    /// @return Output iterator past the written text.</span></div>
-<div class="line"><a id="l01272" name="l01272"></a><span class="lineno"> 1272</span>    <span class="keyword">auto</span> format(<span class="keyword">const</span> morph::units::Quantity&lt;U, Dec&gt;&amp; quantity, std::format_context&amp; ctx)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l01272" name="l01272"></a><span class="lineno"> 1272</span>    <span class="keyword">auto</span> <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a3ed7acb46ca8d5d9854299ff35b4aca2">format</a>(<span class="keyword">const</span> morph::units::Quantity&lt;U, Dec&gt;&amp; quantity, std::format_context&amp; ctx)<span class="keyword"> const </span>{</div>
 <div class="line"><a id="l01273" name="l01273"></a><span class="lineno"> 1273</span>        <span class="keywordflow">return</span> std::format_to(ctx.out(), <span class="stringliteral">&quot;{}&quot;</span>, morph::units::toString(quantity));</div>
 <div class="line"><a id="l01274" name="l01274"></a><span class="lineno"> 1274</span>    }</div>
 <div class="line"><a id="l01275" name="l01275"></a><span class="lineno"> 1275</span>};</div>
@@ -1483,7 +1483,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l01283" name="l01283"></a><span class="lineno"> 1283</span><span class="comment">    /// @param quantity The named value.</span></div>
 <div class="line"><a id="l01284" name="l01284"></a><span class="lineno"> 1284</span><span class="comment">    /// @param ctx      Format context.</span></div>
 <div class="line"><a id="l01285" name="l01285"></a><span class="lineno"> 1285</span><span class="comment">    /// @return Output iterator past the written text.</span></div>
-<div class="line"><a id="l01286" name="l01286"></a><span class="lineno"> 1286</span>    <span class="keyword">auto</span> format(<span class="keyword">const</span> morph::units::NamedQuantity&lt;Name, U&gt;&amp; quantity, std::format_context&amp; ctx)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l01286" name="l01286"></a><span class="lineno"> 1286</span>    <span class="keyword">auto</span> <a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a3ed7acb46ca8d5d9854299ff35b4aca2">format</a>(<span class="keyword">const</span> morph::units::NamedQuantity&lt;Name, U&gt;&amp; quantity, std::format_context&amp; ctx)<span class="keyword"> const </span>{</div>
 <div class="line"><a id="l01287" name="l01287"></a><span class="lineno"> 1287</span>        <span class="keywordflow">return</span> std::formatter&lt;morph::units::Quantity&lt;U&gt;&gt;::format(quantity, ctx);</div>
 <div class="line"><a id="l01288" name="l01288"></a><span class="lineno"> 1288</span>    }</div>
 <div class="line"><a id="l01289" name="l01289"></a><span class="lineno"> 1289</span>};</div>
@@ -1555,6 +1555,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 </div>
 <div class="line"><a id="l01353" name="l01353"></a><span class="lineno"> 1353</span>};</div>
 </div>
+<div class="ttc" id="aauthor_8hpp_html_a3ed7acb46ca8d5d9854299ff35b4aca2"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a3ed7acb46ca8d5d9854299ff35b4aca2">morph::ui::author::format</a></div><div class="ttdeci">Handle&lt; std::string &gt; format(AnyHandle const &amp;pattern, std::vector&lt; AnyHandle &gt; args)</div><div class="ttdoc">format: a template with {0}, {1}, … placeholders.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l00825">author.hpp:825</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_aa158a441b87c4d82832d38adb16e2af9"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#aa158a441b87c4d82832d38adb16e2af9">morph::ui::author::count</a></div><div class="ttdeci">Handle&lt; std::int64_t &gt; count(AnyHandle const &amp;list)</div><div class="ttdoc">count: a list&#39;s length.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l00836">author.hpp:836</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1units_1_1Convertible_html"><div class="ttname"><a href="../../d3/deb/conceptmorph_1_1units_1_1Convertible.html">morph::units::Convertible</a></div><div class="ttdoc">Concept: From → To is convertible — a user override takes precedence over an auto-generated ratio pat...</div><div class="ttdef"><b>Definition</b> <a href="#l00526">quantity.hpp:526</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1units_1_1HasUnitBounds_html"><div class="ttname"><a href="../../d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html">morph::units::HasUnitBounds</a></div><div class="ttdoc">Concept: UnitTraits&lt;E&gt; declares an optional static constexpr QuantityBounds bounds(E) — the pre-decod...</div><div class="ttdef"><b>Definition</b> <a href="#l00294">quantity.hpp:294</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1units_1_1HasUnitRelations_html"><div class="ttname"><a href="../../d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html">morph::units::HasUnitRelations</a></div><div class="ttdoc">Concept: UnitTraits&lt;E&gt; also declares within-dimension relations (template param E).</div><div class="ttdef"><b>Definition</b> <a href="#l00284">quantity.hpp:284</a></div></div>

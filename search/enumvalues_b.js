@@ -1,18 +1,13 @@
 var searchData=
 [
-  ['name_0',['Name',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987',1,'morph::ui::detail']]],
-  ['navigate_1',['Navigate',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea49af5acafa8ec4a1c521b63ee46891c7',1,'morph::ui']]],
-  ['neutral_2',['Neutral',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aae9bb5320b3890b6747c91b5a71ae5a01',1,'morph::ui']]],
-  ['nodes_3',['Nodes',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e',1,'morph::ui::detail']]],
-  ['none_4',['None',['../df/d8f/selection_8hpp.html#a0c5a863bb2ec27062f9111027ab3fee8a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::table'],['../d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui'],['../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui']]],
-  ['noneusable_5',['NoneUsable',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa8980eb18c11773d5ac24a2443a993294',1,'morph::ui::FrontendError']]],
-  ['normal_6',['Normal',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0',1,'morph::ui']]],
-  ['normal_7',['normal',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555',1,'morph::offline::SqliteOfflineQueue']]],
-  ['notfinite_8',['NotFinite',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9eaff6e97b110349dae9c6e8be0ff7a85c3',1,'morph::math']]],
-  ['notify_9',['Notify',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eaaaf9ed605d0193362321ba0def15c9b7',1,'morph::ui']]],
-  ['notmade_10',['NotMade',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa7b86632f6a59e5657e6f0ced241153ca',1,'morph::ui::FrontendError']]],
-  ['notyetvalid_11',['NotYetValid',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca05a552d0584560b9eca4e5c2ed6c9fa2',1,'morph::session']]],
-  ['nouiservice_12',['NoUiService',['../d8/dcd/structmorph_1_1ui_1_1ConnectError.html#a047e4d4e99ceb30a5bc29dfa9a0b4174a7c949e2e1863dc9f75886ef9bfc83e28',1,'morph::ui::ConnectError']]],
-  ['null_13',['Null',['../d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fbabbb93ef26e3c101ff11cdd21cab08a94',1,'morph::ui']]],
-  ['number_14',['Number',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895cab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::table'],['../d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337eab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::ui']]]
+  ['malformed_0',['Malformed',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca0dc7301026e66d38061d7eaba481c9a5',1,'morph::session']]],
+  ['many_1',['Many',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a5ae7fb3197b6fd8c723c7766a5680e2e',1,'morph::ui']]],
+  ['map_2',['Map',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a46f3ea056caa3126b91f3f70beea068c',1,'morph::ui']]],
+  ['missingname_3',['MissingName',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa203fa3f42e46f87fdf2b50f4c170ddbf',1,'morph::ui::FrontendError']]],
+  ['model_4',['Model',['../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784',1,'morph::ui::detail']]],
+  ['moved_5',['Moved',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#af5f73481cb3344d4b936e6efe69c9149a95bfdefaaf01553cbf21ccd942855c69',1,'morph::table::ViewOp']]],
+  ['multiline_6',['Multiline',['../d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37a9ef28508538c9b6936b69e7ea8e1a7b7',1,'morph::ui']]],
+  ['multiple_7',['Multiple',['../df/d8f/selection_8hpp.html#a0c5a863bb2ec27062f9111027ab3fee8aa0bf169f2539e893e00d7b1296bc4d8e',1,'Multiplemorph::table'],['../d1/dc0/author_8hpp.html#a386c8f27968d11a8eb2cf7ad0aeff62caa0bf169f2539e893e00d7b1296bc4d8e',1,'Multiplemorph::ui::author'],['../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e',1,'Multiplemorph::ui']]],
+  ['mutation_8',['Mutation',['../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a59016373e3e4440ecf76c1d4b6bcd97d',1,'morph::ui::detail']]],
+  ['muted_9',['Muted',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a70a51c85067ce6cd7fa1630b5a2d4951',1,'morph::ui']]]
 ];

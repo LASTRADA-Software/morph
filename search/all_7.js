@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['gap_0',['gap',['../d1/d05/structmorph_1_1ui_1_1Column.html#ac1b09af753dfd947905ae230b2847197',1,'morph::ui::Column::gap'],['../d7/da8/structmorph_1_1ui_1_1Row.html#a00e43f8c240737a3dc1072ec9655b12a',1,'morph::ui::Row::gap'],['../de/d85/structmorph_1_1ui_1_1Grid.html#adbd54d46363cd90a8d1dc0b59a1b2f11',1,'morph::ui::Grid::gap'],['../d2/d58/structmorph_1_1ui_1_1ForEach.html#a3eab8abc8c25c695ff02965efb48cec5',1,'morph::ui::ForEach::gap']]],
+  ['gap_0',['gap',['../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html#a24dda33443ea37bfd6e282f17098440f',1,'morph::ui::author::ContainerOptions::gap'],['../dd/d09/structmorph_1_1ui_1_1author_1_1ForEachOptions.html#ae6ef04ef37472e1d337ac5a100a4ba51',1,'morph::ui::author::ForEachOptions::gap'],['../d1/d05/structmorph_1_1ui_1_1Column.html#ac1b09af753dfd947905ae230b2847197',1,'morph::ui::Column::gap'],['../d7/da8/structmorph_1_1ui_1_1Row.html#a00e43f8c240737a3dc1072ec9655b12a',1,'morph::ui::Row::gap'],['../de/d85/structmorph_1_1ui_1_1Grid.html#adbd54d46363cd90a8d1dc0b59a1b2f11',1,'morph::ui::Grid::gap'],['../d2/d58/structmorph_1_1ui_1_1ForEach.html#a3eab8abc8c25c695ff02965efb48cec5',1,'morph::ui::ForEach::gap']]],
   ['ge_1',['ge',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#a3b55ae793ede3e8b35104db567598958',1,'morph::table::FilterEntry']]],
   ['generation_2',['generation',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a2f8621cfbc9962f3b5d7395bbe6b7c98',1,'morph::ui::detail::CacheEntry']]],
   ['generation_20for_20auto_20built_20guis_3',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]],
@@ -8,7 +8,7 @@ var searchData=
   ['genericmodelbridgecore_5',['GenericModelBridgeCore',['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html',1,'morph::qt::bridge::GenericModelBridgeCore&lt; Model, Sharing &gt;'],['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html#a9ad1c3d17cec3821abf667147520c6b7',1,'morph::qt::bridge::GenericModelBridgeCore::GenericModelBridgeCore()'],['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html#a9774baedcf28a6be80151c5bd910e551',1,'morph::qt::bridge::GenericModelBridgeCore::GenericModelBridgeCore(::morph::bridge::Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec)']]],
   ['genericmodelbridgecore_3c_20model_2c_20_3a_3amorph_3a_3abridge_3a_3anosharing_20_3e_6',['GenericModelBridgeCore&lt; Model, ::morph::bridge::NoSharing &gt;',['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html',1,'morph::qt::bridge']]],
   ['germanicplural_7',['germanicPlural',['../d5/d8c/message_8hpp.html#ad733b4f57b34aed1912d421d45372422',1,'morph::ui::detail']]],
-  ['get_8',['get',['../dc/d97/classmorph_1_1reactive_1_1Signal.html#a6b8dfacfd8b7892ced2ce7e0639f5959',1,'morph::reactive::Signal::get()'],['../d4/d6f/classmorph_1_1reactive_1_1Computed.html#a8e91f94d4782836d07f3a96ba4dfca72',1,'morph::reactive::Computed::get()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d',1,'morph::util::Tagged::get()']]],
+  ['get_8',['get',['../dc/d97/classmorph_1_1reactive_1_1Signal.html#a6b8dfacfd8b7892ced2ce7e0639f5959',1,'morph::reactive::Signal::get()'],['../d4/d6f/classmorph_1_1reactive_1_1Computed.html#a8e91f94d4782836d07f3a96ba4dfca72',1,'morph::reactive::Computed::get()'],['../d7/d49/classmorph_1_1ui_1_1author_1_1Element.html#a239fcc64396c7b79857ba771a0b57f40',1,'morph::ui::author::Element::get()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d',1,'morph::util::Tagged::get()']]],
   ['getdecimalplaces_9',['getDecimalPlaces',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a83aa3a8c561ea09daaf3d9d470a918d1',1,'morph::math::Rational']]],
   ['getwire_10',['getWire',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a7338c559da93d37a286f222ce825931c',1,'morph::math::Rational']]],
   ['goals_11',['Non-goals',['../index.html#non-goals',1,'']]],
@@ -19,7 +19,7 @@ var searchData=
   ['greaterorequal_16',['GreaterOrEqual',['../d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html',1,'morph::forms']]],
   ['greaterorequal_17',['greaterOrEqual',['../d4/d11/forms_8hpp.html#af3bd1e51e06b51f833c203f904f0d364',1,'morph::forms']]],
   ['grid_18',['Grid',['../de/d85/structmorph_1_1ui_1_1Grid.html',1,'morph::ui']]],
-  ['grid_19',['grid',['../d8/d11/view_8hpp.html#a1b3c921ce2a6f18f482f6022a88ef42d',1,'morph::ui']]],
+  ['grid_19',['grid',['../d1/dc0/author_8hpp.html#aac17190012b6bb580026d8d47ddc26f3',1,'morph::ui::author::grid()'],['../d8/d11/view_8hpp.html#a1b3c921ce2a6f18f482f6022a88ef42d',1,'morph::ui::grid(Grid spec)']]],
   ['gridcell_20',['GridCell',['../df/d66/structmorph_1_1ui_1_1GridCell.html',1,'morph::ui']]],
   ['gridwidget_21',['GridWidget',['../d1/d51/classmorph_1_1ui_1_1GridWidget.html',1,'morph::ui']]],
   ['group_22',['Group',['../dd/d3c/structmorph_1_1table_1_1CompiledFilter_1_1Group.html',1,'morph::table::CompiledFilter']]],

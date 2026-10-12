@@ -49,7 +49,8 @@ var index =
         [ "<span class=\"tt\">testing/</span> — the installed owner test kit", "index.html#testing--the-installed-owner-test-kit", null ]
       ] ],
       [ "Terminal frontend headers (<span class=\"tt\">include/morph/tui/</span>, sources in <span class=\"tt\">src/tui/</span>)", "index.html#terminal-frontend-headers-includemorphtui-sources-in-srctui", null ],
-      [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>)", "index.html#qt-integration-headers-includemorphqt", null ]
+      [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>)", "index.html#qt-integration-headers-includemorphqt", null ],
+      [ "Qt Quick renderer headers (<span class=\"tt\">include/morph/qt_quick/</span>, sources in <span class=\"tt\">src/qt_quick/</span>)", "index.html#qt-quick-renderer-headers-includemorphqt_quick-sources-in-srcqt_quick", null ]
     ] ],
     [ "Known limitations", "index.html#known-limitations", [
       [ "<span class=\"tt\">RemoteServer</span> must be heap-allocated", "index.html#remoteserver-must-be-heap-allocated", null ],
