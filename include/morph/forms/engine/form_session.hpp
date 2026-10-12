@@ -546,8 +546,9 @@ private:
         if (_optionsQuery->pending() || _optionsQuery->error() != nullptr) {
             return;
         }
+        // An idle query (a parent is blank or does not encode) fetched nothing to judge the selection against.
         std::optional<std::string> const request = optionsRequest();
-        if (request.has_value() && request != _issued) {
+        if (!request.has_value() || request != _issued) {
             return;
         }
         std::vector<ChoiceOption> const& current = _fetched->get();
