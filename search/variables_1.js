@@ -20,5 +20,7 @@ var searchData=
   ['boundaryerror_17',['boundaryError',['../de/d88/structmorph_1_1ui_1_1detail_1_1CheckContext.html#a6a17c789cad1957654a6104d80e58862',1,'morph::ui::detail::CheckContext']]],
   ['boundtoken_18',['boundToken',['../d7/d28/structmorph_1_1ui_1_1detail_1_1ModelAlias.html#a5e2d969a78dda1eed4ffbca41f964751',1,'morph::ui::detail::ModelAlias']]],
   ['bridge_19',['bridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html#abcbca1f1a4eeac47622ef500ef79d471',1,'morph::qt::bridge::detail::OwnedLocalBridge']]],
-  ['built_20',['built',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a95de305bcd85eac7ef683904b0a68463',1,'morph::ui::FrontendError']]]
+  ['built_20',['built',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a95de305bcd85eac7ef683904b0a68463',1,'morph::ui::FrontendError']]],
+  ['bundle_21',['bundle',['../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html#a4373aa81adddc26d8fa30c6129e5ac9b',1,'morph::ui::LoadedBundle']]],
+  ['bytes_22',['bytes',['../d6/d26/structmorph_1_1ui_1_1ServedFile.html#a7a6a663f93cccf8f7695f3ce62181ba2',1,'morph::ui::ServedFile::bytes'],['../db/d11/structmorph_1_1ui_1_1BundleFile.html#a325b5d7b3584723f068902496a3d5ae3',1,'morph::ui::BundleFile::bytes']]]
 ];

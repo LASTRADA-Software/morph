@@ -23,9 +23,10 @@ var searchData=
   ['bridgehandler_20',['BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
   ['bridgehandler_3c_20model_2c_20_3a_3amorph_3a_3abridge_3a_3anosharing_20_3e_21',['BridgeHandler&lt; Model, ::morph::bridge::NoSharing &gt;',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
   ['bundle_22',['Bundle',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html',1,'morph::ui']]],
-  ['busy_23',['Busy',['../dc/dd1/structmorph_1_1ui_1_1Busy.html',1,'morph::ui']]],
-  ['busywidget_24',['BusyWidget',['../d3/d98/classmorph_1_1ui_1_1BusyWidget.html',1,'morph::ui']]],
-  ['button_25',['Button',['../d2/d47/structmorph_1_1ui_1_1Button.html',1,'morph::ui']]],
-  ['buttonoptions_26',['ButtonOptions',['../d2/d41/structmorph_1_1ui_1_1author_1_1ButtonOptions.html',1,'morph::ui::author']]],
-  ['buttonwidget_27',['ButtonWidget',['../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html',1,'morph::ui']]]
+  ['bundlefile_23',['BundleFile',['../db/d11/structmorph_1_1ui_1_1BundleFile.html',1,'morph::ui']]],
+  ['busy_24',['Busy',['../dc/dd1/structmorph_1_1ui_1_1Busy.html',1,'morph::ui']]],
+  ['busywidget_25',['BusyWidget',['../d3/d98/classmorph_1_1ui_1_1BusyWidget.html',1,'morph::ui']]],
+  ['button_26',['Button',['../d2/d47/structmorph_1_1ui_1_1Button.html',1,'morph::ui']]],
+  ['buttonoptions_27',['ButtonOptions',['../d2/d41/structmorph_1_1ui_1_1author_1_1ButtonOptions.html',1,'morph::ui::author']]],
+  ['buttonwidget_28',['ButtonWidget',['../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html',1,'morph::ui']]]
 ];

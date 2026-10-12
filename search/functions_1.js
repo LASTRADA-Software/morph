@@ -34,7 +34,8 @@ var searchData=
   ['bridgedispatcher_31',['BridgeDispatcher',['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html#ae87b32be4bf0d19c7cdd4b52dc2f6d2c',1,'morph::ui::BridgeDispatcher']]],
   ['bridgehandler_32',['BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ac2ad5f0697f10ec9320058718e30768f',1,'morph::bridge::BridgeHandler::BridgeHandler(Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec)'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad6b1039524998f20d3b2cfd17d9eee12',1,'morph::bridge::BridgeHandler::BridgeHandler(Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec, std::shared_ptr&lt; detail::HandlerBinding &gt; binding)']]],
   ['brokenrule_33',['brokenRule',['../d1/dc0/author_8hpp.html#a9df3cc90966ee21c14ab758925b5e996',1,'morph::ui::author::detail']]],
-  ['buildkeys_34',['buildKeys',['../d4/d54/sort_8hpp.html#afc0b811b9f4059e9a19412519725d50a',1,'morph::table']]],
-  ['busy_35',['busy',['../d1/dc0/author_8hpp.html#a554e092a0dbc29695b527602a1bc2160',1,'morph::ui::author::busy()'],['../d8/d11/view_8hpp.html#a7326bd262393a4ca783785918f744a02',1,'morph::ui::busy()']]],
-  ['button_36',['button',['../d1/dc0/author_8hpp.html#a42555c027b1a5d92be7c90b6e3669cf2',1,'morph::ui::author::button()'],['../d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183',1,'morph::ui::button()']]]
+  ['build_34',['build',['../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#a104e81c219e2531a0284d5d107d9c923',1,'morph::ui::UiRegistry']]],
+  ['buildkeys_35',['buildKeys',['../d4/d54/sort_8hpp.html#afc0b811b9f4059e9a19412519725d50a',1,'morph::table']]],
+  ['busy_36',['busy',['../d1/dc0/author_8hpp.html#a554e092a0dbc29695b527602a1bc2160',1,'morph::ui::author::busy()'],['../d8/d11/view_8hpp.html#a7326bd262393a4ca783785918f744a02',1,'morph::ui::busy()']]],
+  ['button_37',['button',['../d1/dc0/author_8hpp.html#a42555c027b1a5d92be7c90b6e3669cf2',1,'morph::ui::author::button()'],['../d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183',1,'morph::ui::button()']]]
 ];
