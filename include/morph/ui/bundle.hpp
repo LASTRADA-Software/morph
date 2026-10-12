@@ -303,42 +303,44 @@ namespace detail {
 /// @param arrays The keys of arrays whose elements are objects this layer defines.
 /// @param maps   The keys of maps whose values are objects this layer defines.
 /// @return Why the message is refused, or nothing.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): the arrays' keys, then the maps', as a message lists them.
 [[nodiscard]] inline std::optional<std::string> mustUnderstandIn(Json const& root, std::string_view what,
                                                                  std::initializer_list<std::string_view> arrays,
                                                                  std::initializer_list<std::string_view> maps) {
     if (auto reason = mustUnderstand(root, what)) {
-        return std::move(*reason);
+        return reason;
     }
     auto const* const object = std::get_if<Json::object_t>(&root.data);
     if (object == nullptr) {
         return std::nullopt;
     }
     for (std::string_view const key : arrays) {
-        auto const found = object->find(key);
+        auto const* const found = object->find(key);
         auto const* const items = found == object->end() ? nullptr : std::get_if<Json::array_t>(&found->second.data);
         if (items == nullptr) {
             continue;
         }
         for (Json const& item : *items) {
             if (auto reason = mustUnderstand(item, std::string{what} + " " + std::string{key})) {
-                return std::move(*reason);
+                return reason;
             }
         }
     }
     for (std::string_view const key : maps) {
-        auto const found = object->find(key);
+        auto const* const found = object->find(key);
         auto const* const items = found == object->end() ? nullptr : std::get_if<Json::object_t>(&found->second.data);
         if (items == nullptr) {
             continue;
         }
         for (auto const& [name, item] : *items) {
             if (auto reason = mustUnderstand(item, std::string{what} + " " + std::string{key} + " " + name)) {
-                return std::move(*reason);
+                return reason;
             }
         }
     }
     return std::nullopt;
 }
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 /// @brief Reads a message: bounded depth, must-understand keys refused, unknown keys ignored.
 /// @tparam T The message type.
@@ -381,6 +383,7 @@ template <typename T>
 /// @param name The name.
 /// @param what What it names, for the reason.
 /// @return Why it is refused, or nothing.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the name, then what it names, as the reason reads.
 [[nodiscard]] inline std::optional<std::string> checkName(std::string_view name, std::string_view what) {
     if (name.size() > kMaxNameBytes) {
         return std::string{what} + " is longer than " + std::to_string(kMaxNameBytes) + " bytes";
@@ -394,6 +397,7 @@ template <typename T>
 /// @param list  What the list is, for the reason.
 /// @param item  What one name is, for the reason.
 /// @return Why the list is refused, or nothing.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): the list's description, then one item's, as the reasons read.
 [[nodiscard]] inline std::optional<std::string> checkNames(std::vector<std::string> const& names, std::size_t limit,
                                                            std::string_view list, std::string_view item) {
     if (names.size() > limit) {
@@ -401,7 +405,7 @@ template <typename T>
     }
     for (std::string const& name : names) {
         if (auto reason = checkName(name, item)) {
-            return std::move(*reason);
+            return reason;
         }
     }
     return std::nullopt;
@@ -420,11 +424,12 @@ template <typename T>
     for (auto const& [name, version] : names) {
         static_cast<void>(version);
         if (auto reason = checkName(name, item)) {
-            return std::move(*reason);
+            return reason;
         }
     }
     return std::nullopt;
 }
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 }  // namespace detail
 

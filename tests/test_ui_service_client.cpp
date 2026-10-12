@@ -108,7 +108,7 @@ struct Harness {
     }
 
     [[nodiscard]] morph::ui::Exchange exchange() {
-        return [this](Envelope request, std::function<void(morph::ui::ExchangeReply)> done) {
+        return [this](Envelope const& request, std::function<void(morph::ui::ExchangeReply)> const& done) {
             {
                 std::scoped_lock const lock{sentMutex};
                 sent.push_back(request.kind);
@@ -377,7 +377,7 @@ TEST_CASE("Compatibility: an unknown must-understand key is refused", "[ui-servi
     SECTION("in the manifest, whose digest the server vouches for") {
         std::string const manifest = R"({"!signed":true,"application":"x","files":[]})";
         std::string const digest = morph::ui::contentHash(manifest);
-        morph::ui::Exchange const fake = [&](Envelope request, auto done) {
+        morph::ui::Exchange const fake = [&](Envelope const& request, auto const& done) {
             Envelope reply = morph::wire::makeOk(
                 0, request.kind == "ui-hello" ? R"({"application":"x","digest":")" + digest + R"("})" : manifest);
             done(std::move(reply));

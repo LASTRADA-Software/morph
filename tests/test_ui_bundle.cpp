@@ -10,7 +10,6 @@
 #include <string>
 #include <string_view>
 
-using morph::ui::CatalogReply;
 using morph::ui::contentHash;
 using morph::ui::isContentHash;
 using morph::ui::Manifest;

@@ -139,7 +139,7 @@ namespace detail {
         return std::string{"a catalog entry has an id"};
     }
     if (auto reason = checkName(entry.id, "a catalog entry id")) {
-        return std::move(*reason);
+        return reason;
     }
     if (entry.whenDenied != "hide" && entry.whenDenied != "disable") {
         return "`whenDenied` is `hide` or `disable`, not `" + entry.whenDenied + "`";
@@ -406,7 +406,7 @@ public:
         if (auto refusal = checkBuildable()) {
             return std::unexpected(std::move(*refusal));
         }
-        auto const bundle = std::make_shared<ServedBundle>();
+        auto bundle = std::make_shared<ServedBundle>();
         bundle->application = _application;
         bundle->vocabularies.assign(_vocabularies.begin(), _vocabularies.end());
         bundle->appActions = _appActions;
