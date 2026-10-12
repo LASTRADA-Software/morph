@@ -231,14 +231,20 @@ there. Both reasons lead to one non-blocking acquire verb, `bindModel`, whose
 reply is a `Completion` delivered on an executor the caller names.
 
 **Queueing before the first connect.** A non-blocking *private* bind made
-before `QtWebSocketBackend`'s socket has finished connecting is **queued**, not
-failed — the ordering a single-threaded WASM client must use, since it can never
-block waiting for the connection to settle. The queued request is sent, in FIFO
-order, the moment `connected` fires next (the first connect included, before
-the reconnect handler is posted); if the socket is torn down before ever
-connecting, `cancelPending` rejects each queued request's `Completion` exactly
-once. A *keyed* bind carries no queue: it is rejected with `"disconnected"`
-immediately. See `QtWebSocketBackend`'s own section below.
+before the socket has finished connecting is **queued**, not failed, on both
+socket transports, `QtWebSocketBackend` and `morph::net::SocketBackend`. That
+is the ordering a single-threaded client must use (WASM, or a terminal client
+on a `Caller` I/O loop), since it can never block waiting for the connection to
+settle. The queued request is sent, in FIFO order, the moment the socket next
+connects (the first connect included, before the reconnect handler is posted).
+A disconnect, a failed connect attempt, `cancelPending` and the backend's
+destruction each reject every queued request's `Completion` exactly once. A
+*keyed* bind carries no queue: it is rejected immediately (`"disconnected"`
+from Qt, `DisconnectedError` from `SocketBackend`), since replayed on a later
+connection it would attach from a `current` that connection never issued.
+`SocketBackend` also rejects, rather than queues, a private bind made once no
+connect will be attempted again: the first connect failed, or the connection
+dropped with reconnecting disabled.
 
 ## The structural registration surface — `bindModel` and `promoteModel`
 

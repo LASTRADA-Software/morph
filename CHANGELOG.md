@@ -11,6 +11,12 @@ API surface).
 
 ### Changed
 
+- **`morph::net::SocketBackend` queues a private bind made before its socket
+  connects**, as `QtWebSocketBackend` does, and sends the queued binds in order
+  once it connects. A single-threaded client can bind right after constructing
+  the backend instead of failing with `DisconnectedError`. Keyed binds, and binds
+  made once no further connect will be attempted, are still rejected.
+
 - **Action-log and offline-queue timestamps come from an injected wall clock.**
   `IModelHolder::attachActionLog` takes an optional third parameter, a
   `core::platform::WallClockRef`, and `LogEntry::timestampMs` is read from it.
