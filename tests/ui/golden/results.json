@@ -1,0 +1,113 @@
+{
+   "vocab": "ui/1",
+   "id": "lims.results",
+   "params": {
+      "sampleId": "int"
+   },
+   "models": {
+      "sample": {
+         "type": "Lims_SampleModel",
+         "instance": {
+            "ref": "sampleId"
+         }
+      }
+   },
+   "queries": {
+      "results": {
+         "model": "sample",
+         "action": "Lims_ListResults",
+         "body": {
+            "obj": {
+               "sampleId": {
+                  "ref": "sampleId"
+               }
+            }
+         }
+      }
+   },
+   "view": {
+      "kind": "table",
+      "rows": {
+         "ref": "results"
+      },
+      "key": {
+         "row": "id"
+      },
+      "columns": [
+         {
+            "cell": [
+               {
+                  "kind": "textInput",
+                  "value": {
+                     "ref": "draft.mass"
+                  },
+                  "label": {
+                     "t": "lims.mass",
+                     "fallback": "Mass"
+                  },
+                  "commitOn": "change"
+               }
+            ]
+         },
+         {
+            "cell": [
+               {
+                  "kind": "text",
+                  "text": {
+                     "fn": "quantity",
+                     "args": [
+                        {
+                           "fn": "coalesce",
+                           "args": [
+                              {
+                                 "ref": "calc.concentration"
+                              },
+                              {
+                                 "row": "concentration"
+                              }
+                           ]
+                        }
+                     ]
+                  },
+                  "stale": {
+                     "pending": "calc"
+                  }
+               }
+            ]
+         }
+      ],
+      "scope": {
+         "state": {
+            "draft": {
+               "type": "record",
+               "init": {
+                  "row": "inputs"
+               }
+            }
+         },
+         "queries": {
+            "calc": {
+               "model": "sample",
+               "action": "Lims_EvaluateResult",
+               "body": {
+                  "obj": {
+                     "resultId": {
+                        "row": "id"
+                     },
+                     "inputs": {
+                        "ref": "draft"
+                     }
+                  }
+               },
+               "debounce": 300
+            }
+         }
+      },
+      "a11y": {
+         "name": {
+            "t": "lims.results",
+            "fallback": "Results"
+         }
+      }
+   }
+}

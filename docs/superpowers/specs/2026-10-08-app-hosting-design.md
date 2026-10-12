@@ -533,6 +533,14 @@ auto limsSample = ui::screen<"lims.sample">([](ui::Scope& s) {
 MORPH_REGISTER_SCREEN(limsSample);
 ```
 
+The sketch is in spec 5's notation. As `morph::ui::author` spells it (`docs/spec/ui/author.md`), a
+query or mutation takes its name first (`s.query<GetHeader>("header", sample, ...)`), a body is a list
+of `{&Action::member, handle}` pairs, `refreshOn` names actions through the model handle
+(`sample.actions<HeaderSection, SelectProject>()`), the command `if` is `ui::ifThen`, the
+`switch` node `ui::switchOn`, a dialog is named by `ui::element("project")`, and `custom` keys its
+props by name. `page`, `pageHeader`, `card`, `pill` and `optionalMenu` are the example's own
+compositions, and `ui::t` takes named arguments as `{{"n", e}}`.
+
 The "choose project" dialog is declared in the sample screen's scope, so its mutation reaches the
 sample's private working copy. A picker reusable across screens borrows the owner's instance with
 `"instance": {"from": "sample"}` (§16).

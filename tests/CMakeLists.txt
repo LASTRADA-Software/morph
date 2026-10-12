@@ -177,6 +177,7 @@ add_executable(morph_tests
     test_ui_interpreter_models.cpp
     test_ui_interpreter_permissions.cpp
     test_ui_interpreter_commands.cpp
+    test_ui_author.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
@@ -227,6 +228,9 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_UI_MESSAGES_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/messages.json"
     MORPH_UI_EXPRESSIONS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/expressions.json"
     MORPH_UI_DOCUMENTS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/documents.json")
+
+# The authoring goldens: builder output checked against JSON files.
+target_compile_definitions(morph_tests PRIVATE MORPH_UI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/ui/golden")
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 

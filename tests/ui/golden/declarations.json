@@ -1,0 +1,518 @@
+{
+   "vocab": "ui/1",
+   "id": "lims.declarations",
+   "title": {
+      "t": "lims.declarations",
+      "fallback": "Declarations"
+   },
+   "identity": {
+      "ref": "sampleId"
+   },
+   "dirty": {
+      "ref": "unsaved"
+   },
+   "params": {
+      "sampleId": "int",
+      "copyOf": "int?",
+      "mode": "string",
+      "readOnly": "bool",
+      "dilution": "decimal",
+      "mass": "quantity",
+      "since": "timestamp",
+      "tags": "list<string>",
+      "headerRecord": "record"
+   },
+   "models": {
+      "sample": {
+         "type": "Lims_SampleModel",
+         "instance": {
+            "ref": "sampleId"
+         }
+      },
+      "working": {
+         "type": "Lims_SampleModel",
+         "instance": "private"
+      },
+      "shared": {
+         "type": "Lims_SampleModel",
+         "instance": "shared"
+      },
+      "borrowed": {
+         "type": "Lims_SampleModel",
+         "instance": {
+            "from": "sample"
+         }
+      },
+      "session": {
+         "type": "Auth_SessionModel"
+      }
+   },
+   "state": {
+      "unsaved": {
+         "type": "bool",
+         "init": false
+      },
+      "note": {
+         "type": "string"
+      },
+      "picked": {
+         "type": "int",
+         "init": {
+            "ref": "sampleId"
+         }
+      },
+      "optional": {
+         "type": "list<string>",
+         "init": {
+            "lit": [
+               "turbidity"
+            ]
+         }
+      },
+      "anything": {
+         "init": 1
+      }
+   },
+   "let": {
+      "total": {
+         "fn": "add",
+         "args": [
+            {
+               "ref": "picked"
+            },
+            1
+         ]
+      }
+   },
+   "queries": {
+      "results": {
+         "model": "sample",
+         "action": "Lims_ListResults",
+         "body": {
+            "obj": {
+               "sampleId": {
+                  "ref": "sampleId"
+               }
+            }
+         },
+         "when": {
+            "fn": "engaged",
+            "args": [
+               {
+                  "ref": "sampleId"
+               }
+            ]
+         },
+         "debounce": 250,
+         "refreshEvery": 30000,
+         "staleTime": 5000,
+         "refreshOn": [
+            "Lims_CaptureConcentration",
+            "Lims_LoadSample"
+         ]
+      },
+      "header": {
+         "model": "working",
+         "action": "Lims_GetHeader"
+      },
+      "preview": {
+         "model": "shared",
+         "evaluate": "Lims_EvaluateResult",
+         "body": {
+            "obj": {
+               "resultId": {
+                  "ref": "picked"
+               }
+            }
+         }
+      }
+   },
+   "mutations": {
+      "capture": {
+         "model": "sample",
+         "action": "Lims_CaptureConcentration",
+         "body": {
+            "obj": {
+               "resultId": {
+                  "ref": "picked"
+               }
+            }
+         },
+         "concurrency": "serial",
+         "serialKey": {
+            "ref": "picked"
+         },
+         "invalidates": [
+            "header"
+         ],
+         "patch": {
+            "query": "results",
+            "key": {
+               "ref": "result.id"
+            },
+            "with": {
+               "ref": "result"
+            }
+         },
+         "optimistic": {
+            "query": "results",
+            "key": {
+               "ref": "body.resultId"
+            },
+            "with": {
+               "obj": {
+                  "inputs": {
+                     "ref": "body.inputs"
+                  }
+               }
+            }
+         },
+         "onSuccess": [
+            {
+               "set": "unsaved",
+               "value": true
+            }
+         ],
+         "onError": [
+            {
+               "notify": {
+                  "t": "lims.captureFailed",
+                  "fallback": "Capture failed"
+               },
+               "role": "error"
+            }
+         ],
+         "offline": "queue"
+      },
+      "load": {
+         "model": "working",
+         "action": "Lims_LoadSample",
+         "concurrency": "latest"
+      },
+      "section": {
+         "model": "working",
+         "action": "Lims_HeaderSection",
+         "concurrency": "parallel"
+      },
+      "signIn": {
+         "model": "session",
+         "action": "Auth_SignIn"
+      }
+   },
+   "watch": [
+      {
+         "on": {
+            "ref": "picked"
+         },
+         "do": [
+            {
+               "set": "note",
+               "value": ""
+            }
+         ]
+      },
+      {
+         "on": {
+            "ref": "noteInput.value"
+         },
+         "source": "user",
+         "do": [
+            {
+               "set": "unsaved",
+               "value": true
+            }
+         ]
+      }
+   ],
+   "checks": [
+      {
+         "id": "pickedPositive",
+         "assert": {
+            "fn": "gt",
+            "args": [
+               {
+                  "ref": "picked"
+               },
+               0
+            ]
+         },
+         "message": {
+            "t": "lims.picked",
+            "fallback": "Pick a sample"
+         },
+         "targets": [
+            "noteInput"
+         ],
+         "blocking": true
+      },
+      {
+         "id": "anythingSet",
+         "assert": {
+            "fn": "engaged",
+            "args": [
+               {
+                  "ref": "anything"
+               }
+            ]
+         }
+      }
+   ],
+   "onMount": [
+      {
+         "if": [
+            {
+               "fn": "engaged",
+               "args": [
+                  {
+                     "ref": "copyOf"
+                  }
+               ]
+            },
+            [
+               {
+                  "run": "load",
+                  "body": {
+                     "obj": {
+                        "id": {
+                           "ref": "copyOf"
+                        }
+                     }
+                  }
+               }
+            ],
+            [
+               {
+                  "run": "load"
+               }
+            ]
+         ]
+      }
+   ],
+   "onUnmount": [
+      {
+         "set": "note",
+         "value": ""
+      }
+   ],
+   "onClose": [
+      {
+         "if": [
+            {
+               "ref": "unsaved"
+            },
+            [
+               {
+                  "cancelClose": true
+               }
+            ]
+         ]
+      }
+   ],
+   "onSave": [
+      {
+         "run": "load"
+      }
+   ],
+   "onBackendChange": [
+      {
+         "refetch": "header"
+      }
+   ],
+   "keys": {
+      "Ctrl+S": [
+         {
+            "run": "load"
+         }
+      ]
+   },
+   "showErrors": "touched",
+   "prefetch": [
+      "results"
+   ],
+   "components": {
+      "Chart": {
+         "qml": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "props": {
+            "title": "string",
+            "series": "json",
+            "limit": "exact",
+            "count": "int",
+            "scale": "number",
+            "live": "bool"
+         },
+         "events": {
+            "pointSelected": "key"
+         },
+         "fallback": {
+            "kind": "text",
+            "text": {
+               "ref": "props.title"
+            }
+         }
+      },
+      "Grid": {
+         "host": "ResultGrid",
+         "version": 2,
+         "props": {},
+         "fallback": {
+            "kind": "spacer"
+         }
+      }
+   },
+   "customize": {
+      "resultColumns": {
+         "kind": "columns",
+         "of": "resultsTable"
+      },
+      "density": {
+         "kind": "choice",
+         "options": [
+            "comfortable",
+            "compact"
+         ],
+         "default": "comfortable"
+      },
+      "theme": {
+         "kind": "choice",
+         "options": [
+            "light",
+            "dark"
+         ]
+      },
+      "resultFilter": {
+         "kind": "value",
+         "type": "string?",
+         "default": null
+      },
+      "panels": {
+         "kind": "layout"
+      },
+      "filters": {
+         "kind": "saved"
+      }
+   },
+   "view": {
+      "kind": "column",
+      "children": [
+         {
+            "kind": "textInput",
+            "value": {
+               "ref": "note"
+            },
+            "label": {
+               "t": "lims.note",
+               "fallback": "Note"
+            },
+            "id": "noteInput"
+         },
+         {
+            "kind": "text",
+            "text": {
+               "fn": "format",
+               "args": [
+                  "{0}",
+                  {
+                     "ref": "total"
+                  }
+               ]
+            }
+         },
+         {
+            "kind": "text",
+            "text": {
+               "fn": "concat",
+               "args": [
+                  {
+                     "ref": "mode"
+                  },
+                  {
+                     "pref": "density"
+                  },
+                  {
+                     "pref": "resultFilter"
+                  }
+               ]
+            }
+         },
+         {
+            "kind": "text",
+            "text": {
+               "if": [
+                  {
+                     "fn": "includes",
+                     "args": [
+                        {
+                           "ref": "optional"
+                        },
+                        "turbidity"
+                     ]
+                  },
+                  "yes",
+                  "no"
+               ]
+            },
+            "visible": {
+               "pending": "preview"
+            }
+         },
+         {
+            "kind": "table",
+            "rows": {
+               "ref": "results"
+            },
+            "key": {
+               "row": "id"
+            },
+            "id": "resultsTable",
+            "a11y": {
+               "name": "Results"
+            }
+         },
+         {
+            "kind": "customize",
+            "point": "resultColumns"
+         },
+         {
+            "kind": "custom",
+            "name": "Chart",
+            "props": {
+               "title": "Trend",
+               "series": {
+                  "ref": "results"
+               }
+            },
+            "on": {
+               "pointSelected": [
+                  {
+                     "set": "picked",
+                     "value": {
+                        "ref": "event"
+                     }
+                  }
+               ]
+            },
+            "a11y": {
+               "name": "Trend"
+            }
+         },
+         {
+            "kind": "custom",
+            "name": "Grid",
+            "a11y": {
+               "name": "Grid"
+            }
+         },
+         {
+            "kind": "button",
+            "label": "Sign in",
+            "onClick": [
+               {
+                  "signIn": {
+                     "from": "signIn"
+                  }
+               }
+            ]
+         }
+      ]
+   }
+}

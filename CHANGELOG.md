@@ -217,6 +217,16 @@ API surface).
   - Model calls go through `ui::Dispatcher`; `ui::BridgeDispatcher` sends them over the bridge's
     model-free seams (`bindByType`, `executeRaw`, `attach`).
   - `form`, `collection`, `wizard` and a model-backed `table` are reported and not yet lowered.
+- **`morph::ui::author`: screens written in C++ on the server** (`author.hpp`). Typed builders write
+  the UI document: expression handles with operators (`a + b`, `a < b`, `a && b`, `!a`,
+  `x.orElse(y)`) and member-pointer field reads; queries, evaluations and mutations named by their
+  action type, whose bodies are `{&Action::member, handle}` pairs checked at compile time; every
+  node kind and command, the lifecycle keys, `refreshOn` through the model handle, `form` with its
+  `fields` overlay, `dataTable`, `custom` and host components, and customization points.
+  `ScreenRegistry` and `MORPH_REGISTER_SCREEN` emit a screen's JSON once and register it only when
+  `loadDocument`, with catalog facts taken from the builders' model and action types, and the
+  accessibility rules of spec 5 §11 (`checkAccessibility`) both accept it; a refusal names the
+  path and the rule. Goldens of builder output are under `tests/ui/golden/`.
 
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.

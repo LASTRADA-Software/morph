@@ -139,6 +139,8 @@ interaction a controller declares instead of sequencing
 load-time validation, and the `expr/1` language its properties are written in ·
 [`ui/interpreter.md`](ui/interpreter.md) — how a loaded document mounts: its scopes, queries and the
 session's cache, mutations, relations and commands ·
+[`ui/author.md`](ui/author.md) — the server-side builders that write it, and the
+registration that validates it once, with the accessibility rules ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·
