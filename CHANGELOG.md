@@ -172,6 +172,24 @@ API surface).
 
 ### Added
 
+- **The UI service: `ui-hello`, `ui-catalog`, `ui-fetch` and content-addressed bundles.** Header-only, in the
+  base `morph` target (`ui/bundle.hpp`, `ui/service.hpp`, `ui/service_client.hpp`). `hello` and
+  `kProtocolVersion` are unchanged; a server without the service answers `unknown envelope kind: ui-hello`.
+  - `backend::IEnvelopeService` and `ServerConfig::services`: `RemoteServer` hands a kind it does not answer
+    itself to the first service that serves it, with the verified principal already stamped. Built-in kinds
+    cannot be taken over; a null service is refused at construction.
+  - `ui::UiRegistry` validates an application's screens, app document, themes, message catalogues and
+    components at registration and builds a `ServedBundle` whose manifest lists every file by SHA-256.
+    `ui::UiService` serves it. Every request calls the authoriser (`ui`/`hello`, `ui`/`catalog`, `ui`/`fetch`);
+    the catalog lists a screen only when the principal may run every query it declares at its top level,
+    hiding or disabling it by `whenDenied`, and carries the permitted action ids and the load-time facts.
+  - `ui::UiClient` opens a bundle over a caller-supplied transport, verifies the manifest against the
+    `ui-hello` digest and every file against the manifest, and keeps what it verified in a `VerifiedCache`:
+    an unchanged manifest fetches nothing, a changed byte refuses the bundle, and `openOffline` starts from
+    the last verified bundle.
+  - Every body is bounded (64 KiB requests, 4 MiB files, 4096 files, 64 levels of JSON), and a
+    must-understand (`!`) key is refused.
+
 - **`morph::qt_quick`: the Qt Quick renderer and frontend** (`MORPH_BUILD_QT_QUICK`, default off; needs
   `MORPH_BUILD_QT` and Qt 6.5+ Quick). A compiled STATIC library with the private QML module `MorphUi`, one
   component per node kind. See `docs/spec/qt_quick/`.

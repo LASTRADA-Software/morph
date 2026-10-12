@@ -93,7 +93,7 @@ struct Principal {
 
 /// @brief Authorizes incoming actions on a `RemoteServer`.
 ///
-/// Called before dispatch on **four** envelope kinds, not only `execute`. A
+/// Called before dispatch on **four** of the server's own envelope kinds, not only `execute`. A
 /// `false` return causes the server to reply with `err|unauthorized` (the client
 /// surfaces the error through the `.onError(...)` callback):
 ///
@@ -103,6 +103,18 @@ struct Principal {
 /// | `instances` | `env.typeId`    | **empty** |
 /// | `schemas`   | `env.typeId`    | **empty** |
 /// | `deregister` | **empty**      | **empty** |
+///
+/// A server configured with the UI service (`ui::UiService`) also calls it for
+/// that service's kinds, under the pseudo-model `ui`:
+///
+/// | Envelope | `modelType` | `actionType` |
+/// |---|---|---|
+/// | `ui-hello`, and `ui-fetch` of a public file | `ui` | `hello` |
+/// | `ui-catalog` | `ui` | `catalog` |
+/// | `ui-fetch` of any other file | `ui` | `fetch` |
+///
+/// and, to filter the catalog, with each screen's model types and action ids,
+/// as `execute` would. See `docs/spec/ui/service.md`, "Authorisation".
 ///
 /// A `deregister` names no type, so both ids are empty; its type-level call
 /// is what lets a verifying authorizer refuse a release from a caller with no

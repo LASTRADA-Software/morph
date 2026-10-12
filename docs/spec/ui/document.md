@@ -260,4 +260,4 @@ objects and arrays (`kMaxJsonDepth`), which is checked before the JSON parser ru
   [`interpreter.md`](interpreter.md).
 - The accessibility rules of spec 5 §11: they guard authoring, run at registration with the
   server-side builders ([`author.md`](author.md)), and a client does not repeat them.
-- Delivery: the `ui-*` envelope kinds, the catalog and bundles are the UI service's.
+- Delivery: the `ui-*` envelope kinds, the catalog and bundles are the UI service's, [`service.md`](service.md).

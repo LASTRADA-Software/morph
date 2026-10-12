@@ -141,6 +141,8 @@ load-time validation, and the `expr/1` language its properties are written in ·
 session's cache, mutations, relations and commands ·
 [`ui/author.md`](ui/author.md) — the server-side builders that write it, and the
 registration that validates it once, with the accessibility rules ·
+[`ui/service.md`](ui/service.md) — the UI service: `ui-hello`, `ui-catalog` and `ui-fetch`, the catalog
+filtered for the principal, and content-addressed bundles verified into the client's cache ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·

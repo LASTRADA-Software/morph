@@ -14,6 +14,7 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Protocol version negotiation](#protocol-version-negotiation)
 - [Cancelling a call](#cancelling-a-call)
 - [Serving action schemas](#serving-action-schemas)
+- [The UI service's kinds](#the-ui-services-kinds)
 - [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -37,6 +38,9 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
 | `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
 | `"cancel"`   | request   | Client asks the server to stop one of its own in-flight `execute` calls. Replies `ok` whatever became of the call. Sent only to a server whose `hello` reply advertised `"cancel"`. See [Cancelling a call](#cancelling-a-call). | `callId` (the cancel's own), `cancelCallId` (the execute's), `session` |
+| `"ui-hello"` | request   | The UI service's handshake: what the client speaks; replies with the application, the vocabularies its bundle needs and the manifest digest. Answered only by a server configured with the UI service. See [The UI service's kinds](#the-ui-services-kinds). | `body`, `session` |
+| `"ui-catalog"` | request | The catalog filtered for the principal, its permitted actions and the load-time facts. UI service only. | `session` |
+| `"ui-fetch"` | request   | A bundle file by its content hash; replies with the file's exact bytes in `body`. UI service only. | `body`, `session` |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
 | `"err"`      | reply     | Server failure. | `callId`, `message` |
 
@@ -54,7 +58,8 @@ every other kind.
 ### `session` — authorization context
 
 The `session` field carries a `morph::session::Context` for authorization and
-routing. Populated on `"execute"`; ignored on every other kind.
+routing. Populated on `"execute"` and on the UI service's `"ui-*"` kinds;
+ignored on every other kind.
 
 The `principal` sub-field a client sends is a *claim*, not a fact: a configured
 `session::IAuthorizer` may verify the accompanying `token` and **overwrite**
@@ -645,6 +650,35 @@ the same synchronous control path as `registerModel`/`negotiateProtocolVersion`
 and returns the raw document, throwing on an `"err"` reply. Like
 `negotiateProtocolVersion()`, it is **opt-in**: nothing calls it for you.
 
+## The UI service's kinds
+
+The UI service (`morph::ui::UiService`, [ui/service.md](../ui/service.md))
+adds three kinds through `RemoteServer`'s envelope services
+([backend.md](backend.md#envelope-services)). `hello` and `kProtocolVersion`
+are unchanged: `hello` is unauthorised and names no model, so it cannot carry
+an application's inventory.
+
+| Kind | Request `body` | `ok` reply `body` | Authorisation |
+|---|---|---|---|
+| `"ui-hello"` | `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `{application, version, vocabularies, digest}` | `authorize(session, "ui", "hello")`, the pseudo-action spec 5 writes `ui/hello`; an application with a login screen allows it for an empty principal. A client missing a vocabulary the bundle needs is answered `err "missing vocabulary: <v>[, <v>…]"`. |
+| `"ui-catalog"` | empty | `{entries, permitted, models?, actions?}` | `authorize(session, "ui", "catalog")`, then `authorize(session, modelType, action)` for every action the filter asks about. |
+| `"ui-fetch"` | `{hash}` | the file's bytes | The manifest and a public file: the `ui-hello` gate. Any other file: `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted). An unknown hash is answered `err "not found"` only past the `fetch` gate. |
+| `"ui-evaluate"` | — | — | Not yet served: as the action it evaluates. |
+| `"ui-file"` | — | — | Not yet served: as the mutation that references the file. |
+
+Every refusal is `err "unauthorized"`. A request body over 64 KiB, that is not
+JSON, nests deeper than 64 levels or carries a must-understand (`!`) key is
+refused with the reason.
+
+**Additive, no version bump.** No `Envelope` member is added or retyped: the
+requests and replies travel in `body`, and the session in `session`, both
+existing members. A server without the UI service answers
+`err "unknown envelope kind: ui-hello"`, which a client reads as "no UI
+service" exactly as `interpretHelloReply` reads the same reply to `hello` as a
+peer that predates the handshake. An old client never sends these kinds, so a
+server that has the UI service answers it as before; its `hello` reply is
+byte-for-byte the one a server without the service gives.
+
 ## Action-evolution policy
 
 The passive forward-compat contract (`error_on_unknown_keys = false` on
@@ -786,9 +820,9 @@ client.
 | `modelId` | `uint64_t` | `0` | `"deregister"`, `"execute"`, `"ok"(register)`, `"attach"`, `"assign"` — instance id. |
 | `modelType` | `std::string` | `""` | `"execute"` — routing key for `ActionDispatcher`. |
 | `actionType` | `std::string` | `""` | `"execute"` — second routing key. |
-| `body` | `std::string` | `""` | `"execute"`, `"ok"` — serialized JSON payload. |
+| `body` | `std::string` | `""` | `"execute"`, `"ok"`, `"ui-hello"`, `"ui-fetch"` — serialized JSON payload; a `"ui-fetch"` reply's is the file's exact bytes. |
 | `message` | `std::string` | `""` | `"err"` — free-text error message. |
-| `session` | `::morph::session::Context` | default | `"execute"` — authorization and routing context. |
+| `session` | `::morph::session::Context` | default | `"execute"`, `"ui-hello"`, `"ui-catalog"`, `"ui-fetch"` — authorization and routing context. |
 | `protocolVersion` | `uint32_t` | `0` | `"hello"` — protocol version the sender speaks. `0` means unspecified/legacy peer; not otherwise inspected. |
 | `cancelCallId` | `uint64_t` | `0` | `"cancel"` — the `callId` of the `execute` to stop. `0` names no call. |
 

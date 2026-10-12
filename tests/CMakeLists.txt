@@ -181,6 +181,10 @@ add_executable(morph_tests
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
+    test_remote_envelope_service.cpp
+    test_ui_bundle.cpp
+    test_ui_service.cpp
+    test_ui_service_client.cpp
 )
 
 target_link_libraries(morph_tests
