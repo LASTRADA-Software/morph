@@ -174,3 +174,30 @@ schema assigned as a JS object, the renderer's internal indexes).
   programmatic guard.
 - `clang-format --dry-run --Werror` on every touched file; Doxygen with `WARN_AS_ERROR`.
 - Not verified locally: clang-tidy, MSVC and the WebAssembly build (CI).
+
+## Slice (c), split again
+
+Slice (c) lands as two pull requests, both after (a):
+
+- **(c1) the headless composites:** `collection.hpp` and `wizard.hpp` as models and sessions, no view and no
+  interpreter node. `CollectionModel` reads the `v-*` document (with each column's table `kind`);
+  `CollectionSession` lists rows through a `Query` on `v-query`, keeps a `table::VectorSource` of them in sync so
+  sorting, filtering and selection are the table engine's, runs row and collection actions as one `Mutation`
+  whose bodies are built from `bind` with the row's exact JSON values, holds a `confirm` action until it is
+  answered, and opens the row editor as a `FormSession` reset and prefilled from the row; an editor success
+  (`successCount`) closes it and refetches. `WizardModel` reads `w-*`; `WizardSession` keeps one `FormSession` per
+  step, records each success's body and reply into the resolved values (draft first, the reply winning), applies
+  a step's prefill as JSON on entry, and counts a step done only while its body is the one that succeeded, so
+  returning to a done step submits nothing and a changed body is resubmitted by Next.
+- **(c2) the rest:** `collectionView` and `wizardView` (they need (b)'s `formView`), the interpreter's
+  `collection` and `wizard` nodes, and `app_shell.hpp`. `app_shell` mounts screens by document id, which is the
+  host contract #933 introduces; it waits for that.
+
+`workspace.hpp` (spec 6 §7) hosts screens of every kind, not forms, and its contract is `ui/host.hpp`; it
+belongs with the hosting part (#893), not here. Spec 2 §9 lists it under the forms engine and is corrected in
+the PR that builds it.
+
+Parity of (c1): every QuickTest claim about collections and wizards that needs no view is re-expressed
+headlessly (`tst_collectionview.qml`, the collection half of `tst_LargeIdPrecision.qml`, `tst_wizardview.qml`, and
+the confirm-gate cases of `tst_ViewChrome.qml`). The chrome, dialog-visibility and master-detail layout claims
+move to (c2) with the views.
