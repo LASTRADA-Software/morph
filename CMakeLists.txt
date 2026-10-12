@@ -517,6 +517,8 @@ target_sources(morph
         include/morph/forms/engine/form_session.hpp
         include/morph/forms/engine/handler_submitter.hpp
         include/morph/forms/engine/typed_form.hpp
+        include/morph/forms/engine/collection.hpp
+        include/morph/forms/engine/wizard.hpp
         include/morph/table/data_source.hpp
         include/morph/table/sort.hpp
         include/morph/table/filter.hpp

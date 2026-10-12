@@ -148,6 +148,8 @@ add_executable(morph_tests
     test_forms_engine_typed.cpp
     test_forms_engine_corpora.cpp
     test_forms_engine_edges.cpp
+    test_forms_engine_collection.cpp
+    test_forms_engine_wizard.cpp
     test_session_auth.cpp
     test_policy_hardening.cpp
     test_register_authorization.cpp
