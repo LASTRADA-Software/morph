@@ -809,7 +809,7 @@ files no uploaded report contained. Fixed here.
 - **`x-rules` has one client-side evaluator and no shared corpus.** **Closed.**
   A shared corpus now pins the compiled evaluator
   (`morph::forms::allRulesSatisfied`) to the QML one: one checked-in file,
-  `src/qt/forms/tests/data/rule_corpus.json`, is driven through both —
+  `tests/data/rule_corpus.json`, is driven through both —
   `tests/test_forms_rule_corpus.cpp` on the compiled side,
   `tst_DynamicFormRuleCorpus.qml` on the client side — so a rule kind added to
   one evaluator and not the other now fails a shared test instead of shipping

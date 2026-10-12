@@ -13,7 +13,7 @@
 // form that can never be satisfied, with no error naming why.
 //
 // None of this is reachable through the shared corpus
-// (data/rule_corpus.json), and that is not an oversight: every corpus schema
+// (tests/data/rule_corpus.json), and that is not an oversight: every corpus schema
 // is verbatim `schemaJson<A>()` output, and the compiled emitter cannot emit a
 // kind it does not have. The schemas below are therefore hand-authored -- the
 // one place in the rules tests where that is the honest fixture rather than a

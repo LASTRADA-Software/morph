@@ -9,7 +9,7 @@
 // how `atLeastOneOf` and `mutuallyExclusive` could both be disabled
 // client-side with the whole renderer suite still green.
 //
-// The pin is `data/rule_corpus.json`: ONE file, TWO readers. This file drives
+// The pin is `tests/data/rule_corpus.json`: ONE file, TWO readers. This file drives
 // every row through a real DynamicForm; `tests/test_forms_rule_corpus.cpp`
 // drives the same rows through the compiled evaluator and additionally asserts
 // that (1) each corpus schema is the current `schemaJson<A>()` byte-for-byte,
@@ -74,7 +74,7 @@ TestCase {
         if (testCase.corpusCache !== null)
             return testCase.corpusCache
         verify(typeof ruleCorpusJson === "string" && ruleCorpusJson.length > 0,
-               "data/rule_corpus.json is unreadable or empty")
+               "tests/data/rule_corpus.json is unreadable or empty")
         testCase.corpusCache = JSON.parse(ruleCorpusJson)
         return testCase.corpusCache
     }

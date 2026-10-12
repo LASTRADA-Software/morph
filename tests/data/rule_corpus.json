@@ -1,11 +1,11 @@
 {
   "readme": [
-    "The shared x-rules corpus. ONE file, TWO readers:",
+    "The shared x-rules corpus. ONE file, THREE readers:",
     "  tests/test_forms_rule_corpus.cpp          -- morph::forms::allRulesSatisfied",
+    "  tests/test_forms_engine_corpora.cpp       -- the forms engine's FormSession",
     "  src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml -- a real DynamicForm",
-    "Neither owns the cases, so the two evaluators cannot be pinned to",
-    "different case lists. See docs/spec/forms/forms.md, 'Two evaluators, one",
-    "corpus'.",
+    "No reader owns the cases, so the evaluators cannot be pinned to different",
+    "case lists. See docs/spec/forms/forms.md, 'Two evaluators, one corpus'.",
     "",
     "'schemas' holds verbatim schemaJson<A>() output, as TEXT. Storing it as a",
     "JSON string (not an inline object) is deliberate: the renderer parses the",

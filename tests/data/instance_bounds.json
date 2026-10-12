@@ -1,7 +1,7 @@
 {
   "readme": [
-    "The per-instance constraints corpus. ONE file, TWO readers:",
-    "  tests/test_forms_instance_constraints.cpp -- InstanceConstraints::checkValue",
+    "The per-instance constraints corpus. ONE file, THREE readers:",
+    "  tests/test_forms_instance_constraints.cpp -- InstanceConstraints::checkValue, and the forms engine",
     "  src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml -- a real DynamicForm",
     "",
     "The point of the seam is that ONE declaration both serves a schema and",

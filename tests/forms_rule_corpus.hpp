@@ -16,10 +16,11 @@
 /// `mutuallyExclusive` could be disabled client-side with the renderer suite
 /// still green.
 ///
-/// The pin is `src/qt/forms/tests/data/rule_corpus.json`: **one file, two
+/// The pin is `tests/data/rule_corpus.json`: **one file, three
 /// readers**. `tests/test_forms_rule_corpus.cpp` drives every row through the
-/// compiled evaluator; `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml`
-/// drives the same rows through a real `DynamicForm`. Neither owns the cases.
+/// compiled evaluator, `tests/test_forms_engine_corpora.cpp` through the forms
+/// engine, and `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` through a
+/// real `DynamicForm`. No reader owns the cases.
 ///
 /// This header is also the corpus's generator: `corpusActions()` exposes each
 /// fixture's `schemaJson<A>()`, and the C++ test asserts the checked-in file
