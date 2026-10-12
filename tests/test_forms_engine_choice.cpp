@@ -55,8 +55,11 @@ TEST_CASE("choice: a dependent Choice refetches with its parents' literals when 
     REQUIRE(harness.server.fetches().size() == 2);
     CHECK(harness.server.fetches()[1].action == "ListCities");
     CHECK(harness.server.fetches()[1].body == R"({"country":1})");
+    harness.type(*form, "city", "10");
     harness.type(*form, "country", "");
     CHECK(harness.server.fetches().size() == 2);  // a blank parent is no request
+    // ...and an idle query has fetched nothing to judge the selection against, so it is kept.
+    CHECK(form->field("city").text().peek() == "10");
 }
 
 TEST_CASE("choice: a selection the new options no longer back is cleared, without submitting",
