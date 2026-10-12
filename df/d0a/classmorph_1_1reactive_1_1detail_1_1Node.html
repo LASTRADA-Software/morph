@@ -378,7 +378,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>How many times it has run in that flush, this one included. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00477">477</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +408,7 @@ Protected Member Functions</h2></td></tr>
 <p>How deeply the scope owning this node is nested; the flush runs shallower Effects first. </p>
 <dl class="section return"><dt>Returns</dt><dd>Zero for a node no scope owns. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00497">497</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -444,7 +444,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The flush queue's ordering. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +474,7 @@ Protected Member Functions</h2></td></tr>
 <p>Where this node stands in its runtime's creation order; among Effects of one depth, the flush runs older ones first. </p>
 <dl class="section return"><dt>Returns</dt><dd>Greater than that of every node made from the same runtime before it; zero for a node constructed off the owner, which is never queued. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00500">500</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -503,7 +503,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Marks this node Clean without running it (a dropped queue entry). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -533,7 +533,7 @@ Protected Member Functions</h2></td></tr>
 <p>The runtime core. </p>
 <dl class="section return"><dt>Returns</dt><dd>The core this node belongs to. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -563,7 +563,7 @@ Protected Member Functions</h2></td></tr>
 <p>Whether this node was constructed on the owner; one that was not is refused its work. </p>
 <dl class="section return"><dt>Returns</dt><dd>The owner check the constructor made. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00515">515</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -592,7 +592,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Registers this node as a source of the innermost tracked run, if any. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00518">518</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -621,7 +621,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Marks this node Dirty, so the next pull recomputes it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00526">526</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -651,7 +651,7 @@ Protected Member Functions</h2></td></tr>
 <p>Whether a pull is bringing this node up to date right now. A read of the node from inside that pull can only come from its own run or from a source's run that reads it: a cycle. </p>
 <dl class="section return"><dt>Returns</dt><dd>True between the start and the end of <span class="tt"><a class="el" href="#ac0bd97bb3a86586c4f29775c9d8b1e7b" title="Pull phase: brings this node up to date, recomputing only if a source really changed.">updateIfNecessary()</a></span> on this node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00541">541</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -686,7 +686,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00545">545</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -721,7 +721,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -756,7 +756,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
