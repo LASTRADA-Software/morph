@@ -160,7 +160,7 @@ using ChoiceFetcher = std::function<async::Completion<std::string>(std::string_v
   already ready when it is built submits once in automatic mode.
 - **Submission** is a `reactive::Mutation` over the `Submitter`. In automatic mode an Effect submits
   whenever the form becomes ready with a changed body,
-  except while a programmatic change (prefill, reset) is applying; in explicit mode only `submit()`
+  except while a programmatic change (prefill, reset) is applying and while a Choice's options are in flight (its selection is unjudged until they arrive); in explicit mode only `submit()`
   does.
 - **Choice options:** the rows are the result if it is an array, else its first array member. A
   selection no longer among the options follows the field's `onStale` (spec 5 §6), `clear` by
