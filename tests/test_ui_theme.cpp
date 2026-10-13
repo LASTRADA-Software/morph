@@ -5,11 +5,14 @@
 // default; an unknown `$type` and an unknown path are ignored.
 
 #include <catch2/catch_test_macros.hpp>
+#include <initializer_list>
 #include <map>
 #include <morph/ui/service.hpp>
 #include <morph/ui/theme.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 using morph::ui::Rgba;
@@ -119,6 +122,11 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     auto const wrongResolved = morph::ui::resolveTokens({&wrong});
     REQUIRE(wrongResolved);
     CHECK(morph::ui::themeValues(*wrongResolved).colors.at("color.text").hex() == "#1d1d1f");
+    // Even when its value would read as a colour.
+    TokenSet const named = parsed(R"({"color": {"text": {"$type": "fontFamily", "$value": "#123456"}}})");
+    auto const namedResolved = morph::ui::resolveTokens({&named});
+    REQUIRE(namedResolved);
+    CHECK(morph::ui::themeValues(*namedResolved).colors.at("color.text").hex() == "#1d1d1f");
 }
 
 TEST_CASE("theme: an alias cycle and an alias to a missing token refuse", "[ui][theme]") {
@@ -258,4 +266,164 @@ TEST_CASE("theme: the UI service refuses a malformed or unresolvable theme when 
     auto const absent = missing.build();
     REQUIRE_FALSE(absent);
     CHECK(absent.error().message().contains("`theme/dark.tokens.json` is not in the bundle"));
+}
+
+TEST_CASE("theme: every colour form reads, and every malformed one is refused", "[ui][theme]") {
+    auto const color = [](std::string_view json) -> std::optional<std::string> {
+        auto const parsed = morph::ui::parseJson(json);
+        REQUIRE(parsed);
+        auto const read = morph::ui::colorOf(*parsed);
+        return read ? std::optional<std::string>{read->hex()} : std::nullopt;
+    };
+    CHECK(color(R"("#1aF")") == "#11aaff");
+    CHECK(color(R"("#0A0b0C")") == "#0a0b0c");
+    CHECK(color(R"("#0a0b0c80")") == "#0a0b0c80");
+    CHECK(color(R"({"hex": "#123456", "alpha": 0})") == "#12345600");
+    CHECK(color(R"({"colorSpace": "srgb", "components": [0, 0.5, 1], "alpha": 1})") == "#0080ff");
+    CHECK(color(R"({"colorSpace": "srgb", "components": [0, 0, 1]})") == "#0000ff");
+    for (std::string_view const bad : std::initializer_list<std::string_view>{
+             R"("123456")", R"("#12g456")", R"("#12!456")", R"("#12@456")", R"("#1234")", R"("#")", "3", "[]",
+             R"({"hex": 3})", R"({"hex": "nope"})", R"({"hex": "#fff", "alpha": 2})",
+             R"({"hex": "#fff", "alpha": "x"})", R"({"components": [0, 0, 0]})", R"({"colorSpace": "srgb"})",
+             R"({"colorSpace": "srgb", "components": [0, 0]})",
+             R"({"colorSpace": "srgb", "components": [0, 0, -0.1]})",
+             R"({"colorSpace": "srgb", "components": [0, "a", 0]})", R"({"colorSpace": 3, "components": [0, 0, 0]})",
+             R"({"colorSpace": "srgb", "components": {}})"}) {
+        CAPTURE(bad);
+        CHECK_FALSE(color(bad).has_value());
+    }
+}
+
+TEST_CASE("theme: every simple type's shape is checked", "[ui][theme]") {
+    auto const accepted = [](std::string_view type, std::string_view value) {
+        std::string const text =
+            R"({"x": {"$type": ")" + std::string{type} + R"(", "$value": )" + std::string{value} + "}}";
+        auto const tokens = morph::ui::parseTokens(text);
+        if (!tokens) {
+            UNSCOPED_INFO(tokens.error());
+        }
+        return tokens.has_value();
+    };
+    CHECK(accepted("dimension", R"({"value": 1.5, "unit": "rem"})"));
+    CHECK(accepted("dimension", R"({"value": -2, "unit": "px"})"));
+    CHECK_FALSE(accepted("dimension", R"({"value": 1, "unit": "em"})"));
+    CHECK_FALSE(accepted("dimension", R"({"value": "1", "unit": "px"})"));
+    CHECK_FALSE(accepted("dimension", R"({"unit": "px"})"));
+    CHECK_FALSE(accepted("dimension", R"({"value": 1, "unit": 3})"));
+    CHECK(accepted("duration", R"({"value": 200, "unit": "ms"})"));
+    CHECK(accepted("duration", R"({"value": 0.5, "unit": "s"})"));
+    CHECK_FALSE(accepted("duration", R"({"value": 1, "unit": "px"})"));
+    CHECK(accepted("number", "-3"));
+    CHECK_FALSE(accepted("number", R"("3")"));
+    CHECK(accepted("fontFamily", R"("Inter")"));
+    CHECK_FALSE(accepted("fontFamily", "[]"));
+    CHECK_FALSE(accepted("fontFamily", R"(["Inter", 3])"));
+    CHECK_FALSE(accepted("fontFamily", "3"));
+    CHECK(accepted("fontWeight", "700"));
+    CHECK(accepted("fontWeight", R"("bold")"));
+    CHECK_FALSE(accepted("fontWeight", "0"));
+    CHECK_FALSE(accepted("fontWeight", "1001"));
+    CHECK_FALSE(accepted("fontWeight", "true"));
+    CHECK(accepted("shadow", R"({"anything": true})"));
+}
+
+TEST_CASE("theme: declarations and bounds of a token file are checked", "[ui][theme]") {
+    auto const reason = [](std::string_view text) {
+        auto const tokens = morph::ui::parseTokens(text);
+        return tokens ? std::string{} : tokens.error();
+    };
+    CHECK(reason(R"({"g": {"$type": 3, "x": {"$value": 1}}})").contains("`g.$type` is a string"));
+    CHECK(reason(R"({"x": {"$type": 3, "$value": 1}})").contains("`x.$type` is a string"));
+    // A composite holding an alias still needs a type; only a plain alias takes its target's.
+    CHECK(reason(R"({"x": {"$value": {"color": "{c}"}}})").contains("has no `$type`"));
+    CHECK(reason(R"({"x": {"$value": "{c}"}})").empty());
+    CHECK(reason(R"({"x": {"$type": "number", "$value": "{}"}})").contains("not a number"));
+    CHECK(reason(R"({"x": {"$type": "number", "$value": "{c"}})").contains("not a number"));
+    CHECK(reason(R"({"x": {"$type": "number", "$value": "{abc"}})").contains("not a number"));
+
+    std::string many = "{";
+    for (std::size_t index = 0; index <= morph::ui::kMaxThemeTokens; ++index) {
+        many += (index == 0 ? "" : ",") + std::string{"\"t"} + std::to_string(index) +
+                R"(": {"$type": "number", "$value": 1})";
+    }
+    many += '}';
+    CHECK(reason(many).contains("more than 16384 tokens"));
+}
+
+TEST_CASE("theme: an alias inside a list resolves, and a resolved value is checked against its type", "[ui][theme]") {
+    CHECK(refusal({R"({"f": {"$type": "fontFamily", "$value": ["{base}", "sans-serif"]},
+                       "base": {"$type": "fontFamily", "$value": ["Inter"]}})"})
+              .contains("a font family is a name or a list of names"));
+    CHECK(refusal({R"({"f": {"$type": "fontFamily", "$value": ["{gone}"]}})"}).contains("refers to `gone`"));
+    CHECK(refusal({R"({"c": {"$type": "color", "$value": {"colorSpace": "srgb", "components": ["{n}", 0, 0]}},
+                       "n": {"$type": "number", "$value": 0.5}})"})
+              .empty());
+    CHECK(refusal({R"({"c": {"$type": "color", "$value": {"colorSpace": "srgb", "components": ["{d}", 0, 0]}},
+                       "d": {"$type": "dimension", "$value": {"value": 1, "unit": "px"}}})"})
+              .contains("the token `c`: not a colour"));
+}
+
+TEST_CASE("theme: an index's maps and bounds are checked, and an unlisted name is refused", "[ui][theme]") {
+    auto const reason = [](std::string_view text) {
+        auto const index = morph::ui::parseThemeIndex(text);
+        return index ? std::string{} : index.error();
+    };
+    CHECK_FALSE(reason("{nope").empty());
+    CHECK(reason("[1]").contains("an object"));
+    CHECK(reason(R"({"vocab": 1, "base": "b"})").contains("vocab is ui-theme/1"));
+    CHECK(reason(R"({"vocab": "ui-theme/1", "base": "b", "dark": ""})").contains("`dark` names a token file"));
+    CHECK(reason(R"({"vocab": "ui-theme/1", "base": "b", "density": {"compact": 3}})")
+              .contains("`density.compact` names a token file"));
+    CHECK(reason(R"({"vocab": "ui-theme/1", "base": "b", "surfaces": {"rail": ""}})")
+              .contains("`surfaces.rail` names a token file"));
+    CHECK(reason(R"({"vocab": "ui-theme/1", "base": "b", "surfaces": "rail"})").contains("`surfaces` is an object"));
+    for (std::string_view const key : {"variant", "density", "surfaces"}) {
+        std::string text = R"({"vocab": "ui-theme/1", "base": "b")";
+        std::string list;
+        for (std::size_t index = 0; index <= morph::ui::kMaxThemeVariants; ++index) {
+            std::string const name = "v" + std::to_string(index);
+            if (key == "variant") {
+                text += ",\"" + name + "\": \"f\"";
+            } else {
+                list += (index == 0 ? "\"" : ",\"") + name + "\": \"f\"";
+            }
+        }
+        if (key != "variant") {
+            text += ",\"" + std::string{key} + "\": {" + list + "}";
+        }
+        text += '}';
+        CAPTURE(key);
+        CHECK(reason(text).contains("more than 16"));
+    }
+    CHECK_FALSE(morph::ui::isThemeIndex("{nope"));
+    CHECK_FALSE(morph::ui::isThemeIndex("[1]"));
+    CHECK_FALSE(morph::ui::isThemeIndex(R"({"vocab": 1})"));
+
+    auto const index = morph::ui::parseThemeIndex(R"({"vocab": "ui-theme/1", "base": "b", "dark": "d",
+      "density": {"compact": "c"}, "surfaces": {"rail": "r"}})");
+    REQUIRE(index);
+    TokenSet const empty;
+    morph::ui::TokenFileLookup const lookup = [&empty](std::string_view) -> TokenSet const* { return &empty; };
+    for (auto const& [variant, density, surface, what] :
+         std::initializer_list<std::tuple<std::string_view, std::string_view, std::string_view, std::string_view>>{
+             {"light", "", "", "the theme has no variant `light`"},
+             {"", "cosy", "", "the theme has no density `cosy`"},
+             {"", "", "sidebar", "the theme has no surface `sidebar`"}}) {
+        auto const resolved = morph::ui::resolveTheme(*index, lookup, variant, density, surface);
+        REQUIRE_FALSE(resolved);
+        CHECK(resolved.error() == what);
+    }
+    CHECK(morph::ui::resolveTheme(*index, lookup, "dark", "compact", "rail"));
+    morph::ui::TokenFileLookup const none = [](std::string_view) -> TokenSet const* { return nullptr; };
+    auto const noBase = morph::ui::resolveTheme(*index, none, "dark", "", "");
+    REQUIRE_FALSE(noBase);
+    CHECK(noBase.error() == "the token file `b` is not in the bundle");
+    CHECK(reason(R"({"base": "b"})").contains("vocab is ui-theme/1"));
+}
+
+TEST_CASE("theme: a number of the set takes the theme's value only when its type is number", "[ui][theme]") {
+    TokenSet const tokens = parsed(R"({"opacity": {"stale": {"$type": "color", "$value": "#fff"}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    CHECK(morph::ui::themeValues(*resolved).numbers.at("opacity.stale") == 0.55);
 }
