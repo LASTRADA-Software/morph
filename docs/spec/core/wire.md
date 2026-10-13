@@ -653,7 +653,7 @@ and returns the raw document, throwing on an `"err"` reply. Like
 ## The UI service's kinds
 
 The UI service (`morph::ui::UiService`, [ui/service.md](../ui/service.md))
-adds four kinds through `RemoteServer`'s envelope services
+adds five kinds through `RemoteServer`'s envelope services
 ([backend.md](backend.md#envelope-services)). `hello` and `kProtocolVersion`
 are unchanged: `hello` is unauthorised and names no model, so it cannot carry
 an application's inventory.
@@ -664,7 +664,7 @@ an application's inventory.
 | `"ui-catalog"` | empty | `{entries, permitted, models?, actions?}` | `authorize(session, "ui", "catalog")`, then `authorize(session, modelType, action)` for every action the filter asks about. |
 | `"ui-fetch"` | `{hash}` | the file's bytes | The manifest and a public file: the `ui-hello` gate. Any other file: `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted). An unknown hash is answered `err "not found"` only past the `fetch` gate. |
 | `"ui-evaluate"` | the action's JSON body, with `modelType` and `actionType` naming it | `{body, errors, ready}` | `authorize(session, modelType, actionType)`: as the action it evaluates. A body that does not decode is answered `err` with the decoder's reason. |
-| `"ui-file"` | — | — | Not yet served: as the mutation that references the file. |
+| `"ui-file"` | `{op, …}`: `begin` `{name, type, size, model, action}`, `chunk` `{upload, offset, data}`, `end` `{upload}`, `read` `{ref, offset, length}` | `{upload}`, `{received}`, `{ref}`, `{data, total, name, type}` | `begin`: `authorize(session, model, action)`, as the mutation that will reference the file. The rest: the upload id or reference belongs to the principal; another principal's is `not found`. Served only by a `UiService` with a file store. |
 
 Every refusal is `err "unauthorized"`. A request body over 64 KiB, that is not
 JSON, nests deeper than 64 levels or carries a must-understand (`!`) key is

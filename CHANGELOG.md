@@ -178,6 +178,14 @@ API surface).
 
 ### Added
 
+- **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
+  `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a
+  principal-bound, unguessable reference. `UiService` serves `ui-file` when given
+  a store: an upload is authorised as the mutation that will reference it, a
+  download by its reference. `ui::FileTransfer` uploads and downloads from the
+  client with progress, and `InterpreterHost::uploadFor` tells a host which
+  mutation an upload is for.
+
 - **`ui-evaluate`: an action body evaluated on the server without running it**
   (spec 5 §7). `ActionDispatcher::evaluate` decodes, reconciles, recomputes and
   checks a body and returns it with its field errors (`forms::fieldErrors`) and
