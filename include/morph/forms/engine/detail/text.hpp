@@ -207,7 +207,7 @@ using Json = glz::generic_u64;
     }
     auto const dot = text.find('.');
     auto const digits = [](std::string_view part) {
-        return !part.empty() && std::ranges::all_of(part, [](char chr) { return chr >= '0' && chr <= '9'; });
+        return !part.empty() && part.find_first_not_of("0123456789") == std::string_view::npos;
     };
     if (dot == std::string_view::npos) {
         return digits(text);

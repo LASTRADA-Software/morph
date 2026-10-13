@@ -771,7 +771,7 @@ struct SignMatch {
     std::string_view const whole = rest.substr(0, dot);
     std::string_view const fraction = dot == std::string_view::npos ? std::string_view{} : rest.substr(dot + 1);
     auto const allDigits = [](std::string_view part) {
-        return !part.empty() && std::ranges::all_of(part, [](char chr) { return chr >= '0' && chr <= '9'; });
+        return !part.empty() && part.find_first_not_of("0123456789") == std::string_view::npos;
     };
     if (!allDigits(whole) || (dot != std::string_view::npos && !allDigits(fraction))) {
         return std::nullopt;
