@@ -49,7 +49,9 @@ struct WizardViewOptions {
 
 namespace detail::engine {
 
-/// @brief The built-in header: `<title>  (<step> / <steps>)` and a step indicator (done, current, pending).
+/// @brief The built-in header: the title with the step's position (`Flow  (1 / 2)`) and a step indicator (done,
+/// current,
+///        pending).
 /// @param session The session.
 /// @return The header.
 [[nodiscard]] inline ui::Node wizardHeader(WizardSession& session) {
