@@ -937,6 +937,8 @@ private:
             executor, std::move(task), std::move(token),
             [&holder, action, payload = std::string{payloadJson}, done = std::move(done)](
                 std::optional<R> result, const std::exception_ptr& error) mutable {
+                // `holder` is read only when the action is loggable; this keeps the capture used otherwise.
+                static_cast<void>(holder);
                 if (error) {
                     // The handler failed, so the action was rejected: recorded
                     // Outcome::Failed, as runHandler records a throw from
