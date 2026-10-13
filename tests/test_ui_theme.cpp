@@ -144,7 +144,7 @@ TEST_CASE("theme: an alias cycle and an alias to a missing token refuse", "[ui][
     // A chain too long refuses rather than recursing without bound.
     std::string chain = R"({"t0": {"$type": "number", "$value": 1})";
     for (int index = 1; index <= 100; ++index) {
-        chain += ", \"t" + std::to_string(index) + R"(": {"$value": "{t)" + std::to_string(index - 1) + "}\"}";
+        chain += R"(, "t)" + std::to_string(index) + R"(": {"$value": "{t)" + std::to_string(index - 1) + R"(}"})";
     }
     chain += '}';
     CHECK(refusal({chain}).contains("an alias chain longer than"));
@@ -343,7 +343,7 @@ TEST_CASE("theme: declarations and bounds of a token file are checked", "[ui][th
 
     std::string many = "{";
     for (std::size_t index = 0; index <= morph::ui::kMaxThemeTokens; ++index) {
-        many += (index == 0 ? "" : ",") + std::string{"\"t"} + std::to_string(index) +
+        many += (index == 0 ? "" : ",") + std::string{R"("t)"} + std::to_string(index) +
                 R"(": {"$type": "number", "$value": 1})";
     }
     many += '}';
@@ -383,13 +383,13 @@ TEST_CASE("theme: an index's maps and bounds are checked, and an unlisted name i
         for (std::size_t index = 0; index <= morph::ui::kMaxThemeVariants; ++index) {
             std::string const name = "v" + std::to_string(index);
             if (key == "variant") {
-                text += ",\"" + name + "\": \"f\"";
+                text += R"(,")" + name + R"(": "f")";
             } else {
-                list += (index == 0 ? "\"" : ",\"") + name + "\": \"f\"";
+                list += (index == 0 ? R"(")" : R"(,")") + name + R"(": "f")";
             }
         }
         if (key != "variant") {
-            text += ",\"" + std::string{key} + "\": {" + list + "}";
+            text += R"(,")" + std::string{key} + R"(": {)" + list + "}";
         }
         text += '}';
         CAPTURE(key);
