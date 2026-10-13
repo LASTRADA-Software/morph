@@ -172,8 +172,7 @@ TEST_CASE("engine edges: an equals literal is exact, or null when the language c
     CHECK(literal(R"({"kind":"equals","fields":["a"],"value":[1]})").contains("null"));
 
     // An empty `and` holds and an empty `or` does not.
-    RuleOperand const blank{};
-    auto const none = [&](std::string_view) { return blank; };
+    auto const none = [](std::string_view) { return RuleOperand{}; };
     auto const empty = rule(R"({"kind":"and","conditions":[]})");
     REQUIRE(empty.has_value());
     CHECK(empty->evaluate(none) == Tri::True);
@@ -191,8 +190,9 @@ TEST_CASE("engine edges: an equals literal is exact, or null when the language c
         REQUIRE(parsed.has_value());
         rules.push_back(*std::move(parsed));
     }
-    RuleOperand const invalid{.state = RuleOperand::State::Invalid, .value = {}};
-    auto const undecided = [&](std::string_view) { return invalid; };
+    auto const undecided = [](std::string_view) {
+        return RuleOperand{.state = RuleOperand::State::Invalid, .value = {}};
+    };
     CHECK(morph::forms::visibleVerdict(rules, "x", undecided) == Tri::Unknown);
 }
 
@@ -238,7 +238,7 @@ TEST_CASE("engine edges: encoders refuse what does not fit the field", "[forms-e
     CHECK(errorOf(decimal, "10.5") == "above-maximum");
     CHECK(errorOf(decimal, "1.3") == "not-a-multiple");
     CHECK(errorOf(decimal, "abc") == "malformed");
-    CHECK(errorOf(decimal, "99999999999999999999999") != "");
+    CHECK_FALSE(errorOf(decimal, "99999999999999999999999").empty());
 
     FieldSpec numbers = specOf(FieldKind::Array);
     numbers.itemType = "number";

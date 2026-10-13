@@ -32,6 +32,7 @@ struct FtModel {
 // NOLINTEND(misc-use-internal-linkage)
 
 BRIDGE_REGISTER_MODEL(FtModel, "Test_FormsEngineTyped_Model")
+// NOLINTNEXTLINE(misc-const-correctness): the generated fromJson body declares a non-const local.
 BRIDGE_REGISTER_ACTION(FtModel, FtSum, "Test_FormsEngineTyped_Sum")
 
 namespace {

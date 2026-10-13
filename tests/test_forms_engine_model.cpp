@@ -30,6 +30,7 @@ struct FmModel {
 // NOLINTEND(misc-use-internal-linkage)
 
 BRIDGE_REGISTER_MODEL(FmModel, "Test_FormsEngineModel_Model")
+// NOLINTNEXTLINE(misc-const-correctness): the generated fromJson body declares a non-const local.
 BRIDGE_REGISTER_ACTION(FmModel, FmBooking, "Test_FormsEngineModel_Booking")
 
 namespace {
