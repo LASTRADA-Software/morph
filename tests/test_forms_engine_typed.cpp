@@ -81,6 +81,23 @@ TEST_CASE("Form<A>: set<> is a typed, programmatic change; the next edit submits
     CHECK(form.error() == nullptr);
 }
 
+TEST_CASE("Form<A>: the caller's own acceptance is asked before the action's", "[forms-engine][typed]") {
+    TypedStack stack;
+    bool accept = false;
+    morph::forms::FormSessionOptions options{};
+    options.accepts = [&accept](std::string_view) { return accept; };
+    morph::forms::Form<FtSum, FtModel> form{stack.rt, stack.handler, morph::forms::ChoiceFetcher{},
+                                            std::move(options)};
+    form.set<&FtSum::a>(150);  // the action would refuse this too, but the caller is asked first
+    form.set<&FtSum::b>(1);
+    CHECK_FALSE(form.ready());
+    accept = true;
+    form.set<&FtSum::a>(99);
+    CHECK(form.ready());
+    form.set<&FtSum::a>(150);
+    CHECK_FALSE(form.ready());  // accepted by the caller, refused by the action
+}
+
 TEST_CASE("Form<A>: the action's validate() joins readiness", "[forms-engine][typed]") {
     TypedStack stack;
     morph::forms::Form<FtSum, FtModel> form{stack.rt, stack.handler, morph::forms::ChoiceFetcher{}};
