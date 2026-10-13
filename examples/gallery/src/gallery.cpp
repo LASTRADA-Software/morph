@@ -2,8 +2,6 @@
 
 #include "gallery/gallery.hpp"
 
-#include "gallery/screens.hpp"
-
 #include <cstdint>
 #include <expected>
 #include <memory>
@@ -14,6 +12,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "gallery/screens.hpp"
 
 BRIDGE_REGISTER_MODEL(gallery::GalleryModel, "Gallery_Model")
 BRIDGE_REGISTER_ACTION(gallery::GalleryModel, gallery::ListFacts, "Gallery_ListFacts")

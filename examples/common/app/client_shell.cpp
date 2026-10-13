@@ -20,7 +20,6 @@ namespace morph::examples {
 
 namespace {
 
-
 /// The library's document host, with `navigate` handed to the shell.
 class Host final : public ui::DocumentScreenHost {
 public:

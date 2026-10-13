@@ -11,8 +11,8 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QString>
-#include <app/app_source.hpp>
 #include <algorithm>
+#include <app/app_source.hpp>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
