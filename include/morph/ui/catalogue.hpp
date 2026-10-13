@@ -44,19 +44,21 @@ struct Catalogue {
 };
 
 /// @brief Reads the locale from a catalogue's id.
-/// @param id The id, such as `i18n/de-AT.json`.
+/// @param fileId The id, such as `i18n/de-AT.json`.
 /// @return The locale (`de-AT`), or nothing when the id is not `i18n/LOCALE.json` with a locale of ASCII letters,
 ///         digits and `-` that starts with a letter.
-[[nodiscard]] inline std::optional<std::string> catalogueLocale(std::string_view id) {
-    if (!id.starts_with(kCataloguePrefix) || !id.ends_with(kCatalogueSuffix) ||
-        id.size() <= kCataloguePrefix.size() + kCatalogueSuffix.size()) {
+[[nodiscard]] inline std::optional<std::string> catalogueLocale(std::string_view fileId) {
+    if (!fileId.starts_with(kCataloguePrefix) || !fileId.ends_with(kCatalogueSuffix) ||
+        fileId.size() <= kCataloguePrefix.size() + kCatalogueSuffix.size()) {
         return std::nullopt;
     }
     std::string_view const locale =
-        id.substr(kCataloguePrefix.size(), id.size() - kCataloguePrefix.size() - kCatalogueSuffix.size());
-    auto const letter = [](char const c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
-    bool const valid = letter(locale.front()) && std::ranges::all_of(locale, [&letter](char const c) {
-                           return letter(c) || (c >= '0' && c <= '9') || c == '-';
+        fileId.substr(kCataloguePrefix.size(), fileId.size() - kCataloguePrefix.size() - kCatalogueSuffix.size());
+    auto const letter = [](char const symbol) {
+        return (symbol >= 'a' && symbol <= 'z') || (symbol >= 'A' && symbol <= 'Z');
+    };
+    bool const valid = letter(locale.front()) && std::ranges::all_of(locale, [&letter](char const symbol) {
+                           return letter(symbol) || (symbol >= '0' && symbol <= '9') || symbol == '-';
                        });
     return valid ? std::optional<std::string>{std::string{locale}} : std::nullopt;
 }
@@ -264,8 +266,8 @@ private:
     // NOLINTEND(bugprone-easily-swappable-parameters)
     auto const fold = [](std::string_view text) {
         std::string out{text};
-        std::ranges::transform(out, out.begin(), [](char const c) {
-            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+        std::ranges::transform(out, out.begin(), [](char const symbol) {
+            return symbol >= 'A' && symbol <= 'Z' ? static_cast<char>(symbol - 'A' + 'a') : symbol;
         });
         return out;
     };
