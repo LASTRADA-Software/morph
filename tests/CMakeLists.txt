@@ -212,6 +212,7 @@ add_executable(morph_tests
     test_ui_host.cpp
     test_ui_preferences.cpp
     test_ui_preference_sync.cpp
+    test_ui_host_vocabulary.cpp
 )
 
 target_link_libraries(morph_tests

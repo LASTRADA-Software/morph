@@ -496,6 +496,7 @@ target_sources(morph
         include/morph/ui/service_client.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
+        include/morph/ui/host_vocabulary.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
