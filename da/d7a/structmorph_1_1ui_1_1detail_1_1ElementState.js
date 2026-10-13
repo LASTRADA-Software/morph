@@ -17,5 +17,8 @@ var structmorph_1_1ui_1_1detail_1_1ElementState =
     [ "checks", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a18f6771c3c311fc43179969a7bd77fad", null ],
     [ "bound", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a85894188ea7ccc42fc85b315b47f0b6b", null ],
     [ "errors", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a9bcceb3094a1cdd51b8e99a5982e3180", null ],
-    [ "rows", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a1e5d0c426d2c18cfb40a25d020127438", null ]
+    [ "rows", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a1e5d0c426d2c18cfb40a25d020127438", null ],
+    [ "form", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a71536346fc591492bee40816ec25796a", null ],
+    [ "collection", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2386249559cbedb11911818a512e2c09", null ],
+    [ "wizard", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a61861dd646bf624c7790632dcccdd9f5", null ]
 ];

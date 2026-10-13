@@ -132,6 +132,12 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac2a967c5296c376ee6e06639e1dc098f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Looks up a model type by its registered type id.  <br /></td></tr>
 <tr class="memitem:aecb94740dc7c8dc4ab9728a50be19537" id="r_aecb94740dc7c8dc4ab9728a50be19537"><td class="memItemLeft">std::function&lt; std::optional&lt; <a class="el" href="../../d0/db7/structmorph_1_1ui_1_1ActionInfo.html">ActionInfo</a> &gt;(std::string_view actionId)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#aecb94740dc7c8dc4ab9728a50be19537">action</a></td></tr>
 <tr class="memdesc:aecb94740dc7c8dc4ab9728a50be19537"><td class="mdescLeft">&#160;</td><td class="mdescRight">Looks up an action by its id.  <br /></td></tr>
+<tr class="memitem:a8bfc5e3e010052bda10468fe31d13b4f" id="r_a8bfc5e3e010052bda10468fe31d13b4f"><td class="memItemLeft">std::function&lt; std::optional&lt; std::string &gt;(std::string_view actionId)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8bfc5e3e010052bda10468fe31d13b4f">schema</a></td></tr>
+<tr class="memdesc:a8bfc5e3e010052bda10468fe31d13b4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The schema JSON of an action, as <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">forms::schemaJson</a>&lt;A&gt;()</span> emits it: what a <span class="tt">form</span> node builds its form from. Local mode answers it from the action registry, a remote client from the server's <span class="tt">schemas</span>. Empty: a <span class="tt">form</span> node is reported and shown as a muted text.  <br /></td></tr>
+<tr class="memitem:ada3a6c3914bfb018776a0cf499ad0725" id="r_ada3a6c3914bfb018776a0cf499ad0725"><td class="memItemLeft">std::function&lt; std::optional&lt; std::string &gt;(std::string_view actionId)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ada3a6c3914bfb018776a0cf499ad0725">view</a></td></tr>
+<tr class="memdesc:ada3a6c3914bfb018776a0cf499ad0725"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">v-*</span> view document whose <span class="tt">v-query</span> is an action, as <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">views::viewSchemaJson</a>&lt;V&gt;()</span> emits it: what a <span class="tt">collection</span> node naming that action builds its collection from. Empty: a <span class="tt">collection</span> node is reported and shown as a muted text.  <br /></td></tr>
+<tr class="memitem:ab2ee6924a583c824126fe7b6709ac9a5" id="r_ab2ee6924a583c824126fe7b6709ac9a5"><td class="memItemLeft">std::function&lt; std::optional&lt; std::string &gt;(std::string_view actionId)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5">wizard</a></td></tr>
+<tr class="memdesc:ab2ee6924a583c824126fe7b6709ac9a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">w-*</span> wizard document whose first step is an action, as <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27" title="Generates the w-* JSON document for wizard type W.">flows::wizardSchemaJson</a>&lt;W&gt;()</span> emits it: what a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node naming that action builds its wizard from. Empty: a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node is reported and shown as a muted text.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The facts load-time validation needs from the application's catalog. Local mode answers them from the model registry in-process, the server at registration, a remote client from the UI service's catalog. </p>
@@ -172,6 +178,60 @@ Public Attributes</h2></td></tr>
 <p>Looks up an action by its id. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8bfc5e3e010052bda10468fe31d13b4f" name="a8bfc5e3e010052bda10468fe31d13b4f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8bfc5e3e010052bda10468fe31d13b4f">&#9670;&#160;</a></span>schema</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;std::optional&lt;std::string&gt;(std::string_view actionId)&gt; morph::ui::Catalog::schema</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The schema JSON of an action, as <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">forms::schemaJson</a>&lt;A&gt;()</span> emits it: what a <span class="tt">form</span> node builds its form from. Local mode answers it from the action registry, a remote client from the server's <span class="tt">schemas</span>. Empty: a <span class="tt">form</span> node is reported and shown as a muted text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ada3a6c3914bfb018776a0cf499ad0725" name="ada3a6c3914bfb018776a0cf499ad0725"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ada3a6c3914bfb018776a0cf499ad0725">&#9670;&#160;</a></span>view</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;std::optional&lt;std::string&gt;(std::string_view actionId)&gt; morph::ui::Catalog::view</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The <span class="tt">v-*</span> view document whose <span class="tt">v-query</span> is an action, as <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">views::viewSchemaJson</a>&lt;V&gt;()</span> emits it: what a <span class="tt">collection</span> node naming that action builds its collection from. Empty: a <span class="tt">collection</span> node is reported and shown as a muted text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab2ee6924a583c824126fe7b6709ac9a5" name="ab2ee6924a583c824126fe7b6709ac9a5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2ee6924a583c824126fe7b6709ac9a5">&#9670;&#160;</a></span>wizard</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;std::optional&lt;std::string&gt;(std::string_view actionId)&gt; morph::ui::Catalog::wizard</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The <span class="tt">w-*</span> wizard document whose first step is an action, as <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27" title="Generates the w-* JSON document for wizard type W.">flows::wizardSchemaJson</a>&lt;W&gt;()</span> emits it: what a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node naming that action builds its wizard from. Empty: a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node is reported and shown as a muted text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

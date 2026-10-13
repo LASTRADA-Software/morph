@@ -15,5 +15,6 @@ var locale__format_8hpp =
     [ "morph::render::detail::leadingSignLength", "d8/d3a/locale__format_8hpp.html#ac7813bd0cf1d0c9ccf0bee23f78a3e0a", null ],
     [ "morph::render::detail::leadingSign", "d8/d3a/locale__format_8hpp.html#a754a0b67b7e0cfacba985bcad2b4bb40", null ],
     [ "morph::render::normalizeLocaleNumber", "d8/d3a/locale__format_8hpp.html#a0fab5bb6044bd06e6fbb386a3263f612", null ],
-    [ "morph::render::formatCanonicalNumber", "d8/d3a/locale__format_8hpp.html#a6176641facb0816da5e1f014c104b033", null ]
+    [ "morph::render::formatCanonicalNumber", "d8/d3a/locale__format_8hpp.html#a6176641facb0816da5e1f014c104b033", null ],
+    [ "morph::render::parseDecimal", "d8/d3a/locale__format_8hpp.html#a39ad542d6a60c3fbd1fb14ad7707f375", null ]
 ];

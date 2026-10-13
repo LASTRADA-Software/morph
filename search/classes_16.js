@@ -7,8 +7,14 @@ var searchData=
   ['wire_4',['Wire',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html',1,'morph::math::Rational']]],
   ['wireclampscope_5',['WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html',1,'morph::math']]],
   ['wirecodecops_6',['WireCodecOps',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html',1,'morph::wire']]],
-  ['wizard_7',['Wizard',['../d6/d94/structmorph_1_1flows_1_1Wizard.html',1,'morph::flows']]],
-  ['wizardscreen_8',['WizardScreen',['../dc/d11/structmorph_1_1app_1_1WizardScreen.html',1,'morph::app']]],
-  ['wizardstep_9',['WizardStep',['../d8/d94/structmorph_1_1flows_1_1WizardStep.html',1,'morph::flows']]],
-  ['wizardtraits_10',['WizardTraits',['../de/d61/structmorph_1_1flows_1_1WizardTraits.html',1,'morph::flows']]]
+  ['wirevalue_7',['WireValue',['../d5/d6e/structmorph_1_1forms_1_1WireValue.html',1,'morph::forms']]],
+  ['wizard_8',['Wizard',['../d6/d94/structmorph_1_1flows_1_1Wizard.html',1,'morph::flows']]],
+  ['wizardchrome_9',['WizardChrome',['../d7/d92/structmorph_1_1forms_1_1WizardChrome.html',1,'morph::forms']]],
+  ['wizardmodel_10',['WizardModel',['../dd/dd2/classmorph_1_1forms_1_1WizardModel.html',1,'morph::forms']]],
+  ['wizardscreen_11',['WizardScreen',['../dc/d11/structmorph_1_1app_1_1WizardScreen.html',1,'morph::app']]],
+  ['wizardsession_12',['WizardSession',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html',1,'morph::forms']]],
+  ['wizardstep_13',['WizardStep',['../d8/d94/structmorph_1_1flows_1_1WizardStep.html',1,'morph::flows']]],
+  ['wizardstepspec_14',['WizardStepSpec',['../d3/d06/structmorph_1_1forms_1_1WizardStepSpec.html',1,'morph::forms']]],
+  ['wizardtraits_15',['WizardTraits',['../de/d61/structmorph_1_1flows_1_1WizardTraits.html',1,'morph::flows']]],
+  ['wizardviewoptions_16',['WizardViewOptions',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html',1,'morph::forms']]]
 ];

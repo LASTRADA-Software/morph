@@ -1,12 +1,21 @@
 var searchData=
 [
-  ['object_0',['Object',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a497031794414a552435f90151ac3b54b',1,'morph::ui']]],
-  ['ok_1',['Ok',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aaa60852f204ed8028c1c58808b746d115',1,'morph::ui']]],
-  ['omit_2',['Omit',['../d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4a3f9823fc8c5bf8d5efbb0ad3be5f16c9',1,'morph::forms']]],
-  ['one_3',['One',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a06c2cea18679d64399783748fa367bdd',1,'morph::ui']]],
-  ['open_4',['Open',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eac3bf447eabe632720a3aa1a7ce401274',1,'Openmorph::ui'],['../d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac3bf447eabe632720a3aa1a7ce401274',1,'Openmorph::ui']]],
-  ['other_5',['Other',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a6311ae17c1ee52b36e68aaf4ad066387',1,'morph::ui']]],
-  ['overflow_6',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
-  ['overquota_7',['OverQuota',['../dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a4121488bf0ad871d8b26921ad51825b5',1,'morph::ui']]],
-  ['ownthread_8',['OwnThread',['../d2/d85/io__loop_8hpp.html#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263',1,'morph::exec']]]
+  ['name_0',['Name',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987',1,'morph::ui::detail']]],
+  ['navigate_1',['Navigate',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea49af5acafa8ec4a1c521b63ee46891c7',1,'morph::ui']]],
+  ['neutral_2',['Neutral',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aae9bb5320b3890b6747c91b5a71ae5a01',1,'morph::ui']]],
+  ['nodes_3',['Nodes',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e',1,'morph::ui::detail']]],
+  ['none_4',['None',['../df/d8f/selection_8hpp.html#a0c5a863bb2ec27062f9111027ab3fee8a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::table'],['../d1/dc0/author_8hpp.html#a386c8f27968d11a8eb2cf7ad0aeff62ca6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui::author'],['../d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui'],['../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui']]],
+  ['noneusable_5',['NoneUsable',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa8980eb18c11773d5ac24a2443a993294',1,'morph::ui::FrontendError']]],
+  ['normal_6',['Normal',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0',1,'morph::ui']]],
+  ['normal_7',['normal',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555',1,'morph::offline::SqliteOfflineQueue']]],
+  ['not_8',['Not',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79aa74c05d080620f087c4e523977230666',1,'morph::forms::RuleExpr']]],
+  ['notengaged_9',['NotEngaged',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79ab8fe9a0c9d4b3f850987a69b36cf427e',1,'morph::forms::RuleExpr']]],
+  ['notfinite_10',['NotFinite',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9eaff6e97b110349dae9c6e8be0ff7a85c3',1,'morph::math']]],
+  ['notfound_11',['NotFound',['../dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a38c300f4fc9ce8a77aad4a30de05cad8',1,'morph::ui']]],
+  ['notify_12',['Notify',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eaaaf9ed605d0193362321ba0def15c9b7',1,'morph::ui']]],
+  ['notmade_13',['NotMade',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa7b86632f6a59e5657e6f0ced241153ca',1,'morph::ui::FrontendError']]],
+  ['notyetvalid_14',['NotYetValid',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca05a552d0584560b9eca4e5c2ed6c9fa2',1,'morph::session']]],
+  ['nouiservice_15',['NoUiService',['../d8/dcd/structmorph_1_1ui_1_1ConnectError.html#a047e4d4e99ceb30a5bc29dfa9a0b4174a7c949e2e1863dc9f75886ef9bfc83e28',1,'morph::ui::ConnectError']]],
+  ['null_16',['Null',['../d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fbabbb93ef26e3c101ff11cdd21cab08a94',1,'morph::ui']]],
+  ['number_17',['Number',['../d5/dc9/field__model_8hpp.html#a0ab75baf4b2fd216b784dc38dc98eaedab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::forms'],['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895cab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::table'],['../d1/dc0/author_8hpp.html#a95426682ac3c0f37a78cc0d5db6ed9c8ab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::ui::author'],['../d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337eab2ee912b91d69b435159c7c3f6df7f5f',1,'Numbermorph::ui']]]
 ];

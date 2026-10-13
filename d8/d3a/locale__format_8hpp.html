@@ -123,10 +123,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d3a/locale_
 
 <p>Locale numeric-entry normalisation for the control edge.  
 <a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
+<div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
+<code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
+<code>#include &quot;<a class="el" href="../../d1/de8/rational_8hpp_source.html">../util/rational.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d8/d3a/locale__format_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -167,6 +171,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a0fab5bb6044bd06e6fbb386a3263f612"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text.  <br /></td></tr>
 <tr class="memitem:a6176641facb0816da5e1f014c104b033" id="r_a6176641facb0816da5e1f014c104b033"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a6176641facb0816da5e1f014c104b033">morph::render::formatCanonicalNumber</a> (std::string_view canonicalText, <a class="el" href="../../dc/ddc/structmorph_1_1render_1_1NumericLocale.html">NumericLocale</a> const &amp;loc)</td></tr>
 <tr class="memdesc:a6176641facb0816da5e1f014c104b033"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts canonical (<span class="tt">.</span>-decimal) numeric text to locale-formatted display text, grouping the integer part in triples.  <br /></td></tr>
+<tr class="memitem:a39ad542d6a60c3fbd1fb14ad7707f375" id="r_a39ad542d6a60c3fbd1fb14ad7707f375"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39ad542d6a60c3fbd1fb14ad7707f375">morph::render::parseDecimal</a> (std::string_view text, <a class="el" href="../../dc/ddc/structmorph_1_1render_1_1NumericLocale.html">NumericLocale</a> const &amp;loc, std::optional&lt; std::uint32_t &gt; maxDecimalPlaces=std::nullopt)</td></tr>
+<tr class="memdesc:a39ad542d6a60c3fbd1fb14ad7707f375"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses locale-formatted decimal entry text into the exact value it spells.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Locale numeric-entry normalisation for the control edge. </p>
@@ -212,7 +218,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The decoded code point, or a <span class="tt">length</span> of <span class="tt">0</span> when <code class="param">text</code> does not start with a well-formed sequence. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +258,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -298,7 +304,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -334,7 +340,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">1</span>, <span class="tt">2</span>, <span class="tt">3</span> or <span class="tt">4</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -370,7 +376,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The base code point of the locale's digit set. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -411,7 +417,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The match, or a <span class="tt">length</span> of <span class="tt">0</span> when <code class="param">rest</code> starts with no digit. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -455,7 +461,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the grouping is well placed (or absent). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -496,7 +502,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of bytes the separator occupies, or <span class="tt">0</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -544,7 +550,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of bytes the sign occupies, or <span class="tt">0</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -588,7 +594,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The match, or a <span class="tt">length</span> of <span class="tt">0</span> when <code class="param">rest</code> starts with no sign. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -643,7 +649,7 @@ character is malformed" arm, and an explicitly-positive entry is rejected in eve
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The canonical <span class="tt">.</span>-decimal text, or <span class="tt">std::nullopt</span> when malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00585">585</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -688,7 +694,54 @@ character is malformed" arm, and an explicitly-positive entry is rejected in eve
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The locale-formatted display text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00704">704</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00709">709</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39ad542d6a60c3fbd1fb14ad7707f375" name="a39ad542d6a60c3fbd1fb14ad7707f375"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39ad542d6a60c3fbd1fb14ad7707f375">&#9670;&#160;</a></span>parseDecimal()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; math::Rational &gt; morph::render::parseDecimal </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dc/ddc/structmorph_1_1render_1_1NumericLocale.html">NumericLocale</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>loc</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; std::uint32_t &gt;</td>          <td class="paramname"><span class="paramname"><em>maxDecimalPlaces</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::nullopt</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Parses locale-formatted decimal entry text into the exact value it spells. </p>
+<p>The one decimal parser morph ships: the forms engine and any application read entry text through it. The text goes through <span class="tt">normalizeLocaleNumber</span> first, so the locale's separators, signs and digits are accepted and its grouping is validated; the canonical text must then be <span class="tt">-?[0-9]+(\.[0-9]+)?</span> (no exponent, no bare separator, no surrounding space). The value must fit <span class="tt">math::Rational</span>: at most <span class="tt">math::kMaxDecimalPlaces</span> fraction digits, and the digits read as one integer within <span class="tt">int64_t</span>. Nothing is rounded: text finer than <code class="param">maxDecimalPlaces</code> is refused, because dropping a digit a user typed changes the value they meant. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The entry, e.g. <span class="tt">"1.050,25"</span>. </td></tr>
+    <tr><td class="paramname">loc</td><td>The locale facts the entry was typed in. </td></tr>
+    <tr><td class="paramname">maxDecimalPlaces</td><td>The declared precision, when there is one. The result carries it as its precision tag (clamped to <span class="tt">math::kMaxDecimalPlaces</span>); without one the tag is the number of fraction digits typed. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The exact value, or <span class="tt">std::nullopt</span> for malformed, over-precise or unrepresentable text. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00759">759</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>

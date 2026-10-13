@@ -12,11 +12,12 @@ var searchData=
   ['quantitycell_9',['QuantityCell',['../d5/d33/structmorph_1_1table_1_1QuantityCell.html',1,'morph::table']]],
   ['quantitydecodeerror_10',['QuantityDecodeError',['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html',1,'morph::forms']]],
   ['query_11',['Query',['../da/d9b/classmorph_1_1reactive_1_1Query.html',1,'morph::reactive']]],
-  ['querydecl_12',['QueryDecl',['../da/db7/structmorph_1_1ui_1_1QueryDecl.html',1,'morph::ui']]],
-  ['queryhandle_13',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html',1,'morph::ui::author']]],
-  ['querylimits_14',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
-  ['queryoptions_15',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
-  ['queryref_16',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author']]],
-  ['queryruntime_17',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
-  ['queueitem_18',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['query_3c_20std_3a_3astring_2c_20std_3a_3astring_20_3e_12',['Query&lt; std::string, std::string &gt;',['../da/d9b/classmorph_1_1reactive_1_1Query.html',1,'morph::reactive']]],
+  ['querydecl_13',['QueryDecl',['../da/db7/structmorph_1_1ui_1_1QueryDecl.html',1,'morph::ui']]],
+  ['queryhandle_14',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html',1,'morph::ui::author']]],
+  ['querylimits_15',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
+  ['queryoptions_16',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
+  ['queryref_17',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author']]],
+  ['queryruntime_18',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
+  ['queueitem_19',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

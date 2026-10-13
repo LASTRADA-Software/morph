@@ -15,7 +15,7 @@ var searchData=
   ['registeredscreen_12',['RegisteredScreen',['../d2/dc8/structmorph_1_1ui_1_1author_1_1RegisteredScreen.html',1,'morph::ui::author']]],
   ['remoteserver_13',['RemoteServer',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html',1,'morph::backend']]],
   ['requiredwhen_14',['RequiredWhen',['../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html',1,'morph::forms']]],
-  ['result_15',['Result',['../d5/d09/structmorph_1_1model_1_1ActionTraits.html',1,'morph::model']]],
+  ['result_15',['Result',['../d5/d09/structmorph_1_1model_1_1ActionTraits.html',1,'morph::model::Result&lt; A &gt;'],['../d5/d09/structmorph_1_1model_1_1ActionTraits.html',1,'morph::model::Result&lt; Action &gt;']]],
   ['route_16',['Route',['../de/d2f/structmorph_1_1ui_1_1Route.html',1,'morph::ui']]],
   ['row_17',['Row',['../d7/da8/structmorph_1_1ui_1_1Row.html',1,'morph::ui']]],
   ['rowchange_18',['RowChange',['../d0/dc5/structmorph_1_1table_1_1RowChange.html',1,'morph::table']]],
@@ -25,10 +25,13 @@ var searchData=
   ['rowsnapshot_22',['RowSnapshot',['../d0/d78/classmorph_1_1table_1_1RowSnapshot.html',1,'morph::table']]],
   ['rowssnapshot_23',['RowsSnapshot',['../db/d95/classmorph_1_1table_1_1RowsSnapshot.html',1,'morph::table']]],
   ['rowssource_24',['RowsSource',['../dd/df1/classmorph_1_1table_1_1RowsSource.html',1,'morph::table']]],
-  ['rtscope_25',['RtScope',['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html',1,'morph::ui::detail']]],
-  ['rulelist_26',['RuleList',['../d3/d8b/structmorph_1_1forms_1_1RuleList.html',1,'morph::forms']]],
-  ['runoptions_27',['RunOptions',['../d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html',1,'morph::ui::author']]],
-  ['runtime_28',['Runtime',['../d5/dc1/classmorph_1_1reactive_1_1Runtime.html',1,'morph::reactive']]],
-  ['runtimecore_29',['RuntimeCore',['../d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html',1,'morph::reactive::detail']]],
-  ['runtimeoptions_30',['RuntimeOptions',['../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html',1,'morph::reactive']]]
+  ['rowstate_25',['RowState',['../d6/dc2/classmorph_1_1forms_1_1RowState.html',1,'morph::forms']]],
+  ['rtscope_26',['RtScope',['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html',1,'morph::ui::detail']]],
+  ['ruleexpr_27',['RuleExpr',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html',1,'morph::forms']]],
+  ['rulelist_28',['RuleList',['../d3/d8b/structmorph_1_1forms_1_1RuleList.html',1,'morph::forms']]],
+  ['ruleoperand_29',['RuleOperand',['../d4/d24/structmorph_1_1forms_1_1RuleOperand.html',1,'morph::forms']]],
+  ['runoptions_30',['RunOptions',['../d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html',1,'morph::ui::author']]],
+  ['runtime_31',['Runtime',['../d5/dc1/classmorph_1_1reactive_1_1Runtime.html',1,'morph::reactive']]],
+  ['runtimecore_32',['RuntimeCore',['../d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html',1,'morph::reactive::detail']]],
+  ['runtimeoptions_33',['RuntimeOptions',['../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html',1,'morph::reactive']]]
 ];

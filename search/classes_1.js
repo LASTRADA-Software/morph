@@ -21,12 +21,13 @@ var searchData=
   ['bridgedestroyederror_18',['BridgeDestroyedError',['../db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html',1,'morph::backend']]],
   ['bridgedispatcher_19',['BridgeDispatcher',['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html',1,'morph::ui']]],
   ['bridgehandler_20',['BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
-  ['bridgehandler_3c_20model_2c_20_3a_3amorph_3a_3abridge_3a_3anosharing_20_3e_21',['BridgeHandler&lt; Model, ::morph::bridge::NoSharing &gt;',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
-  ['bundle_22',['Bundle',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html',1,'morph::ui']]],
-  ['bundlefile_23',['BundleFile',['../db/d11/structmorph_1_1ui_1_1BundleFile.html',1,'morph::ui']]],
-  ['busy_24',['Busy',['../dc/dd1/structmorph_1_1ui_1_1Busy.html',1,'morph::ui']]],
-  ['busywidget_25',['BusyWidget',['../d3/d98/classmorph_1_1ui_1_1BusyWidget.html',1,'morph::ui']]],
-  ['button_26',['Button',['../d2/d47/structmorph_1_1ui_1_1Button.html',1,'morph::ui']]],
-  ['buttonoptions_27',['ButtonOptions',['../d2/d41/structmorph_1_1ui_1_1author_1_1ButtonOptions.html',1,'morph::ui::author']]],
-  ['buttonwidget_28',['ButtonWidget',['../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html',1,'morph::ui']]]
+  ['bridgehandler_3c_20m_2c_20bridge_3a_3anosharing_20_3e_21',['BridgeHandler&lt; M, bridge::NoSharing &gt;',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
+  ['bridgehandler_3c_20model_2c_20_3a_3amorph_3a_3abridge_3a_3anosharing_20_3e_22',['BridgeHandler&lt; Model, ::morph::bridge::NoSharing &gt;',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html',1,'morph::bridge']]],
+  ['bundle_23',['Bundle',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html',1,'morph::ui']]],
+  ['bundlefile_24',['BundleFile',['../db/d11/structmorph_1_1ui_1_1BundleFile.html',1,'morph::ui']]],
+  ['busy_25',['Busy',['../dc/dd1/structmorph_1_1ui_1_1Busy.html',1,'morph::ui']]],
+  ['busywidget_26',['BusyWidget',['../d3/d98/classmorph_1_1ui_1_1BusyWidget.html',1,'morph::ui']]],
+  ['button_27',['Button',['../d2/d47/structmorph_1_1ui_1_1Button.html',1,'morph::ui']]],
+  ['buttonoptions_28',['ButtonOptions',['../d2/d41/structmorph_1_1ui_1_1author_1_1ButtonOptions.html',1,'morph::ui::author']]],
+  ['buttonwidget_29',['ButtonWidget',['../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html',1,'morph::ui']]]
 ];

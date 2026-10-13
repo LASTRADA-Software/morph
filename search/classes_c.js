@@ -37,10 +37,14 @@ var searchData=
   ['multimodelbridgecore_3c_20sharing_2c_20model_2e_2e_2e_20_3e_34',['MultiModelBridgeCore&lt; Sharing, Model... &gt;',['../d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html',1,'morph::qt::bridge']]],
   ['multimodelformscontrollercore_35',['MultiModelFormsControllerCore',['../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html',1,'morph::qt::forms']]],
   ['mutation_36',['Mutation',['../d3/d3a/classmorph_1_1reactive_1_1Mutation.html',1,'morph::reactive']]],
-  ['mutationdecl_37',['MutationDecl',['../d7/d39/structmorph_1_1ui_1_1MutationDecl.html',1,'morph::ui']]],
-  ['mutationhandle_38',['MutationHandle',['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html',1,'morph::ui::author']]],
-  ['mutationoptions_39',['MutationOptions',['../d1/d37/structmorph_1_1reactive_1_1MutationOptions.html',1,'morph::reactive::MutationOptions&lt; A &gt;'],['../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html',1,'morph::ui::author::MutationOptions&lt; Action &gt;']]],
-  ['mutationref_40',['MutationRef',['../d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef.html',1,'morph::ui::author']]],
-  ['mutationruntime_41',['MutationRuntime',['../de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html',1,'morph::ui::detail']]],
-  ['mutuallyexclusive_42',['MutuallyExclusive',['../dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html',1,'morph::forms']]]
+  ['mutation_3c_20call_2c_20std_3a_3astring_20_3e_37',['Mutation&lt; Call, std::string &gt;',['../d3/d3a/classmorph_1_1reactive_1_1Mutation.html',1,'morph::reactive']]],
+  ['mutation_3c_20std_3a_3astring_2c_20std_3a_3astring_20_3e_38',['Mutation&lt; std::string, std::string &gt;',['../d3/d3a/classmorph_1_1reactive_1_1Mutation.html',1,'morph::reactive']]],
+  ['mutationdecl_39',['MutationDecl',['../d7/d39/structmorph_1_1ui_1_1MutationDecl.html',1,'morph::ui']]],
+  ['mutationhandle_40',['MutationHandle',['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html',1,'morph::ui::author']]],
+  ['mutationoptions_41',['MutationOptions',['../d1/d37/structmorph_1_1reactive_1_1MutationOptions.html',1,'morph::reactive::MutationOptions&lt; A &gt;'],['../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html',1,'morph::ui::author::MutationOptions&lt; Action &gt;']]],
+  ['mutationoptions_3c_20call_20_3e_42',['MutationOptions&lt; Call &gt;',['../d1/d37/structmorph_1_1reactive_1_1MutationOptions.html',1,'morph::reactive']]],
+  ['mutationoptions_3c_20std_3a_3astring_20_3e_43',['MutationOptions&lt; std::string &gt;',['../d1/d37/structmorph_1_1reactive_1_1MutationOptions.html',1,'morph::reactive']]],
+  ['mutationref_44',['MutationRef',['../d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef.html',1,'morph::ui::author']]],
+  ['mutationruntime_45',['MutationRuntime',['../de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html',1,'morph::ui::detail']]],
+  ['mutuallyexclusive_46',['MutuallyExclusive',['../dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html',1,'morph::forms']]]
 ];
