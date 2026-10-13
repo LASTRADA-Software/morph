@@ -704,8 +704,10 @@ public:
         return std::move(completion);
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test sets and reads these.
     bool dropped = false;
     std::vector<std::string> sessions;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::shared_ptr<morph::backend::RemoteServer> _server;
@@ -724,7 +726,7 @@ OpenResult drainOpen(morph::exec::MainThreadExecutor& owner, std::optional<OpenR
 }  // namespace
 
 TEST_CASE("exchangeOver: UiClient opens a bundle through a transport's request verb", "[ui-service][client]") {
-    Harness harness;
+    Harness const harness;
     RequestBackend transport{harness.server};
     morph::exec::MainThreadExecutor owner;
     UiClient const client{morph::ui::exchangeOver(transport, owner), fullClient(), harness.store};
@@ -742,7 +744,7 @@ TEST_CASE("exchangeOver: UiClient opens a bundle through a transport's request v
 // Mutation: hand the exchange an empty reply instead of the failure — the run reports Unsupported, not Unreachable.
 TEST_CASE("exchangeOver: a request the transport could not deliver is Unreachable, with its reason",
           "[ui-service][client]") {
-    Harness harness;
+    Harness const harness;
     RequestBackend transport{harness.server};
     transport.dropped = true;
     morph::exec::MainThreadExecutor owner;

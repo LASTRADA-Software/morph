@@ -125,10 +125,12 @@ protected:
     /// @brief Releases what `connect` made beside the backend; called by `close`, after the bridge is gone.
     virtual void disconnect() {}
 
-    /// @brief The session every request carries.
-    session::Context session;
+    /// @brief The session every request carries, for a source to fill before `open` sends anything.
+    /// @return It.
+    [[nodiscard]] session::Context& requestSession() noexcept { return _session; }
 
 private:
+    session::Context _session;
     std::shared_ptr<bool> _alive;
     std::unique_ptr<bridge::Bridge> _bridge;
     std::unique_ptr<ui::BridgeDispatcher> _dispatcher;
@@ -144,10 +146,11 @@ public:
     /// @param timeout How long to wait for the bundle before reporting the server unreachable.
     explicit RemoteAppSource(std::string url, std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
-private:
+protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     [[nodiscard]] std::chrono::milliseconds openTimeout() const override { return _timeout; }
 
+private:
     std::string _url;
     std::chrono::milliseconds _timeout;
 };
@@ -166,10 +169,11 @@ public:
     LocalAppSource(LocalAppSource&&) = delete;
     LocalAppSource& operator=(LocalAppSource&&) = delete;
 
-private:
+protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     void disconnect() override;
 
+private:
     LocalApp _app;
     LocalSetup _setup;
     bool _setUp = false;

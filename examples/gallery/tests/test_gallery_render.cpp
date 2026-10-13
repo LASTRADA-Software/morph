@@ -72,7 +72,7 @@ TEST_CASE("gallery render smoke: remote mode, against a server, offscreen", "[ga
     if (QQuickWindow::graphicsApi() != QSGRendererInterface::Software) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     }
-    QGuiApplication app{argCount(), argValues()};
+    QGuiApplication const app{argCount(), argValues()};
     auto bundle = gallery::bundle();
     REQUIRE(bundle.has_value());
     morph::exec::ThreadPoolExecutor workers{2};
@@ -92,11 +92,11 @@ TEST_CASE("gallery render smoke: remote mode, against a server, offscreen", "[ga
 
 // Mutation: report clean() without checking that a screen mounted — this case passes a source with no screens.
 TEST_CASE("render smoke: a source that opens nothing is not clean", "[gallery][render-smoke]") {
-    morph::examples::LocalApp empty{
+    morph::examples::LocalApp const empty{
         .name = "empty",
         .bundle =
             [] {
-                morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "empty", .version = "1"}};
+                morph::ui::UiRegistry const served{morph::ui::ApplicationInfo{.id = "empty", .version = "1"}};
                 return served.build();
             },
         .setUp = {}};

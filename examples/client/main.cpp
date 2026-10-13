@@ -7,12 +7,14 @@
 
 #include <app/app_source.hpp>
 #include <app/client_shell.hpp>
+#include <cstddef>
 #include <exception>
 #include <expected>
 #include <iostream>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/frontend.hpp>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -61,7 +63,8 @@ struct ShellFactory {
 };
 
 int run(int argc, char** argv) {
-    std::vector<std::string> args{argv, argv + argc};
+    std::span<char*> const raw{argv, static_cast<std::size_t>(argc)};
+    std::vector<std::string> args{raw.begin(), raw.end()};
     auto clientArgs = examples::readClientArgs(args);
     if (!clientArgs) {
         std::cerr << "client: " << clientArgs.error() << '\n';
@@ -75,17 +78,14 @@ int run(int argc, char** argv) {
     ShellFactory const factory{.source = source->get(), .args = &*clientArgs};
     std::vector<ui::FrontendOption> built;
 #if MORPH_CLIENT_HAS_QT_QUICK
-    built.push_back(morph::qt_quick::frontendOption(argc, argv,
-                                                    morph::qt_quick::FrontendConfig{.mountShell = factory,
-                                                                                    .components = nullptr,
-                                                                                    .title = "morph",
-                                                                                    .onWidthClass = {}}));
+    built.push_back(morph::qt_quick::frontendOption(
+        argc, argv,
+        morph::qt_quick::FrontendConfig{
+            .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}}));
 #endif
 #if MORPH_CLIENT_HAS_TUI
-    built.push_back(morph::tui::frontendOption(morph::tui::FrontendConfig{.mountShell = factory,
-                                                                         .terminal = nullptr,
-                                                                         .input = nullptr,
-                                                                         .mouse = ::core::tui::MouseTracking::Drag}));
+    built.push_back(morph::tui::frontendOption(morph::tui::FrontendConfig{
+        .mountShell = factory, .terminal = nullptr, .input = nullptr, .mouse = ::core::tui::MouseTracking::Drag}));
 #endif
     auto frontend = ui::selectFrontend(built, args);
     if (!frontend) {

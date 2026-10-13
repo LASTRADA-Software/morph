@@ -15,6 +15,7 @@ BRIDGE_REGISTER_ACTION(probe::ProbeModel, probe::Answer, "Probe_Answer")
 
 namespace probe {
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
 std::int64_t ProbeModel::execute(Answer const& /*action*/) const { return 42; }
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {

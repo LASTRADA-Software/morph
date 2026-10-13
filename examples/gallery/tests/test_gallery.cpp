@@ -26,6 +26,7 @@ using morph::examples::testing::ScreenHarness;
 namespace {
 
 /// Every `kind` named in @p json, at any depth: the view's nodes and the components' fallbacks.
+// NOLINTNEXTLINE(misc-no-recursion): one level per nesting of the document's JSON.
 void collectKinds(morph::ui::Json const& json, std::set<std::string>& kinds) {
     if (auto const* const object = std::get_if<morph::ui::Json::object_t>(&json.data)) {
         for (auto const& [key, value] : *object) {

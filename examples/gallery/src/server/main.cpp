@@ -19,7 +19,7 @@
 
 int main(int argc, char** argv) {
     try {
-        QCoreApplication app{argc, argv};
+        QCoreApplication const app{argc, argv};
         std::uint16_t port = 8765;
         QStringList const args = QCoreApplication::arguments();
         for (qsizetype index = 1; index + 1 < args.size(); ++index) {

@@ -34,11 +34,11 @@ struct ValueOption {
 
 std::array<ValueOption, 5> const& valueOptions() {
     static std::array<ValueOption, 5> const options{{
-        {"--server", [](ClientArgs& out, std::string value) { out.server = std::move(value); }},
-        {"--app", [](ClientArgs& out, std::string value) { out.app = std::move(value); }},
-        {"--db", [](ClientArgs& out, std::string value) { out.db = std::move(value); }},
-        {"--user", [](ClientArgs& out, std::string value) { out.user = std::move(value); }},
-        {"--screen", [](ClientArgs& out, std::string value) { out.screen = std::move(value); }},
+        {.name = "--server", .store = [](ClientArgs& out, std::string value) { out.server = std::move(value); }},
+        {.name = "--app", .store = [](ClientArgs& out, std::string value) { out.app = std::move(value); }},
+        {.name = "--db", .store = [](ClientArgs& out, std::string value) { out.db = std::move(value); }},
+        {.name = "--user", .store = [](ClientArgs& out, std::string value) { out.user = std::move(value); }},
+        {.name = "--screen", .store = [](ClientArgs& out, std::string value) { out.screen = std::move(value); }},
     }};
     return options;
 }
@@ -131,7 +131,7 @@ void ClientSource::open(ui::AppContext& context,
     }
     exec::IExecutor& owner = context.executor();
     _bridge = std::make_unique<bridge::Bridge>(std::move(transport->backend), owner);
-    _bridge->setDefaultSession(session);
+    _bridge->setDefaultSession(_session);
     // A reply already queued when the source closes still reaches the exchange's continuation; from then on it sends
     // nothing, because the transport it borrows is gone with the bridge.
     ui::Exchange guarded = [alive, inner = std::move(transport->exchange)](
@@ -143,7 +143,7 @@ void ClientSource::open(ui::AppContext& context,
         inner(std::move(request), std::move(done));
     };
     _dispatcher =
-        std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, ui::evaluatorOver(guarded, session, &owner));
+        std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, ui::evaluatorOver(guarded, _session, &owner));
 
     // Shared by the client's answer and the timeout: whichever comes first is delivered, once.
     auto const deliver = std::make_shared<std::function<void(std::expected<ui::LoadedBundle, ui::ConnectError>)>>(
@@ -170,7 +170,7 @@ void ClientSource::open(ui::AppContext& context,
     ui::HelloRequest hello;
     hello.vocabularies = clientVocabularies();
     ui::UiClient const client{std::move(guarded), std::move(hello), std::make_shared<ui::MemoryBundleStore>()};
-    client.open(session, [deliver](std::expected<ui::LoadedBundle, ui::ConnectError> opened) {
+    client.open(_session, [deliver](std::expected<ui::LoadedBundle, ui::ConnectError> opened) {
         (*deliver)(std::move(opened));
     });
 }
@@ -210,7 +210,7 @@ std::expected<ClientSource::Transport, ui::ConnectError> RemoteAppSource::connec
 // ── LocalAppSource ──────────────────────────────────────────────────────────
 
 LocalAppSource::LocalAppSource(LocalApp app, LocalSetup setup) : _app{std::move(app)}, _setup{std::move(setup)} {
-    session.principal = _setup.user;
+    requestSession().principal = _setup.user;
 }
 
 LocalAppSource::~LocalAppSource() {
@@ -241,7 +241,7 @@ std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect
     _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
     // The UI service answers in process, synchronously, exactly as the server's strand would.
     ui::Exchange exchange = [service = _service, authorizer = session::allowAllAuthorizer()](
-                                wire::Envelope request, std::function<void(ui::ExchangeReply)> const& done) {
+                                wire::Envelope const& request, std::function<void(ui::ExchangeReply)> const& done) {
         try {
             done(wire::decode(service->handle(request, *authorizer)));
         } catch (std::exception const& error) {

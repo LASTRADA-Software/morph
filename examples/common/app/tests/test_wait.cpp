@@ -44,7 +44,8 @@ TEST_CASE("awaitOn: returns the value, rethrows the failure, and gives up at the
     {
         auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&owner);
         std::thread settler{[&promise] { promise.resolve(7); }};
-        CHECK(awaitOn(owner, std::move(completion)) == 7);
+        int const value = awaitOn(owner, std::move(completion));
+        CHECK(value == 7);
         settler.join();
     }
     {

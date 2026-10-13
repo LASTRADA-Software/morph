@@ -66,7 +66,7 @@ public:
     SimulatedAppSource(SimulatedAppSource&&) = delete;
     SimulatedAppSource& operator=(SimulatedAppSource&&) = delete;
 
-private:
+protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
         auto bundle = _app.bundle();
         if (!bundle) {
@@ -77,7 +77,7 @@ private:
         backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(std::move(*bundle)));
         _server = std::make_shared<backend::RemoteServer>(*_workers, config);
-        ui::Exchange exchange = [server = _server](wire::Envelope request,
+        ui::Exchange exchange = [server = _server](wire::Envelope const& request,
                                                    std::function<void(ui::ExchangeReply)> const& done) {
             try {
                 done(wire::decode(server->handleInline(wire::encode(request))));
@@ -94,6 +94,7 @@ private:
         _workers.reset();
     }
 
+private:
     LocalApp _app;
     std::unique_ptr<exec::ThreadPoolExecutor> _workers;
     std::shared_ptr<backend::RemoteServer> _server;
@@ -118,14 +119,15 @@ public:
         std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
         _source->open(_context,
                       [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
-        if (!pumpUntil(_context.owner(), [&opened] { return opened.has_value(); })) {
+        if (!pumpUntil(_context.owner(), [&opened] { return opened.has_value(); }) || !opened.has_value()) {
             throw std::runtime_error{"ScreenHarness: the application did not open in time"};
         }
-        if (!*opened) {
-            throw std::runtime_error{"ScreenHarness: " + opened->error().message};
+        std::expected<ui::Bundle, ui::ConnectError> bundle = std::move(opened).value();
+        if (!bundle) {
+            throw std::runtime_error{"ScreenHarness: " + bundle.error().message};
         }
         _shell = mountClientShell(
-            _context, _backend, std::move(*opened), *_source,
+            _context, _backend, std::move(bundle), *_source,
             ClientShellOptions{.startScreen = std::move(screenId),
                                .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
                                .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); }});

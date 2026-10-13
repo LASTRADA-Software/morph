@@ -61,7 +61,7 @@ Opened openAndWait(FakeAppContext& context, morph::ui::AppSource& source) {
     std::optional<Opened> opened;
     source.open(context, [&opened](Opened result) { opened = std::move(result); });
     REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
-    return std::move(*opened);
+    return std::move(opened).value();
 }
 
 }  // namespace
@@ -109,7 +109,7 @@ TEST_CASE("Client shell: a document's navigate replaces the screen, after the ha
             morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
         auto const next = backend.find("Button", "testId", "next");
         REQUIRE(next.has_value());
-        backend.click(*next);
+        backend.click(next.value());
         CHECK(log.mounted == std::vector<std::string>{"probe.home"});  // posted, not yet run
         CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
         CHECK_FALSE(textOf(backend, "answer").has_value());
@@ -161,24 +161,27 @@ namespace {
 /// A source whose exchange the test answers by hand.
 class ManualSource final : public morph::examples::ClientSource {
 public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test answers and inspects these.
     std::vector<std::function<void(morph::ui::ExchangeReply)>> waiting;
     int sent = 0;
     std::chrono::milliseconds timeout{0};
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-private:
+protected:
     [[nodiscard]] std::expected<Transport, morph::ui::ConnectError> connect(
         morph::ui::AppContext& /*context*/) override {
         _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
-        return Transport{
-            .backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
-            .exchange = [this](morph::wire::Envelope /*request*/, std::function<void(morph::ui::ExchangeReply)> done) {
-                ++sent;
-                waiting.push_back(std::move(done));
-            }};
+        return Transport{.backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
+                         .exchange = [this](morph::wire::Envelope const& /*request*/,
+                                            std::function<void(morph::ui::ExchangeReply)> done) {
+                             ++sent;
+                             waiting.push_back(std::move(done));
+                         }};
     }
     [[nodiscard]] std::chrono::milliseconds openTimeout() const override { return timeout; }
     void disconnect() override { _workers.reset(); }
 
+private:
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
 
 public:
@@ -239,5 +242,5 @@ TEST_CASE("ClientSource: switching backends is refused", "[examples-common][sour
         }
     });
     REQUIRE(refusal.has_value());
-    CHECK(*refusal == "this client does not switch backends; the switch to `local` is the hosting layer's");
+    CHECK(refusal.value() == "this client does not switch backends; the switch to `local` is the hosting layer's");
 }

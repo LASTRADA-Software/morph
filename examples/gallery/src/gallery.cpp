@@ -22,6 +22,7 @@ namespace gallery {
 
 namespace ui = morph::ui::author;
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
 std::vector<Fact> GalleryModel::execute(ListFacts const& /*action*/) const {
     return {Fact{.id = 1, .label = "Kinds", .value = "34"},
             Fact{.id = 2, .label = "Renderers", .value = "Qt Quick, terminal"},
