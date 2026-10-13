@@ -116,7 +116,7 @@ TEST_CASE("preferences: a mounted screen takes its stored choices; an absent ent
     prefs_test::Client client{s, "ann"};
     std::expected<morph::ui::PreferencesLoaded, std::string> loaded;
     auto const screen = client.mount(loaded);
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     CHECK(loaded->applied == 1);
     CHECK(loaded->ignored == 0);
     client.owner.runAll();
@@ -137,7 +137,7 @@ TEST_CASE("preferences: an outdated entry is ignored and the point keeps its def
     prefs_test::Client client{s, "ann"};
     std::expected<morph::ui::PreferencesLoaded, std::string> loaded;
     auto const screen = client.mount(loaded);
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     CHECK(loaded->applied == 0);
     CHECK(loaded->ignored == 3);
     client.owner.runAll();
@@ -152,7 +152,7 @@ TEST_CASE("preferences: a choice is written as the user makes it, and a reset re
     prefs_test::Client client{s, "ann"};
     std::expected<morph::ui::PreferencesLoaded, std::string> loaded;
     auto const screen = client.mount(loaded);
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
 
     auto const select = client.backend.find("Select", "testId", "edit-density");
     REQUIRE(select);
@@ -224,7 +224,7 @@ TEST_CASE("preferences: a load reply is read point by point; a reply that is not
           R"({"app":"lims","scope":"scripted","points":["density","filter","panels"]})");
     // A choice and a layout are taken; a point the document lacks and text that is not JSON are ignored.
     h.reply(call, R"({"values":{"density":"\"compact\"","panels":"{\"rail\":true}","gone":"1","filter":"{no"}})");
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     REQUIRE(loaded->has_value());
     CHECK((*loaded)->applied == 2);
     CHECK((*loaded)->ignored == 2);
@@ -233,14 +233,14 @@ TEST_CASE("preferences: a load reply is read point by point; a reply that is not
     loaded.reset();
     sync.load(*screen, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
     h.reply(h.dispatcher.last("load"), "[1, 2]");
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     REQUIRE_FALSE(loaded->has_value());
     CHECK(loaded->error().starts_with("not a preferences reply"));
 
     loaded.reset();
     sync.load(*screen, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
     h.fail(h.dispatcher.last("load"));
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     REQUIRE_FALSE(loaded->has_value());
     CHECK(loaded->error() == "it failed");
 
@@ -262,7 +262,7 @@ TEST_CASE("preferences: a screen with no points loads at once; writes report the
     morph::async::CallbackScope const scope;
     std::optional<Outcome> loaded;
     sync.load(*plain, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
-    REQUIRE(loaded);
+    REQUIRE(loaded.has_value());
     CHECK((*loaded)->applied == 0);
     sync.load(*plain, scope);
     CHECK(h.dispatcher.calls.empty());
