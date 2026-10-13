@@ -87,9 +87,9 @@ public:
     /// @return Its JSON text, or `std::nullopt` when nothing is stored.
     [[nodiscard]] async::Completion<std::optional<std::string>> get(PrefKey const& key) override {
         auto [completion, promise] = async::Completion<std::optional<std::string>>::makeSettleable(&_strand);
-        _strand.postTask([this, key = tie(key), promise = std::move(promise)] mutable {
-            auto const found = _entries.find(key);
-            promise.resolve(found == _entries.end() ? std::nullopt : std::optional<std::string>{found->second});
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            auto const found = _entries.find(entry);
+            settle.resolve(found == _entries.end() ? std::nullopt : std::optional<std::string>{found->second});
         });
         return std::move(completion);
     }
@@ -100,9 +100,9 @@ public:
     /// @return `true`: the memory store refuses nothing.
     [[nodiscard]] async::Completion<bool> set(PrefKey const& key, std::string json) override {
         auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
-        _strand.postTask([this, key = tie(key), json = std::move(json), promise = std::move(promise)] mutable {
-            _entries.insert_or_assign(std::move(key), std::move(json));
-            promise.resolve(true);
+        _strand.postTask([this, entry = tie(key), text = std::move(json), settle = std::move(promise)] mutable {
+            _entries.insert_or_assign(std::move(entry), std::move(text));
+            settle.resolve(true);
         });
         return std::move(completion);
     }
@@ -112,8 +112,8 @@ public:
     /// @return Whether an entry was there.
     [[nodiscard]] async::Completion<bool> remove(PrefKey const& key) override {
         auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
-        _strand.postTask([this, key = tie(key), promise = std::move(promise)] mutable {
-            promise.resolve(_entries.erase(key) != 0);
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            settle.resolve(_entries.erase(entry) != 0);
         });
         return std::move(completion);
     }
