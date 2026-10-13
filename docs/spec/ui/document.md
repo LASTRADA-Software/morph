@@ -156,7 +156,7 @@ place a kind is described.
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
-| `form` | `model`, `action` (required), `prefill`, `submit`, `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, and each field's values as `form.field.value` |
+| `form` | `model`, `action` (required), `prefill`, `submit`, `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
 | `collection`, `wizard` | `model`, `action` (required) | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
@@ -229,7 +229,9 @@ unknown, an `instance` expression names a model that is not keyed, an action bel
 model type, `refreshOn` names an action of another model type, an `optimistic` `with` writes a field
 the server calculates, or a mutation that sends a credential or returns a secret is queued offline.
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
-an alias's default instance, which is the interpreter's.
+an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
+an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's
+form from.
 
 ## Refusals
 

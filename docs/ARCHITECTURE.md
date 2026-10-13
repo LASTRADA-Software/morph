@@ -699,6 +699,8 @@ folder.
 | `forms/engine/form_session.hpp` | `FormSession`, `FieldState`, `RowState`, `Submitter`, `ChoiceFetcher`, `FormSessionOptions` (`morph::forms::`) — the reactive, headless state of one form |
 | `forms/engine/handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` (`morph::forms::`) — a form submitting through the application's own `BridgeHandler`s |
 | `forms/engine/typed_form.hpp` | `Form<A, M, S>`, `FormModel::forAction<A>()` (`morph::forms::`) — a form over a registered action type, with typed access |
+| `forms/engine/overrides.hpp` | `Overrides`, `FieldView` (`morph::forms::`) — replacement controls by field path, widget, unit or kind |
+| `forms/engine/form_view.hpp` | `formView`, `FormViewOptions` (`morph::forms::`) — a form session rendered as a view tree |
 
 #### `util/` — exact values, units, time
 

@@ -214,6 +214,12 @@ API surface).
     submission as an `Exclusive` mutation, prefill, reset, and Choice options as a query keyed on the parents.
   - `handlerSubmitter` / `handlerChoiceFetcher` route a form to the application's own `BridgeHandler`s;
     `Form<A, M, S>` adds typed `set<>`, `value()` and `lastResult()` and joins `A`'s `validate()` to readiness.
+  - `formView` (`form_view.hpp`) renders a session through the view tree, so one form draws on every frontend;
+    `Overrides` (`overrides.hpp`) replace a field's control by path, widget, unit or kind. `FieldOverlay` applies
+    a document's `fields` (omit, hidden, label, unit, decimals, widget, blankAs) to the model.
+  - The interpreter lowers `form` nodes: the schema from the new `Catalog::schema`, submissions through the
+    node's model alias, the prefill followed, `onSubmit`/`onSuccess`/`onError`, and the form's values as elements
+    (`{"ref": "<form>.<field>.value"}`). A form document renders on Qt Quick and on the terminal.
   - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
     renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
 - **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared

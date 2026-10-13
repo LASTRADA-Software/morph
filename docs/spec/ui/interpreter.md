@@ -198,6 +198,20 @@ applies to the width.
 - **`customize`** lowers a `choice` point to a select and a string `value` point to a text input, each
   writing the screen's preference and calling `preferenceChanged`; other points show the point's name.
 - **`custom`** lowers its component's fallback with `props` bound, inside `ui::custom`.
+- **`form`** is the forms engine's (`docs/spec/forms/engine.md`). Its element is declared like an
+  input's, with or without an `id`, and builds a `forms::FormSession` when the scope is declared, so
+  its values can be read before it is drawn: the schema comes from `Catalog::schema(action)`; the
+  `fields` overlay is evaluated once and applied before the model is read; `submit` (`explicit`,
+  `auto`) chooses over `x-submitMode`; every submission and options fetch goes through the `model`
+  alias's channel, bound for its instance when the call is made (a Choice whose options action belongs to
+  another model therefore fails its fetch); `prefill` is followed, each non-null
+  value loading the form as a programmatic change. It lowers to `forms::formView` inside a column that
+  carries the node's common properties. `onSubmit`, `onSuccess` and `onError` run once per attempt,
+  success and failure, with the body, the reply and the error text as `event`. Its element values
+  are `ready`, `body` (the record it would submit, `null` while not ready), `submitted`, `pending`
+  and each field by wire name, a record of `value`, `draft`, `valid`, `required`, `visible`,
+  `readonly` and `errors`. An action the catalog has no schema for, or a schema that does not build,
+  is reported and shown as a muted text naming the action.
 
 ## Diagnostics
 
@@ -228,7 +242,11 @@ stops when its scope is gone.
 
 Reported when met, and shown as a muted text naming the kind:
 
-- `form`, `collection` and `wizard`: the forms engine (spec 2).
+- `collection` and `wizard`: the forms engine's composite screens (spec 2 §8).
+- A `form` node's `overrides` (spec 2 §7): document subtrees or components replacing a field's
+  control. C++ code replaces controls through `forms::Overrides`.
+- A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
+  encode.
 - A `table` declared from a model's list action: the table engine (spec 7).
 - Component loading: every `custom` node renders its fallback, as `Mounted` does.
 - Prefetching on hover: the host starts a screen's `prefetch` queries through `Session::prefetch`.
