@@ -5,12 +5,6 @@
 // a dialog dismisses and reopens; lists reconcile with the fewest moves, keep focus across a reorder and carry an
 // int64 key above 2^53; and spec 5 §7's server-calculated values show in the rendered cells, stale while in flight.
 
-// First, ahead of every header that brings view.hpp: GCC's -Wshadow reports value.hpp's enumerator `Type::Key` when
-// view.hpp's `ui::Key` was declared before it.
-// clang-format off
-#include <morph/ui/value.hpp>
-// clang-format on
-
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <catch2/catch_test_macros.hpp>
@@ -468,4 +462,78 @@ TEST_CASE("qt_quick interpreter: a failed calculation keeps the stale value and 
     CHECK(cell("result", 1).shownText() == "2");
     CHECK(cell("error", 1).shownText() == "no connection");
     CHECK(cell("error", 0).shownText().empty());
+}
+
+// A `form` node renders through Qt Quick: the forms engine's view tree, typed into on the real engine, submits the
+// exact body through the model alias.
+TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "capture",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration",
+          "fields": { "note": { "label": "Remarks" } } },
+        { "kind": "text", "testId": "ready", "text": { "if": [ { "ref": "cap.ready" }, "ready", "not ready" ] } } ] } })");
+    CHECK(QtHarness::widget("label_note").shownText() == "Remarks");
+    CHECK(QtHarness::widget("ready").shownText() == "not ready");
+    h.click("field_sampleId");
+    h.scene.type(QStringLiteral("9007199254740993"));
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("12.5"));
+    CHECK(QtHarness::widget("ready").shownText() == "ready");
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    auto const& call = h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration"));
+    CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
+}
+
+// A `collection` node renders through Qt Quick: the rows' exact cells, the confirm dialog gating a row action, and
+// the row editor in its dialog, submitting through the model alias.
+TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    h.dispatcher.autoReply.emplace("Lims_ListSamples", R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "samples",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })");
+    CHECK(QtHarness::widget("collection_title").shownText() == "Samples");
+    CHECK(QtHarness::widget("cell_name_9007199254740993").shownText() == "Water");
+    h.click("rowAction_Lims_DeleteSample_9007199254740993");
+    h.scene.settle();
+    CHECK(h.dispatcher.count("Lims_DeleteSample") == 0);
+    h.click("confirm_accept");
+    h.scene.settle();
+    REQUIRE(h.dispatcher.count("Lims_DeleteSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_DeleteSample")).body == R"({"id":9007199254740993})");
+    h.click("rowOpen_9007199254740993");
+    h.scene.settle();
+    CHECK(QtHarness::widget("field_sampleId").shownText() == "9007199254740993");
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("2"));
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration")).body ==
+          R"({"sampleId":9007199254740993,"concentration":{"num":200,"den":100,"dp":2}})");
+}
+
+// A `wizard` node renders through Qt Quick: Next waits for the step's success, and the second step is prefilled from
+// the first, exactly.
+TEST_CASE("qt_quick interpreter: a wizard document steps on", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    h.dispatcher.autoReply.emplace("Lims_CaptureConcentration", R"({"ok":true})");
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "flow",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" } })");
+    CHECK(QtHarness::widget("wizard_title").shownText() == "Capture flow  (1 / 2)");
+    h.click("field_sampleId");
+    h.scene.type(QStringLiteral("9007199254740993"));
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("1"));
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    h.click("wizardNext");
+    h.scene.settle();
+    CHECK(QtHarness::widget("wizard_title").shownText() == "Capture flow  (2 / 2)");
+    CHECK(QtHarness::widget("field_sampleId").shownText() == "9007199254740993");
+    REQUIRE(h.dispatcher.count("Lims_ConfirmSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ConfirmSample")).body == R"({"sampleId":9007199254740993})");
 }

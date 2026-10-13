@@ -306,6 +306,45 @@ inline Catalog corpusCatalog() {
         }
         return info;
     };
+    // The actions a `form` node, a collection's editor and a wizard's steps build from.
+    catalog.schema = [](std::string_view action) -> std::optional<std::string> {
+        if (action == "Lims_ConfirmSample") {
+            return std::string{R"({"type":"object","title":"Confirm","properties":{
+              "sampleId":{"type":"integer","title":"Sample","x-order":0}},"required":["sampleId"]})"};
+        }
+        if (action != "Lims_CaptureConcentration") {
+            return std::nullopt;
+        }
+        return std::string{R"({"type":"object","title":"Capture","properties":{
+          "sampleId":{"type":"integer","title":"Sample","x-order":0},
+          "concentration":{"type":["object","null"],"title":"Concentration","x-decimalPlaces":2,
+            "ExtUnits":{"unitAscii":"mg_per_L","unitUnicode":"mg/L"},"x-order":1},
+          "rowIndex":{"type":["integer","null"],"x-order":2},
+          "note":{"type":["string","null"],"title":"Note","x-order":3}},
+          "required":["sampleId","concentration"]})"};
+    };
+    // The collection a `collection` node over the sample list builds from: its rows open the capture form.
+    // `Lims_ListStale` answers the same document, which lists another action: a catalog out of step.
+    catalog.view = [](std::string_view action) -> std::optional<std::string> {
+        if (action != "Lims_ListSamples" && action != "Lims_ListStale") {
+            return std::nullopt;
+        }
+        return std::string{R"({"v-kind":"collection","v-title":"Samples","v-query":"Lims_ListSamples",
+          "v-rowKey":"id","v-columns":[{"field":"id","label":"ID","kind":"integer","v-hidden":true},
+          {"field":"name","label":"Name"}],
+          "v-rowAction":{"action":"Lims_CaptureConcentration","bind":{"sampleId":"id"}},
+          "v-actions":[{"action":"Lims_DeleteSample","label":"Delete","bind":{"id":"id"},"confirm":true}]})"};
+    };
+    // The wizard a `wizard` node starting with the capture builds from: capture, then confirm the captured sample.
+    catalog.wizard = [](std::string_view action) -> std::optional<std::string> {
+        if (action != "Lims_CaptureConcentration") {
+            return std::nullopt;
+        }
+        return std::string{R"({"w-title":"Capture flow","w-steps":[
+          {"action":"Lims_CaptureConcentration","title":"Capture"},
+          {"action":"Lims_ConfirmSample","title":"Confirm",
+           "prefill":{"sampleId":"Lims_CaptureConcentration.sampleId"}}]})"};
+    };
     return catalog;
 }
 

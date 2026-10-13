@@ -160,7 +160,7 @@ using ChoiceFetcher = std::function<async::Completion<std::string>(std::string_v
   already ready when it is built submits once in automatic mode.
 - **Submission** is a `reactive::Mutation` over the `Submitter`. In automatic mode an Effect submits
   whenever the form becomes ready with a changed body,
-  except while a programmatic change (prefill, reset) is applying; in explicit mode only `submit()`
+  except while a programmatic change (prefill, reset) is applying and while a Choice's options are in flight (its selection is unjudged until they arrive); in explicit mode only `submit()`
   does.
 - **Choice options:** the rows are the result if it is an array, else its first array member. A
   selection no longer among the options follows the field's `onStale` (spec 5 §6), `clear` by
@@ -263,7 +263,7 @@ public:
   cells formatted exactly — not through a double as today) plus the action buttons, or master-detail
   with a side form.
 - **`WizardModel`** (`w-*`), **`WizardSession`**: one `FormSession` per step, kept alive; a step is
-  done when its submission succeeded; Back/Next; entering a step applies its prefill from the
+  done while its current body is the one whose submission succeeded; Back/Next; entering a step applies its prefill from the
   resolved values (draft first, then the reply, the reply winning on a name collision — the rule
   `FlowSession` documents) as JSON values, not as re-encoded text. Returning to a step that already
   succeeded shows its submitted values and does not submit it again; Next resubmits it only when its

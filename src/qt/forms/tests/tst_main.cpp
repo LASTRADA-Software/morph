@@ -7,9 +7,11 @@
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQuickTest/quicktest.h>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QFile>
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtCore/QtGlobal>
 #include <QtQml/QQmlContext>
 #include <QtQml/QQmlEngine>
 
@@ -17,15 +19,43 @@ Q_IMPORT_QML_PLUGIN(MorphFormsPlugin)
 
 namespace {
 
-/// @brief Publishes the two shared test corpora to the QML engine.
+/// @brief Writes the body corpus back, when regenerating it.
 ///
-/// Each corpus is one file with two readers — a C++ suite and a QML one:
+/// The body corpus's expected bodies are the ones `DynamicForm` produces, so they are written by this suite
+/// (`tst_BodyCorpus.qml`) rather than by hand. With `MORPH_FORMS_WRITE_BODY_CORPUS` set in the environment the
+/// suite fills every row's `body` and calls `write`; without it, it requires each row's committed body.
+class BodyCorpusFile : public QObject {
+    Q_OBJECT
+
+public:
+    /// @param parent The QObject parent.
+    explicit BodyCorpusFile(QObject* parent) : QObject(parent) {}
+
+    /// @brief Replaces the corpus file.
+    /// @param text The whole file.
+    /// @return Whether every byte was written.
+    [[nodiscard]] Q_INVOKABLE bool write(const QString& text) const {
+        QFile file(QStringLiteral(MORPH_FORMS_BODY_CORPUS));
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            return false;
+        }
+        QByteArray const bytes = text.toUtf8();
+        return file.write(bytes) == bytes.size();
+    }
+};
+
+/// @brief Publishes the shared test corpora to the QML engine.
+///
+/// Each corpus is one file read by a C++ suite and a QML one:
 ///
 /// - `tests/data/rule_corpus.json` — read by
-///   `tests/test_forms_rule_corpus.cpp` and `tst_DynamicFormRuleCorpus.qml`;
+///   `tests/test_forms_rule_corpus.cpp`, `tests/test_forms_engine_corpora.cpp` and
+///   `tst_DynamicFormRuleCorpus.qml`;
 /// - `tests/data/instance_bounds.json` — read by
 ///   `tests/test_forms_instance_constraints.cpp` and
-///   `tst_DynamicFormInstanceBounds.qml`.
+///   `tst_DynamicFormInstanceBounds.qml`;
+/// - `tests/data/body_corpus.json` — written and checked by `tst_BodyCorpus.qml`,
+///   read by `tests/test_forms_engine_corpora.cpp`.
 ///
 /// QML cannot fetch either itself: an XMLHttpRequest against a `file:` URL is
 /// refused unless `QML_XHR_ALLOW_FILE_READ` is exported, and a suite whose
@@ -59,6 +89,12 @@ public Q_SLOTS:
                                                   readAll(QStringLiteral(MORPH_FORMS_RULE_CORPUS)));
         engine->rootContext()->setContextProperty(QStringLiteral("instanceBoundsJson"),
                                                   readAll(QStringLiteral(MORPH_FORMS_INSTANCE_BOUNDS)));
+        engine->rootContext()->setContextProperty(QStringLiteral("bodyCorpusJson"),
+                                                  readAll(QStringLiteral(MORPH_FORMS_BODY_CORPUS)));
+        engine->rootContext()->setContextProperty(QStringLiteral("bodyCorpusRegenerate"),
+                                                  qEnvironmentVariableIsSet("MORPH_FORMS_WRITE_BODY_CORPUS"));
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the engine is its QObject parent and deletes it.
+        engine->rootContext()->setContextProperty(QStringLiteral("bodyCorpusFile"), new BodyCorpusFile(engine));
     }
 
 private:

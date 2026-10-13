@@ -777,11 +777,15 @@ Frame {
                     // "array", "items": {...}}) -- a comma-separated-with-
                     // validation control, not the plain text field's
                     // fall-through (which would wrap the typed text as a
-                    // JSON *string*, not an array). Scoped to array-of-string
-                    // today; any other item type still renders this control
-                    // but each entry is encoded as a JSON string, same as an
-                    // array of strings, rather than silently misencoding.
+                    // JSON *string*, not an array). Each entry is encoded by
+                    // the items' type (`arrayItemType`): integers and numbers
+                    // as bare JSON numbers, booleans as true/false, anything
+                    // else as a JSON string.
                     isArray: types.indexOf("array") !== -1,
+                    arrayItemType: types.indexOf("array") === -1 ? ""
+                                   : opt(jsonTypes(resolveProp(opt(p.items, ({})))).filter(function (t) {
+                                       return t !== "null"
+                                   })[0], "string"),
                     // A collection of objects, and -- for a top-level one --
                     // its element's member descriptors, in x-order order: the
                     // columns a grid slot draws (label, unit, decimals,
@@ -1651,11 +1655,35 @@ Frame {
         return "{" + parts.join(",") + "}"
     }
 
-    function arrayJsonLiteral(text) {
+    // One comma-separated entry per item, blank entries dropped, each encoded
+    // by the items' type. Integer and number items keep the digits as typed
+    // (leading zeros dropped, as JSON requires) and never pass through a JS
+    // number, so an id past 2^53 stays exact. An item that does not encode
+    // makes the field encode to nothing, as an invalid scalar does.
+    function arrayJsonLiteral(text, itemType) {
         const items = text.split(",")
             .map(function (item) { return item.trim() })
             .filter(function (item) { return item !== "" })
-        return JSON.stringify(items)
+        const literals = []
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
+            if (itemType === "integer") {
+                if (!/^-?\d+$/.test(item))
+                    return null
+                literals.push(item.replace(/^(-?)0+(?=\d)/, "$1"))
+            } else if (itemType === "number") {
+                if (!/^-?\d+(\.\d+)?$/.test(item))
+                    return null
+                literals.push(item.replace(/^(-?)0+(?=\d)/, "$1"))
+            } else if (itemType === "boolean") {
+                if (item !== "true" && item !== "false")
+                    return null
+                literals.push(item)
+            } else {
+                literals.push(JSON.stringify(item))
+            }
+        }
+        return "[" + literals.join(",") + "]"
     }
 
     // Encodes one field's current input text as the JSON literal morph
@@ -1698,7 +1726,7 @@ Frame {
             return encodeObjectArray(f, text)
         }
         if (f.isArray) {
-            return arrayJsonLiteral(text)
+            return arrayJsonLiteral(text, opt(f.arrayItemType, "string"))
         }
         if (f.isEnum) {
             // Also already a JSON literal — but here the whole set is in the

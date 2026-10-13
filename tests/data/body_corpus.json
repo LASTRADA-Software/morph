@@ -1,0 +1,776 @@
+{
+  "readme": [
+    "The body corpus: what the QML renderer's DynamicForm sends, byte for byte, for typed text.",
+    "Written by src/qt/forms/tests/tst_BodyCorpus.qml (MORPH_FORMS_WRITE_BODY_CORPUS=1 regenerates",
+    "every body from a real DynamicForm); without the variable that suite requires the committed",
+    "bodies. tests/test_forms_engine_corpora.cpp requires the forms engine to send the same bytes.",
+    "",
+    "A case: 'schema' (JSON text), 'locale' (C or de_DE), 'offset' (display zone, minutes east of UTC),",
+    "optional 'prefill' (JSON text, loaded first), 'steps' (each sets one field's text, after",
+    "selecting 'unit' when given), and 'body': the body sent, or null when the form is not ready."
+  ],
+  "cases": [
+    {
+      "id": "decimal/exact",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "12.5"
+        }
+      ],
+      "body": "{\"price\":{\"num\":1250,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "decimal/places",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "0.07"
+        }
+      ],
+      "body": "{\"price\":{\"num\":7,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "decimal/negative",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "-3"
+        }
+      ],
+      "body": "{\"price\":{\"num\":-300,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "decimal/too-precise",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "1.234"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "decimal/de_DE",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "de_DE",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "1.234,56"
+        }
+      ],
+      "body": "{\"price\":{\"num\":123456,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "decimal/de_DE-ungrouped",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "de_DE",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "1234,5"
+        }
+      ],
+      "body": "{\"price\":{\"num\":123450,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "decimal/de_DE-misgrouped",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "de_DE",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "price",
+          "text": "1.5"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "quantity/canonical",
+      "schema": "{\"type\":\"object\",\"properties\":{\"mass\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":3,\"ExtUnits\":{\"unitAscii\":\"kg\",\"unitUnicode\":\"kg\"},\"x-unitAlternatives\":[{\"id\":\"g\",\"display\":\"g\",\"decimals\":1,\"num\":1,\"den\":1000},{\"id\":\"t\",\"display\":\"t\",\"decimals\":4,\"num\":1000,\"den\":1}]}},\"additionalProperties\":false,\"required\":[\"mass\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "mass",
+          "text": "2650.5"
+        }
+      ],
+      "body": "{\"mass\":{\"num\":2650500,\"den\":1000,\"dp\":3}}"
+    },
+    {
+      "id": "quantity/grams",
+      "schema": "{\"type\":\"object\",\"properties\":{\"mass\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":3,\"ExtUnits\":{\"unitAscii\":\"kg\",\"unitUnicode\":\"kg\"},\"x-unitAlternatives\":[{\"id\":\"g\",\"display\":\"g\",\"decimals\":1,\"num\":1,\"den\":1000},{\"id\":\"t\",\"display\":\"t\",\"decimals\":4,\"num\":1000,\"den\":1}]}},\"additionalProperties\":false,\"required\":[\"mass\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "mass",
+          "text": "2650500.0",
+          "unit": 1
+        }
+      ],
+      "body": "{\"mass\":{\"num\":26505000,\"den\":10000,\"dp\":3}}"
+    },
+    {
+      "id": "quantity/tonnes",
+      "schema": "{\"type\":\"object\",\"properties\":{\"mass\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":3,\"ExtUnits\":{\"unitAscii\":\"kg\",\"unitUnicode\":\"kg\"},\"x-unitAlternatives\":[{\"id\":\"g\",\"display\":\"g\",\"decimals\":1,\"num\":1,\"den\":1000},{\"id\":\"t\",\"display\":\"t\",\"decimals\":4,\"num\":1000,\"den\":1}]}},\"additionalProperties\":false,\"required\":[\"mass\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "mass",
+          "text": "2.6505",
+          "unit": 2
+        }
+      ],
+      "body": "{\"mass\":{\"num\":26505000,\"den\":10000,\"dp\":3}}"
+    },
+    {
+      "id": "quantity/grams-too-precise",
+      "schema": "{\"type\":\"object\",\"properties\":{\"mass\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":3,\"ExtUnits\":{\"unitAscii\":\"kg\",\"unitUnicode\":\"kg\"},\"x-unitAlternatives\":[{\"id\":\"g\",\"display\":\"g\",\"decimals\":1,\"num\":1,\"den\":1000},{\"id\":\"t\",\"display\":\"t\",\"decimals\":4,\"num\":1000,\"den\":1}]}},\"additionalProperties\":false,\"required\":[\"mass\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "mass",
+          "text": "2650500.01",
+          "unit": 1
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "int64/beyond-2^53",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "9007199254740993"
+        }
+      ],
+      "body": "{\"id\":9007199254740993}"
+    },
+    {
+      "id": "int64/max",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "9223372036854775807"
+        }
+      ],
+      "body": "{\"id\":9223372036854775807}"
+    },
+    {
+      "id": "int64/min",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "-9223372036854775808"
+        }
+      ],
+      "body": "{\"id\":-9223372036854775808}"
+    },
+    {
+      "id": "int64/past-max",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "9223372036854775808"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "int64/leading-zeros",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "0042"
+        }
+      ],
+      "body": "{\"id\":42}"
+    },
+    {
+      "id": "int64/text",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "id",
+          "text": "4x"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "int64/anyOf-optional",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"anyOf\":[{\"$ref\":\"#/$defs/int64_t\"},{\"type\":\"null\"}],\"x-order\":0},\"name\":{\"type\":\"string\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"name\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "name",
+          "text": "n"
+        },
+        {
+          "field": "id",
+          "text": "9007199254740993"
+        }
+      ],
+      "body": "{\"id\":9007199254740993,\"name\":\"n\"}"
+    },
+    {
+      "id": "int64/anyOf-blank",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"anyOf\":[{\"$ref\":\"#/$defs/int64_t\"},{\"type\":\"null\"}],\"x-order\":0},\"name\":{\"type\":\"string\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"name\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "name",
+          "text": "n"
+        }
+      ],
+      "body": "{\"name\":\"n\"}"
+    },
+    {
+      "id": "number/plain",
+      "schema": "{\"type\":\"object\",\"properties\":{\"ratio\":{\"type\":\"number\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"ratio\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "ratio",
+          "text": "3.5"
+        }
+      ],
+      "body": "{\"ratio\":3.5}"
+    },
+    {
+      "id": "number/leading-zeros",
+      "schema": "{\"type\":\"object\",\"properties\":{\"ratio\":{\"type\":\"number\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"ratio\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "ratio",
+          "text": "007.50"
+        }
+      ],
+      "body": "{\"ratio\":7.50}"
+    },
+    {
+      "id": "number/exponent",
+      "schema": "{\"type\":\"object\",\"properties\":{\"ratio\":{\"type\":\"number\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"ratio\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "ratio",
+          "text": "1e5"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "number/de_DE",
+      "schema": "{\"type\":\"object\",\"properties\":{\"ratio\":{\"type\":\"number\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"ratio\"]}",
+      "locale": "de_DE",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "ratio",
+          "text": "21,5"
+        }
+      ],
+      "body": "{\"ratio\":21.5}"
+    },
+    {
+      "id": "number/display-decimals",
+      "schema": "{\"type\":\"object\",\"properties\":{\"density\":{\"type\":\"number\",\"x-order\":0,\"x-displayDecimals\":3}},\"additionalProperties\":false,\"required\":[\"density\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "density",
+          "text": "2.505"
+        }
+      ],
+      "body": "{\"density\":2.505}"
+    },
+    {
+      "id": "number/display-decimals-too-precise",
+      "schema": "{\"type\":\"object\",\"properties\":{\"density\":{\"type\":\"number\",\"x-order\":0,\"x-displayDecimals\":3}},\"additionalProperties\":false,\"required\":[\"density\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "density",
+          "text": "2.5051"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "number/bounds-inside",
+      "schema": "{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"number\",\"x-order\":0,\"minimum\":-40.5,\"maximum\":120,\"multipleOf\":0.5}},\"additionalProperties\":false,\"required\":[\"temperature\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "temperature",
+          "text": "-40.5"
+        }
+      ],
+      "body": "{\"temperature\":-40.5}"
+    },
+    {
+      "id": "number/bounds-below",
+      "schema": "{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"number\",\"x-order\":0,\"minimum\":-40.5,\"maximum\":120,\"multipleOf\":0.5}},\"additionalProperties\":false,\"required\":[\"temperature\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "temperature",
+          "text": "-41"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "number/multiple-of",
+      "schema": "{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"number\",\"x-order\":0,\"minimum\":-40.5,\"maximum\":120,\"multipleOf\":0.5}},\"additionalProperties\":false,\"required\":[\"temperature\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "temperature",
+          "text": "0.25"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "blank-as/empty-after-edit",
+      "schema": "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"x-order\":0},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"x-blankAs\":\"empty\"}},\"additionalProperties\":false,\"required\":[\"title\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "title",
+          "text": "t"
+        },
+        {
+          "field": "note",
+          "text": "x"
+        },
+        {
+          "field": "note",
+          "text": ""
+        }
+      ],
+      "body": "{\"title\":\"t\",\"note\":\"\"}"
+    },
+    {
+      "id": "blank-as/empty-never-edited",
+      "schema": "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"x-order\":0},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"x-blankAs\":\"empty\"}},\"additionalProperties\":false,\"required\":[\"title\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "title",
+          "text": "t"
+        }
+      ],
+      "body": "{\"title\":\"t\"}"
+    },
+    {
+      "id": "blank-as/empty-prefilled",
+      "schema": "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"x-order\":0},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"x-blankAs\":\"empty\"}},\"additionalProperties\":false,\"required\":[\"title\"]}",
+      "locale": "C",
+      "offset": 0,
+      "prefill": "{\"title\":\"t\",\"note\":\"\"}",
+      "steps": [],
+      "body": "{\"title\":\"t\",\"note\":\"\"}"
+    },
+    {
+      "id": "blank-as/omit",
+      "schema": "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"x-order\":0},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"title\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "title",
+          "text": "t"
+        },
+        {
+          "field": "note",
+          "text": "x"
+        },
+        {
+          "field": "note",
+          "text": ""
+        }
+      ],
+      "body": "{\"title\":\"t\"}"
+    },
+    {
+      "id": "enum/string",
+      "schema": "{\"type\":\"object\",\"properties\":{\"grade\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"],\"x-order\":0},\"level\":{\"type\":\"integer\",\"enum\":[1,2,3],\"x-order\":1},\"role\":{\"type\":[\"string\",\"null\"],\"oneOf\":[{\"const\":\"Manager\",\"title\":\"Manager\"},{\"const\":\"Clerk\",\"title\":\"Clerk\"}],\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"grade\",\"level\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "grade",
+          "text": "\"Medium\""
+        },
+        {
+          "field": "level",
+          "text": "2"
+        }
+      ],
+      "body": "{\"grade\":\"Medium\",\"level\":2}"
+    },
+    {
+      "id": "enum/const-branches",
+      "schema": "{\"type\":\"object\",\"properties\":{\"grade\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"],\"x-order\":0},\"level\":{\"type\":\"integer\",\"enum\":[1,2,3],\"x-order\":1},\"role\":{\"type\":[\"string\",\"null\"],\"oneOf\":[{\"const\":\"Manager\",\"title\":\"Manager\"},{\"const\":\"Clerk\",\"title\":\"Clerk\"}],\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"grade\",\"level\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "grade",
+          "text": "\"High\""
+        },
+        {
+          "field": "level",
+          "text": "3"
+        },
+        {
+          "field": "role",
+          "text": "\"Manager\""
+        }
+      ],
+      "body": "{\"grade\":\"High\",\"level\":3,\"role\":\"Manager\"}"
+    },
+    {
+      "id": "enum/not-an-option",
+      "schema": "{\"type\":\"object\",\"properties\":{\"grade\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"],\"x-order\":0},\"level\":{\"type\":\"integer\",\"enum\":[1,2,3],\"x-order\":1},\"role\":{\"type\":[\"string\",\"null\"],\"oneOf\":[{\"const\":\"Manager\",\"title\":\"Manager\"},{\"const\":\"Clerk\",\"title\":\"Clerk\"}],\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"grade\",\"level\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "grade",
+          "text": "\"Emperor\""
+        },
+        {
+          "field": "level",
+          "text": "1"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "boolean/required-untouched",
+      "schema": "{\"type\":\"object\",\"properties\":{\"flag\":{\"type\":\"boolean\",\"x-order\":0},\"maybe\":{\"type\":[\"boolean\",\"null\"],\"x-order\":1},\"note\":{\"type\":\"string\",\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"flag\",\"note\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "note",
+          "text": "n"
+        }
+      ],
+      "body": "{\"flag\":false,\"note\":\"n\"}"
+    },
+    {
+      "id": "boolean/checked",
+      "schema": "{\"type\":\"object\",\"properties\":{\"flag\":{\"type\":\"boolean\",\"x-order\":0},\"maybe\":{\"type\":[\"boolean\",\"null\"],\"x-order\":1},\"note\":{\"type\":\"string\",\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"flag\",\"note\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "note",
+          "text": "n"
+        },
+        {
+          "field": "flag",
+          "text": "true"
+        },
+        {
+          "field": "maybe",
+          "text": "false"
+        }
+      ],
+      "body": "{\"flag\":true,\"maybe\":false,\"note\":\"n\"}"
+    },
+    {
+      "id": "datetime/utc",
+      "schema": "{\"type\":\"object\",\"properties\":{\"when\":{\"type\":\"string\",\"format\":\"date-time\",\"x-order\":0},\"day\":{\"type\":[\"string\",\"null\"],\"format\":\"date\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"when\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "when",
+          "text": "2026-07-05T14:30"
+        }
+      ],
+      "body": "{\"when\":\"2026-07-05T14:30:00Z\"}"
+    },
+    {
+      "id": "datetime/offset",
+      "schema": "{\"type\":\"object\",\"properties\":{\"when\":{\"type\":\"string\",\"format\":\"date-time\",\"x-order\":0},\"day\":{\"type\":[\"string\",\"null\"],\"format\":\"date\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"when\"]}",
+      "locale": "C",
+      "offset": 120,
+      "steps": [
+        {
+          "field": "when",
+          "text": "2026-07-05T16:30:00"
+        }
+      ],
+      "body": "{\"when\":\"2026-07-05T14:30:00Z\"}"
+    },
+    {
+      "id": "datetime/negative-offset-day",
+      "schema": "{\"type\":\"object\",\"properties\":{\"when\":{\"type\":\"string\",\"format\":\"date-time\",\"x-order\":0},\"day\":{\"type\":[\"string\",\"null\"],\"format\":\"date\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"when\"]}",
+      "locale": "C",
+      "offset": -300,
+      "steps": [
+        {
+          "field": "when",
+          "text": "2026-01-01T22:00"
+        },
+        {
+          "field": "day",
+          "text": "2026-07-20"
+        }
+      ],
+      "body": "{\"when\":\"2026-01-02T03:00:00Z\",\"day\":\"2026-07-20\"}"
+    },
+    {
+      "id": "datetime/malformed",
+      "schema": "{\"type\":\"object\",\"properties\":{\"when\":{\"type\":\"string\",\"format\":\"date-time\",\"x-order\":0},\"day\":{\"type\":[\"string\",\"null\"],\"format\":\"date\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"when\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "when",
+          "text": "not-a-date"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "array/strings",
+      "schema": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"x-order\":0},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"x-order\":1},\"counts\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"name\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "name",
+          "text": "a"
+        },
+        {
+          "field": "tags",
+          "text": "red, green, blue"
+        }
+      ],
+      "body": "{\"name\":\"a\",\"tags\":[\"red\",\"green\",\"blue\"]}"
+    },
+    {
+      "id": "array/blank-items",
+      "schema": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"x-order\":0},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"x-order\":1},\"counts\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"name\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "name",
+          "text": "a"
+        },
+        {
+          "field": "tags",
+          "text": "  red ,, green ,   "
+        }
+      ],
+      "body": "{\"name\":\"a\",\"tags\":[\"red\",\"green\"]}"
+    },
+    {
+      "id": "array/integers",
+      "schema": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"x-order\":0},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"x-order\":1},\"counts\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"x-order\":2}},\"additionalProperties\":false,\"required\":[\"name\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "name",
+          "text": "a"
+        },
+        {
+          "field": "counts",
+          "text": "1, 2, 30"
+        }
+      ],
+      "body": "{\"name\":\"a\",\"counts\":[1,2,30]}"
+    },
+    {
+      "id": "text/escapes",
+      "schema": "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"text\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "text",
+          "text": "say \"hi\" \\ back\tslash"
+        }
+      ],
+      "body": "{\"text\":\"say \\\"hi\\\" \\\\ back\\tslash\"}"
+    },
+    {
+      "id": "text/unicode",
+      "schema": "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"text\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "text",
+          "text": "Grüße € 世界"
+        }
+      ],
+      "body": "{\"text\":\"Grüße € 世界\"}"
+    },
+    {
+      "id": "text/trimmed",
+      "schema": "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"text\"]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "text",
+          "text": "  padded  "
+        }
+      ],
+      "body": "{\"text\":\"padded\"}"
+    },
+    {
+      "id": "rules/greater-holds",
+      "schema": "{\"type\":\"object\",\"properties\":{\"low\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}},\"high\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":1,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}}},\"additionalProperties\":false,\"required\":[],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}},\"x-rules\":[{\"kind\":\"greater\",\"fields\":[\"high\",\"low\"]}]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "low",
+          "text": "1.00"
+        },
+        {
+          "field": "high",
+          "text": "2.50"
+        }
+      ],
+      "body": "{\"low\":{\"num\":100,\"den\":100,\"dp\":2},\"high\":{\"num\":250,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "rules/greater-fails",
+      "schema": "{\"type\":\"object\",\"properties\":{\"low\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}},\"high\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":1,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}}},\"additionalProperties\":false,\"required\":[],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}},\"x-rules\":[{\"kind\":\"greater\",\"fields\":[\"high\",\"low\"]}]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "low",
+          "text": "3"
+        },
+        {
+          "field": "high",
+          "text": "2.50"
+        }
+      ],
+      "body": null
+    },
+    {
+      "id": "rules/greater-vacuous",
+      "schema": "{\"type\":\"object\",\"properties\":{\"low\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}},\"high\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":1,\"x-decimalPlaces\":2,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"money\"}}},\"additionalProperties\":false,\"required\":[],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}},\"x-rules\":[{\"kind\":\"greater\",\"fields\":[\"high\",\"low\"]}]}",
+      "locale": "C",
+      "offset": 0,
+      "steps": [
+        {
+          "field": "high",
+          "text": "2.50"
+        }
+      ],
+      "body": "{\"high\":{\"num\":250,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "prefill/exact-round-trip",
+      "schema": "{\"type\":\"object\",\"properties\":{\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"required\":[\"price\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "prefill": "{\"price\":{\"num\":1250,\"den\":100,\"dp\":2}}",
+      "steps": [],
+      "body": "{\"price\":{\"num\":1250,\"den\":100,\"dp\":2}}"
+    },
+    {
+      "id": "prefill/quantity-round-trip",
+      "schema": "{\"type\":\"object\",\"properties\":{\"mass\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":0,\"x-decimalPlaces\":3,\"ExtUnits\":{\"unitAscii\":\"kg\",\"unitUnicode\":\"kg\"},\"x-unitAlternatives\":[{\"id\":\"g\",\"display\":\"g\",\"decimals\":1,\"num\":1,\"den\":1000},{\"id\":\"t\",\"display\":\"t\",\"decimals\":4,\"num\":1000,\"den\":1}]}},\"additionalProperties\":false,\"required\":[\"mass\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "prefill": "{\"mass\":{\"num\":2650500,\"den\":1000,\"dp\":3}}",
+      "steps": [],
+      "body": "{\"mass\":{\"num\":2650500,\"den\":1000,\"dp\":3}}"
+    },
+    {
+      "id": "prefill/int64-round-trip",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0}},\"additionalProperties\":false,\"required\":[\"id\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "prefill": "{\"id\":9007199254740993}",
+      "steps": [],
+      "body": "{\"id\":9007199254740993}"
+    },
+    {
+      "id": "prefill/datetime-zone",
+      "schema": "{\"type\":\"object\",\"properties\":{\"when\":{\"type\":\"string\",\"format\":\"date-time\",\"x-order\":0},\"day\":{\"type\":[\"string\",\"null\"],\"format\":\"date\",\"x-order\":1}},\"additionalProperties\":false,\"required\":[\"when\"]}",
+      "locale": "C",
+      "offset": 120,
+      "prefill": "{\"when\":\"2026-07-05T14:30:00Z\"}",
+      "steps": [],
+      "body": "{\"when\":\"2026-07-05T14:30:00Z\"}"
+    },
+    {
+      "id": "prefill/nested",
+      "schema": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"x-order\":0},\"address\":{\"type\":[\"object\",\"null\"],\"x-order\":1,\"additionalProperties\":false,\"properties\":{\"street\":{\"type\":\"string\",\"x-order\":0},\"zip\":{\"type\":[\"integer\",\"null\"],\"x-order\":1}},\"required\":[\"street\"]},\"lines\":{\"type\":\"array\",\"x-order\":2,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"sku\":{\"type\":\"string\",\"x-order\":0},\"qty\":{\"type\":\"integer\",\"x-order\":1},\"price\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"type\":\"integer\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"x-order\":2,\"x-decimalPlaces\":2}},\"required\":[\"sku\",\"qty\"]}}},\"additionalProperties\":false,\"required\":[\"name\"],\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}}}",
+      "locale": "C",
+      "offset": 0,
+      "prefill": "{\"name\":\"n\",\"address\":{\"street\":\"Main\",\"zip\":12345},\"lines\":[{\"sku\":\"A\",\"qty\":2,\"price\":{\"num\":150,\"den\":100,\"dp\":2}},{\"sku\":\"B\",\"qty\":1}]}",
+      "steps": [],
+      "body": null
+    }
+  ]
+}

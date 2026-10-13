@@ -345,8 +345,8 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     CHECK(h.backend.drag(dragged, h.byTestId("Text", "target")));
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "tick"})") == "5");
-    // The forms engine and the table engine nodes are reported, not lowered.
-    CHECK(h.diagnostics.size() == 2);
+    // The form lowers through the forms engine; the table declared from a list action is reported, not lowered.
+    CHECK(h.diagnostics.size() == 1);
 }
 
 TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui][interpreter]") {

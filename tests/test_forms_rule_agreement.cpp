@@ -30,6 +30,8 @@
 #include <optional>
 #include <string>
 
+#include "forms_engine_support.hpp"
+
 // File-scope, not anonymous-namespaced: glaze's reflection needs linkage.
 // NOLINTBEGIN(misc-use-internal-linkage)
 // NOLINTBEGIN(cert-err58-cpp,bugprone-throwing-static-initialization,misc-const-correctness,bugprone-exception-escape)
@@ -103,4 +105,37 @@ TEST_CASE("the emitted schema carries what the renderer needs to agree", "[forms
     // The int64 literal beyond 2^53 carries exact digits alongside the number,
     // because the number itself does not survive JSON.parse.
     CHECK(schema.contains(R"("valueText":"9007199254740993")"));
+}
+
+// The forms engine reads the same emitted schema and must reach the compiled verdicts: a bool literal compares as
+// a bool, and an id past 2^53 compares on its digits.
+TEST_CASE("the forms engine reaches the compiled verdicts on the emitted schema",
+          "[forms][rules][agreement][forms-engine]") {
+    using morph::test::formsengine::Harness;
+    auto const& schema = morph::forms::schemaJson<RuleAgreementAction>();
+    {
+        Harness harness;
+        auto const form = harness.session("Test_RuleAgreement", schema);
+        harness.type(*form, "flag", "true");
+        CHECK_FALSE(form->ready());
+        CHECK(form->field("reason").required().get());
+        harness.type(*form, "reason", "because");
+        CHECK(form->ready());
+    }
+    {
+        Harness harness;
+        auto const form = harness.session("Test_RuleAgreement", schema);
+        harness.type(*form, "flag", "false");
+        CHECK(form->ready());
+    }
+    {
+        Harness harness;
+        auto const form = harness.session("Test_RuleAgreement", schema);
+        harness.type(*form, "id", "9007199254740992");
+        CHECK(form->ready());
+        harness.type(*form, "id", "9007199254740993");
+        CHECK_FALSE(form->ready());
+        harness.type(*form, "reason", "because");
+        CHECK(form->ready());
+    }
 }

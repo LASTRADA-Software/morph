@@ -202,6 +202,44 @@ API surface).
   `routeOf` and `parseRoute`, the string form of a screen instance.
   `Screen::pending()` and `Screen::beginClose()` are what the protocol reads.
 
+- **The forms engine, headless: `include/morph/forms/engine/`.** Header-only, in the base `morph` target; it
+  depends on `morph::reactive` and the UI document's values and expressions, never on a renderer. See
+  `docs/spec/forms/engine.md`.
+  - `FormModel::fromSchema` reads the schema JSON the emitters write into a form's model; `forAction<A>()` reads
+    `schemaJson<A>()` through the same reader. Nested objects and collections of objects are fields, and the
+    `epochSeconds` / `epochDays` widgets are date-time and date kinds over an integer.
+  - `x-rules` are translated into `expr/1` and evaluated by `ui::evaluate`, three-valued and exactly; a
+    presentation rule applies to every field it names.
+  - `FormSession`: per-field drafts, exact encodings, readiness, the body in `x-order`, automatic and explicit
+    submission as an `Exclusive` mutation, prefill, reset, and Choice options as a query keyed on the parents.
+  - `handlerSubmitter` / `handlerChoiceFetcher` route a form to the application's own `BridgeHandler`s;
+    `Form<A, M, S>` adds typed `set<>`, `value()` and `lastResult()` and joins `A`'s `validate()` to readiness.
+  - `formView` (`form_view.hpp`) renders a session through the view tree, so one form draws on every frontend;
+    `Overrides` (`overrides.hpp`) replace a field's control by path, widget, unit or kind. `FieldOverlay` applies
+    a document's `fields` (omit, hidden, label, unit, decimals, widget, blankAs) to the model.
+  - The interpreter lowers `form` nodes: the schema from the new `Catalog::schema`, submissions through the
+    node's model alias, the prefill followed, `onSubmit`/`onSuccess`/`onError`, and the form's values as elements
+    (`{"ref": "<form>.<field>.value"}`). A form document renders on Qt Quick and on the terminal.
+  - `CollectionSession` (`collection.hpp`) lists a `v-*` view's rows through a query, keeps them as a
+    `table::VectorSource` for the table engine, runs row and collection actions with exact bound bodies, holds a
+    `confirm` action until answered, and edits a row in a prefilled `FormSession`.
+  - `WizardSession` (`wizard.hpp`) runs a `w-*` wizard as one `FormSession` per step: a step is done while its
+    body is the one that succeeded, Next waits for that, and entering a step applies its prefill from what earlier
+    steps resolved.
+  - `collectionView` and `wizardView` (`collection_view.hpp`, `wizard_view.hpp`) render the two sessions through
+    the view tree: a table of exact cells with the row actions, the confirm and editor dialogs or a master-detail
+    side form, and a wizard's header, current step and Back/Next. `CollectionChrome` and `WizardChrome` let a host
+    draw those parts from its own kit, driving the same session calls.
+  - The interpreter lowers `collection` and `wizard` nodes to them, from the new `Catalog::view` and
+    `Catalog::wizard` lookups, every call through the node's model alias. A collection and a wizard document
+    render on Qt Quick and on the terminal.
+  - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
+    renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
+- **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared
+  rather than rounding.
+- **`forms/blank_as.hpp`** holds `BlankAs`, which `forms.hpp` includes, so code naming it need not include the
+  schema emitters.
+
 - **The UI service: `ui-hello`, `ui-catalog`, `ui-fetch` and content-addressed bundles.** Header-only, in the
   base `morph` target (`ui/bundle.hpp`, `ui/service.hpp`, `ui/service_client.hpp`). `hello` and
   `kProtocolVersion` are unchanged; a server without the service answers `unknown envelope kind: ui-hello`.
@@ -281,7 +319,7 @@ API surface).
     `switchBackend`, transfers, `signIn`, …) go through `ui::InterpreterHost`.
   - Model calls go through `ui::Dispatcher`; `ui::BridgeDispatcher` sends them over the bridge's
     model-free seams (`bindByType`, `executeRaw`, `attach`).
-  - `form`, `collection`, `wizard` and a model-backed `table` are reported and not yet lowered.
+  - A model-backed `table` is reported and not yet lowered.
 - **`morph::ui::author`: screens written in C++ on the server** (`author.hpp`). Typed builders write
   the UI document: expression handles with operators (`a + b`, `a < b`, `a && b`, `!a`,
   `x.orElse(y)`) and member-pointer field reads; queries, evaluations and mutations named by their

@@ -35,6 +35,8 @@
 #include <optional>
 #include <string>
 
+#include "forms_engine_support.hpp"
+
 // ---------------------------------------------------------------------------
 // A miniature, dedicated unit system for the corpus -- independent of
 // examples/forms/lab_units.hpp so the corpus does not depend on an example.
@@ -224,4 +226,60 @@ TEST_CASE("Conformance corpus: CFSharedDefFields -- mandatory $ref dual-read, on
     // both properties' $ref points at -- forms.md: "many properties of the
     // same unit type share one $def and therefore one ExtUnits."
     CHECK(countOccurrences(schema, R"("unitAscii":"kg")") == 1);
+}
+
+// The same fixtures, through the forms engine: the renderer contract read from
+// the emitted schemas themselves.
+
+TEST_CASE("Conformance corpus through the engine: x-order and the required gate", "[conformance][forms-engine]") {
+    morph::test::formsengine::Harness harness;
+    auto const form = harness.session("CFScalarsAndRequired", morph::forms::schemaJson<CFScalarsAndRequired>());
+    REQUIRE(form->fields().size() == 3);
+    CHECK(form->fields()[0]->spec().name == "count");
+    CHECK(form->fields()[1]->spec().name == "label");
+    CHECK(form->fields()[2]->spec().name == "note");
+    CHECK_FALSE(form->ready());
+    harness.type(*form, "count", "3");
+    CHECK_FALSE(form->ready());
+    harness.type(*form, "label", "widget-7");
+    CHECK(form->body() == R"({"count":3,"label":"widget-7"})");
+}
+
+TEST_CASE("Conformance corpus through the engine: exact Quantity payloads and unit switching",
+          "[conformance][forms-engine]") {
+    morph::test::formsengine::Harness harness;
+    auto const form = harness.session("CFQuantityAlternatives", morph::forms::schemaJson<CFQuantityAlternatives>());
+    harness.type(*form, "mass", "2650.5");
+    CHECK(form->body() == R"({"mass":{"num":2650500,"den":1000,"dp":3}})");
+    form->field("mass").switchUnit(1);
+    harness.settle();
+    CHECK(form->field("mass").text().peek() == "2650500.0");
+    CHECK(form->body() == R"({"mass":{"num":26505000,"den":10000,"dp":3}})");
+    harness.type(*form, "mass", "2650500.01");
+    CHECK_FALSE(form->ready());  // more places than grams take
+}
+
+TEST_CASE("Conformance corpus through the engine: Choice, Timestamp and the shared $def",
+          "[conformance][forms-engine]") {
+    morph::test::formsengine::Harness harness;
+    auto const choice = harness.session("CFChoiceField", morph::forms::schemaJson<CFChoiceField>());
+    auto const& spec = choice->field("widgetId").spec();
+    REQUIRE(spec.choice.has_value());
+    CHECK(spec.choice->optionsAction == "CFListWidgets");
+    CHECK(spec.choice->valueField == "id");
+    CHECK(spec.choice->labelField == "name");
+    CHECK(harness.server.fetches().size() == 1);
+    CHECK(harness.server.fetches()[0].body == "{}");
+
+    auto const stamp = harness.session("CFTimestampField", morph::forms::schemaJson<CFTimestampField>());
+    CHECK(stamp->field("when").spec().kind == morph::forms::FieldKind::DateTime);
+    CHECK_FALSE(stamp->ready());
+    harness.type(*stamp, "when", "2026-07-20T09:00");
+    CHECK(stamp->body() == R"({"when":"2026-07-20T09:00:00Z"})");
+
+    auto const shared = harness.session("CFSharedDefFields", morph::forms::schemaJson<CFSharedDefFields>());
+    CHECK(shared->field("massA").spec().unit == "kg");
+    CHECK(shared->field("massB").spec().unit == "kg");
+    CHECK(shared->field("massA").spec().decimalPlaces == 3U);
+    CHECK(shared->field("massB").spec().decimalPlaces == 3U);
 }

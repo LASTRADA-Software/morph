@@ -464,6 +464,7 @@ target_sources(morph
         include/morph/session/session.hpp
         include/morph/forms/field_errors.hpp
         include/morph/forms/forms.hpp
+        include/morph/forms/blank_as.hpp
         include/morph/forms/choice.hpp
         include/morph/forms/i18n.hpp
         include/morph/util/rational.hpp
@@ -513,6 +514,18 @@ target_sources(morph
         include/morph/session/session_auth.hpp
         include/morph/util/tagged.hpp
         include/morph/forms/instance_constraints.hpp
+        include/morph/forms/engine/field_model.hpp
+        include/morph/forms/engine/rules.hpp
+        include/morph/forms/engine/values.hpp
+        include/morph/forms/engine/form_session.hpp
+        include/morph/forms/engine/handler_submitter.hpp
+        include/morph/forms/engine/typed_form.hpp
+        include/morph/forms/engine/overrides.hpp
+        include/morph/forms/engine/form_view.hpp
+        include/morph/forms/engine/collection.hpp
+        include/morph/forms/engine/wizard.hpp
+        include/morph/forms/engine/collection_view.hpp
+        include/morph/forms/engine/wizard_view.hpp
         include/morph/table/data_source.hpp
         include/morph/table/sort.hpp
         include/morph/table/filter.hpp
@@ -567,6 +580,7 @@ target_sources(morph
         include/morph/core/detail/subscription_registry.hpp
         include/morph/forms/detail/session_common.hpp
         include/morph/forms/detail/schema_name.hpp
+        include/morph/forms/engine/detail/text.hpp
 )
 set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 

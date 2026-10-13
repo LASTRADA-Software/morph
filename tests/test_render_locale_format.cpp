@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <morph/render/locale_format.hpp>
 #include <morph/util/datetime.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -928,4 +929,74 @@ TEST_CASE("locale_format: an empty or malformed zeroDigit reads as ASCII '0'", "
     CHECK(formatCanonicalNumber("55", {.zeroDigit = ""}) == "55");
     CHECK(normalizeLocaleNumber("55", {.zeroDigit = "\xC0"}) == "55");  // not a code point
     CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xC0"}) == "55");
+    CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xED\xA0\x80"}) == "55");      // a surrogate
+    CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xF4\x90\x80\x80"}) == "55");  // past U+10FFFF
+}
+
+TEST_CASE("locale_format: the display edge rewrites only digits", "[render][locale]") {
+    morph::render::NumericLocale const arabic{.zeroDigit = "\xD9\xA0"};  // U+0660
+    CHECK(formatCanonicalNumber("1.2.3", arabic) == "\xD9\xA1.\xD9\xA2.\xD9\xA3");
+    CHECK(formatCanonicalNumber("1.2a", arabic) ==
+          "\xD9\xA1.\xD9\xA2"
+          "a");
+}
+
+// ──── The same corpora, through the parser the forms engine uses ─────────────
+//
+// parseDecimal is normalizeLocaleNumber plus the canonical-shape check and the
+// int64 envelope, so every row above that normalises must parse to the exact
+// value of its canonical text, and every row that does not must not parse.
+
+namespace {
+[[nodiscard]] std::optional<morph::math::Rational> canonicalValue(std::string_view canonical) {
+    return morph::render::parseDecimal(canonical, morph::render::NumericLocale{});
+}
+}  // namespace
+
+TEST_CASE("parseDecimal agrees with normalizeLocaleNumber on the multi-unit corpus",
+          "[render][locale][parse-decimal]") {
+    morph::render::NumericLocale const two{.decimalSeparator = kDecimal2, .groupSeparator = kGroup2};
+    morph::render::NumericLocale const four{.decimalSeparator = kDecimal4, .groupSeparator = kGroup4};
+    struct Row {
+        std::string text;
+        morph::render::NumericLocale locale;
+    };
+    std::array<Row, 7> const rows{{
+        {.text = joined({"1", kGroup2, "050", kDecimal2, "25"}), .locale = two},
+        {.text = joined({"-1", kGroup2, "050", kDecimal2, "25"}), .locale = two},
+        {.text = joined({"+1", kGroup2, "050", kDecimal2, "25"}), .locale = two},
+        {.text = joined({"1", kGroup4, "050", kDecimal4, "25"}), .locale = four},
+        {.text = joined({"1", kGroup2, "5"}), .locale = two},
+        {.text = joined({"1", kDecimal2, "0", kDecimal2, "5"}), .locale = two},
+        {.text = joined({kDecimal2, "-5"}), .locale = two},
+    }};
+    for (auto const& row : rows) {
+        auto const normalised = morph::render::normalizeLocaleNumber(row.text, row.locale);
+        auto const parsed = morph::render::parseDecimal(row.text, row.locale);
+        INFO("row '" << row.text << "'");
+        REQUIRE(parsed.has_value() == normalised.has_value());
+        if (normalised.has_value()) {
+            CHECK(*parsed == *canonicalValue(*normalised));
+        }
+    }
+}
+
+TEST_CASE("parseDecimal reads every measured digit set", "[render][locale][parse-decimal]") {
+    for (auto const& set : kDigitSets) {
+        INFO(set.name);
+        auto const five = morph::render::parseDecimal(set.five, {.zeroDigit = set.zero});
+        REQUIRE(five.has_value());
+        CHECK(*five == *canonicalValue("5"));
+        morph::render::NumericLocale const locale{.decimalSeparator = kArDecimal,
+                                                  .groupSeparator = kArGroup,
+                                                  .negativeSign = kArNegative,
+                                                  .zeroDigit = set.zero};
+        auto const display = morph::render::formatCanonicalNumber("-1050.25", locale);
+        CHECK(morph::render::parseDecimal(display, locale) == canonicalValue("-1050.25"));
+    }
+    morph::render::NumericLocale const arabic{.zeroDigit = kArZero};
+    CHECK_FALSE(morph::render::parseDecimal("\xD9\xA5"
+                                            "5",
+                                            arabic)
+                    .has_value());  // two digit families in one entry
 }
