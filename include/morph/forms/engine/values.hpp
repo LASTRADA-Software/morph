@@ -92,8 +92,12 @@ struct ValueContext {
         {"incomplete", "A required part is missing"},
         {"unrepresentable", "Nested too deeply to edit here"},
     }};
-    const auto* const found = std::ranges::find(kEnglish, code, &std::pair<std::string_view, std::string_view>::first);
-    std::string_view const english = found == kEnglish.end() ? std::string_view{"Not a valid value"} : found->second;
+    std::string_view english = "Not a valid value";
+    for (auto const& [known, text] : kEnglish) {
+        if (known == code) {
+            english = text;
+        }
+    }
     std::string const key = "morph.forms.error." + std::string{code};
     return FieldError{.code = std::string{code},
                       .message = render::resolveText(context.translations, context.bcp47, std::nullopt, key, english)};
