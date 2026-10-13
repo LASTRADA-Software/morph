@@ -174,3 +174,20 @@ schema assigned as a JS object, the renderer's internal indexes).
   programmatic guard.
 - `clang-format --dry-run --Werror` on every touched file; Doxygen with `WARN_AS_ERROR`.
 - Not verified locally: clang-tidy, MSVC and the WebAssembly build (CI).
+
+## Slice (b): what it holds and what it leaves
+
+- **Holds:** `form_view.hpp` and `overrides.hpp` (spec 2 §7's controls, cells, layout and chrome, and C++
+  overrides); the field overlay (`FieldOverlay`, applied to the schema before it is read, `unit` and `decimals`
+  after); the interpreter's `form` lowering, with the schema from a new `Catalog::schema`, calls through the
+  node's model alias, the prefill followed, the three event lists and the form's element values; the QuickTest
+  view claims on `RecordingBackend`; a form document on Qt Quick and on the terminal.
+- **Leaves, each for a stated reason:**
+  - The grid widget (`x-widget: grid`): its keyboard model (Tab between input cells, Enter commits and moves
+    down, Esc reverts, arrows between cells not being edited) needs the view tree to move focus, which it cannot.
+    That is a view-tree seam first.
+  - A document's `overrides`: a subtree whose props are a field's value, draft, errors and options and whose
+    events set the draft is a new scoped binding in the interpreter, and new vocabulary of `ui/1`'s `form` node.
+  - A `form` node's `showErrors`: errors show on a control as soon as its draft does not encode.
+  - The (c1) claims deferred to views (chrome, dialog visibility, master-detail) need `collectionView` and
+    `wizardView`, which are (c2)'s; none of them needs `formView` alone.

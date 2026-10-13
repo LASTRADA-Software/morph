@@ -5,9 +5,10 @@ values and its reactive session, in C++ and without a toolkit. The emitters (`fo
 action as schema JSON; the engine reads that JSON back into a form a user can fill in, and assembles the exact
 body the action takes. The program design is spec 2 (`docs/superpowers/specs/2026-10-04-forms-engine-design.md`).
 
-Read this before changing a header under `forms/engine/`. The headers here are the headless half of spec 2:
-the model, rules, values, `FormSession`, the submitters and `Form<A>`. Rendering a session through the view tree
-(`formView`, overrides), collections, wizards and the app shell are not in the tree yet.
+Read this before changing a header under `forms/engine/`. The headers here are the model, rules, values,
+`FormSession`, the submitters, `Form<A>`, and the rendering (`formView`, overrides, the field overlay) a
+document's `form` node reaches through the interpreter. Collections, wizards and the app shell are not in the
+tree yet.
 
 ## Contents
 
@@ -17,6 +18,8 @@ the model, rules, values, `FormSession`, the submitters and `Form<A>`. Rendering
 - [Values and exactness](#values-and-exactness)
 - [FormSession](#formsession)
 - [Submitters and typed forms](#submitters-and-typed-forms)
+- [The field overlay](#the-field-overlay)
+- [Rendering](#rendering)
 - [Parity with the QML renderer](#parity-with-the-qml-renderer)
 - [Design decisions](#design-decisions)
 
@@ -32,6 +35,8 @@ Header-only, in the base `morph` target:
 | `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession` |
 | `handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` |
 | `typed_form.hpp` | `Form<A, M, S>`, and the definition of `FormModel::forAction<A>()` |
+| `overrides.hpp` | `FieldView`, `Overrides` |
+| `form_view.hpp` | `FormViewOptions`, `formView` |
 | `detail/text.hpp` | JSON reading and quoting, exact decimal text, ISO-8601 wall-clock text |
 
 The engine depends on `morph::reactive` and on the UI document's values and expressions
@@ -178,6 +183,9 @@ it. A view mounted on it is destroyed first.
 - **Automatic submission waits for options in flight.** While any top-level Choice is fetching, its selection is
   unjudged — a parent just changed — so the automatic Effect does not submit; the settled query wakes it, after
   a stale selection has been cleared.
+- **Automatic submission waits for the submission in flight.** The submission is `Exclusive`, so a body ready while
+  another is in flight would be refused; the Effect waits instead and sends the latest body when the one in flight
+  settles, so typing against a slow server loses nothing.
 - **Groups.** `groupCollapsed(i)` and `tabSelection(i)` are per-group signals a view binds; `groupTitle(i)`
   resolves `<action>.group.<i>` through the translations.
 
@@ -195,6 +203,61 @@ the schema's literal (`render::resolveText`).
   readiness through `accepts`; `set<&A::member>(v)` is a programmatic change; `value()` is the body decoded;
   `lastResult()` is the session's last reply decoded, so the typed result and the JSON reply change together.
 
+## The field overlay
+
+`FieldOverlay` is what a document's `fields` (spec 6 §10), or an application, changes about a top-level field
+before the session is built; `FormModel::fromSchema(action, schema, overlays)` applies it.
+
+- `omit` removes the property, and its `required` entry, from the schema: the member is out of the form and of
+  the body. `hidden` sets `x-hidden`: in the body, out of the view.
+- `label`, `widget` and `blankAs` set `title`, `x-widget` and `x-blankAs` before the schema is read, so a widget
+  overlay chooses the kind as the schema's own keyword would (`textarea`, `radio`, `slider`, `epochDays`, …).
+- `unit` picks a Quantity's entry unit (`FieldSpec::entryUnit`) among its units, or replaces the unit shown on a
+  field without units. A draft starts, and a prefill and a reset return, in the entry unit; the wire value stays in
+  the canonical unit.
+- `decimals` sets the entry unit's places (a Number's display decimals); the wire keeps the schema's places.
+- An overlay naming a field the schema does not have, or a unit that is not one of the field's, is a
+  `SchemaError`.
+
+`FormModel::withSubmitMode` is a document's `submit` choosing over `x-submitMode`.
+
+## Rendering
+
+`formView(session, options)` renders a session as a view tree; mount it after the session and destroy the mount
+before it.
+
+| Kind | Control |
+|---|---|
+| Text, Multiline | `TextInput` (single-line, multiline) |
+| Integer, Number, Decimal | `TextInput`, with the unit beside it |
+| Quantity | `TextInput` and a unit `Select` (with alternatives); switching converts the draft exactly |
+| Boolean | `Checkbox` labelled with the field |
+| Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
+| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date) |
+| Slider | `Slider` over `x-min`..`x-max` by `x-step` |
+| Array | `TextInput`, comma-separated |
+| Object | `Panel` of its members' cells |
+| ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
+
+- **A cell** is the label (with ` *` while required, live), the control and the help text, visible while the
+  field is. Each control carries the view tree's field state: read-only, required, and the field's error as its
+  one message. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
+  `add_<path>`, `remove_<path>#<key>`, `form_submit`, `form_status`, `form_result`.
+- **Layout.** A section is a `Panel`, consecutive tab groups one `Tabs`, an accordion a collapsible `Panel`, the
+  implicit group a flat grid; each group is a `Grid` of `gridColumns` columns (the flat one 1 while `gridColumns`
+  is 2), every cell spanning its `x-colspan` clamped to the grid. Tab selection and collapse are the session's
+  signals, so switching tabs keeps what was typed.
+- **Chrome.** The status line, a Submit button in explicit mode (enabled while ready and not in flight), and the
+  last reply or error.
+- **Overrides** replace a field's control, resolved by field path, widget hint, unit, then kind. The replacement
+  is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
+  as the built-in control does.
+- **Through a document.** The interpreter lowers a `form` node to `formView` over a session it builds from
+  `Catalog::schema`, the node's overlay and its model alias (`docs/spec/ui/interpreter.md`, "Lowering").
+
+**Not here yet:** the grid widget (`x-widget: grid`, spec 2 §7), whose keyboard model needs a way for the view
+tree to move focus, which it does not have; and a document's `overrides`.
+
 ## Parity with the QML renderer
 
 Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus cases of the existing suites:
@@ -207,6 +270,12 @@ Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus 
   requires the committed bodies). The engine must send the same bytes, case by case.
 - **Instance bounds and conformance**: every row of `tests/data/instance_bounds.json` and every conformance fixture
   through a session.
+- **Rendering**: the view claims of the QuickTests (controls per kind, labels from translations and in `x-order`,
+  the live required mark, help, explicit Submit, the reply and error line, rule-driven visibility and read-only,
+  sections, tab runs, accordions and grids, object panels and collection rows, override precedence and an override
+  driving the session) on `RecordingBackend` (`tests/test_forms_engine_view.cpp`); a `form` document through the
+  interpreter (`tests/test_ui_interpreter_forms.cpp`), on Qt Quick (`tests/qt_quick/test_qt_quick_interpreter.cpp`)
+  and on the terminal (`tests/tui/test_tui_forms.cpp`).
 
 ### Differences from the QML renderer
 
