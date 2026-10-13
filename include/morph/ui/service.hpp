@@ -380,44 +380,8 @@ public:
         if (auto reason = detail::checkServable(file.bytes)) {
             return refuse(file.id, std::move(*reason));
         }
-        if (file.kind == kMessagesFile) {
-            if (!catalogueLocale(file.id)) {
-                return refuse(file.id, "a message catalogue's id is i18n/<locale>.json");
-            }
-            auto catalogue = parseCatalogue(file.bytes);
-            if (!catalogue) {
-                return refuse(file.id, std::move(catalogue.error()));
-            }
-            if (!catalogue->dropped.empty()) {
-                return refuse(file.id, "a message is outside the ui/1 subset: " + catalogue->dropped.front());
-            }
-        }
-        if (file.kind == kThemeFile) {
-            if (isThemeIndex(file.bytes)) {
-                auto index = parseThemeIndex(file.bytes);
-                if (!index) {
-                    return refuse(file.id, "the theme index: " + index.error());
-                }
-                _themeIndexes.emplace_back(file.id, std::move(*index));
-            } else {
-                auto tokens = parseTokens(file.bytes);
-                if (!tokens) {
-                    return refuse(file.id, "the token file: " + tokens.error());
-                }
-                _tokenFiles.emplace(file.id, std::move(*tokens));
-            }
-        }
-        if (file.kind == kAppFile) {
-            auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
-            if (!loaded) {
-                return std::unexpected(std::move(loaded.error()));
-            }
-            if (loaded->id != kAppFile) {
-                return refuse(file.id, "the app document's id is `app`");
-            }
-            detail::DocumentActions const named{*loaded};
-            _appActions = named.actions();
-            _appModelTypes = named.modelTypes();
+        if (auto added = addKind(file); !added) {
+            return added;
         }
         _files.push_back(std::move(file));
         return {};
@@ -474,6 +438,65 @@ private:
         /// @brief The delivered components the document names: their `qml` pointer and hash.
         std::vector<std::pair<std::string, std::string>> components;
     };
+
+    // The checks and the indexing one kind of file adds to addFile's common ones.
+    std::expected<void, Refusal> addKind(BundleFile const& file) {
+        if (file.kind == kMessagesFile) {
+            return checkCatalogue(file);
+        }
+        if (file.kind == kThemeFile) {
+            return addTheme(file);
+        }
+        if (file.kind == kAppFile) {
+            return addApp(file);
+        }
+        return {};
+    }
+
+    [[nodiscard]] static std::expected<void, Refusal> checkCatalogue(BundleFile const& file) {
+        if (!catalogueLocale(file.id)) {
+            return refuse(file.id, "a message catalogue's id is i18n/<locale>.json");
+        }
+        auto catalogue = parseCatalogue(file.bytes);
+        if (!catalogue) {
+            return refuse(file.id, std::move(catalogue.error()));
+        }
+        if (!catalogue->dropped.empty()) {
+            return refuse(file.id, "a message is outside the ui/1 subset: " + catalogue->dropped.front());
+        }
+        return {};
+    }
+
+    std::expected<void, Refusal> addTheme(BundleFile const& file) {
+        if (isThemeIndex(file.bytes)) {
+            auto index = parseThemeIndex(file.bytes);
+            if (!index) {
+                return refuse(file.id, "the theme index: " + index.error());
+            }
+            _themeIndexes.emplace_back(file.id, std::move(*index));
+            return {};
+        }
+        auto tokens = parseTokens(file.bytes);
+        if (!tokens) {
+            return refuse(file.id, "the token file: " + tokens.error());
+        }
+        _tokenFiles.emplace(file.id, std::move(*tokens));
+        return {};
+    }
+
+    std::expected<void, Refusal> addApp(BundleFile const& file) {
+        auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
+        if (!loaded) {
+            return std::unexpected(std::move(loaded.error()));
+        }
+        if (loaded->id != kAppFile) {
+            return refuse(file.id, "the app document's id is `app`");
+        }
+        detail::DocumentActions const named{*loaded};
+        _appActions = named.actions();
+        _appModelTypes = named.modelTypes();
+        return {};
+    }
 
     /// @brief A refusal of the registration of @p document.
     /// @param document The screen or file id.
