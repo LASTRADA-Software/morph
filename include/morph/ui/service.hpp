@@ -22,6 +22,7 @@
 #include "bundle.hpp"
 #include "document.hpp"
 #include "file_store.hpp"
+#include "theme.hpp"
 #include "value.hpp"
 
 /// @file
@@ -354,7 +355,8 @@ public:
     ///        message catalogue (`messages`) or a delivered component (`component`).
     ///
     /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
-    /// and an app document that load-time validation refuses or whose id is not `app`.
+    /// an app document that load-time validation refuses or whose id is not `app`, and a theme file that is neither
+    /// a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes.
     /// @param file The file.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> addFile(BundleFile file) {
@@ -375,6 +377,15 @@ public:
         }
         if (auto reason = detail::checkServable(file.bytes)) {
             return refuse(file.id, std::move(*reason));
+        }
+        if (file.kind == kThemeFile) {
+            if (isThemeIndex(file.bytes)) {
+                if (auto index = parseThemeIndex(file.bytes); !index) {
+                    return refuse(file.id, "the theme index: " + index.error());
+                }
+            } else if (auto tokens = parseTokens(file.bytes); !tokens) {
+                return refuse(file.id, "the token file: " + tokens.error());
+            }
         }
         if (file.kind == kAppFile) {
             auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
@@ -418,6 +429,36 @@ public:
     }
 
 private:
+    /// @brief Checks every theme index: each combination of its variants, densities and surfaces over `base`
+    ///        resolves from the bundle's token files (`checkTheme`).
+    /// @return The refusal, naming the index and the combination, or nothing.
+    [[nodiscard]] std::optional<Refusal> checkThemes() const {
+        std::map<std::string, TokenSet, std::less<>> tokenFiles;
+        std::vector<std::pair<std::string, ThemeIndex>> indexes;
+        for (BundleFile const& file : _files) {
+            if (file.kind != kThemeFile) {
+                continue;
+            }
+            if (isThemeIndex(file.bytes)) {
+                if (auto index = parseThemeIndex(file.bytes)) {
+                    indexes.emplace_back(file.id, std::move(*index));
+                }
+            } else if (auto tokens = parseTokens(file.bytes)) {
+                tokenFiles.emplace(file.id, std::move(*tokens));
+            }
+        }
+        TokenFileLookup const lookup = [&tokenFiles](std::string_view id) -> TokenSet const* {
+            auto const found = tokenFiles.find(id);
+            return found == tokenFiles.end() ? nullptr : &found->second;
+        };
+        for (auto const& [id, index] : indexes) {
+            if (auto reason = checkTheme(index, lookup)) {
+                return Refusal{.document = id, .path = {}, .reason = "the theme: " + std::move(*reason)};
+            }
+        }
+        return std::nullopt;
+    }
+
     /// @brief A registered screen and what `build` needs of its document.
     struct Screen {
         /// @brief What the bundle serves.
@@ -450,9 +491,13 @@ private:
         return std::nullopt;
     }
 
-    /// @brief What `build` refuses: a delivered component missing from the bundle, and the bounds.
+    /// @brief What `build` refuses: a delivered component missing from the bundle, a theme some combination of which
+    ///        does not resolve, and the bounds.
     /// @return The refusal, or nothing.
     [[nodiscard]] std::optional<Refusal> checkBuildable() const {
+        if (auto refusal = checkThemes()) {
+            return refusal;
+        }
         std::set<std::string, std::less<>> componentHashes;
         for (BundleFile const& file : _files) {
             if (file.kind == kComponentFile) {
