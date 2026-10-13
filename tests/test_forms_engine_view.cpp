@@ -16,6 +16,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
+#include <morph/util/datetime.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -374,4 +375,19 @@ TEST_CASE("formView: Choice option keys keep ids past 2^53 exact", "[forms-engin
         harness.settle();
         CHECK(form->body() == R"({"slot":9007199254740993})");
     }
+}
+
+TEST_CASE("formView: a date-time control's draft and instant convert in the display zone", "[forms-engine][view]") {
+    namespace engine = morph::forms::detail::engine;
+    CHECK_FALSE(engine::draftInstant("2024-02-30", true, 0).has_value());
+    CHECK_FALSE(engine::draftInstant("2024-01-01T25:00", false, 0).has_value());
+    auto const day = engine::draftInstant("2024-01-01", true, 60);  // a date ignores the zone
+    REQUIRE(day.has_value());
+    CHECK(engine::instantDraft(day, true, 60) == "2024-01-01");
+    auto const instant = engine::draftInstant("2024-01-01T10:00", false, 60);
+    REQUIRE(instant.has_value());
+    CHECK(engine::instantDraft(instant, false, 0) == "2024-01-01T09:00:00");  // read at UTC+1, shown at UTC
+    CHECK(engine::instantDraft(instant, false, 60) == "2024-01-01T10:00:00");
+    CHECK(engine::instantDraft(std::nullopt, false, 0).empty());
+    CHECK(engine::instantDraft(morph::time::Timestamp{}, false, 0).empty());
 }
