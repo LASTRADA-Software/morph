@@ -2011,6 +2011,81 @@ TEST_CASE("SocketBackend: a bind on a dropped connection is rejected rather than
     }
 }
 
+// Mutation: reject a private bind filed before the first connect (the binds are rejected "disconnected").
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketBackend: private binds made before the first connect are queued and sent in order once it connects",
+          "[net][socket_backend][registration-surface]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+
+    // The handshake is answered only below, so both binds are filed while the
+    // socket is not yet connected.
+    std::vector<morph::exec::detail::ModelId> bound;
+    std::string error;
+    for (std::string const typeId : {"SbEchoModel", "SbCounterModel"}) {
+        backend.bindModel(privateBind(typeId), callerExec)
+            .thenDetached([&](morph::exec::detail::ModelId mid) { bound.push_back(mid); })
+            .onErrorDetached([&](const std::exception_ptr& exc) {
+                try {
+                    std::rethrow_exception(exc);
+                } catch (const std::exception& err) {
+                    error = err.what();
+                }
+            });
+    }
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+
+    auto const first = fake.receiveEnvelope();
+    auto const second = fake.receiveEnvelope();
+    CHECK(first.kind == "register");
+    CHECK(first.typeId == "SbEchoModel");
+    CHECK(second.typeId == "SbCounterModel");
+    REQUIRE(first.callId != 0U);
+    REQUIRE(second.callId != first.callId);
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(first.callId, {}, 41)));
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(second.callId, {}, 42)));
+
+    for (int i = 0; i < 500 && bound.size() < 2 && error.empty(); ++i) {
+        if (!callerExec.runOnce()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+    }
+    CHECK(error.empty());
+    REQUIRE(bound.size() == 2);
+    CHECK(bound[0] == morph::exec::detail::ModelId{41});
+    CHECK(bound[1] == morph::exec::detail::ModelId{42});
+}
+
+// Mutation: leave the queue out of cancelAll (the queued bind never settles).
+TEST_CASE("SocketBackend: cancelPending rejects a bind still queued for the first connect",
+          "[net][socket_backend][registration-surface]") {
+    FakeWsServer const fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+
+    std::string error;
+    std::atomic<bool> done{false};
+    backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const std::exception& err) {
+            error = err.what();
+        }
+        done.store(true);
+    });
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled before connect"}));
+    REQUIRE(drainUntil(callerExec, done));
+    CHECK(error == "cancelled before connect");
+}
+
 TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's own message",
           "[net][socket_backend][registration-surface]") {
     morph::exec::ThreadPoolExecutor serverPool{2};

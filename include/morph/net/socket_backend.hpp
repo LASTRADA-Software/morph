@@ -240,12 +240,21 @@ public:
     /// An empty `primary` with a live `current` gives that instance up first,
     /// and an empty `primary` binds a private instance.
     ///
+    /// A private bind made while the socket is not connected is queued, not
+    /// failed, and sent in FIFO order the next time it connects, the first
+    /// connect included: a single-threaded client binds before the socket is
+    /// up and cannot block waiting for it. `cancelPending` and the backend's
+    /// destruction reject what is still queued. A keyed bind is not queued: it
+    /// may re-point a live instance, and replayed on a later connection it
+    /// would attach from a `current` that connection never issued.
+    ///
     /// @param request Owning bind request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
     ///                must outlive the returned `Completion`.
     /// @return A `Completion` resolved with the bound `ModelId`; rejected with
-    ///         `backend::DisconnectedError` if the socket is down or drops
-    ///         before the reply, or with a `std::runtime_error` carrying the
+    ///         `backend::DisconnectedError` if a keyed bind finds the socket
+    ///         down, if the socket drops before the reply, or if a queued bind
+    ///         is cancelled; or with a `std::runtime_error` carrying the
     ///         server's own error message.
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override {
@@ -256,7 +265,7 @@ public:
         }
         if (request.primary.empty()) {
             return sendControlAsync(::morph::wire::makeRegister(request.typeId, request.contextKey), "register",
-                                    std::nullopt, cbExec);
+                                    std::nullopt, cbExec, BeforeConnect::Queue);
         }
         if (request.current.v != 0U) {
             return sendControlAsync(
@@ -559,6 +568,12 @@ private:
         std::shared_ptr<::core::async::StopCallback<CancelOnStop>> watch;
     };
 
+    /// @brief What a control call filed while the socket is not connected does.
+    enum class BeforeConnect : std::uint8_t {
+        Reject,  ///< Rejected with `DisconnectedError`.
+        Queue,   ///< Held, and sent once the socket connects.
+    };
+
     /// @brief One in-flight control call issued through `bindModel`/`promoteModel`.
     ///
     /// Kept in its own table rather than beside the executes: an execute reply
@@ -585,6 +600,8 @@ private:
         /// @brief State of a `negotiateProtocolVersion` call, or null — null
         ///        for the `"hello"` a reconnect re-sends.
         std::shared_ptr<::morph::async::detail::CompletionState<::morph::wire::ProtocolNegotiationResult>> negotiation;
+        /// @brief What a call filed while the socket is not connected does.
+        BeforeConnect beforeConnect = BeforeConnect::Reject;
 
         /// @brief Rejects whichever state this call settles.
         /// @param failure The failure.
@@ -608,15 +625,19 @@ private:
     /// @param what   Verb name for the error message.
     /// @param echo   Id to resolve with, or `nullopt` to use the reply's `modelId`.
     /// @param cbExec Executor the continuation is delivered on.
+    /// @param beforeConnect What the call does if the socket is not connected when it is filed.
     /// @return The `Completion` the reply — or a disconnect — settles.
     ::morph::async::Completion<::morph::exec::detail::ModelId> sendControlAsync(
         ::morph::wire::Envelope env, std::string_view what, std::optional<::morph::exec::detail::ModelId> echo,
-        ::morph::exec::IExecutor& cbExec) {
+        ::morph::exec::IExecutor& cbExec, BeforeConnect beforeConnect = BeforeConnect::Reject) {
         auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>>();
         ::morph::async::Completion<::morph::exec::detail::ModelId> comp{state, &cbExec};
         _loop->post([core = _core, env,
-                     pending = PendingControl{
-                         .state = state, .what = std::string{what}, .echo = echo, .body = nullptr}]() mutable {
+                     pending = PendingControl{.state = state,
+                                              .what = std::string{what},
+                                              .echo = echo,
+                                              .body = nullptr,
+                                              .beforeConnect = beforeConnect}]() mutable {
             core->fileControl(std::move(env), std::move(pending));
         });
         return comp;
@@ -772,6 +793,11 @@ private:
             MORPH_ZONE("SocketBackend::fileControl");
             note("SocketBackend::bindModel");
             if (!connected.load() || !conn) {
+                if (pending.beforeConnect == BeforeConnect::Queue && !closed && !attemptsOver) {
+                    // The call id is drawn when it is sent, so a queued call holds none.
+                    queuedControls.emplace_back(std::move(env), std::move(pending));
+                    return;
+                }
                 pending.reject(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
                 return;
             }
@@ -825,6 +851,7 @@ private:
         void cancelAll(const std::exception_ptr& exc, CancelOnServer onServer = CancelOnServer::No) {
             auto drained = executes.drain();
             auto drainedControl = controls.drain();
+            auto drainedQueue = std::exchange(queuedControls, {});
             if (onServer == CancelOnServer::Yes && cancelAdvertised) {
                 for (auto const& [callId, pending] : drained) {
                     sendCancel(callId, pending.stop ? pending.session : session);
@@ -836,6 +863,9 @@ private:
                 }
             }
             for (auto& entry : drainedControl) {
+                entry.second.reject(exc);
+            }
+            for (auto& entry : drainedQueue) {
                 entry.second.reject(exc);
             }
         }
@@ -852,6 +882,11 @@ private:
                 // A new connection may reach another server: learn again
                 // whether it honours `"cancel"`.
                 fileHello(nullptr);
+            }
+            // Before the reconnect handler is posted, so binds made while the
+            // socket was down reach the server ahead of the re-registrations.
+            for (auto& [env, pending] : std::exchange(queuedControls, {})) {
+                fileControl(std::move(env), std::move(pending));
             }
             if (isReconnect && reconnectHandler && reconnectExec != nullptr) {
                 // Posted, never run here: the handler re-registers through
@@ -1071,9 +1106,11 @@ private:
                 // Never reached the server even once — fail fast, no retry
                 // (mirrors QtWebSocketBackend's "no reconnect for
                 // never-connected sockets").
+                self->attemptsOver = true;
                 co_return;
             }
-            if (self->cfg.reconnectEnabled) {
+            self->attemptsOver = !self->cfg.reconnectEnabled;
+            if (!self->attemptsOver) {
                 self->scheduleReconnect();
             }
         }
@@ -1091,6 +1128,9 @@ private:
         ::morph::exec::IExecutor* reconnectExec{nullptr};
         bool everConnected{false};
         bool closed{false};
+        /// No further connect will be attempted: a bind made now is rejected,
+        /// not queued for a connect that cannot come.
+        bool attemptsOver{false};
         /// Set by `negotiateProtocolVersion`: re-send `"hello"` on each connect.
         bool negotiate{false};
         /// Whether this connection's server advertised `"cancel"`. Cleared on
@@ -1104,6 +1144,9 @@ private:
         // from `executes`' counter rather than owning a second one, so the two
         // tables can never claim the same id.
         ::morph::backend::detail::PendingCallTable<PendingControl> controls;
+        // Private binds filed while the socket was not connected, in the order
+        // they were made; sent on the next connect.
+        std::vector<std::pair<::morph::wire::Envelope, PendingControl>> queuedControls;
         std::vector<std::shared_ptr<std::promise<void>>> connectWaiters;
     };
 
