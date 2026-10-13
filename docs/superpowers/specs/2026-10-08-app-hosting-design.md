@@ -154,7 +154,9 @@ The bundle may carry one **app document** (id `app`) with `state`, `let`, `queri
 `{"ref": "app.name"}` and may write its `state` with `{"set": "app.name", ...}`.
 
 Its use is what no single screen owns: lookup lists loaded once per session (analysis
-methods, clients, units), the current tenant, a connection banner.
+methods, clients, units), the current tenant, a connection banner. It is mounted with
+`Interpreter::mountApp` as an `AppRoot`, and a host destroys its screens before the root
+(`docs/spec/ui/interpreter.md`, "The app root scope").
 
 Two expression forms read the client and the session:
 
@@ -416,9 +418,12 @@ document side:
   `backendSwitchFailed` to the `onError` path of the command that asked for it.
 - A call in flight on the old backend is rejected with `BackendChangedError`, which has the error
   kind `backendChanged` (§10).
-- Order in the interpreter: the switch commits; the queries on private aliases are held idle; each
-  mounted screen's `onBackendChange` runs; then the held queries run their fetch and the others
-  refetch, in one batch; `{"env": "backend"}` and `{"env": "online"}` publish with it. A query on a
+- Order in the interpreter: the switch commits (`InterpreterHost::switchBackend` calls its `done`);
+  each mounted screen's and the app root's `onBackendChange` runs; then every query refetches, in
+  the same batch; `{"env": "backend"}` publishes with it, and `{"env": "online"}` stays the host's
+  to publish. Running every `onBackendChange` before any refetch in one batch is what holds the
+  queries on private aliases: none fetches against the empty new instance before its screen has
+  recovered. A query on a
   private alias therefore never fetches against the empty new instance.
 - A private model instance does not survive a switch. A screen holding an open record reloads it in
   `onBackendChange`, from state it keeps, and decides what the user is told about edits the old

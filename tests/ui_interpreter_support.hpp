@@ -204,18 +204,26 @@ public:
         log.push_back("close " + screen + (result ? " " + glz::write_json(valueToJson(*result)).value_or("") : ""));
         return !refuseAll;
     }
-    bool focus(std::string const& screen, std::string const& element) override {
-        log.push_back("focus " + screen + " " + element);
-        return !refuseAll;
-    }
     bool hostCommand(std::string const& name, Value const& args) override {
         log.push_back("host " + name + " " + glz::write_json(valueToJson(args)).value_or(""));
         return std::ranges::find(commands, name) != commands.end();
     }
-    bool switchBackend(std::string const& name) override {
+    bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) override {
         log.push_back("switchBackend " + name);
-        return std::ranges::find(backends, name) != backends.end();
+        if (std::ranges::find(backends, name) == backends.end()) {
+            return false;
+        }
+        if (holdSwitches) {
+            pendingSwitches.push_back(std::move(done));
+        } else {
+            done({});
+        }
+        return true;
     }
+    /// @brief Keep each switch's `done` in `pendingSwitches` instead of committing it at once.
+    bool holdSwitches = false;
+    /// @brief The held switches' `done`, oldest first.
+    std::vector<std::function<void(std::expected<void, std::string>)>> pendingSwitches;
     void resetPrefs(std::string const& screen, std::string const& point) override {
         log.push_back("resetPrefs " + screen + " " + point);
     }

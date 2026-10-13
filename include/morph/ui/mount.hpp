@@ -7,11 +7,13 @@
 #include <exception>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -199,6 +201,26 @@ public:
     /// @return The node's widget, or null for a null node.
     Widget* mountRoot(reactive::Scope& scope, Node const& node, ContainerWidget* parent) {
         return mountPass([&] { return mount(scope, node, parent); });
+    }
+
+    /// @brief Moves keyboard focus to the mounted widget whose `focusId` is @p focusId.
+    ///
+    /// Of several such widgets (rows of a list), the one mounted first is taken. A backend that cannot move focus
+    /// leaves it where it was; the request was still made.
+    /// @param focusId The name.
+    /// @return Whether a mounted widget has that name.
+    bool focus(std::string_view focusId) {
+        // lower_bound, not find: of equal names, find may answer any; lower_bound answers the first inserted.
+        auto const found = _focusable.lower_bound(focusId);
+        if (found == _focusable.end() || found->first != focusId) {
+            return false;
+        }
+        try {
+            found->second->focus();
+        } catch (...) {  // NOLINT(bugprone-empty-catch)
+            // Focus is a request: a backend that cannot move it leaves it where it was.
+        }
+        return true;
     }
 
 private:
@@ -413,7 +435,26 @@ private:
         if (common.autofocus && _autofocus == nullptr) {
             _autofocus = &widget;
         }
+        if (!common.focusId.empty()) {
+            scope.make<Focusable>(_focusable, _focusable.emplace(common.focusId, &widget));
+        }
     }
+
+    using FocusMap = std::multimap<std::string, Widget*, std::less<>>;
+
+    // A widget's entry in the focus map, owned by the widget's scope after the widget, so it leaves the map before
+    // the widget is destroyed.
+    struct Focusable {
+        Focusable(FocusMap& owner, FocusMap::iterator added) noexcept : map{&owner}, entry{added} {}
+        Focusable(Focusable const&) = delete;
+        Focusable& operator=(Focusable const&) = delete;
+        Focusable(Focusable&&) = delete;
+        Focusable& operator=(Focusable&&) = delete;
+        ~Focusable() { map->erase(entry); }
+
+        FocusMap* map;
+        FocusMap::iterator entry;
+    };
 
     // No predicate accepts every key; a predicate that throws refuses the drop.
     void applyDrop(Widget& widget, Common const& common) {
@@ -1186,6 +1227,9 @@ private:
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;
+    // The mounted widgets with a focus name. A multimap keeps equal names in insertion order, so the first mounted
+    // is found first.
+    FocusMap _focusable;
 };
 
 }  // namespace detail
@@ -1260,6 +1304,15 @@ public:
     /// @brief The root node's widget.
     /// @return The widget; valid as long as this object.
     [[nodiscard]] Widget& root() const noexcept { return *_widget; }
+
+    /// @brief Moves keyboard focus to the mounted widget whose `Common::focusId` is @p focusId, at any depth,
+    ///        including the content of a Switch case, a Tabs page, a Dialog and every row mounted now.
+    ///
+    /// Of several such widgets, the one mounted first is taken; one whose content has since been unmounted is not
+    /// found.
+    /// @param focusId The name.
+    /// @return Whether a mounted widget has that name.
+    bool focus(std::string_view focusId) { return _mounter.focus(focusId); }
 
 private:
     [[nodiscard]] static Node nonNull(Node root) {

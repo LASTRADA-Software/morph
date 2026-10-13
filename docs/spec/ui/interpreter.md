@@ -31,8 +31,8 @@ Read this before changing what a mounted document does. What a document may say 
 |---|---|
 | `Dispatcher` | Binds a model by type id, privately or to a shared instance (`bind`), and returns a `ModelChannel` whose `execute(actionId, bodyJson, CallOptions)` sends one action and resolves with the reply's JSON text on the runtime's owner. |
 | `BridgeDispatcher` | The application's `Dispatcher`: `bind` makes a `bridge::RawHandler` (`bindByType`, and `attach` for a key), `execute` is `executeRaw`. An `evaluate` query goes through the `Evaluator` it was built with (`ui::evaluatorOver`, the UI service's `ui-evaluate`); without one it is refused with a `std::runtime_error`. It has no offline queue (`queueOffline` is ignored). A shared binding without a key is left unattached, which the bridge refuses at the first call. |
-| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `focus`, `hostCommand`, `switchBackend`, `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
-| `Session` | What screens of one client session share: the query cache, `refreshOn` bookkeeping, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged()` a backend switch. |
+| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
+| `Session` | What screens of one client session share: the query cache, `refreshOn` bookkeeping, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
 | `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, or a mutation run in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
 
@@ -41,6 +41,16 @@ Read this before changing what a mounted document does. What a document may say 
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
 `backendChanged`; everything else is `error`).
+
+## The app root scope
+
+`Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
+queries and mutations, declared once for the session, and its `onMount`. A second root on the same
+session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
+names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of
+the app document runs once however many screens read it, and `{"set": "app.name"}` writes the root's
+state (a name that is not state is reported). Destroying the root runs its `onUnmount` and takes its
+scope off the session; the screens that read it are destroyed first, as sign-out does (spec 6 §5).
 
 ## Mounting
 
@@ -166,7 +176,15 @@ its target does not resolve, and when the host does not support it.
 - `open` and `close` set a dialog's own `open`; a dialog whose `open` is an expression is refused and
   reported. `reset` of a dialog restores its content's state and inputs and clears `submitted`.
 - `navigate` runs `onResult` with the returned value as `event`, or `onCancel`.
-- `switchBackend` to a listed backend calls `Session::backendChanged`.
+- `focus` moves keyboard focus to the element of that id in the screen's mounted tree (`Mounted::focus`); an
+  element that is not mounted is reported and fails the command.
+- `switchBackend` asks the host; a backend it does not list is reported. When the switch commits,
+  `Session::backendChanged` runs, in one batch, every mounted screen's and the app root's `onBackendChange`, then
+  marks every entry stale and refetches the mounted queries, and sets `{"env": "backend"}`; the command then
+  succeeds. A failed switch is reported as `backendSwitchFailed: reason`, fails the command and refetches nothing.
+  A switch that commits after its screen is gone touches nothing of it.
+- `set` of `app.name` writes the app root's state (below); with no app root it goes to the host's
+  `setAppValue`.
 - `setLocale` replaces the session's locale, so every `t` re-resolves, and tells the host.
 - `signIn` clears the cache and hands the host the mutation's reply, secret fields included (it runs
   inside the mutation's `onSuccess`, before they are removed); `signOut` clears the cache.

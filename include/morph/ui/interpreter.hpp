@@ -236,16 +236,6 @@ public:
         return false;
     }
 
-    /// @brief Moves keyboard focus to an element.
-    /// @param screen  The screen's id.
-    /// @param element The element id.
-    /// @return Whether focus moved.
-    virtual bool focus(std::string const& screen, std::string const& element) {
-        static_cast<void>(screen);
-        static_cast<void>(element);
-        return false;
-    }
-
     /// @brief Runs a command the application registered (`host/1`).
     /// @param name The command.
     /// @param args Its arguments; `null` when none.
@@ -256,11 +246,17 @@ public:
         return false;
     }
 
-    /// @brief Switches to a backend the application's source lists.
+    /// @brief Switches to a backend the application's source lists (`AppSource::switchBackend`, spec 6 §9).
+    ///
+    /// The switch is asynchronous: the host calls @p done once, on the runtime's owner, when it committed or failed.
+    /// A failed switch leaves the old backend in place.
     /// @param name The backend.
+    /// @param done Called once with nothing when the switch committed, or with why it failed. Not called when the
+    ///        backend is not listed.
     /// @return Whether it is listed.
-    virtual bool switchBackend(std::string const& name) {
+    virtual bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) {
         static_cast<void>(name);
+        static_cast<void>(done);
         return false;
     }
 
@@ -577,6 +573,8 @@ struct CacheEntry {
 };
 
 class QueryRuntime;
+class RtScope;
+class ScreenCore;
 
 }  // namespace detail
 
@@ -720,6 +718,15 @@ public:
         return found == values.end() ? Value{} : found->second;
     }
 
+    /// @brief The app document's scope, which `{"ref": "app.name"}` reads and `{"set": "app.name"}` writes; set by
+    ///        `Interpreter::mountApp` for as long as the `AppRoot` lives.
+    /// @return It, or `nullptr` when no app document is mounted.
+    [[nodiscard]] detail::RtScope const* appScope() const noexcept { return _appScope; }
+
+    /// @brief Installs or clears the app document's scope. Called by `AppRoot`, nothing else.
+    /// @param scope The scope, or `nullptr`.
+    void setAppScope(detail::RtScope const* scope) noexcept { _appScope = scope; }
+
     /// @brief Drops every cache entry: `signOut` and a principal change (spec 5 §5, "Isolation").
     void clear() {
         _runtime->batch([this] {
@@ -735,8 +742,20 @@ public:
         });
     }
 
-    /// @brief Marks every entry stale and refetches those a mounted query uses: a backend switch (spec 6 §9).
-    void backendChanged();
+    /// @brief Carries out a committed backend switch (spec 6 §9), in one batch: every mounted screen's
+    ///        `onBackendChange` runs first, then every entry is marked stale and the mounted queries refetch, and
+    ///        `{"env": "backend"}` becomes @p backend. A query on a private alias therefore never fetches before its
+    ///        screen has recovered from the switch.
+    /// @param backend The backend now in use.
+    void backendChanged(std::string const& backend);
+
+    /// @brief Registers a mounted screen or app document, whose `onBackendChange` a backend switch runs.
+    /// @param screen It. Borrowed until `detachScreen`.
+    void attachScreen(detail::ScreenCore& screen) { _screens.push_back(&screen); }
+
+    /// @brief Forgets a screen or app document.
+    /// @param screen It.
+    void detachScreen(detail::ScreenCore& screen) { std::erase(_screens, &screen); }
 
     /// @brief Starts a query's request before its screen mounts, so the screen mounts on a warm cache.
     /// @param channel The alias's channel.
@@ -960,6 +979,8 @@ private:
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
     reactive::Signal<ValueRecord> _hostValues;
+    detail::RtScope const* _appScope = nullptr;
+    std::vector<detail::ScreenCore*> _screens;
     reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
     std::function<HostCommandResult(std::string const&, Value const&)> _hostCommandRunner;
     std::map<std::string, std::shared_ptr<detail::CacheEntry>, std::less<>> _entries;
@@ -1475,6 +1496,12 @@ public:
     /// @brief Refetches the current key now, ending a debounce wait.
     void refetch();
 
+    /// @brief Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry
+    ///        when it differs from the current one, and fetches the current one otherwise. A backend switch uses it,
+    ///        so a body `onBackendChange` changed is fetched once, with what the recovery set, and the old key is
+    ///        not fetched first.
+    void refetchCurrent();
+
     /// @brief Marks its entry stale and refetches it.
     void invalidate() {
         if (auto const& current = _entry.peek()) {
@@ -1529,6 +1556,8 @@ private:
     reactive::Signal<bool> _waiting;
     Target _target;
     Target _pendingTarget;
+    // The query's key, owned by its scope's nodes; set once `start` made it.
+    reactive::Computed<Target> const* _key = nullptr;
     reactive::TimerHandle _debounce;
     reactive::TimerHandle _refresh;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
@@ -1716,13 +1745,30 @@ public:
         }
         prefDefaults = defaults;
         prefs.set(std::move(defaults));
+        session.attachScreen(*this);
     }
 
     ScreenCore(ScreenCore const&) = delete;
     ScreenCore& operator=(ScreenCore const&) = delete;
     ScreenCore(ScreenCore&&) = delete;
     ScreenCore& operator=(ScreenCore&&) = delete;
-    ~ScreenCore() = default;
+    /// @brief Takes the screen off the session, so a later backend switch does not run its `onBackendChange`.
+    ~ScreenCore() { session.detachScreen(*this); }
+
+    /// @brief Runs a lifecycle list in the document's own scope, as a screen's or app document's own command list.
+    /// @param key The lifecycle key, such as `onBackendChange`.
+    void runLifecycleOf(std::string_view key) {
+        auto const found = _doc->lifecycle.find(key);
+        auto const scope = rootScope.lock();
+        if (found == _doc->lifecycle.end() || !scope) {
+            return;
+        }
+        CommandCtx const ctx{.scope = scope,
+                             .bindings = std::make_shared<Bindings>(),
+                             .cancelClose = std::make_shared<bool>(false),
+                             .boundary = nullptr};
+        runList(found->second, ctx, {});
+    }
 
     /// @brief The document.
     /// @return It.
@@ -1850,6 +1896,9 @@ public:
     InterpreterHost* host;
     /// @brief The diagnostic callback.
     std::function<void(Refusal const&)> onDiagnostic;
+    /// @brief Moves focus to a mounted element by its id; empty until the screen is mounted, and again once it is
+    ///        unmounting.
+    std::function<bool(std::string_view)> focusElement;
     /// @brief The models the opener lends.
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The screen scope's reactive depth.
@@ -1871,6 +1920,8 @@ public:
     /// @brief Counts pending work in or out.
     /// @param delta What started (positive) or ended (negative).
     void addPending(int delta) { pendingWork.set(pendingWork.peek() + delta); }
+    /// @brief The document's own scope, once mounted.
+    std::weak_ptr<RtScope> rootScope;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
@@ -1901,6 +1952,9 @@ private:
                       std::set<std::string, std::less<>>& seen);
     void runMutation(Command const& command, CommandCtx const& ctx, Done done) const;
     void runSet(Command const& command, CommandCtx const& ctx, Done const& done);
+    void runSetApp(Command const& command, std::span<std::string const> rest, Value value, Done const& done);
+    void writeSlot(StateSlot& slot, std::span<std::string const> within, Value value, Command const& command,
+                   Done const& done);
     void runReset(Command const& command, CommandCtx const& ctx, Done const& done);
     void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
@@ -1960,6 +2014,7 @@ public:
             }
         } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
         }
+        _core->focusElement = {};
         _mounted.reset();
         _scope.reset();
     }
@@ -2119,6 +2174,63 @@ private:
     std::optional<Mounted> _mounted;
 };
 
+/// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
+///
+/// Its state, lets, queries and mutations live once for the session. A screen reads them as `{"ref": "app.name"}`,
+/// a binding on one updates, and `{"set": "app.name", …}` writes the app document's state. A query of the app
+/// document runs once however many screens read it. Destroying the root runs its `onUnmount`, takes its scope off the
+/// session and releases its model instances; a host does that before it clears the session on sign-out.
+class AppRoot {
+public:
+    AppRoot(AppRoot const&) = delete;
+    AppRoot& operator=(AppRoot const&) = delete;
+    AppRoot(AppRoot&&) = delete;
+    AppRoot& operator=(AppRoot&&) = delete;
+
+    /// @brief Runs `onUnmount`, takes the scope off the session, and releases everything.
+    ~AppRoot() {
+        try {
+            if (auto const found = _core->doc().lifecycle.find("onUnmount"); found != _core->doc().lifecycle.end()) {
+                runCommands(found->second);
+            }
+        } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
+        }
+        _core->session.setAppScope(nullptr);
+        _scope.reset();
+    }
+
+    /// @brief Evaluates an expression in the app document's scope.
+    /// @param expression The expression's JSON.
+    /// @return Its value; `null` for an expression that does not parse.
+    [[nodiscard]] Value read(Json const& expression) const {
+        auto parsed = parseExpression(expression);
+        if (!parsed) {
+            return Value{};
+        }
+        return detail::evalIn(*_scope, nullptr, *parsed);
+    }
+
+    /// @brief The diagnostics reported so far.
+    /// @return They.
+    [[nodiscard]] std::vector<Refusal> const& diagnostics() const noexcept { return _core->diagnostics; }
+
+private:
+    friend class Interpreter;
+
+    AppRoot() = default;
+
+    void runCommands(Commands const& commands) {
+        detail::CommandCtx const ctx{.scope = _scope,
+                                     .bindings = std::make_shared<detail::Bindings>(),
+                                     .cancelClose = std::make_shared<bool>(false),
+                                     .boundary = nullptr};
+        _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
+    }
+
+    std::unique_ptr<detail::ScreenCore> _core;
+    std::shared_ptr<detail::RtScope> _scope;
+};
+
 /// @brief Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.
 class Interpreter {
 public:
@@ -2145,6 +2257,13 @@ public:
                                                                         IViewBackend& backend,
                                                                         MountOptions const& options = {});
 
+    /// @brief Mounts the app document as the session's root scope (spec 6 §5).
+    ///
+    /// Refused: a document whose id is not `app`, and a second app document while one is mounted on the session.
+    /// @param doc The app document, loaded.
+    /// @return The root, or the refusal. Keep it as long as the session's screens may read `app.*`.
+    [[nodiscard]] std::expected<std::unique_ptr<AppRoot>, Refusal> mountApp(std::shared_ptr<Document const> doc);
+
 private:
     Session* _session;
     Dispatcher* _dispatcher;
@@ -2155,15 +2274,24 @@ private:
 // Implementation
 // ---------------------------------------------------------------------------------------------------------------
 
-inline void Session::backendChanged() {
-    _runtime->batch([this] {
+inline void Session::backendChanged(std::string const& backend) {
+    _runtime->batch([this, &backend] {
+        std::vector<detail::ScreenCore*> const screens = _screens;
+        for (detail::ScreenCore* const screen : screens) {
+            if (std::ranges::find(_screens, screen) != _screens.end()) {
+                screen->runLifecycleOf("onBackendChange");
+            }
+        }
+        ValueRecord env = _env.peek();
+        env.insert_or_assign("backend", Value{backend});
+        _env.set(std::move(env));
         for (auto const& [key, entry] : _entries) {
             static_cast<void>(key);
             entry->stale = true;
         }
         std::vector<detail::QueryRuntime*> const mounted = _mounted;
         for (detail::QueryRuntime* const query : mounted) {
-            query->invalidate();
+            query->refetchCurrent();
         }
     });
 }
@@ -2266,7 +2394,15 @@ inline bool RtScope::ready() const {
     return true;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): an `app.` name is read in the root scope with its head consumed, once per segment.
 inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> path) const {
+    if (head == "app") {
+        RtScope const* const app = _scope->core.session.appScope();
+        if (app == nullptr || path.empty()) {
+            return Value{};
+        }
+        return ScopeEnv{*app, nullptr}.ref(path.front(), path.subspan(1));
+    }
     if (_bindings != nullptr) {
         for (Binding const& bound : std::views::reverse(*_bindings)) {
             if (bound.name == head) {
@@ -2424,6 +2560,7 @@ inline void QueryRuntime::start() {
         target.body = std::move(body);
         return target;
     });
+    _key = &key;
     reactive::Scheduler* const scheduler = scope.core.session.options().scheduler;
     std::weak_ptr<bool> const alive = _alive;
     scope.nodes.effect([this, &key, scheduler, alive, first = true]() mutable {
@@ -2503,6 +2640,25 @@ inline void QueryRuntime::refetch() {
         }
         auto const current = _entry.peek();
         if (current && !(switched && current->pending.peek())) {
+            _scope->core.session.fetch(current, channel());
+        }
+    });
+}
+
+inline void QueryRuntime::refetchCurrent() {
+    if (_key == nullptr) {
+        refetch();
+        return;
+    }
+    _scope->core.runtime().batch([this] {
+        _debounce.cancel();
+        _waiting.set(false);
+        Target const target = _key->peek();
+        if (!(_entry.peek() && target == _target)) {
+            switchTo(target);
+            return;
+        }
+        if (auto const current = _entry.peek(); current && !current->pending.peek()) {
             _scope->core.session.fetch(current, channel());
         }
     });
@@ -3470,20 +3626,38 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                        : unsupported(command, "`return`"));
             return;
         case CommandKind::Focus:
-            finish(host != nullptr && host->focus(_doc->id, command.target) ? true : unsupported(command, "`focus`"));
+            if (focusElement && focusElement(command.target)) {
+                finish(true);
+                return;
+            }
+            report(command.path, "`" + command.target + "` is not mounted");
+            finish(false);
             return;
         case CommandKind::Host:
             runHostCommand(command, ctx, done);
             return;
-        case CommandKind::SwitchBackend:
-            if (host != nullptr && host->switchBackend(command.target)) {
-                session.backendChanged();
-                finish(true);
+        case CommandKind::SwitchBackend: {
+            std::weak_ptr<RtScope> const weak = ctx.scope;
+            auto committed = [this, weak, target = command.target, path = command.path,
+                              done](std::expected<void, std::string> const& outcome) {
+                if (!weak.lock()) {
+                    return;
+                }
+                if (!outcome) {
+                    report(path, "backendSwitchFailed: " + outcome.error());
+                    done(false);
+                    return;
+                }
+                session.backendChanged(target);
+                done(true);
+            };
+            if (host != nullptr && host->switchBackend(command.target, std::move(committed))) {
                 return;
             }
             report(command.path, "backend `" + command.target + "` is not listed");
             finish(false);
             return;
+        }
         case CommandKind::ResetPrefs: {
             ValueRecord prefsNow = prefs.peek();
             if (command.target == "all") {
@@ -3690,39 +3864,57 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
 }
 
 // NOLINTEND(misc-no-recursion)
+inline void ScreenCore::writeSlot(StateSlot& slot, std::span<std::string const> within, Value value,
+                                  Command const& command, Done const& done) {
+    slot.scope->core.initState(*slot.scope, slot);
+    Type const& type = slot.decl->type;
+    if (within.empty() && !type.isAny() && !type.admits(value)) {
+        report(command.path, "`set` writes a value that is not a " + type.name());
+        done(false);
+        return;
+    }
+    Value next = withPath(slot.value->peek(), within, std::move(value));
+    session.noteWrite();
+    slot.value->set(std::move(next));
+    done(true);
+}
+
+inline void ScreenCore::runSetApp(Command const& command, std::span<std::string const> rest, Value value,
+                                  Done const& done) {
+    if (RtScope const* const app = session.appScope(); app != nullptr && !rest.empty()) {
+        NameRef const* const named = app->find(rest.front());
+        if (named != nullptr && named->category == NameCategory::State) {
+            writeSlot(*named->state, rest.subspan(1), std::move(value), command, done);
+            return;
+        }
+        report(command.path, "`app." + rest.front() + "` is not state of the app document");
+        done(false);
+        return;
+    }
+    std::string name;
+    for (std::string const& segment : rest) {
+        name += name.empty() ? segment : "." + segment;
+    }
+    done(host != nullptr && host->setAppValue(name, value) ? true : unsupported(command, "`set` of `app`"));
+}
+
 inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Done const& done) {
     RtScope const& scope = *ctx.scope;
-    auto finish = [&done](bool succeeded) { done(succeeded); };
     auto path = splitPath(command.target);
     if (!path || path->empty()) {
-        finish(false);
+        done(false);
         return;
     }
     std::string const head = path->front();
     std::span<std::string const> const rest = std::span<std::string const>{*path}.subspan(1);
     Value value = evalIn(scope, ctx.bindings.get(), command.value);
     if (head == "app") {
-        std::string name;
-        for (std::string const& segment : rest) {
-            name += name.empty() ? segment : "." + segment;
-        }
-        finish(host != nullptr && host->setAppValue(name, value) ? true : unsupported(command, "`set` of `app`"));
+        runSetApp(command, rest, std::move(value), done);
         return;
     }
     NameRef const* const found = scope.find(head);
     if (found != nullptr && found->category == NameCategory::State) {
-        StateSlot& slot = *found->state;
-        initState(*slot.scope, slot);
-        Type const& type = slot.decl->type;
-        if (rest.empty() && !type.isAny() && !type.admits(value)) {
-            report(command.path, "`set` writes a value that is not a " + type.name());
-            finish(false);
-            return;
-        }
-        Value next = withPath(slot.value->peek(), rest, std::move(value));
-        session.noteWrite();
-        slot.value->set(std::move(next));
-        finish(true);
+        writeSlot(*found->state, rest, std::move(value), command, done);
         return;
     }
     if (found != nullptr && found->category == NameCategory::Element) {
@@ -3732,11 +3924,11 @@ inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Do
         if (element.bound == nullptr) {
             element.committed.set(std::move(value));
         }
-        finish(true);
+        done(true);
         return;
     }
     report(command.path, "`set` names nothing writable here");
-    finish(false);
+    done(false);
 }
 
 inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, Done const& done) {
@@ -4054,6 +4246,7 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
         common.layout.width = sizingOf(once(ctx, sizing));
     }
     common.testId = std::string{node.name("testId")};
+    common.focusId = node.id;
     common.surface = std::string{node.name("surface")};
     if (ExprPtr const autofocus = node.prop("autofocus")) {
         common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
@@ -5288,6 +5481,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
     screen->_core = std::make_unique<detail::ScreenCore>(doc, *_session, *_dispatcher, _options, options);
     detail::ScreenCore& core = *screen->_core;
     screen->_scope = std::make_shared<detail::RtScope>(core, nullptr, nullptr, options.depth);
+    core.rootScope = screen->_scope;
     detail::RtScope& scope = *screen->_scope;
     scope.submitted = &core.submitted;
     scope.showErrors = doc->showErrors;
@@ -5324,8 +5518,38 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         return lowered;
     });
     screen->_mounted.emplace(runtime, backend, std::move(root), options.parent, options.depth + 1);
+    screen->_core->focusElement = [mounted = &*screen->_mounted](std::string_view element) {
+        return mounted->focus(element);
+    };
     screen->runLifecycle("onMount");
     return screen;
+}
+
+inline std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shared_ptr<Document const> doc) {
+    if (doc->id != "app") {
+        return std::unexpected(
+            Refusal{.document = doc->id, .path = "/id", .reason = "the app document's id is `app`"});
+    }
+    if (_session->appScope() != nullptr) {
+        return std::unexpected(
+            Refusal{.document = doc->id, .path = {}, .reason = "an app document is already mounted on the session"});
+    }
+    std::unique_ptr<AppRoot> root{new AppRoot{}};
+    root->_core = std::make_unique<detail::ScreenCore>(doc, *_session, *_dispatcher, _options, MountOptions{});
+    detail::ScreenCore& core = *root->_core;
+    root->_scope = std::make_shared<detail::RtScope>(core, nullptr, nullptr, 0);
+    core.rootScope = root->_scope;
+    std::vector<Commands const*> lists;
+    for (auto const& [key, commands] : doc->lifecycle) {
+        static_cast<void>(key);
+        lists.push_back(&commands);
+    }
+    _session->runtime().untracked([&] { core.declare(*root->_scope, &doc->scope, {}, lists); });
+    _session->setAppScope(root->_scope.get());
+    if (auto const found = doc->lifecycle.find("onMount"); found != doc->lifecycle.end()) {
+        root->runCommands(found->second);
+    }
+    return root;
 }
 
 }  // namespace morph::ui

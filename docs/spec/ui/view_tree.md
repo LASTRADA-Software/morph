@@ -140,6 +140,7 @@ Every node but `Custom` also carries `Common`:
 | `surface` | The named token set of the theme that styles the node and everything inside it, set once |
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
+| `focusId` | The name `Mounted::focus` finds the widget by after mount, such as a document element's id; set once ([below](#focus)) |
 
 Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
 `field`, a `FieldState`:
@@ -285,6 +286,12 @@ the rest of the root. Content mounted later — a new case, a dialog opened, a r
 mount of its own, and its first `autofocus` widget takes focus. Content that fails to mount gives
 up its candidate together with its widgets, and the mount around it finds the next one. A backend
 that cannot move focus leaves it where it was.
+
+**After mount**, `Mounted::focus(name)` moves focus to the widget whose `Common::focusId` is `name`,
+at any depth: the content of a Switch case, a Tabs page or a Dialog, and every row mounted now. Of
+several widgets with one name (rows), the one mounted first is taken. Each name is held by the
+widget's own scope, after the widget, so content that unmounts is no longer found. It answers whether
+a mounted widget had the name; the move itself is `Widget::focus()`, a request a backend may decline.
 
 ### Callbacks
 

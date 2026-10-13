@@ -568,14 +568,11 @@ private:
         handle.answers(call);
         _open.push_back(OpenCall{.call = call, .handle = &handle});
     }
-    bool focus(std::string const& screen, std::string const& element) override {
-        return _options.application != nullptr && _options.application->focus(screen, element);
-    }
     bool hostCommand(std::string const& name, Value const& args) override {
         return _options.application != nullptr && _options.application->hostCommand(name, args);
     }
-    bool switchBackend(std::string const& name) override {
-        return _options.application != nullptr && _options.application->switchBackend(name);
+    bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->switchBackend(name, std::move(done));
     }
     void resetPrefs(std::string const& screen, std::string const& point) override {
         if (_options.application != nullptr) {

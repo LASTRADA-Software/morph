@@ -99,11 +99,15 @@ TEST_CASE("interpreter commands: navigate as a dialog returns through onResult o
     CHECK(readJson(*screen, R"({"ref": "picked"})") == R"("cancelled")");
 }
 
-TEST_CASE("interpreter commands: focus, host commands, return and close go to the host", "[ui][interpreter]") {
+TEST_CASE("interpreter commands: focus moves to the element itself; host commands, return and close go to the host",
+          "[ui][interpreter]") {
     Harness h;
     h.host.commands = {"openPath"};
     auto screen = h.mount(kCommands, who(3));
     h.backend.click(h.byTestId("Button", "focus"));
+    h.settle();
+    // The interpreter carries `focus` out in the mounted tree; the host is not asked.
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "note"));
     h.backend.click(h.byTestId("Button", "host"));
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "ran"})") == "5");
@@ -117,9 +121,8 @@ TEST_CASE("interpreter commands: focus, host commands, return and close go to th
     h.backend.click(h.byTestId("Button", "self"));
     h.backend.click(h.byTestId("Button", "app"));
     h.settle();
-    CHECK(h.host.log == std::vector<std::string>{"focus cmds note", R"(host openPath {"path":"/tmp"})",
-                                                 "host nope null", "close cmds 3", "close cmds",
-                                                 R"(app banner "hey")"});
+    CHECK(h.host.log == std::vector<std::string>{R"(host openPath {"path":"/tmp"})", "host nope null", "close cmds 3",
+                                                 "close cmds", R"(app banner "hey")"});
 }
 
 TEST_CASE("interpreter commands: switchBackend for a listed and an unlisted backend", "[ui][interpreter]") {
@@ -229,12 +232,13 @@ TEST_CASE("interpreter commands: without a host every host command is reported",
     auto mounted = bare.mount(ui::testing::loadOrFail(kCommands, ui::testing::corpusCatalog()), who(3), h.backend);
     REQUIRE(mounted);
     h.settle();
-    for (char const* const button : {"pick", "focus", "host", "switch", "notify", "return", "self", "app", "upload",
-                                     "download", "locale", "signout"}) {
+    // `focus` is not among them: the interpreter carries it out in the mounted tree, host or not.
+    for (char const* const button :
+         {"pick", "host", "switch", "notify", "return", "self", "app", "upload", "download", "locale", "signout"}) {
         h.backend.click(h.byTestId("Button", button));
         h.settle();
     }
-    CHECK(reported.size() >= 10);
+    CHECK(reported.size() >= 9);
     CHECK((*mounted)->diagnostics().size() == reported.size());
 }
 
@@ -455,9 +459,9 @@ TEST_CASE("interpreter commands: a host that refuses a request fails the command
         reasons.push_back(refusal.reason);
     }
     CHECK(reasons == std::vector<std::string>{
-                         "`navigate` is not supported by the host", "`focus` is not supported by the host",
-                         "`notify` is not supported by the host", "`return` is not supported by the host",
-                         "`close: self` is not supported by the host", "`set` of `app` is not supported by the host"});
+                         "`navigate` is not supported by the host", "`notify` is not supported by the host",
+                         "`return` is not supported by the host", "`close: self` is not supported by the host",
+                         "`set` of `app` is not supported by the host"});
     CHECK(screen->diagnostics().size() == reasons.size());
 }
 

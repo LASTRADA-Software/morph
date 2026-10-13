@@ -221,3 +221,39 @@ TEST_CASE("ui::Common: a chord without a handler is taken and runs nothing", "[u
     CHECK(backend.press(1, "F1"));
     CHECK(probe.count(ui::detail::site::kCallbackThrew) == 0);
 }
+
+// Mutations: drop the focus map's entry removal (the old case's input stays findable after it is unmounted); call
+// focus on nothing (`focus` then reports success without moving focus).
+TEST_CASE("ui::Mounted::focus moves focus by name after mount, and forgets what was unmounted", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::int64_t> which{runtime, 0};
+    ui::Mounted view{
+        runtime, backend,
+        ui::column(
+            {.children = {
+                 ui::textInput({.common = {.testId = "first", .focusId = "name"}}),
+                 ui::textInput({.common = {.testId = "second", .focusId = "name"}}),
+                 ui::switchOf(
+                     {.selector = [&] { return ui::Key{which.get()}; },
+                      .cases = {
+                          {.key = intKey(0), .node = ui::textInput({.common = {.testId = "old", .focusId = "case"}})},
+                          {.key = intKey(1),
+                           .node = ui::textInput({.common = {.testId = "new", .focusId = "later"}})}}})}})};
+    CHECK(backend.focused() == 0);
+    CHECK_FALSE(view.focus("nowhere"));
+    CHECK(backend.focused() == 0);
+
+    // Of two widgets with one name, the one mounted first takes focus.
+    REQUIRE(view.focus("name"));
+    CHECK(backend.focused() == *backend.find("TextInput", "testId", "first"));
+    REQUIRE(view.focus("case"));
+    CHECK(backend.focused() == *backend.find("TextInput", "testId", "old"));
+
+    which.set(1);
+    owner.runAll();
+    CHECK_FALSE(view.focus("case"));
+    REQUIRE(view.focus("later"));
+    CHECK(backend.focused() == *backend.find("TextInput", "testId", "new"));
+}

@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **`InterpreterHost::switchBackend` is asynchronous** (`switchBackend(name, done)`): it answers whether the
+  backend is listed and calls `done` when the switch committed or failed. On commit, `Session::backendChanged(name)`
+  runs every mounted screen's `onBackendChange` before the queries refetch, in one batch, and sets
+  `{"env": "backend"}`; a failure is reported as `backendSwitchFailed` and fails the command.
+- **`InterpreterHost::focus` is gone**: the interpreter carries out `{"focus": id}` itself, through the mounted
+  tree.
+
 - **`{"can": "host:name"}` answers from the client's host commands**, set with `Session::setHostCommands`, and no
   longer from the server's permitted set: a `host:` name passed to `setPermitted` no longer counts.
 
@@ -188,6 +195,12 @@ API surface).
   socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
   turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
   client can fetch an application's screens over a real connection.
+- **Focus after mount**: `ui::Common::focusId` and `ui::Mounted::focus(name)` move
+  keyboard focus to a mounted widget by name; the interpreter names each element by its `id`, so a document's
+  `{"focus": id}` moves focus in the view tree.
+- **The app root scope**: `ui::Interpreter::mountApp` mounts the app document once per session as an
+  `ui::AppRoot`; screens read its names as `app.name` and write its state with `set`.
+
 - **Theme tokens (`ui-theme/1`).** Header-only in the base `morph` target (`ui/theme.hpp`), and
   `qt_quick::applyTheme` in `morph::qt_quick`.
   - DTCG 2025.10 token files are parsed (`parseTokens`), layered and alias-resolved (`resolveTokens`,
