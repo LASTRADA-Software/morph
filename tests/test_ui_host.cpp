@@ -51,7 +51,9 @@ constexpr std::string_view kSaving = R"({
   "onClose": [ { "notify": "closing" },
                { "seq": [ { "run": "save" }, { "if": [ { "ref": "keep" }, [ { "cancelClose": true } ] ] } ] } ],
   "view": { "kind": "column", "children": [
-    { "kind": "button", "testId": "keep", "label": "keep", "onClick": [ { "set": "keep", "value": true } ] } ] } })";
+    { "kind": "button", "testId": "keep", "label": "keep", "onClick": [ { "set": "keep", "value": true } ] },
+    { "kind": "button", "testId": "upload", "label": "upload",
+      "onClick": [ { "upload": "/tmp/a.csv", "to": "save", "as": "ref" } ] } ] } })";
 
 /// A screen that opens a chooser as a dialog and takes its answer.
 constexpr std::string_view kOpener = R"({
@@ -324,4 +326,15 @@ TEST_CASE("A screen opened as a dialog answers its opener once, by return, close
         harness.settle();
         CHECK(opener->title().get() == (ending == Ending::Return ? "apple" : "cancelled"));
     }
+}
+
+// Mutation: drop DocumentScreenHost's uploadFor (the application is asked to upload without the mutation's model and
+// action, which the server authorises the upload as).
+TEST_CASE("A document's upload reaches the application with the mutation it is for", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto const saving = std::move(*shell.mount("saving", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "upload"));
+    harness.settle();
+    CHECK(count(harness.host.log, "uploadFor Lims_SampleModel Lims_Attach") == 1);
 }

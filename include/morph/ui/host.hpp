@@ -606,6 +606,11 @@ private:
         return _options.application != nullptr &&
                _options.application->upload(file, std::move(progress), std::move(done));
     }
+    bool uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
+                   std::function<void(std::expected<Value, std::string>)> done) override {
+        return _options.application != nullptr &&
+               _options.application->uploadFor(request, std::move(progress), std::move(done));
+    }
     bool download(Value const& file, std::string const& option, Value const& name,
                   std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr && _options.application->download(file, option, name, std::move(done));
