@@ -25,9 +25,13 @@
 #include "../core/backend.hpp"
 #include "../core/bridge.hpp"
 #include "../core/completion.hpp"
+#include "../forms/engine/collection.hpp"
+#include "../forms/engine/collection_view.hpp"
 #include "../forms/engine/field_model.hpp"
 #include "../forms/engine/form_session.hpp"
 #include "../forms/engine/form_view.hpp"
+#include "../forms/engine/wizard.hpp"
+#include "../forms/engine/wizard_view.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/scheduler.hpp"
 #include "../reactive/scope.hpp"
@@ -1046,6 +1050,12 @@ struct ElementState {
     reactive::Computed<Value>* rows = nullptr;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
+    /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is
+    ///        unknown or does not build.
+    std::unique_ptr<forms::CollectionSession> collection;
+    /// @brief A `wizard`'s session (spec 2), made when the element is wired; null when its wizard document or a
+    ///        step's schema is unknown or does not build.
+    std::unique_ptr<forms::WizardSession> wizard;
 };
 
 /// @brief One check at run time.
@@ -1611,13 +1621,14 @@ struct LowerCtx {
     return nullptr;
 }
 
-/// @brief Whether a node kind keeps per-element state even without an id: the inputs, dialogs, tables and forms.
+/// @brief Whether a node kind keeps per-element state even without an id: the inputs, dialogs, tables and the forms
+///        engine's screens.
 /// @param kind The kind.
 /// @return It.
 [[nodiscard]] inline bool statefulKind(std::string_view kind) {
-    static constexpr std::array<std::string_view, 10> kStateful = {
-        "textInput",  "checkbox", "select", "dateTimeInput", "slider",
-        "filePicker", "dialog",   "drawer", "table",         "form"};
+    static constexpr std::array<std::string_view, 12> kStateful = {
+        "textInput", "checkbox", "select", "dateTimeInput", "slider",     "filePicker",
+        "dialog",    "drawer",   "table",  "form",          "collection", "wizard"};
     return listed(kStateful, kind);
 }
 
@@ -1819,6 +1830,10 @@ private:
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
     void wireForm(ElementState& element);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    forms::Submitter aliasCalls(ModelAlias* alias);
+    forms::FormSessionOptions engineOptions() const;
+    void wireComposite(ElementState& element);
+    Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
@@ -3025,6 +3040,10 @@ inline void ScreenCore::wireElement(ElementState& element) {
     std::string_view const kind = node.kind;
     if (kind == "form") {
         wireForm(element);
+        return;
+    }
+    if (kind == "collection" || kind == "wizard") {
+        wireComposite(element);
         return;
     }
     bool const input = kind == "textInput" || kind == "checkbox" || kind == "select" || kind == "dateTimeInput" ||
@@ -4469,7 +4488,10 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "form") {
         return lowerForm(node, ctx, element);
     }
-    report(node.path, "`" + node.kind + "` is a forms engine screen this interpreter does not lower yet");
+    if (kind == "collection" || kind == "wizard") {
+        return lowerComposite(node, ctx, element);
+    }
+    report(node.path, "`" + node.kind + "` is a node kind this interpreter does not lower");
     return ui::text(Text{.text = std::string{node.kind}, .role = TextRole::Muted});
 }
 
@@ -4570,24 +4592,8 @@ inline void ScreenCore::wireForm(ElementState& element) {
     } else if (node.name("submit") == "auto") {
         model = model->withSubmitMode(forms::SubmitMode::Automatic);
     }
-    // Every call goes through the alias's channel, bound for its current instance when the call is made.
-    auto const call = [this, modelAlias = alias->model](std::string_view actionId,
-                                                        std::string const& body) -> async::Completion<std::string> {
-        std::shared_ptr<ModelChannel> const channel = channelOf(*modelAlias, *this);
-        if (channel == nullptr) {
-            auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
-            promise.reject(std::make_exception_ptr(std::runtime_error{"the form's model alias is not bound"}));
-            return std::move(failed);
-        }
-        return channel->execute(std::string{actionId}, body, CallOptions{});
-    };
-    FormatContext const& format = session.formatting();
-    forms::FormSessionOptions options{};
-    options.locale = format.numeric;
-    options.bcp47 = format.locale;
-    options.translations = format.translations;
-    options.displayOffsetMinutes = format.utcOffsetMinutes;
-    element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), call, call, std::move(options));
+    forms::Submitter const call = aliasCalls(alias->model);
+    element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), call, call, engineOptions());
     if (ExprPtr const prefill = node.prop("prefill")) {
         // A prefill follows its expression: a query's row arriving, or another record chosen, loads the form again.
         forms::FormSession* const form = element.form.get();
@@ -4648,6 +4654,109 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
         });
     }
     Column column{.children = {forms::formView(*form, forms::FormViewOptions{.showTitle = false})}};
+    commonOf(node, ctx, element, column.common);
+    return ui::column(std::move(column));
+}
+
+// Every call goes through the alias's channel, bound for its current instance when the call is made.
+inline forms::Submitter ScreenCore::aliasCalls(ModelAlias* alias) {
+    return [this, alias](std::string_view actionId, std::string const& body) -> async::Completion<std::string> {
+        std::shared_ptr<ModelChannel> const channel = channelOf(*alias, *this);
+        if (channel == nullptr) {
+            auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
+            promise.reject(std::make_exception_ptr(std::runtime_error{"the node's model alias is not bound"}));
+            return std::move(failed);
+        }
+        return channel->execute(std::string{actionId}, body, CallOptions{});
+    };
+}
+
+// The session's locale, translations and display zone, as every form the engine builds here reads them.
+inline forms::FormSessionOptions ScreenCore::engineOptions() const {
+    FormatContext const& format = session.formatting();
+    forms::FormSessionOptions options{};
+    options.locale = format.numeric;
+    options.bcp47 = format.locale;
+    options.translations = format.translations;
+    options.displayOffsetMinutes = format.utcOffsetMinutes;
+    return options;
+}
+
+// Builds a collection's or wizard's session when its element is declared. The node's `action` is the collection's
+// query or the wizard's first step; the catalog answers the document for it, and every call (the query, the actions,
+// every step's submission) goes through the node's model alias.
+inline void ScreenCore::wireComposite(ElementState& element) {
+    DocNode const& node = *element.node;
+    RtScope& scope = *element.scope;
+    bool const collection = node.kind == "collection";
+    std::string const action{node.name("action")};
+    Catalog const& catalog = session.options().catalog;
+    auto const& lookup = collection ? catalog.view : catalog.wizard;
+    std::optional<std::string> const document = lookup ? lookup(action) : std::nullopt;
+    if (!document.has_value()) {
+        report(node.path, std::string{"no "} + (collection ? "view" : "wizard") + " document for `" + action +
+                              "`: the catalog has none for a `" + node.kind + "` to build from");
+        return;
+    }
+    NameRef const* const alias = scope.find(node.name("model"));
+    if (alias == nullptr || alias->model == nullptr) {
+        report(node.path, "`" + std::string{node.name("model")} + "` is not a model alias");
+        return;
+    }
+    forms::SchemaLookup const schemas = catalog.schema ? forms::SchemaLookup{catalog.schema} : forms::SchemaLookup{};
+    forms::Submitter const call = aliasCalls(alias->model);
+    if (collection) {
+        auto model = forms::CollectionModel::fromSchema(*document);
+        if (!model) {
+            report(node.path, "the collection of `" + action + "` does not build: " + model.error().path + ": " +
+                                  model.error().message);
+            return;
+        }
+        if (model->query() != action) {
+            report(node.path, "the view document of `" + action + "` lists `" + std::string{model->query()} + "`");
+            return;
+        }
+        element.collection = std::make_unique<forms::CollectionSession>(runtime(), *std::move(model), schemas, call,
+                                                                        call, engineOptions());
+        return;
+    }
+    // The wizard's id, the stem of its translation keys, is the action it starts with.
+    auto model = forms::WizardModel::fromSchema(action, *document);
+    if (!model) {
+        report(node.path,
+               "the wizard of `" + action + "` does not build: " + model.error().path + ": " + model.error().message);
+        return;
+    }
+    if (model->steps().front().action != action) {
+        report(node.path,
+               "the wizard document of `" + action + "` starts with `" + model->steps().front().action + "`");
+        return;
+    }
+    try {
+        element.wizard =
+            std::make_unique<forms::WizardSession>(runtime(), *std::move(model), schemas, call, call, engineOptions());
+    } catch (std::invalid_argument const& error) {
+        report(node.path, error.what());
+    }
+}
+
+inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    // The editor's and the steps' titles are the dialog's and the header's; the forms do not repeat them.
+    forms::FormViewOptions form{};
+    form.showTitle = false;
+    Node view;
+    if (element != nullptr && element->collection != nullptr) {
+        forms::CollectionViewOptions options{};
+        options.form = std::move(form);
+        view = forms::collectionView(*element->collection, std::move(options));
+    } else if (element != nullptr && element->wizard != nullptr) {
+        forms::WizardViewOptions options{};
+        options.form = std::move(form);
+        view = forms::wizardView(*element->wizard, options);
+    } else {
+        return ui::text(Text{.text = std::string{node.name("action")}, .role = TextRole::Muted});
+    }
+    Column column{.children = {std::move(view)}};
     commonOf(node, ctx, element, column.common);
     return ui::column(std::move(column));
 }

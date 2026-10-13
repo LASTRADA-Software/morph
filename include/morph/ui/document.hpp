@@ -71,6 +71,14 @@ struct Catalog {
     ///        from. Local mode answers it from the action registry, a remote client from the server's `schemas`.
     ///        Empty: a `form` node is reported and shown as a muted text.
     std::function<std::optional<std::string>(std::string_view actionId)> schema;
+    /// @brief The `v-*` view document whose `v-query` is an action, as `views::viewSchemaJson<V>()` emits it: what a
+    ///        `collection` node naming that action builds its collection from. Empty: a `collection` node is
+    ///        reported and shown as a muted text.
+    std::function<std::optional<std::string>(std::string_view actionId)> view;
+    /// @brief The `w-*` wizard document whose first step is an action, as `flows::wizardSchemaJson<W>()` emits it:
+    ///        what a `wizard` node naming that action builds its wizard from. Empty: a `wizard` node is reported and
+    ///        shown as a muted text.
+    std::function<std::optional<std::string>(std::string_view actionId)> wizard;
 };
 
 /// @brief Options of `loadDocument`.

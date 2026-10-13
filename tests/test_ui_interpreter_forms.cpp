@@ -116,3 +116,110 @@ TEST_CASE("form node: an action the catalog has no schema for is reported and sh
     CHECK(h.diagnostics.front().reason.contains("no schema"));
     CHECK(h.backend.find("Text", "text", "Lims_Unknown").has_value());
 }
+
+namespace {
+
+constexpr std::string_view kSamples = R"({
+  "vocab": "ui/1", "id": "samples",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "collection", "testId": "samples", "model": "sample", "action": "Lims_ListSamples" } })";
+
+constexpr std::string_view kCaptureFlow = R"({
+  "vocab": "ui/1", "id": "flow",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "wizard", "testId": "flow", "model": "sample", "action": "Lims_CaptureConcentration" } })";
+
+}  // namespace
+
+TEST_CASE("collection node: the catalog's view document lists rows through the model alias",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(kSamples);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    CHECK(h.diagnostics.empty());
+    CHECK(h.backend.find("Column", "testId", "samples").has_value());  // the node's own testId
+    REQUIRE(h.dispatcher.count("Lims_ListSamples") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ListSamples")).typeId == "Lims_SampleModel");
+    h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
+    CHECK(h.text("collection_title") == "Samples");
+    CHECK(h.text("cell_name_9007199254740993") == "Water");
+
+    // A confirmed delete goes through the alias with the row's exact key, then the list reloads.
+    h.backend.click(h.byTestId("Button", "rowAction_Lims_DeleteSample_9007199254740993"));
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_DeleteSample") == 0);
+    CHECK(h.backend.prop(h.byTestId("Dialog", "confirmDialog"), "open") == "true");
+    h.backend.click(h.byTestId("Button", "confirm_accept"));
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_DeleteSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_DeleteSample")).body == R"({"id":9007199254740993})");
+    h.reply(h.dispatcher.last("Lims_DeleteSample"), "{}");
+    CHECK(h.dispatcher.count("Lims_ListSamples") == 2);
+    h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
+
+    // The row editor is the capture form, prefilled from the row and submitted through the alias.
+    h.backend.click(h.byTestId("Button", "rowOpen_9007199254740993"));
+    h.settle();
+    CHECK(h.backend.prop(h.byTestId("Dialog", "editorDialog"), "open") == "true");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "field_sampleId"), "text") == "9007199254740993");
+    h.backend.edit(h.byTestId("TextInput", "field_concentration"), "2");
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration")).body ==
+          R"({"sampleId":9007199254740993,"concentration":{"num":200,"den":100,"dp":2}})");
+    h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
+    CHECK(h.backend.prop(h.byTestId("Dialog", "editorDialog"), "open") == "false");
+    CHECK(h.dispatcher.count("Lims_ListSamples") == 3);
+}
+
+TEST_CASE("wizard node: the catalog's wizard document steps through the model alias", "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(kCaptureFlow);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    CHECK(h.diagnostics.empty());
+    CHECK(h.backend.find("Column", "testId", "flow").has_value());
+    CHECK(h.text("wizard_title") == "Capture flow  (1 / 2)");
+    CHECK(h.backend.prop(h.byTestId("Button", "wizardNext"), "enabled") == "false");
+    h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "9007199254740993");
+    h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") == 1);
+    h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
+    CHECK(h.backend.prop(h.byTestId("Button", "wizardNext"), "enabled") == "true");
+    h.backend.click(h.byTestId("Button", "wizardNext"));
+    h.settle();
+    CHECK(h.text("wizard_title") == "Capture flow  (2 / 2)");
+    // The second step's prefill is the first step's body, exact; ready as prefilled, it submits once.
+    CHECK(h.backend.prop(h.byTestId("TextInput", "field_sampleId"), "text") == "9007199254740993");
+    REQUIRE(h.dispatcher.count("Lims_ConfirmSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ConfirmSample")).body == R"({"sampleId":9007199254740993})");
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ConfirmSample")).typeId == "Lims_SampleModel");
+}
+
+TEST_CASE("collection and wizard nodes: a document the catalog lacks is reported and shown muted",
+          "[ui][interpreter][forms]") {
+    for (std::string_view const document : {
+             R"({"vocab": "ui/1", "id": "a", "models": { "sample": { "type": "Lims_SampleModel" } },
+                 "view": { "kind": "collection", "model": "sample", "action": "Lims_ListResults" } })",
+             R"({"vocab": "ui/1", "id": "b", "models": { "sample": { "type": "Lims_SampleModel" } },
+                 "view": { "kind": "wizard", "model": "sample", "action": "Lims_ConfirmSample" } })",
+         }) {
+        Harness h;
+        auto const screen = h.mount(document);
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.find("document for") != std::string::npos);
+        CHECK(h.backend.all("Table").empty());
+        CHECK(h.backend.all("Button").empty());
+    }
+}
+
+TEST_CASE("collection node: a view document listing another action is reported", "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "stale",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "collection", "model": "sample", "action": "Lims_ListStale" } })");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "the view document of `Lims_ListStale` lists `Lims_ListSamples`");
+    CHECK(h.dispatcher.calls.empty());
+    CHECK(h.backend.find("Text", "text", "Lims_ListStale").has_value());
+}

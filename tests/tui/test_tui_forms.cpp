@@ -72,6 +72,14 @@ struct TuiClient {
         settle();
     }
 
+    [[nodiscard]] std::string drawn() const {
+        std::string text;
+        for (std::string const& row : rowsOf(screen)) {
+            text += row + "\n";
+        }
+        return text;
+    }
+
     [[nodiscard]] bool shows(std::string const& text) const {
         auto const rows = rowsOf(screen);
         return std::ranges::any_of(rows, [&](std::string const& row) { return row.contains(text); });
@@ -109,4 +117,60 @@ TEST_CASE("tui forms: a form document draws on the terminal and submits what is 
     REQUIRE(client.dispatcher.count("Lims_CaptureConcentration") >= 1);
     auto const& call = client.dispatcher.calls.at(client.dispatcher.last("Lims_CaptureConcentration"));
     CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
+}
+
+TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its editor", "[tui][forms]") {
+    TuiClient client;
+    client.dispatcher.autoReply.emplace("Lims_ListSamples", R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
+    client.dispatcher.autoReply.emplace("Lims_CaptureConcentration", R"({"ok":true})");
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "samples",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("Samples"));
+    CHECK(client.shows("Water"));
+    CHECK(client.shows("Delete"));
+    CHECK_FALSE(client.shows("Concentration *"));  // the editor dialog is closed
+    client.backend.focusFirst();
+    client.settle();
+    client.key(KeyCode::Enter);
+    INFO(client.drawn());
+    CHECK(client.shows("9007199254740993"));
+    CHECK(client.shows("Concentration *"));
+}
+
+TEST_CASE("tui forms: a wizard document steps on to its second step with the prefill", "[tui][forms]") {
+    TuiClient client;
+    client.dispatcher.autoReply.emplace("Lims_CaptureConcentration", R"({"ok":true})");
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "flow",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    CHECK(client.shows("Capture flow  (1 / 2)"));
+    client.backend.focusFirst();
+    client.settle();
+    client.type("9007199254740993");
+    client.backend.focusNext();
+    client.settle();
+    client.type("1");
+    REQUIRE(client.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    for (int i = 0; i < 3; ++i) {  // past rowIndex and note, to Next (Back is disabled)
+        client.backend.focusNext();
+        client.settle();
+    }
+    client.key(KeyCode::Enter);
+    INFO(client.drawn());
+    CHECK(client.shows("Capture flow  (2 / 2)"));
+    REQUIRE(client.dispatcher.count("Lims_ConfirmSample") == 1);
+    CHECK(client.dispatcher.calls.at(client.dispatcher.last("Lims_ConfirmSample")).body ==
+          R"({"sampleId":9007199254740993})");
 }

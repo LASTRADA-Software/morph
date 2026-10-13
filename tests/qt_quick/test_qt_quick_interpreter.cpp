@@ -492,3 +492,54 @@ TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quic
     auto const& call = h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration"));
     CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
 }
+
+// A `collection` node renders through Qt Quick: the rows' exact cells, the confirm dialog gating a row action, and
+// the row editor in its dialog, submitting through the model alias.
+TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    h.dispatcher.autoReply.emplace("Lims_ListSamples", R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "samples",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })");
+    CHECK(QtHarness::widget("collection_title").shownText() == "Samples");
+    CHECK(QtHarness::widget("cell_name_9007199254740993").shownText() == "Water");
+    h.click("rowAction_Lims_DeleteSample_9007199254740993");
+    h.scene.settle();
+    CHECK(h.dispatcher.count("Lims_DeleteSample") == 0);
+    h.click("confirm_accept");
+    h.scene.settle();
+    REQUIRE(h.dispatcher.count("Lims_DeleteSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_DeleteSample")).body == R"({"id":9007199254740993})");
+    h.click("rowOpen_9007199254740993");
+    h.scene.settle();
+    CHECK(QtHarness::widget("field_sampleId").shownText() == "9007199254740993");
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("2"));
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration")).body ==
+          R"({"sampleId":9007199254740993,"concentration":{"num":200,"den":100,"dp":2}})");
+}
+
+// A `wizard` node renders through Qt Quick: Next waits for the step's success, and the second step is prefilled from
+// the first, exactly.
+TEST_CASE("qt_quick interpreter: a wizard document steps on", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    h.dispatcher.autoReply.emplace("Lims_CaptureConcentration", R"({"ok":true})");
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "flow",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" } })");
+    CHECK(QtHarness::widget("wizard_title").shownText() == "Capture flow  (1 / 2)");
+    h.click("field_sampleId");
+    h.scene.type(QStringLiteral("9007199254740993"));
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("1"));
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    h.click("wizardNext");
+    h.scene.settle();
+    CHECK(QtHarness::widget("wizard_title").shownText() == "Capture flow  (2 / 2)");
+    CHECK(QtHarness::widget("field_sampleId").shownText() == "9007199254740993");
+    REQUIRE(h.dispatcher.count("Lims_ConfirmSample") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ConfirmSample")).body == R"({"sampleId":9007199254740993})");
+}
