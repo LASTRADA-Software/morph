@@ -114,8 +114,9 @@ TEST_CASE("UiRegistry's digest is a function of the files alone", "[ui-service][
     REQUIRE(first->manifest == second->manifest);
 
     UiRegistry changed = uiservice::registry();
+    // One changed byte, inside the token's value so the theme stays a valid token file.
     std::string theme{uiservice::kTheme};
-    theme[theme.size() - 3] = '7';
+    theme.replace(theme.find("#00aa66"), 7, "#00aa67");
     REQUIRE(changed.addFile(uiservice::file(morph::ui::kThemeFile, "changed", theme)));
     auto const rebuilt = changed.build();
     REQUIRE(rebuilt);
@@ -452,13 +453,13 @@ TEST_CASE("ui-fetch serves a file by its hash, behind its gate", "[ui-service][f
 }
 
 TEST_CASE("ui-fetch serves equal bytes under any entry that admits the caller", "[ui-service][fetch]") {
-    // A screen with no query and a theme with the same bytes share one file.
+    // A screen with no query and a delivered component with the same bytes share one file.
     std::string const doc = R"({"vocab":"ui/1","id":"same","view":{"kind":"text","text":"x"}})";
     UiRegistry registry = emptyRegistry();
     CatalogEntry unavailable = entry("same");
     unavailable.available = false;
     REQUIRE(registry.addScreen(unavailable, doc));
-    REQUIRE(registry.addFile(uiservice::file(morph::ui::kThemeFile, "copy", doc)));
+    REQUIRE(registry.addFile(uiservice::file(morph::ui::kComponentFile, "copy", doc)));
     auto const built = registry.build();
     REQUIRE(built);
     UiService service{*built};
