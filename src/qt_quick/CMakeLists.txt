@@ -90,6 +90,7 @@ add_library(morph_qt_quick STATIC
     relay.hpp
     scheduler.cpp
     table.cpp
+    theme.cpp
     widget.cpp
     widget.hpp
 )
@@ -103,6 +104,7 @@ target_sources(morph_qt_quick
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/components.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/frontend.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/scheduler.hpp
+        ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/theme.hpp
 )
 # Same standalone-compile check the core target gets.
 set_target_properties(morph_qt_quick PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON AUTOMOC ON)
