@@ -8,7 +8,8 @@ body the action takes. The program design is spec 2 (`docs/superpowers/specs/202
 Read this before changing a header under `forms/engine/`. The headers here are the model, rules, values,
 `FormSession`, the submitters, `Form<A>`, the collection and wizard sessions, and the rendering (`formView`,
 overrides, the field overlay, `collectionView`, `wizardView`) that a document's `form`, `collection` and `wizard`
-nodes reach through the interpreter. The app shell is not in the tree yet.
+nodes reach through the interpreter. The app shell is not in the tree yet: it mounts screens by document id, which
+is the host's contract.
 
 ## Contents
 
@@ -22,6 +23,7 @@ nodes reach through the interpreter. The app shell is not in the tree yet.
 - [Rendering](#rendering)
 - [Collections](#collections)
 - [Wizards](#wizards)
+- [Rendering collections and wizards](#rendering-collections-and-wizards)
 - [Parity with the QML renderer](#parity-with-the-qml-renderer)
 - [Design decisions](#design-decisions)
 
@@ -41,6 +43,8 @@ Header-only, in the base `morph` target:
 | `form_view.hpp` | `FormViewOptions`, `formView` |
 | `collection.hpp` | `CollectionModel`, `CollectionColumn`, `CollectionAction`, `CollectionRow`, `PendingConfirm`, `SchemaLookup`, `CollectionSession` |
 | `wizard.hpp` | `WizardModel`, `WizardStepSpec`, `WizardSession` |
+| `collection_view.hpp` | `CollectionChrome`, `CollectionViewOptions`, `collectionView` |
+| `wizard_view.hpp` | `WizardChrome`, `WizardViewOptions`, `wizardView` |
 | `detail/text.hpp` | JSON reading and quoting, exact decimal text, ISO-8601 wall-clock text |
 
 The engine depends on `morph::reactive` and on the UI document's values and expressions
@@ -261,6 +265,7 @@ before it.
 
 **Not here yet:** the grid widget (`x-widget: grid`, spec 2 §7), whose keyboard model needs a way for the view
 tree to move focus, which it does not have; and a document's `overrides`.
+
 ## Collections
 
 `CollectionModel::fromSchema(viewJson)` reads the `v-*` view document (`docs/spec/forms/views.md`): the kind
@@ -304,6 +309,37 @@ wizard's lifetime, and throws `std::invalid_argument` when a step's schema is un
   returning to a done step submits nothing.
 - `title()` and `stepTitle(i)` resolve `<id>.title` and `<id>.step.<i>.title` through the translations.
 
+## Rendering collections and wizards
+
+`collectionView(session, options)` and `wizardView(session, options)` render the sessions as view trees; as with
+`formView`, mount the result after the session and destroy the mount before it. Their `options.form` is handed
+to every form they draw, so `Overrides` reach the editor's and every step's fields.
+
+- **A collection** is a header (the title, a `Busy` while the list loads, a button per collection action), an
+  error line (the list's failure, else the last action's), a `Table` of the visible columns' exact cells with a
+  last column of Open and the row actions, the confirm `Dialog` (open while `pendingConfirm()` is engaged; accept
+  runs the action, cancel or dismissal drops it), and the editor's `formView`: in a `Dialog` open while
+  `openRow()` is engaged for a `collection` view, beside the table and shown while a row is open for a
+  `master-detail` one, whose table selects the open row and opens the row selected. Activating a row opens it when the view has a row action.
+  Every action button is disabled while an action is in flight. Test ids: `collection_title`,
+  `collectionAction_<Action>`, `collection_error`, `collection_rows`, `cell_<field>_<rowKey>`,
+  `rowOpen_<rowKey>`, `rowAction_<Action>_<rowKey>`, `confirmDialog`, `confirm_message`, `confirm_accept`,
+  `confirm_cancel`, `editorDialog`, `detailForm`; a row key past 2^53 keeps every digit in them.
+- **A wizard** is a header (`<title>  (<step> / <steps>)` and a `Steps` indicator: done, current, pending), a
+  `Switch` over the steps' `formView`s that mounts the current one (the values live in the step sessions, so
+  leaving a step loses nothing), and Back and Next, enabled by `canBack()` and `canNext()`, with a note on the
+  last step. Test ids: `wizard_title`, `wizard_steps`, `wizard_step_<index>`, `wizardBack`, `wizardNext`,
+  `wizard_last`.
+- **Chrome.** `CollectionChrome` and `WizardChrome` replace the view's own parts with a host's: the collection's
+  header, each row (the rows are then a list of the chrome's nodes rather than a table), the confirm (mounted only
+  while an action waits) and the editor dialog (handed the editor's form view to place); the wizard's header and
+  navigation. A chrome is handed the session and drives it through the same calls the built-in parts make, so its
+  gates are the session's: a chrome's Next does nothing until `canNext()`. A master-detail view has no editor
+  dialog to replace.
+- **Through a document.** The interpreter lowers a `collection` or `wizard` node to these views over sessions it
+  builds from `Catalog::view` or `Catalog::wizard` and its model alias (`docs/spec/ui/interpreter.md`,
+  "Lowering").
+
 ## Parity with the QML renderer
 
 Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus cases of the existing suites:
@@ -325,7 +361,13 @@ Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus 
 - **Collections and wizards**: the claims of `tst_collectionview.qml`, the collection half of
   `tst_LargeIdPrecision.qml`, `tst_wizardview.qml` and the confirm gate of `tst_ViewChrome.qml`, on the same
   fixtures, against `CollectionSession` and `WizardSession` (`tests/test_forms_engine_collection.cpp`,
-  `tests/test_forms_engine_wizard.cpp`). What those files assert about drawn widgets comes with the views.
+  `tests/test_forms_engine_wizard.cpp`); what they and `tst_ViewChrome.qml` assert about drawn widgets (cells
+  and buttons by test id, the confirm and editor dialogs' visibility, the master-detail layout, the header, row,
+  confirm, editor and navigation chrome) on `RecordingBackend` (`tests/test_forms_engine_collection_view.cpp`,
+  `tests/test_forms_engine_wizard_view.cpp`); a collection and a wizard document through the interpreter, on
+  Qt Quick and on the terminal. `tst_ViewChrome.qml`'s field-label, status and result chrome of the embedded
+  forms has no counterpart: `formView`'s chrome is its options and `Overrides`, which do reach the embedded
+  forms.
 
 ### Differences from the QML renderer
 

@@ -218,3 +218,27 @@ Parity of (c1): every QuickTest claim about collections and wizards that needs n
 headlessly (`tst_collectionview.qml`, the collection half of `tst_LargeIdPrecision.qml`, `tst_wizardview.qml`, and
 the confirm-gate cases of `tst_ViewChrome.qml`). The chrome, dialog-visibility and master-detail layout claims
 move to (c2) with the views.
+
+## Slice (c2): what it holds and what it leaves
+
+- **Holds:** `collection_view.hpp` (`collectionView`: header, error line, a `Table` of exact cells with Open and
+  the row actions, the confirm `Dialog`, the editor `formView` in a `Dialog` or, for `master-detail`, beside the
+  table with the table's selection bound to the open row) and `wizard_view.hpp` (`wizardView`: title and `Steps`,
+  a `Switch` over the steps' forms, Back and Next on the session's gates); `CollectionChrome` and `WizardChrome`,
+  the C++ counterpart of `tst_ViewChrome.qml`'s roles, each handed the session; the interpreter's `collection`
+  and `wizard` lowering, with the documents from new `Catalog::view` and `Catalog::wizard` lookups keyed by the
+  node's `action` (the collection's query, the wizard's first step, which is what the vocabulary's action rule
+  already checks), every call through the model alias; a collection and a wizard document on Qt Quick and on the
+  terminal.
+- **Parity of (c2):** `tst_collectionview.qml`'s cells and buttons by object name, editor and confirm dialog
+  visibility, Open prefilling the editor; `tst_LargeIdPrecision.qml`'s collection keys in test ids and bodies;
+  `tst_wizardview.qml`'s gates and prefill on drawn buttons; `tst_ViewChrome.qml`'s header, row, confirm, editor
+  and wizard header/nav chrome, the registry reaching embedded forms (as `options.form`), a fully chromed
+  collection drawing nothing of its own; and the master-detail layout. On `RecordingBackend`
+  (`test_forms_engine_collection_view.cpp`, `test_forms_engine_wizard_view.cpp`).
+- **Leaves:**
+  - `app_shell.hpp`: it mounts screens by document id, which is the host contract still to land; it waits for it.
+  - The workspace (spec 6 §7) belongs to the hosting part.
+  - `tst_ViewChrome.qml`'s field-label, status and result chrome of the embedded forms: `formView`'s chrome is its
+    options and `Overrides`, which reach the embedded forms; a label slot would be a new seam of `formView`.
+  - Chrome through a document: a `collection` or `wizard` node takes no chrome; it is C++ only.

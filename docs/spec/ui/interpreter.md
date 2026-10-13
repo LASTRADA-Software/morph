@@ -212,6 +212,17 @@ applies to the width.
   and each field by wire name, a record of `value`, `draft`, `valid`, `required`, `visible`,
   `readonly` and `errors`. An action the catalog has no schema for, or a schema that does not build,
   is reported and shown as a muted text naming the action.
+- **`collection`** and **`wizard`** are the forms engine's composite screens. Each element is
+  declared like a form's and builds its session when the scope is declared: a
+  `forms::CollectionSession` from `Catalog::view(action)`, whose `v-query` must be the node's
+  `action`, or a `forms::WizardSession` from `Catalog::wizard(action)`, whose first step must be it
+  (the action is the wizard's id, the stem of its translation keys). The row editor's and the steps'
+  schemas come from `Catalog::schema`. Every call (the list query, the row and collection actions,
+  the editor's and every step's submissions) goes through the `model` alias's channel, as a form's
+  does. They lower to `forms::collectionView` and `forms::wizardView`, with the forms' own titles
+  left out, inside a column that carries the node's common properties. They have no element values
+  and no events. A document the catalog lacks, one for another action, one that does not build, or
+  a wizard step without a schema is reported and shown as a muted text naming the action.
 
 ## Diagnostics
 
@@ -242,7 +253,9 @@ stops when its scope is gone.
 
 Reported when met, and shown as a muted text naming the kind:
 
-- `collection` and `wizard`: the forms engine's composite screens (spec 2 §8).
+- The chrome of a `collection` or `wizard` (its header, rows, confirm, editor and navigation drawn
+  by the host's own kit): C++ code replaces them through `forms::CollectionChrome` and
+  `forms::WizardChrome`.
 - A `form` node's `overrides` (spec 2 §7): document subtrees or components replacing a field's
   control. C++ code replaces controls through `forms::Overrides`.
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not

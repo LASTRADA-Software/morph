@@ -231,7 +231,9 @@ the server calculates, or a mutation that sends a credential or returns a secret
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
 an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
 an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's
-form from.
+form from. Two more do the same for the forms engine's screens: `view(actionId)` answers the `v-*`
+view document whose `v-query` is the action (a `collection` node's), and `wizard(actionId)` the
+`w-*` wizard document whose first step is the action (a `wizard` node's).
 
 ## Refusals
 

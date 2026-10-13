@@ -226,6 +226,13 @@ API surface).
   - `WizardSession` (`wizard.hpp`) runs a `w-*` wizard as one `FormSession` per step: a step is done while its
     body is the one that succeeded, Next waits for that, and entering a step applies its prefill from what earlier
     steps resolved.
+  - `collectionView` and `wizardView` (`collection_view.hpp`, `wizard_view.hpp`) render the two sessions through
+    the view tree: a table of exact cells with the row actions, the confirm and editor dialogs or a master-detail
+    side form, and a wizard's header, current step and Back/Next. `CollectionChrome` and `WizardChrome` let a host
+    draw those parts from its own kit, driving the same session calls.
+  - The interpreter lowers `collection` and `wizard` nodes to them, from the new `Catalog::view` and
+    `Catalog::wizard` lookups, every call through the node's model alias. A collection and a wizard document
+    render on Qt Quick and on the terminal.
   - Parity with the QML renderer is measured: the 46-row rule corpus and a body corpus written by the QML
     renderer itself (`tests/data/body_corpus.json`), byte for byte, with the deliberate differences named.
 - **`render::parseDecimal`**: locale entry text to an exact `math::Rational`, refusing more places than declared
@@ -312,7 +319,7 @@ API surface).
     `switchBackend`, transfers, `signIn`, …) go through `ui::InterpreterHost`.
   - Model calls go through `ui::Dispatcher`; `ui::BridgeDispatcher` sends them over the bridge's
     model-free seams (`bindByType`, `executeRaw`, `attach`).
-  - `form`, `collection`, `wizard` and a model-backed `table` are reported and not yet lowered.
+  - A model-backed `table` is reported and not yet lowered.
 - **`morph::ui::author`: screens written in C++ on the server** (`author.hpp`). Typed builders write
   the UI document: expression handles with operators (`a + b`, `a < b`, `a && b`, `!a`,
   `x.orElse(y)`) and member-pointer field reads; queries, evaluations and mutations named by their
