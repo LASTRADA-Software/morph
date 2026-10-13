@@ -155,7 +155,9 @@ server, never a surprise on a client.
   document, or when the text cannot be served. The text is served byte for byte.
 - `addEntry(entry)` lists an entry with no document: a host screen, or one not built (`available: false`).
 - `addFile(BundleFile{kind, id, bytes, isPublic})` adds the app document (`app`, loaded and validated, id `app`), a theme, a
-  message catalogue or a delivered component.
+  message catalogue or a delivered component. A message catalogue's id is `i18n/<locale>.json`, and one whose shape
+  `parseCatalogue` refuses or that has a pattern outside the `ui/1` subset is refused
+  ([`catalogue.md`](catalogue.md)).
 - `requireVocabulary(v)` adds a vocabulary the bundle needs.
 - `build()` refuses a screen that names a delivered component (`qml`) whose hash no `component` file has, and a
   bundle over the bounds. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file

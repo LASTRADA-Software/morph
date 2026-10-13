@@ -149,6 +149,8 @@ filtered for the principal, and content-addressed bundles verified into the clie
 preferences model, keyed by the verified session, and loaded back into a mounted screen ·
 [`ui/host_vocabulary.md`](ui/host_vocabulary.md) — the commands and values a client application registers
 (`host/1`): checked arguments, the trust gate, `can` and the handshake ·
+[`ui/catalogue.md`](ui/catalogue.md) — a bundle's message catalogues, the provider `t` resolves through, locale
+switching and search in every locale ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·

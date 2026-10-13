@@ -188,6 +188,14 @@ API surface).
   socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
   turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
   client can fetch an application's screens over a real connection.
+- **Message catalogues from the bundle.** Header-only, in the base `morph` target (`ui/catalogue.hpp`).
+  - A `messages` file is `i18n/<locale>.json`, a flat map of key to a MessageFormat 2 pattern.
+    `UiRegistry::addFile` refuses one with another id, a refused shape or a pattern outside the `ui/1` subset.
+  - `ui::loadCatalogues` reads a verified bundle's catalogues into `ui::MessageCatalogues`, leaving out and
+    noting what it cannot use; its `provider()` tries the exact locale, then the language.
+    `ui::Session::setTranslations` installs it, and `{"setLocale": …}` re-resolves every `t` through it.
+  - `ui::textInEveryLocale` and `ui::matchesInAnyLocale` find a title in every locale the bundle has.
+
 - **Preferences: customization choices stored per person on the server.** Header-only, in the base `morph`
   target (`ui/preferences.hpp`, `ui/preference_sync.hpp`).
   - `ui::IPreferencesStore` keeps a choice's JSON text by `PrefKey{person, app, scope, point}`;
