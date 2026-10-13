@@ -580,6 +580,28 @@ class QueryRuntime;
 
 }  // namespace detail
 
+/// @brief What running a host command (`host/1`) did.
+struct HostCommandResult {
+    /// @brief The outcome.
+    enum class Kind : std::uint8_t {
+        Ran,      ///< The command ran.
+        Missing,  ///< The client has no such command; nothing ran.
+        Refused,  ///< The command exists and did not run: its arguments, or a connection that is not verified.
+    };
+    /// @brief The outcome.
+    Kind kind = Kind::Ran;
+    /// @brief Why it was refused; empty otherwise.
+    std::string reason;
+};
+
+/// @brief The client's host commands, as a session runs them (spec 6 §14).
+struct HostCommands {
+    /// @brief The commands the client can run now; `{"can": "host:name"}` is true for these.
+    std::set<std::string, std::less<>> available;
+    /// @brief Runs a command with its evaluated `args` (`null` when the document gives none).
+    std::function<HostCommandResult(std::string const& name, Value const& args)> run;
+};
+
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, `refreshOn` bookkeeping, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
@@ -597,7 +619,8 @@ public:
           _format{runtime, std::make_shared<FormatContext const>()},
           _env{runtime},
           _sessionValues{runtime},
-          _hostValues{runtime} {}
+          _hostValues{runtime},
+          _hostCommandNames{runtime} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
@@ -613,15 +636,23 @@ public:
     /// @return They.
     [[nodiscard]] SessionOptions const& options() const noexcept { return _options; }
 
-    /// @brief Sets the action ids the principal may run, and the `host:<command>` names the client has, as the
-    ///        catalog reply lists them; `{"can": ...}` follows them.
+    /// @brief Sets the action ids the principal may run, as the catalog reply lists them; `{"can": ...}` follows them.
     /// @param permitted The ids.
     void setPermitted(std::set<std::string, std::less<>> permitted) { _permitted.set(std::move(permitted)); }
 
-    /// @brief Whether the principal may run an action, or the client has a host command. A tracked read.
+    /// @brief Whether the principal may run an action, or the client can run a host command now. A tracked read.
+    ///
+    /// A `host:` name is answered from the client's own commands (`setHostCommands`), never from the server's
+    /// permitted set: the two have different owners, and a catalog refresh must not drop the client's commands.
     /// @param action The action id, or `host:<command>`.
     /// @return Whether it is permitted.
-    [[nodiscard]] bool can(std::string_view action) const { return _permitted.get().contains(action); }
+    [[nodiscard]] bool can(std::string_view action) const {
+        static constexpr std::string_view kHostPrefix = "host:";
+        if (action.starts_with(kHostPrefix)) {
+            return _hostCommandNames.get().contains(action.substr(kHostPrefix.size()));
+        }
+        return _permitted.get().contains(action);
+    }
 
     /// @brief Replaces the formatting facts; every `t` and display function re-evaluates.
     /// @param format The facts.
@@ -650,6 +681,21 @@ public:
     /// @brief Sets the `host` values the application registered.
     /// @param values The values.
     void setHostValues(ValueRecord values) { _hostValues.set(std::move(values)); }
+
+    /// @brief Sets the client's host commands: the names `{"can": "host:name"}` answers for, and what runs them. A
+    ///        session without a runner asks `InterpreterHost::hostCommand`.
+    /// @param commands The names and the runner.
+    void setHostCommands(HostCommands commands) {
+        _hostCommandRunner = std::move(commands.run);
+        _hostCommandNames.set(std::move(commands.available));
+    }
+
+    /// @brief What runs host commands.
+    /// @return It; empty when the application set none.
+    [[nodiscard]] std::function<HostCommandResult(std::string const&, Value const&)> const& hostCommandRunner()
+        const noexcept {
+        return _hostCommandRunner;
+    }
 
     /// @brief Reads `env`, `session` or `host`. A tracked read.
     /// @param form `Env`, `Session` or `Host`.
@@ -906,6 +952,8 @@ private:
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
     reactive::Signal<ValueRecord> _hostValues;
+    reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
+    std::function<HostCommandResult(std::string const&, Value const&)> _hostCommandRunner;
     std::map<std::string, std::shared_ptr<detail::CacheEntry>, std::less<>> _entries;
     std::vector<detail::QueryRuntime*> _mounted;
     int _userDepth = 0;
@@ -3722,6 +3770,16 @@ inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, 
 
 inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done) {
     Value const args = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
+    if (auto const& run = session.hostCommandRunner()) {
+        HostCommandResult const result = run(command.target, args);
+        if (result.kind == HostCommandResult::Kind::Missing) {
+            report(command.path, "host command `" + command.target + "` is missing");
+        } else if (result.kind == HostCommandResult::Kind::Refused) {
+            report(command.path, result.reason);
+        }
+        done(result.kind == HostCommandResult::Kind::Ran);
+        return;
+    }
     bool const known = host != nullptr && host->hostCommand(command.target, args);
     if (!known) {
         report(command.path, "host command `" + command.target + "` is missing");
