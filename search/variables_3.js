@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['data_0',['data',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aebc33aa747fd583741693029ac3b799e',1,'morph::detail::FixedString']]],
+  ['data_0',['data',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aebc33aa747fd583741693029ac3b799e',1,'morph::detail::FixedString::data'],['../d3/d58/structmorph_1_1ui_1_1FileRequest.html#a47179d7ccdfb3b40f5c7d855a4844215',1,'morph::ui::FileRequest::data'],['../da/d81/structmorph_1_1ui_1_1FileReply.html#aa474b59f3fd52f8fc66cf74aecf9d666',1,'morph::ui::FileReply::data']]],
   ['dates_1',['dates',['../d8/d47/structmorph_1_1table_1_1Services.html#a3b125021d62d97be59245851392831bf',1,'morph::table::Services::dates'],['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#ac39ec88435180f671477ff504a10fd4c',1,'morph::ui::FormatContext::dates']]],
   ['datetime_2',['dateTime',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ac7c98cf48ab6c759f0eaa9c3c1288746',1,'morph::ui::testing::detail::Callbacks']]],
   ['deadlettered_3',['deadLettered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73',1,'morph::offline::SyncResult']]],

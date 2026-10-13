@@ -453,6 +453,7 @@ var hierarchy =
     ] ],
     [ "morph::ui::DocNode", "df/d0e/structmorph_1_1ui_1_1DocNode.html", null ],
     [ "morph::ui::Document", "d4/d02/structmorph_1_1ui_1_1Document.html", null ],
+    [ "morph::ui::DownloadedFile", "d5/d44/structmorph_1_1ui_1_1DownloadedFile.html", null ],
     [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", null ],
     [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", null ],
     [ "morph::ui::EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", null ],
@@ -464,7 +465,12 @@ var hierarchy =
     [ "morph::ui::Expr", "d0/df6/structmorph_1_1ui_1_1Expr.html", null ],
     [ "morph::ui::FetchRequest", "dc/da0/structmorph_1_1ui_1_1FetchRequest.html", null ],
     [ "morph::ui::FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", null ],
+    [ "morph::ui::FileInfo", "d2/d7e/structmorph_1_1ui_1_1FileInfo.html", null ],
     [ "morph::ui::FilePicker", "d3/da2/structmorph_1_1ui_1_1FilePicker.html", null ],
+    [ "morph::ui::FileReply", "da/d81/structmorph_1_1ui_1_1FileReply.html", null ],
+    [ "morph::ui::FileRequest", "d3/d58/structmorph_1_1ui_1_1FileRequest.html", null ],
+    [ "morph::ui::FileSlice", "d4/d03/structmorph_1_1ui_1_1FileSlice.html", null ],
+    [ "morph::ui::FileTransfer", "d5/db2/classmorph_1_1ui_1_1FileTransfer.html", null ],
     [ "morph::ui::ForEach", "d2/d58/structmorph_1_1ui_1_1ForEach.html", null ],
     [ "morph::ui::FormatContext", "db/d4c/structmorph_1_1ui_1_1FormatContext.html", null ],
     [ "morph::ui::FormattedMessage", "d8/d21/structmorph_1_1ui_1_1FormattedMessage.html", null ],
@@ -480,6 +486,9 @@ var hierarchy =
     [ "morph::ui::HelloRequest", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html", null ],
     [ "morph::ui::IBundleStore", "d2/df7/classmorph_1_1ui_1_1IBundleStore.html", [
       [ "morph::ui::MemoryBundleStore", "dc/ddf/classmorph_1_1ui_1_1MemoryBundleStore.html", null ]
+    ] ],
+    [ "morph::ui::IFileStore", "d6/d37/classmorph_1_1ui_1_1IFileStore.html", [
+      [ "morph::ui::MemoryFileStore", "d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html", null ]
     ] ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", null ],
     [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", null ],
@@ -498,6 +507,7 @@ var hierarchy =
     [ "morph::ui::LoadOptions", "d8/dc0/structmorph_1_1ui_1_1LoadOptions.html", null ],
     [ "morph::ui::Manifest", "dd/dd5/structmorph_1_1ui_1_1Manifest.html", null ],
     [ "morph::ui::ManifestFile", "d8/d93/structmorph_1_1ui_1_1ManifestFile.html", null ],
+    [ "morph::ui::MemoryFileStoreOptions", "d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html", null ],
     [ "morph::ui::Menu", "de/dce/structmorph_1_1ui_1_1Menu.html", null ],
     [ "morph::ui::MenuEntry", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html", null ],
     [ "morph::ui::MenuItem", "d4/dac/structmorph_1_1ui_1_1MenuItem.html", null ],
@@ -571,6 +581,7 @@ var hierarchy =
     [ "morph::ui::UiClient", "d1/d97/classmorph_1_1ui_1_1UiClient.html", null ],
     [ "morph::ui::UiRegistry", "d0/dc8/classmorph_1_1ui_1_1UiRegistry.html", null ],
     [ "morph::ui::UnitInfo", "d6/d42/structmorph_1_1ui_1_1UnitInfo.html", null ],
+    [ "morph::ui::UploadRequest", "d9/ddd/structmorph_1_1ui_1_1UploadRequest.html", null ],
     [ "morph::ui::Value", "da/d54/classmorph_1_1ui_1_1Value.html", null ],
     [ "morph::ui::VerifiedCache", "de/dca/classmorph_1_1ui_1_1VerifiedCache.html", null ],
     [ "morph::ui::WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", null ],

@@ -29,7 +29,7 @@ var searchData=
   ['claims_26',['claims',['../d0/d26/structmorph_1_1session_1_1Principal.html#adceb36274cb7bbe112ab31e8d6e36bf8',1,'morph::session::Principal']]],
   ['classify_27',['classify',['../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#a0f9cecf4b22b1e65fdb0a0b33a0c67cf',1,'morph::ui::SessionOptions']]],
   ['click_28',['click',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a4d2e1d385b3c23d9ae83c3692f67aab7',1,'morph::ui::testing::detail::Callbacks']]],
-  ['clock_29',['clock',['../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#a071bca8aba970505c434c345a1c1634b',1,'morph::ui::SessionOptions']]],
+  ['clock_29',['clock',['../d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html#a42958fc971045b79ae63343fe0065df8',1,'morph::ui::MemoryFileStoreOptions::clock'],['../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#a071bca8aba970505c434c345a1c1634b',1,'morph::ui::SessionOptions::clock']]],
   ['coalesce_30',['coalesce',['../da/dba/structmorph_1_1model_1_1ActionLogPolicy.html#a2da3306697c2b77909bef7eea39ee668',1,'morph::model::ActionLogPolicy']]],
   ['code_31',['code',['../d2/db3/structmorph_1_1table_1_1TableError.html#a58b8836d6c60d0fcc67c1a2094d02658',1,'morph::table::TableError']]],
   ['collapsed_32',['collapsed',['../dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#ae9256b3bd78a9379ed49d6beb38112c3',1,'morph::ui::author::PanelOptions::collapsed'],['../d4/d64/structmorph_1_1ui_1_1Panel.html#a60e9f7458e2b6298ae25d30a82a353e7',1,'morph::ui::Panel::collapsed']]],

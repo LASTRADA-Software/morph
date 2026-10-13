@@ -5,6 +5,7 @@ var interpreter_8hpp =
     [ "morph::ui::Dispatcher", "d5/d80/classmorph_1_1ui_1_1Dispatcher.html", "d5/d80/classmorph_1_1ui_1_1Dispatcher" ],
     [ "morph::ui::BridgeDispatcher", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher" ],
     [ "morph::ui::NavigateRequest", "dc/d75/structmorph_1_1ui_1_1NavigateRequest.html", "dc/d75/structmorph_1_1ui_1_1NavigateRequest" ],
+    [ "morph::ui::UploadRequest", "d9/ddd/structmorph_1_1ui_1_1UploadRequest.html", "d9/ddd/structmorph_1_1ui_1_1UploadRequest" ],
     [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost" ],
     [ "morph::ui::SessionOptions", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html", "d4/d0c/structmorph_1_1ui_1_1SessionOptions" ],
     [ "morph::ui::detail::OptimisticLayer", "de/d52/structmorph_1_1ui_1_1detail_1_1OptimisticLayer.html", "de/d52/structmorph_1_1ui_1_1detail_1_1OptimisticLayer" ],

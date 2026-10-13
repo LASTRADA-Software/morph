@@ -30,7 +30,7 @@ var searchData=
   ['singleton_27',['singleton',['../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html#a098d6e11adfabd98c4916a2926b3af87',1,'morph::ui::CatalogEntry']]],
   ['sink_28',['sink',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570',1,'morph::journal::OutboxRelay']]],
   ['site_29',['site',['../dc/d5d/structmorph_1_1testing_1_1OwnerProbeRecorder_1_1Seen.html#a8647d69dc7f2a22d17bf9d0ef4798e70',1,'morph::testing::OwnerProbeRecorder::Seen']]],
-  ['size_30',['size',['../d8/d93/structmorph_1_1ui_1_1ManifestFile.html#a2879c4c1485f2ffa21eff164e9127244',1,'morph::ui::ManifestFile']]],
+  ['size_30',['size',['../d8/d93/structmorph_1_1ui_1_1ManifestFile.html#a2879c4c1485f2ffa21eff164e9127244',1,'morph::ui::ManifestFile::size'],['../d3/d58/structmorph_1_1ui_1_1FileRequest.html#a37b1b41742190e59ea440110ce5b72a1',1,'morph::ui::FileRequest::size'],['../d2/d7e/structmorph_1_1ui_1_1FileInfo.html#aeb5b67cf84526709d33806b9daf2cd5a',1,'morph::ui::FileInfo::size']]],
   ['sizes_31',['sizes',['../d7/d07/structmorph_1_1ui_1_1Splitter.html#abbdfcc8dba1b514fa81c0e310b7f7d3c',1,'morph::ui::Splitter']]],
   ['sleep_32',['sleep',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a5a256ea38f2a9cb7adef0aaf8bc17cf1',1,'morph::offline::ReconnectCoordinator::Deps']]],
   ['slide_33',['slide',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a8d4b1ccfdf7644304b097029e69f929f',1,'morph::ui::testing::detail::Callbacks']]],

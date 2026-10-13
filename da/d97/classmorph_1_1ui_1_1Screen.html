@@ -165,7 +165,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <div class="textblock"><p>A mounted screen: its scopes, its view mounted through <span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html" title="A view tree mounted on a backend: its widgets, built once, and the bindings that keep them current.">Mounted</a></span>, and what its host asks of it. </p>
 <p>Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and the backend outlive it. Destroying it runs <span class="tt">onUnmount</span>, unmounts the view and releases every scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01837">1837</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01860">1860</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a59328acdd48a28a5e5e2195c8f2d3ed6" name="a59328acdd48a28a5e5e2195c8f2d3ed6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a59328acdd48a28a5e5e2195c8f2d3ed6">&#9670;&#160;</a></span>~Screen()</h2>
@@ -192,7 +192,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 
 <p>Runs <span class="tt">onUnmount</span>, then unmounts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01845">1845</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01868">1868</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,7 +223,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The root widget. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01858">1858</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01881">1881</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +253,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The document's id. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01867">1867</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01890">1890</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +289,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value; <span class="tt">null</span> for an expression that does not parse. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01873">1873</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01896">1896</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,7 +319,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a9d170f37684ec1cf1d5f5425b050925d" title="Evaluates the document&#39;s title.">title</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01883">1883</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01906">1906</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +349,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a965ff0074fb10c900a0a1671aa9e9036" title="Evaluates the document&#39;s identity.">identity</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01887">1887</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01910">1910</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +379,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a0a329ba938eb00c0038c0c211729d8f4" title="Evaluates the document&#39;s dirty.">dirty</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is <span class="tt">true</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01891">1891</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01914">1914</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -409,7 +409,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Runs <span class="tt">onClose</span>, as the host does before it closes the screen. </p>
 <dl class="section return"><dt>Returns</dt><dd>False when <span class="tt">onClose</span> ran <span class="tt">cancelClose</span>: the screen stays open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01899">1899</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01922">1922</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -444,7 +444,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01909">1909</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01932">1932</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +474,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The diagnostics reported so far, each path and reason once. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01917">1917</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01940">1940</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -515,7 +515,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it fits and was taken. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01924">1924</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01947">1947</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -551,7 +551,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its channel and token; an empty channel when it has none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04723">4723</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04752">4752</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

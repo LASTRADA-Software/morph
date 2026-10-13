@@ -45,7 +45,7 @@ var searchData=
   ['ispulling_42',['isPulling',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#a86a9841fa1909b01f40b8bf3ff3144b8',1,'morph::reactive::detail::Node']]],
   ['isreset_43',['isReset',['../d8/d7d/structmorph_1_1table_1_1ViewChange.html#a29e3d74c6853bca07eafd7b0f75d959f',1,'morph::table::ViewChange']]],
   ['isserial_44',['isSerial',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#a40e82378c8523f0274f810f3800ce5ce',1,'morph::exec::IExecutor::isSerial()'],['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a8cc0d37645e4c7e0e7a3f0d2725cc351',1,'morph::exec::ThreadPoolExecutor::isSerial()']]],
-  ['issue_45',['issue',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33',1,'morph::session::TokenIssuer']]],
+  ['issue_45',['issue',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33',1,'morph::session::TokenIssuer::issue()'],['../d6/d37/classmorph_1_1ui_1_1IFileStore.html#a78c16a42cb0445c29ef7c1925952a576',1,'morph::ui::IFileStore::issue()'],['../d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html#a03d01a1dfe0739dace8811f98bc45d3d',1,'morph::ui::MemoryFileStore::issue()']]],
   ['iszero_46',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
   ['italianplural_47',['italianPlural',['../d5/d8c/message_8hpp.html#a75f7d7144a615220a650074aabf7ff47',1,'morph::ui::detail']]],
   ['itemof_48',['itemOf',['../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a0918e493863c2201b5cd06d80a42dbf7',1,'morph::qt_quick::Backend']]]

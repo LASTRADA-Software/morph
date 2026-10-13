@@ -159,6 +159,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-hello</span> reply.  <a href="../../d3/d85/structmorph_1_1ui_1_1HelloReply.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AEvaluateReply" id="r_morph_3A_3Aui_3A_3AEvaluateReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html">morph::ui::EvaluateReply</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-evaluate</span> reply: what <span class="tt">ActionDispatcher::evaluate</span> answered.  <a href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AFileRequest" id="r_morph_3A_3Aui_3A_3AFileRequest"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d58/structmorph_1_1ui_1_1FileRequest.html">morph::ui::FileRequest</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-file</span> request: one step of an upload or a download, named by <span class="tt"><a class="el" href="../../d3/d58/structmorph_1_1ui_1_1FileRequest.html#a51f8d759934e61d8cddb5898c9c2d901" title="begin, chunk, end or read.">op</a></span>.  <a href="../../d3/d58/structmorph_1_1ui_1_1FileRequest.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AFileReply" id="r_morph_3A_3Aui_3A_3AFileReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d81/structmorph_1_1ui_1_1FileReply.html">morph::ui::FileReply</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-file</span> reply: the members its <span class="tt">op</span> answers, the others absent.  <a href="../../da/d81/structmorph_1_1ui_1_1FileReply.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACatalogEntry" id="r_morph_3A_3Aui_3A_3ACatalogEntry"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">morph::ui::CatalogEntry</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One catalog entry (spec 6 §8).  <a href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACatalogReply" id="r_morph_3A_3Aui_3A_3ACatalogReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">morph::ui::CatalogReply</a></td></tr>
@@ -198,6 +202,10 @@ Functions</h2></td></tr>
 <tr class="memdesc:a86a899a26869656920ddc21d4a69bc1d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-hello</span> reply body.  <br /></td></tr>
 <tr class="memitem:a5b0b0410e905040be17892331b4c133e" id="r_a5b0b0410e905040be17892331b4c133e"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html">EvaluateReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5b0b0410e905040be17892331b4c133e">morph::ui::parseEvaluateReply</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a5b0b0410e905040be17892331b4c133e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-evaluate</span> reply body.  <br /></td></tr>
+<tr class="memitem:aa24171e20cf33945c5a032a7b9d74536" id="r_aa24171e20cf33945c5a032a7b9d74536"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d3/d58/structmorph_1_1ui_1_1FileRequest.html">FileRequest</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa24171e20cf33945c5a032a7b9d74536">morph::ui::parseFileRequest</a> (std::string_view text)</td></tr>
+<tr class="memdesc:aa24171e20cf33945c5a032a7b9d74536"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-file</span> request body.  <br /></td></tr>
+<tr class="memitem:a2d5e205b37ffabed6ec1de7452a35c3e" id="r_a2d5e205b37ffabed6ec1de7452a35c3e"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../da/d81/structmorph_1_1ui_1_1FileReply.html">FileReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2d5e205b37ffabed6ec1de7452a35c3e">morph::ui::parseFileReply</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a2d5e205b37ffabed6ec1de7452a35c3e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-file</span> reply body.  <br /></td></tr>
 <tr class="memitem:a6d7521f837bdcd48dccbf5cbdfa267aa" id="r_a6d7521f837bdcd48dccbf5cbdfa267aa"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">CatalogReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6d7521f837bdcd48dccbf5cbdfa267aa">morph::ui::parseCatalogReply</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a6d7521f837bdcd48dccbf5cbdfa267aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-catalog</span> reply body.  <br /></td></tr>
 <tr class="memitem:acb37e0b120545faa7a4daff4c672d9d1" id="r_acb37e0b120545faa7a4daff4c672d9d1"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../dc/da0/structmorph_1_1ui_1_1FetchRequest.html">FetchRequest</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acb37e0b120545faa7a4daff4c672d9d1">morph::ui::parseFetchRequest</a> (std::string_view text)</td></tr>
@@ -215,6 +223,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:a06c23d8772feec7e0d1a12dbc9ea3667"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind that fetches a file by its hash.  <br /></td></tr>
 <tr class="memitem:acf615e33205ba746ffd92c80f8c1a2a1" id="r_acf615e33205ba746ffd92c80f8c1a2a1"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#acf615e33205ba746ffd92c80f8c1a2a1">morph::ui::kEvaluateKind</a> = &quot;ui-evaluate&quot;</td></tr>
 <tr class="memdesc:acf615e33205ba746ffd92c80f8c1a2a1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind that evaluates an action body without running it (spec 5 §7).  <br /></td></tr>
+<tr class="memitem:a2eea034c10720ed6f6d1c9efc0060b7a" id="r_a2eea034c10720ed6f6d1c9efc0060b7a"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a2eea034c10720ed6f6d1c9efc0060b7a">morph::ui::kFileKind</a> = &quot;ui-file&quot;</td></tr>
+<tr class="memdesc:a2eea034c10720ed6f6d1c9efc0060b7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind of the file side channel (<span class="tt">files/1</span>, spec 6 §18): uploads and downloads in chunks.  <br /></td></tr>
 <tr class="memitem:aaf94945c0612a24acce5c1f47b3e8e41" id="r_aaf94945c0612a24acce5c1f47b3e8e41"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#aaf94945c0612a24acce5c1f47b3e8e41">morph::ui::kServiceModel</a> = &quot;ui&quot;</td></tr>
 <tr class="memdesc:aaf94945c0612a24acce5c1f47b3e8e41"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pseudo-model the service's envelopes are authorised under: <span class="tt">authorize(session, "ui", &lt;action&gt;)</span>.  <br /></td></tr>
 <tr class="memitem:a4621107250860ffb9a50b78c27ec8039" id="r_a4621107250860ffb9a50b78c27ec8039"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a4621107250860ffb9a50b78c27ec8039">morph::ui::kHelloAction</a> = &quot;hello&quot;</td></tr>
@@ -227,6 +237,10 @@ Variables</h2></td></tr>
 <tr class="memdesc:a6dd37a08e909f1be16dc50c78f77cfce"><td class="mdescLeft">&#160;</td><td class="mdescRight">The prefix of a content hash.  <br /></td></tr>
 <tr class="memitem:a6509c9f7d0ea4af3ac00bde1e8dce023" id="r_a6509c9f7d0ea4af3ac00bde1e8dce023"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a6509c9f7d0ea4af3ac00bde1e8dce023">morph::ui::kHashDigits</a> = 64</td></tr>
 <tr class="memdesc:a6509c9f7d0ea4af3ac00bde1e8dce023"><td class="mdescLeft">&#160;</td><td class="mdescRight">The hexadecimal digits of a SHA-256 digest.  <br /></td></tr>
+<tr class="memitem:a0212bed079eaa7757c1a4965685710fd" id="r_a0212bed079eaa7757c1a4965685710fd"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a0212bed079eaa7757c1a4965685710fd">morph::ui::kMaxFileChunkBytes</a> = std::size_t{256} * 1024</td></tr>
+<tr class="memdesc:a0212bed079eaa7757c1a4965685710fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most file bytes one <span class="tt">ui-file</span> chunk carries, before base64url.  <br /></td></tr>
+<tr class="memitem:a4e9c40847b18f61906bfd26260165db4" id="r_a4e9c40847b18f61906bfd26260165db4"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a4e9c40847b18f61906bfd26260165db4">morph::ui::kMaxFileRequestBytes</a> = (<a class="el" href="#a0212bed079eaa7757c1a4965685710fd">kMaxFileChunkBytes</a> / 3 * 4) + (std::size_t{4} * 1024)</td></tr>
+<tr class="memdesc:a4e9c40847b18f61906bfd26260165db4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest <span class="tt">ui-file</span> request body a server reads: a chunk in base64url, and the rest of the request.  <br /></td></tr>
 <tr class="memitem:a316eda47034be2e2174d312528679f70" id="r_a316eda47034be2e2174d312528679f70"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a316eda47034be2e2174d312528679f70">morph::ui::kMaxRequestBytes</a> = std::size_t{64} * 1024</td></tr>
 <tr class="memdesc:a316eda47034be2e2174d312528679f70"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest request body (<span class="tt">ui-hello</span>, <span class="tt">ui-fetch</span>) a server reads.  <br /></td></tr>
 <tr class="memitem:ab3522276f59bad162fb9ab02cf36f55c" id="r_ab3522276f59bad162fb9ab02cf36f55c"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ab3522276f59bad162fb9ab02cf36f55c">morph::ui::kMaxFileBytes</a> = std::size_t{4} * 1024 * 1024</td></tr>
@@ -288,7 +302,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The hash. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +338,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">sha256:</span> followed by exactly 64 lower-case hexadecimal digits. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -365,7 +379,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00348">348</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -418,7 +432,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00319">319</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +493,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The message, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00416">416</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -523,7 +537,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +578,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -617,7 +631,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the list is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -664,7 +678,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the map is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -700,7 +714,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -736,7 +750,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The manifest, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -772,7 +786,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00553">553</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -808,7 +822,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -844,7 +858,79 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00612">612</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa24171e20cf33945c5a032a7b9d74536" name="aa24171e20cf33945c5a032a7b9d74536"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa24171e20cf33945c5a032a7b9d74536">&#9670;&#160;</a></span>parseFileRequest()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; FileRequest, std::string &gt; morph::ui::parseFileRequest </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads a <span class="tt">ui-file</span> request body. </p>
+<p>Refused: a body longer than <span class="tt">kMaxFileRequestBytes</span>, text that is not JSON or nests too deep, a must-understand key, or an <span class="tt">op</span> that is not <span class="tt">begin</span>, <span class="tt">chunk</span>, <span class="tt">end</span> or <span class="tt">read</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The request body. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00633">633</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2d5e205b37ffabed6ec1de7452a35c3e" name="a2d5e205b37ffabed6ec1de7452a35c3e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2d5e205b37ffabed6ec1de7452a35c3e">&#9670;&#160;</a></span>parseFileReply()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; FileReply, std::string &gt; morph::ui::parseFileReply </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads a <span class="tt">ui-file</span> reply body. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The reply body. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00651">651</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -880,7 +966,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00662">662</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -916,7 +1002,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00690">690</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1051,6 +1137,32 @@ template&lt;typename T&gt; </div>
 
 </div>
 </div>
+<a id="a2eea034c10720ed6f6d1c9efc0060b7a" name="a2eea034c10720ed6f6d1c9efc0060b7a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2eea034c10720ed6f6d1c9efc0060b7a">&#9670;&#160;</a></span>kFileKind</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::kFileKind = &quot;ui-file&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The envelope kind of the file side channel (<span class="tt">files/1</span>, spec 6 §18): uploads and downloads in chunks. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aaf94945c0612a24acce5c1f47b3e8e41" name="aaf94945c0612a24acce5c1f47b3e8e41"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaf94945c0612a24acce5c1f47b3e8e41">&#9670;&#160;</a></span>kServiceModel</h2>
 
@@ -1073,7 +1185,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-model the service's envelopes are authorised under: <span class="tt">authorize(session, "ui", &lt;action&gt;)</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1099,7 +1211,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates <span class="tt">ui-hello</span>, and the fetch of a public file or the manifest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1125,7 +1237,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates <span class="tt">ui-catalog</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1151,7 +1263,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates the fetch of a file that is not public. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1177,7 +1289,7 @@ template&lt;typename T&gt; </div>
 
 <p>The prefix of a content hash. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1203,7 +1315,59 @@ template&lt;typename T&gt; </div>
 
 <p>The hexadecimal digits of a SHA-256 digest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0212bed079eaa7757c1a4965685710fd" name="a0212bed079eaa7757c1a4965685710fd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0212bed079eaa7757c1a4965685710fd">&#9670;&#160;</a></span>kMaxFileChunkBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxFileChunkBytes = std::size_t{256} * 1024</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The most file bytes one <span class="tt">ui-file</span> chunk carries, before base64url. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4e9c40847b18f61906bfd26260165db4" name="a4e9c40847b18f61906bfd26260165db4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4e9c40847b18f61906bfd26260165db4">&#9670;&#160;</a></span>kMaxFileRequestBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxFileRequestBytes = (kMaxFileChunkBytes / 3 * 4) + (std::size_t{4} * 1024)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The largest <span class="tt">ui-file</span> request body a server reads: a chunk in base64url, and the rest of the request. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1229,7 +1393,7 @@ template&lt;typename T&gt; </div>
 
 <p>The largest request body (<span class="tt">ui-hello</span>, <span class="tt">ui-fetch</span>) a server reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1255,7 +1419,7 @@ template&lt;typename T&gt; </div>
 
 <p>The largest file a bundle may hold, and a client accepts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1281,7 +1445,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most files a manifest, and entries a catalog, may list. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1307,7 +1471,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most action ids, model facts or action facts a catalog may carry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1333,7 +1497,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most items of a list or map in a <span class="tt">ui-hello</span> (vocabularies, host components, commands, values). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1359,7 +1523,7 @@ template&lt;typename T&gt; </div>
 
 <p>The longest name: an id, a kind, a vocabulary, a host name, an application id or version. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1385,7 +1549,7 @@ template&lt;typename T&gt; </div>
 
 <p>The file kinds of a manifest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1411,7 +1575,7 @@ template&lt;typename T&gt; </div>
 
 <p>The app document (spec 6 §5). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1437,7 +1601,7 @@ template&lt;typename T&gt; </div>
 
 <p>A theme (<span class="tt">ui-theme/1</span>, spec 6 §6). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1463,7 +1627,7 @@ template&lt;typename T&gt; </div>
 
 <p>A message catalogue. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1489,7 +1653,7 @@ template&lt;typename T&gt; </div>
 
 <p>A delivered custom component (spec 5 §10). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>

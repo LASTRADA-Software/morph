@@ -145,7 +145,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Collects an application's screens and files and builds the bundle the UI service serves. </p>
 <p>Built once, before the service answers anything; <span class="tt"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923" title="Builds the bundle.">build</a></span> copies everything into an immutable <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>. A screen authored with the C++ builders is added by its emitted text, so an authoring registry feeds this one through <span class="tt"><a class="el" href="#aeffd84aad6901012d278b55fff460242" title="Registers a screen: its catalog entry and its document.">addScreen</a></span> without either depending on the other. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad9d853d15da0d8f07b0a334895a82571" name="ad9d853d15da0d8f07b0a334895a82571"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad9d853d15da0d8f07b0a334895a82571">&#9670;&#160;</a></span>UiRegistry()</h2>
@@ -183,7 +183,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,7 +225,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -261,7 +261,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -297,7 +297,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,7 +332,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,7 +362,7 @@ Public Member Functions</h2></td></tr>
 <p>Builds the bundle. </p>
 <p>Refused when a screen names a delivered component (<span class="tt">qml</span>) whose hash no <span class="tt">component</span> file has, when the bundle holds more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a26b6188a56f040e6d44027d4e379f33b" title="The most files a manifest, and entries a catalog, may list.">kMaxBundleFiles</a></span> files or entries, and when it needs more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a3602898655368bce825c85533dbfcfe0" title="The most items of a list or map in a ui-hello (vocabularies, host components, commands,...">kMaxListItems</a></span> vocabularies or a vocabulary name longer than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>. </p><dl class="section return"><dt>Returns</dt><dd>The bundle, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

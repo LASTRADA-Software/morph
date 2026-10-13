@@ -23,9 +23,10 @@ var searchData=
   ['documentparser_20',['DocumentParser',['../dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser.html',1,'morph::ui::detail']]],
   ['documentrefused_21',['DocumentRefused',['../de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html',1,'morph::ui::detail']]],
   ['documentvalidator_22',['DocumentValidator',['../d5/d14/classmorph_1_1ui_1_1detail_1_1DocumentValidator.html',1,'morph::ui::detail']]],
-  ['drawer_23',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
-  ['drawerwidget_24',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
-  ['dropzone_25',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
-  ['dropzoneoptions_26',['DropZoneOptions',['../d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html',1,'morph::ui::author']]],
-  ['dropzonewidget_27',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
+  ['downloadedfile_23',['DownloadedFile',['../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html',1,'morph::ui']]],
+  ['drawer_24',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
+  ['drawerwidget_25',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
+  ['dropzone_26',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
+  ['dropzoneoptions_27',['DropZoneOptions',['../d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html',1,'morph::ui::author']]],
+  ['dropzonewidget_28',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
 ];

@@ -22,5 +22,5 @@ var searchData=
   ['bridge_19',['bridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html#abcbca1f1a4eeac47622ef500ef79d471',1,'morph::qt::bridge::detail::OwnedLocalBridge']]],
   ['built_20',['built',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a95de305bcd85eac7ef683904b0a68463',1,'morph::ui::FrontendError']]],
   ['bundle_21',['bundle',['../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html#a4373aa81adddc26d8fa30c6129e5ac9b',1,'morph::ui::LoadedBundle']]],
-  ['bytes_22',['bytes',['../d6/d26/structmorph_1_1ui_1_1ServedFile.html#a7a6a663f93cccf8f7695f3ce62181ba2',1,'morph::ui::ServedFile::bytes'],['../db/d11/structmorph_1_1ui_1_1BundleFile.html#a325b5d7b3584723f068902496a3d5ae3',1,'morph::ui::BundleFile::bytes']]]
+  ['bytes_22',['bytes',['../d4/d03/structmorph_1_1ui_1_1FileSlice.html#adedcaa5d5b3ae2f3f10deb99099588fe',1,'morph::ui::FileSlice::bytes'],['../d6/d26/structmorph_1_1ui_1_1ServedFile.html#a7a6a663f93cccf8f7695f3ce62181ba2',1,'morph::ui::ServedFile::bytes'],['../db/d11/structmorph_1_1ui_1_1BundleFile.html#a325b5d7b3584723f068902496a3d5ae3',1,'morph::ui::BundleFile::bytes'],['../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html#aaa21cbc7551eb21c2e7cbe8d0a941b5f',1,'morph::ui::DownloadedFile::bytes']]]
 ];

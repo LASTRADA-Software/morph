@@ -160,6 +160,8 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 <tr class="memdesc:a6866bf1617bd94e0048b04a60325b80d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes <span class="tt">app.name</span> with <span class="tt">set</span> (spec 6 §5).  <br /></td></tr>
 <tr class="memitem:ab78043816cfecddb91537d09372ebf48" id="r_ab78043816cfecddb91537d09372ebf48"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#ab78043816cfecddb91537d09372ebf48">upload</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;file, std::function&lt; void(<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>)&gt; progress, std::function&lt; void(std::expected&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>, std::string &gt;)&gt; done)</td></tr>
 <tr class="memdesc:ab78043816cfecddb91537d09372ebf48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a file through the server's file side channel (<span class="tt">files/1</span>).  <br /></td></tr>
+<tr class="memitem:a6458f0bc280e5bd67aee23c586fda1dc" id="r_a6458f0bc280e5bd67aee23c586fda1dc"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a6458f0bc280e5bd67aee23c586fda1dc">uploadFor</a> (<a class="el" href="../../d9/ddd/structmorph_1_1ui_1_1UploadRequest.html">UploadRequest</a> const &amp;request, std::function&lt; void(<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>)&gt; progress, std::function&lt; void(std::expected&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>, std::string &gt;)&gt; done)</td></tr>
+<tr class="memdesc:a6458f0bc280e5bd67aee23c586fda1dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a file through the server's file side channel, knowing the mutation that will reference it. The interpreter calls this one; the default calls <span class="tt"><a class="el" href="#ab78043816cfecddb91537d09372ebf48" title="Sends a file through the server&#39;s file side channel (files/1).">upload</a>(file, …)</span>, so a host that overrides only that keeps working.  <br /></td></tr>
 <tr class="memitem:a6bac462c1175a7d0e5110c525fdbfbe4" id="r_a6bac462c1175a7d0e5110c525fdbfbe4"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a6bac462c1175a7d0e5110c525fdbfbe4">download</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;file, std::string const &amp;option, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;name, std::function&lt; void(std::expected&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>, std::string &gt;)&gt; done)</td></tr>
 <tr class="memdesc:a6bac462c1175a7d0e5110c525fdbfbe4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches a file by reference to save it, or to a local temporary reference for a viewer.  <br /></td></tr>
 <tr class="memitem:a8b9c1e20321481e181ce2fbd3c54d6d6" id="r_a8b9c1e20321481e181ce2fbd3c54d6d6"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a8b9c1e20321481e181ce2fbd3c54d6d6">preferenceChanged</a> (std::string const &amp;screen, std::string const &amp;point, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
@@ -170,7 +172,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the application answers for the commands a document cannot carry out alone (spec 6). Every default answers "not supported", which the interpreter reports as a diagnostic. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6b76ddb0f199f53e12cf5d785e89862d" name="a6b76ddb0f199f53e12cf5d785e89862d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6b76ddb0f199f53e12cf5d785e89862d">&#9670;&#160;</a></span>navigate()</h2>
@@ -215,7 +217,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the host opened it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +258,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the screen was opened as something that can end. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00226">226</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -297,7 +299,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether focus moved. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,7 +340,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the command exists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +376,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is listed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -414,7 +416,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +451,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -490,7 +492,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it was shown. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -526,7 +528,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the host installed it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -555,7 +557,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 
 <p>Ends the session. The interpreter has already cleared the session's query cache. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -596,7 +598,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the app document declares it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -643,7 +645,54 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the host can send files. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6458f0bc280e5bd67aee23c586fda1dc" name="a6458f0bc280e5bd67aee23c586fda1dc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6458f0bc280e5bd67aee23c586fda1dc">&#9670;&#160;</a></span>uploadFor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::ui::InterpreterHost::uploadFor </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/ddd/structmorph_1_1ui_1_1UploadRequest.html">UploadRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>progress</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(std::expected&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends a file through the server's file side channel, knowing the mutation that will reference it. The interpreter calls this one; the default calls <span class="tt"><a class="el" href="#ab78043816cfecddb91537d09372ebf48" title="Sends a file through the server&#39;s file side channel (files/1).">upload</a>(file, …)</span>, so a host that overrides only that keeps working. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">request</td><td>The file and the mutation. </td></tr>
+    <tr><td class="paramname">progress</td><td>Called with the progress, 0 to 1. </td></tr>
+    <tr><td class="paramname">done</td><td>Called once with the file's reference, or the failure's text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the host can send files. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -696,7 +745,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the host can fetch files. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -742,7 +791,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -771,7 +820,7 @@ InterpreterHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Inter
 
 <p>A call was refused with error kind <span class="tt">denied</span>: the permitted set is a snapshot, so the host asks the server again and calls <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html#a42fe016063e96da2b30601424bd2d1d9" title="Sets the action ids the principal may run, and the host:&lt;command&gt; names the client has,...">Session::setPermitted</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00355">355</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

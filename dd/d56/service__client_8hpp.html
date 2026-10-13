@@ -142,6 +142,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d56/service
 <code>#include &quot;../session/session.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">../ui/frontend.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../dd/dc1/file__store_8hpp_source.html">file_store.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../dd/d56/service__client_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -157,6 +158,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A bundle the client verified: what the shell mounts, and what it was verified against.  <a href="../../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AUiClient" id="r_morph_3A_3Aui_3A_3AUiClient"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d97/classmorph_1_1ui_1_1UiClient.html">morph::ui::UiClient</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens an application's bundle through the UI service, verifying everything it fetches.  <a href="../../d1/d97/classmorph_1_1ui_1_1UiClient.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ADownloadedFile" id="r_morph_3A_3Aui_3A_3ADownloadedFile"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html">morph::ui::DownloadedFile</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A file a download brought back.  <a href="../../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AFileTransfer" id="r_morph_3A_3Aui_3A_3AFileTransfer"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/db2/classmorph_1_1ui_1_1FileTransfer.html">morph::ui::FileTransfer</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The client of the file side channel (<span class="tt">files/1</span>, spec 6 §18): uploads and downloads through <span class="tt">ui-file</span>, one chunk of at most <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a0212bed079eaa7757c1a4965685710fd" title="The most file bytes one ui-file chunk carries, before base64url.">kMaxFileChunkBytes</a></span> in flight at a time, reporting progress after each.  <a href="../../d5/db2/classmorph_1_1ui_1_1FileTransfer.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
@@ -192,7 +197,7 @@ Functions</h2></td></tr>
 
 <p>One reply, or why the transport could not deliver it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +215,7 @@ Functions</h2></td></tr>
 
 <p>Sends one request and calls its callback once with the reply. The transport assigns the request's <span class="tt">callId</span> and matches the reply to it; a failure to deliver either is the error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -247,7 +252,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value as JSON text, or why there is none: the transport's reason, the server's <span class="tt">err</span> message, or why the reply body was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00545">545</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +299,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The evaluator: the model's type id, the action id and its JSON body in, the query's value out. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00579">579</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
