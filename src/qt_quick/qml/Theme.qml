@@ -3,24 +3,27 @@ pragma Singleton
 import QtQuick
 
 // The colours and units every MorphUi component reads. A unit is the default font's average character width
-// horizontally and its line height vertically.
+// horizontally and its line height vertically. The colours and the stale opacity are the ui-theme/1 defaults;
+// qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
 QtObject {
     readonly property FontMetrics metrics: FontMetrics {}
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
     readonly property real spacing: unitHeight / 2
 
-    readonly property color text: "#1d1d1f"
-    readonly property color muted: "#6e6e73"
-    readonly property color error: "#c62828"
-    readonly property color success: "#2e7d32"
-    readonly property color info: "#1565c0"
-    readonly property color warn: "#b26a00"
-    readonly property color neutral: "#e5e5ea"
-    readonly property color surface: "#ffffff"
-    readonly property color border: "#c7c7cc"
-    readonly property color selection: "#cfe3ff"
-    readonly property real staleOpacity: 0.55
+    property color text: "#1d1d1f"
+    property color muted: "#6e6e73"
+    property color error: "#c62828"
+    property color success: "#2e7d32"
+    property color info: "#1565c0"
+    property color warn: "#b26a00"
+    property color neutral: "#e5e5ea"
+    property color surface: "#ffffff"
+    property color border: "#c7c7cc"
+    property color selection: "#cfe3ff"
+    property color accent: "#1565c0"
+    property color focus: "#1565c0"
+    property real staleOpacity: 0.55
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.
     function textColor(role: int): color {
