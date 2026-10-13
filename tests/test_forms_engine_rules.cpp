@@ -241,6 +241,10 @@ TEST_CASE("RuleExpr: presentation verdicts combine every rule naming the field",
     CHECK(morph::forms::requiredVerdict(rules, "discount", fields.lookup()) == Tri::True);
     CHECK(morph::forms::readonlyVerdict(rules, "total", fields.lookup()) == Tri::True);
     CHECK(morph::forms::gatingVerdict(rules, fields.lookup()) == Tri::False);  // discount now required, blank
+    // A field no rule of the kind names is shown, editable and not required by rules.
+    CHECK(morph::forms::readonlyVerdict(rules, "discount", fields.lookup()) == Tri::False);
+    CHECK(morph::forms::requiredVerdict(rules, "total", fields.lookup()) == Tri::False);
+    CHECK(morph::forms::visibleVerdict(rules, "elsewhere", fields.lookup()) == Tri::True);
 }
 
 TEST_CASE("RuleExpr: a presentation rule applies to every field it names, not only the first",
