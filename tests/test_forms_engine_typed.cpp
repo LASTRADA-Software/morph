@@ -18,7 +18,7 @@
 struct FtSum {
     int a = 0;
     int b = 0;
-    std::optional<std::string> note{};
+    std::optional<std::string> note;
 
     // The action's own rule, which the schema cannot state: the form must not submit past it.
     [[nodiscard]] bool validate() const { return a < 100; }

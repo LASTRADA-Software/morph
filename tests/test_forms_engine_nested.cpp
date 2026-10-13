@@ -124,7 +124,7 @@ TEST_CASE("nested: two levels deep, blank optional leaves and objects are left o
     CHECK(form->body() ==
           R"({"data":{"useSpecificGravity":false,"testLiquidTemperature":25.0,"testLiquidName":"water",)"
           R"("determination1":{"massPycnometerEmpty":1450.10,"massPycnometerAndSample":3450.25,"excluded":false}}})");
-    form->reset();
+    (*form).reset();
     harness.settle();
     harness.type(*form, "data.useSpecificGravity", "true");
     harness.type(*form, "data.testLiquidName", "  ");
@@ -162,7 +162,7 @@ TEST_CASE("nested: a prefill decodes into the members and round-trips", "[forms-
         form->body() ==
         R"({"data":{"useSpecificGravity":false,"testLiquidTemperature":25.5,"determination1":{"massPycnometerEmpty":1450.10,)"
         R"("massPycnometerAndSample":3450.25,"excluded":true,"computedDensity":2.412}}})");
-    form->reset();
+    (*form).reset();
     harness.settle();
     CHECK(form->field("data").blank());
     CHECK_FALSE(form->ready());
@@ -217,7 +217,7 @@ TEST_CASE("nested: loaded cells read as their text; a reset empties the rows", "
     harness.settle();
     CHECK(form->body() == R"({"rows":[{"sieve":2.5,"passing":{"num":30,"den":10,"dp":1},"order":7}]})");
     CHECK(form->field("rows[0].passing").text().peek() == "3.0");
-    form->reset();
+    (*form).reset();
     harness.settle();
     CHECK(form->field("rows").rows().empty());
     CHECK(form->body() == R"({"rows":[]})");

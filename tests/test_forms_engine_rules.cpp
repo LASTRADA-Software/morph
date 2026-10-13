@@ -35,15 +35,17 @@ namespace ui = morph::ui;
     return *std::move(parsed);
 }
 
-[[nodiscard]] RuleOperand valid(ui::Value value) { return RuleOperand{RuleOperand::State::Valid, std::move(value)}; }
-[[nodiscard]] RuleOperand invalid() { return RuleOperand{RuleOperand::State::Invalid, {}}; }
+[[nodiscard]] RuleOperand valid(ui::Value value) {
+    return RuleOperand{.state = RuleOperand::State::Valid, .value = std::move(value)};
+}
+[[nodiscard]] RuleOperand invalid() { return RuleOperand{.state = RuleOperand::State::Invalid, .value = {}}; }
 [[nodiscard]] ui::Value decimal(std::int64_t num, std::int64_t den, std::uint32_t places) {
     return ui::Decimal{Rational{Numerator{num}, Denominator{den}, DecimalPlaces{places}}};
 }
 
 /// The fields a rule sees; an absent name is blank.
 struct Fields {
-    std::map<std::string, RuleOperand, std::less<>> values{};
+    std::map<std::string, RuleOperand, std::less<>> values;
 
     [[nodiscard]] RuleLookup lookup() const {
         return [this](std::string_view name) {

@@ -121,7 +121,7 @@ TEST_CASE("FormSession: reset clears every draft and does not submit a form that
         "ResetResubmit", R"({"properties":{"note":{"type":["string","null"],"x-order":0}},"required":[]})");
     harness.type(*form, "note", "hello");
     auto const before = harness.server.submits().size();
-    form->reset();
+    (*form).reset();
     harness.settle();
     CHECK(form->ready());
     CHECK(form->field("note").text().peek().empty());
@@ -160,7 +160,7 @@ TEST_CASE("FormSession: a stored payload round-trips, absent members start blank
     CHECK(form->field("role").text().peek() == R"("B")");
     CHECK(form->field("tags").text().peek() == "a, b");
     harness.type(*form, "temperature", "22.00");
-    CHECK(form->body()->find(R"("temperature":22.00)") != std::string::npos);
+    CHECK(form->body()->contains(R"("temperature":22.00)"));
 
     form->prefill(R"({"id":5})");
     harness.settle();
@@ -186,7 +186,7 @@ TEST_CASE("FormSession: a stored payload round-trips, absent members start blank
     shifted->prefill(kStored);
     zoned.settle();
     CHECK(shifted->field("takenAt").text().peek() == "2026-07-20T11:00:00");
-    CHECK(shifted->body()->find(R"("takenAt":"2026-07-20T09:00:00Z")") != std::string::npos);
+    CHECK(shifted->body()->contains(R"("takenAt":"2026-07-20T09:00:00Z")"));
 }
 
 TEST_CASE("FormSession: x-blankAs empty submits \"\" once the field was filled, and only then",
@@ -223,7 +223,7 @@ TEST_CASE("FormSession: x-blankAs empty submits \"\" once the field was filled, 
     CHECK_FALSE(form->ready());
     CHECK(harness.server.submits().size() == before);
 
-    form->reset();
+    (*form).reset();
     harness.settle();
     harness.type(*form, "id", "8");
     harness.type(*form, "title", "U");
@@ -377,7 +377,7 @@ TEST_CASE("FormSession: an enum starts unselected, encodes the chosen literal an
     CHECK_FALSE(form->ready());
     harness.type(*form, "role", R"("Manager")");
     CHECK(form->body() == R"({"projectId":1,"principal":"bob","role":"Manager"})");
-    form->reset();
+    (*form).reset();
     harness.settle();
     CHECK(form->field("role").text().peek().empty());
     CHECK(form->field("principal").text().peek().empty());
