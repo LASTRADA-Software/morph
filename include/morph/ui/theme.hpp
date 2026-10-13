@@ -73,8 +73,8 @@ struct Rgba {
         static constexpr std::string_view kDigits = "0123456789abcdef";
         std::string out = "#";
         auto const put = [&out](std::uint8_t const channel) {
-            out += kDigits[static_cast<std::size_t>(channel >> 4U)];
-            out += kDigits[static_cast<std::size_t>(channel & 0xFU)];
+            out += kDigits.at(static_cast<std::size_t>(channel >> 4U));
+            out += kDigits.at(static_cast<std::size_t>(channel & 0xFU));
         };
         put(r);
         put(g);
@@ -133,27 +133,27 @@ namespace detail {
         return std::nullopt;
     }
     text.remove_prefix(1);
-    auto const digit = [](char const c) -> int {
-        if (c >= '0' && c <= '9') {
-            return c - '0';
+    auto const digit = [](char const symbol) -> int {
+        if (symbol >= '0' && symbol <= '9') {
+            return symbol - '0';
         }
-        if (c >= 'a' && c <= 'f') {
-            return c - 'a' + 10;
+        if (symbol >= 'a' && symbol <= 'f') {
+            return symbol - 'a' + 10;
         }
-        if (c >= 'A' && c <= 'F') {
-            return c - 'A' + 10;
+        if (symbol >= 'A' && symbol <= 'F') {
+            return symbol - 'A' + 10;
         }
         return -1;
     };
-    if (!std::ranges::all_of(text, [&digit](char const c) { return digit(c) >= 0; })) {
+    if (!std::ranges::all_of(text, [&digit](char const symbol) { return digit(symbol) >= 0; })) {
         return std::nullopt;
     }
-    auto const pair = [&digit, text](std::size_t const at) {
-        return static_cast<std::uint8_t>((digit(text[at]) * 16) + digit(text[at + 1]));
+    auto const pair = [&digit, text](std::size_t const offset) {
+        return static_cast<std::uint8_t>((digit(text.at(offset)) * 16) + digit(text.at(offset + 1)));
     };
     if (text.size() == 3) {
-        auto const single = [&digit, text](std::size_t const at) {
-            return static_cast<std::uint8_t>(digit(text[at]) * 17);
+        auto const single = [&digit, text](std::size_t const offset) {
+            return static_cast<std::uint8_t>(digit(text.at(offset)) * 17);
         };
         return Rgba{.r = single(0), .g = single(1), .b = single(2), .a = 255};
     }
@@ -272,51 +272,74 @@ inline constexpr std::array<std::string_view, 18> kFontWeights = {
         }
         channels.at(index) = *channel;
     }
-    return Rgba{.r = channels[0], .g = channels[1], .b = channels[2], .a = *opacity};
+    return Rgba{.r = channels.at(0), .g = channels.at(1), .b = channels.at(2), .a = *opacity};
 }
 
 namespace detail {
 
-inline std::optional<std::string> checkTokenValue(std::string_view type, Json const& value) {
+/// @brief Checks a `dimension` or a `duration`: an object of a number `value` and a known `unit`.
+/// @param type  `dimension` or `duration`.
+/// @param value The value.
+/// @return Why it is not one, or nothing.
+[[nodiscard]] inline std::optional<std::string> checkMeasure(std::string_view type, Json const& value) {
+    bool const dimension = type == "dimension";
     auto const* const object = std::get_if<Json::object_t>(&value.data);
+    Json const* const number = object != nullptr ? memberOf(*object, "value") : nullptr;
+    Json const* const unit = object != nullptr ? memberOf(*object, "unit") : nullptr;
+    auto const* const unitText = unit != nullptr ? std::get_if<std::string>(&unit->data) : nullptr;
+    std::array<std::string_view, 2> const units =
+        dimension ? std::array<std::string_view, 2>{"px", "rem"} : std::array<std::string_view, 2>{"ms", "s"};
+    bool const known = unitText != nullptr && std::ranges::find(units, *unitText) != units.end();
+    if (number != nullptr && numberOf(*number) && known) {
+        return std::nullopt;
+    }
+    return dimension ? std::string{"a dimension is an object of a number value and the unit px or rem"}
+                     : std::string{"a duration is an object of a number value and the unit ms or s"};
+}
+
+/// @brief Checks a `fontFamily`: a name, or a non-empty list of names.
+/// @param value The value.
+/// @return Why it is not one, or nothing.
+[[nodiscard]] inline std::optional<std::string> checkFontFamily(Json const& value) {
+    if (std::holds_alternative<std::string>(value.data)) {
+        return std::nullopt;
+    }
+    auto const* const names = std::get_if<Json::array_t>(&value.data);
+    bool const allNames = names != nullptr && !names->empty() && std::ranges::all_of(*names, [](Json const& name) {
+                              return std::holds_alternative<std::string>(name.data);
+                          });
+    return allNames ? std::nullopt : std::optional<std::string>{"a font family is a name or a list of names"};
+}
+
+/// @brief Checks a `fontWeight`: 1 to 1000, or a DTCG weight name.
+/// @param value The value.
+/// @return Why it is not one, or nothing.
+[[nodiscard]] inline std::optional<std::string> checkFontWeight(Json const& value) {
+    if (auto const number = numberOf(value)) {
+        return *number >= 1.0 && *number <= 1000.0 ? std::nullopt
+                                                   : std::optional<std::string>{"a weight is 1 to 1000"};
+    }
+    auto const* const name = std::get_if<std::string>(&value.data);
+    return name != nullptr && std::ranges::find(kFontWeights, *name) != kFontWeights.end()
+               ? std::nullopt
+               : std::optional<std::string>{"not a font weight"};
+}
+
+inline std::optional<std::string> checkTokenValue(std::string_view type, Json const& value) {
     if (type == "color") {
         return colorOf(value) ? std::nullopt : std::optional<std::string>{"not a colour in sRGB or hex"};
     }
     if (type == "dimension" || type == "duration") {
-        Json const* const number = object != nullptr ? memberOf(*object, "value") : nullptr;
-        Json const* const unit = object != nullptr ? memberOf(*object, "unit") : nullptr;
-        auto const* const unitText = unit != nullptr ? std::get_if<std::string>(&unit->data) : nullptr;
-        bool const known = unitText != nullptr && (type == "dimension" ? (*unitText == "px" || *unitText == "rem")
-                                                                       : (*unitText == "ms" || *unitText == "s"));
-        if (number == nullptr || !numberOf(*number) || !known) {
-            return type == "dimension"
-                       ? std::string{"a dimension is an object of a number value and the unit px or rem"}
-                       : std::string{"a duration is an object of a number value and the unit ms or s"};
-        }
-        return std::nullopt;
+        return checkMeasure(type, value);
     }
     if (type == "number") {
         return numberOf(value) ? std::nullopt : std::optional<std::string>{"not a number"};
     }
     if (type == "fontFamily") {
-        if (std::holds_alternative<std::string>(value.data)) {
-            return std::nullopt;
-        }
-        auto const* const names = std::get_if<Json::array_t>(&value.data);
-        bool const allNames = names != nullptr && !names->empty() && std::ranges::all_of(*names, [](Json const& name) {
-                                  return std::holds_alternative<std::string>(name.data);
-                              });
-        return allNames ? std::nullopt : std::optional<std::string>{"a font family is a name or a list of names"};
+        return checkFontFamily(value);
     }
     if (type == "fontWeight") {
-        if (auto const number = numberOf(value)) {
-            return *number >= 1.0 && *number <= 1000.0 ? std::nullopt
-                                                       : std::optional<std::string>{"a weight is 1 to 1000"};
-        }
-        auto const* const name = std::get_if<std::string>(&value.data);
-        return name != nullptr && std::ranges::find(kFontWeights, *name) != kFontWeights.end()
-                   ? std::nullopt
-                   : std::optional<std::string>{"not a font weight"};
+        return checkFontWeight(value);
     }
     return std::nullopt;
 }
@@ -332,6 +355,73 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
     return out;
 }
 
+/// @brief The `$type` an object declares, or the one it inherits.
+/// @param object    The group's or token's members.
+/// @param where     Its path with a trailing `.`, for the refusal.
+/// @param inherited The nearest enclosing `$type`.
+/// @return The type, or why the declaration is refused.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the path, then the type passed down, as readGroup takes them.
+[[nodiscard]] inline std::expected<std::string, std::string> declaredType(Json::object_t const& object,
+                                                                          std::string_view where,
+                                                                          std::string const& inherited) {
+    Json const* const declared = memberOf(object, "$type");
+    if (declared == nullptr) {
+        return inherited;
+    }
+    auto const* const text = std::get_if<std::string>(&declared->data);
+    if (text == nullptr) {
+        return std::unexpected(joined({"`", where, "$type` is a string"}));
+    }
+    return *text;
+}
+
+/// @brief Reads one token into @p out.
+/// @param path   The token's path.
+/// @param object The token's members.
+/// @param value  Its `$value`.
+/// @param type   The type it inherits.
+/// @param out    Where it goes.
+/// @return Why the file is refused, or nothing.
+[[nodiscard]] inline std::optional<std::string> readToken(std::string const& path, Json::object_t const& object,
+                                                          Json const& value, std::string const& type, TokenSet& out) {
+    auto tokenType = declaredType(object, path + ".", type);
+    if (!tokenType) {
+        return std::move(tokenType.error());
+    }
+    bool const alias = holdsAlias(value);
+    if (tokenType->empty()) {
+        if (alias && std::holds_alternative<std::string>(value.data)) {
+            out.insert_or_assign(path, Token{.type = {}, .value = value});
+            return std::nullopt;
+        }
+        return joined({"the token `", path, "` has no `$type`"});
+    }
+    if (std::ranges::find(kKnownTokenTypes, *tokenType) == kKnownTokenTypes.end()) {
+        return std::nullopt;
+    }
+    if (!alias) {
+        if (auto reason = checkTokenValue(*tokenType, value)) {
+            return joined({"the token `", path, "`: ", *reason});
+        }
+    }
+    out.insert_or_assign(path, Token{.type = std::move(*tokenType), .value = value});
+    return std::nullopt;
+}
+
+/// @brief Refuses a member name a token file may not have.
+/// @param prefix The group's path, with a trailing `.`.
+/// @param name   The member's name.
+/// @return Why it is refused, or nothing.
+[[nodiscard]] inline std::optional<std::string> checkMemberName(std::string const& prefix, std::string const& name) {
+    if (name.starts_with('!')) {
+        return joined({"the must-understand key `", prefix, name, "` is not understood"});
+    }
+    if (name.find_first_of(".{}") != std::string::npos) {
+        return joined({"the token or group name `", prefix, name, "` has `.`, `{` or `}`"});
+    }
+    return std::nullopt;
+}
+
 /// @brief Reads the tokens of one group into @p out.
 /// @param group     The group's members.
 /// @param prefix    The group's path, with a trailing `.`; empty at the top.
@@ -343,26 +433,19 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
 [[nodiscard]] inline std::optional<std::string> readGroup(Json::object_t const& group, std::string const& prefix,
                                                           std::string const& inherited, TokenSet& out) {
     // NOLINTEND(misc-no-recursion,bugprone-easily-swappable-parameters)
-    std::string type = inherited;
-    if (Json const* const declared = memberOf(group, "$type")) {
-        auto const* const text = std::get_if<std::string>(&declared->data);
-        if (text == nullptr) {
-            return "`" + prefix + "$type` is a string";
-        }
-        type = *text;
+    auto const type = declaredType(group, prefix, inherited);
+    if (!type) {
+        return type.error();
     }
     if (memberOf(group, "$extends") != nullptr) {
-        return "`" + prefix + "$extends`: group inheritance is not supported";
+        return joined({"`", prefix, "$extends`: group inheritance is not supported"});
     }
     for (auto const& [name, member] : group) {
         if (name.starts_with('$')) {
             continue;
         }
-        if (name.starts_with('!')) {
-            return joined({"the must-understand key `", prefix, name, "` is not understood"});
-        }
-        if (name.find_first_of(".{}") != std::string::npos) {
-            return joined({"the token or group name `", prefix, name, "` has `.`, `{` or `}`"});
+        if (auto reason = checkMemberName(prefix, name)) {
+            return reason;
         }
         auto const* const object = std::get_if<Json::object_t>(&member.data);
         if (object == nullptr) {
@@ -370,36 +453,14 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
         }
         std::string const path = prefix + name;
         Json const* const value = memberOf(*object, "$value");
-        if (value == nullptr) {
-            if (auto reason = readGroup(*object, path + ".", type, out)) {
-                return reason;
-            }
-            continue;
+        auto reason = value == nullptr ? readGroup(*object, path + ".", *type, out)
+                                       : readToken(path, *object, *value, *type, out);
+        if (reason) {
+            return reason;
         }
-        std::string tokenType = type;
-        if (Json const* const declared = memberOf(*object, "$type")) {
-            auto const* const text = std::get_if<std::string>(&declared->data);
-            if (text == nullptr) {
-                return joined({"`", path, ".$type` is a string"});
-            }
-            tokenType = *text;
-        }
-        bool const alias = holdsAlias(*value);
-        if (tokenType.empty() && !(alias && std::holds_alternative<std::string>(value->data))) {
-            return joined({"the token `", path, "` has no `$type`"});
-        }
-        if (!tokenType.empty() && std::ranges::find(kKnownTokenTypes, tokenType) == kKnownTokenTypes.end()) {
-            continue;
-        }
-        if (!alias && !tokenType.empty()) {
-            if (auto reason = checkTokenValue(tokenType, *value)) {
-                return joined({"the token `", path, "`: ", *reason});
-            }
-        }
-        if (out.size() >= kMaxThemeTokens) {
+        if (out.size() > kMaxThemeTokens) {
             return "a token file holds more than " + std::to_string(kMaxThemeTokens) + " tokens";
         }
-        out.insert_or_assign(path, Token{.type = std::move(tokenType), .value = *value});
     }
     return std::nullopt;
 }
@@ -442,8 +503,8 @@ private:
         }
         auto const found = _merged->find(path);
         if (found == _merged->end()) {
-            return "`" + (_chain.empty() ? path : _chain.back()) + "` refers to `" + path +
-                   "`, which no token file of the variant has";
+            // Only an alias names a path the set may lack, and the aliasing token is on the chain.
+            return "`" + _chain.back() + "` refers to `" + path + "`, which no token file of the variant has";
         }
         _chain.push_back(path);
         Token token = found->second;
@@ -522,11 +583,11 @@ private:
         return "`" + std::string{key} + "` is an object of name to token file";
     }
     for (auto const& [name, file] : *object) {
-        auto const* const id = std::get_if<std::string>(&file.data);
-        if (id == nullptr || id->empty()) {
+        auto const* const fileId = std::get_if<std::string>(&file.data);
+        if (fileId == nullptr || fileId->empty()) {
             return "`" + std::string{key} + "." + name + "` names a token file";
         }
-        out.insert_or_assign(name, *id);
+        out.insert_or_assign(name, *fileId);
     }
     return std::nullopt;
 }
@@ -617,14 +678,14 @@ private:
         if (key == "vocab" || key == "density" || key == "surfaces" || key == "icons") {
             continue;
         }
-        auto const* const id = std::get_if<std::string>(&member.data);
-        if (id == nullptr || id->empty()) {
+        auto const* const fileId = std::get_if<std::string>(&member.data);
+        if (fileId == nullptr || fileId->empty()) {
             return std::unexpected("the variant `" + key + "` names a token file");
         }
         if (key == "base") {
-            index.base = *id;
+            index.base = *fileId;
         } else {
-            index.variants.insert_or_assign(key, *id);
+            index.variants.insert_or_assign(key, *fileId);
         }
     }
     if (index.base.empty()) {
@@ -645,7 +706,7 @@ private:
 }
 
 /// @brief Finds a token file of the bundle by id.
-using TokenFileLookup = std::function<TokenSet const*(std::string_view id)>;
+using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
 
 /// @brief Resolves one combination of a theme: `base`, then the variant, the density and the surface, each optional.
 /// @param index   The theme index.
@@ -663,10 +724,10 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view id)>;
                                                                        std::string_view surface) {
     // NOLINTEND(bugprone-easily-swappable-parameters)
     std::vector<TokenSet const*> layers;
-    auto const layer = [&](std::string const& id) -> std::optional<std::string> {
-        TokenSet const* const tokens = files(id);
+    auto const layer = [&](std::string const& fileId) -> std::optional<std::string> {
+        TokenSet const* const tokens = files(fileId);
         if (tokens == nullptr) {
-            return "the token file `" + id + "` is not in the bundle";
+            return "the token file `" + fileId + "` is not in the bundle";
         }
         layers.push_back(tokens);
         return std::nullopt;
@@ -706,20 +767,33 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view id)>;
 [[nodiscard]] inline std::optional<std::string> checkTheme(ThemeIndex const& index, TokenFileLookup const& files) {
     auto const namesOf = [](std::map<std::string, std::string, std::less<>> const& from) {
         std::vector<std::string> names{std::string{}};
-        for (auto const& [name, id] : from) {
-            static_cast<void>(id);
+        for (auto const& [name, fileId] : from) {
+            static_cast<void>(fileId);
             names.push_back(name);
         }
         return names;
     };
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): variant, density, surface: the order they layer in.
+    auto const label = [](std::string const& variant, std::string const& density, std::string const& surface) {
+        std::string out = "base";
+        if (!variant.empty()) {
+            out += " + " + variant;
+        }
+        if (!density.empty()) {
+            out += " + density " + density;
+        }
+        if (!surface.empty()) {
+            out += " + surface " + surface;
+        }
+        return out;
+    };
+    std::vector<std::string> const surfaces = namesOf(index.surfaces);
     for (std::string const& variant : namesOf(index.variants)) {
         for (std::string const& density : namesOf(index.densities)) {
-            for (std::string const& surface : namesOf(index.surfaces)) {
+            for (std::string const& surface : surfaces) {
                 auto const resolved = resolveTheme(index, files, variant, density, surface);
                 if (!resolved) {
-                    return "base" + (variant.empty() ? std::string{} : " + " + variant) +
-                           (density.empty() ? std::string{} : " + density " + density) +
-                           (surface.empty() ? std::string{} : " + surface " + surface) + ": " + resolved.error();
+                    return label(variant, density, surface) + ": " + resolved.error();
                 }
             }
         }
