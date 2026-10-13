@@ -276,6 +276,10 @@ public:
     /// @return The draft signal.
     [[nodiscard]] reactive::Signal<std::string>& text() noexcept { return _text; }
 
+    /// @brief The draft, read-only. Tracked.
+    /// @return What the control holds.
+    [[nodiscard]] std::string const& draft() const { return _text.get(); }
+
     /// @brief A Decimal's or Quantity's entry unit, an index into `spec().units`.
     /// @return The unit signal.
     [[nodiscard]] reactive::Signal<std::size_t>& unit() noexcept { return _unit; }
@@ -971,6 +975,11 @@ private:
         // may be one the new options no longer back. Waiting lets the stale selection be cleared first; the settled
         // query wakes this Effect again.
         if (std::ranges::any_of(_fields, [](auto const& field) { return field->optionsPending(); })) {
+            return;
+        }
+        // The submission is Exclusive: while one is in flight a new run would be refused and its body lost. Waiting
+        // here sends the latest body once the one in flight settles, which wakes this Effect again.
+        if (_mutation.pending()) {
             return;
         }
         std::optional<std::string> const& body = _body.get();
