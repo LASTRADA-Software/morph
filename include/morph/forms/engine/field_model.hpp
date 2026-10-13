@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <expected>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -207,6 +208,9 @@ struct FieldSpec {
     std::string unitAscii;
     /// @brief A Decimal's or Quantity's entry units: the canonical one first, then `x-unitAlternatives`.
     std::vector<UnitOption> units;
+    /// @brief The index into `units` a draft starts in (and returns to on prefill and reset): 0, the canonical
+    ///        unit, unless a field overlay's `unit` names another.
+    std::size_t entryUnit = 0;
     /// @brief An Enum's options, in schema order.
     std::vector<ChoiceOption> enumOptions;
     /// @brief A Choice's options source.
@@ -231,6 +235,30 @@ struct FieldSpec {
     ///        the path, it is deeper than `kMaxNestingDepth`, or its schema states no members.
     bool truncated = false;
 };
+
+/// @brief What a document (or an application) changes about one top-level field before the session is built: a
+///        `form` node's `fields` entry (spec 6 §10). An unset member keeps the schema's.
+struct FieldOverlay {
+    /// @brief Removes the member from the form and from its body.
+    bool omit = false;
+    /// @brief Keeps the member in the body and out of the view (`x-hidden`).
+    bool hidden = false;
+    /// @brief Replaces the label (`title`).
+    std::optional<std::string> label{};
+    /// @brief The unit a Quantity is entered in: the id of one of its units (its canonical unit or an alternative).
+    ///        On a field without units, the unit shown beside it.
+    std::optional<std::string> unit{};
+    /// @brief The places a Decimal or Quantity is entered with in its entry unit, or a Number's display decimals.
+    ///        The wire value keeps the schema's places.
+    std::optional<std::uint32_t> decimals{};
+    /// @brief Replaces `x-widget`, so the kind is read again (`textarea`, `radio`, `slider`, `epochDays`, …).
+    std::optional<std::string> widget{};
+    /// @brief Replaces `x-blankAs`.
+    std::optional<BlankAs> blankAs{};
+};
+
+/// @brief The overlays of a form's fields, by wire name.
+using FieldOverlays = std::map<std::string, FieldOverlay, std::less<>>;
 
 /// @brief One `x-layout` group, or the implicit group of the fields no group names.
 struct FieldGroupSpec {
@@ -752,21 +780,32 @@ private:
 /// action are the same model.
 class FormModel {
 public:
-    /// @brief Reads a schema document.
+    /// @brief Reads a schema document, with the overlays a document or an application states for its fields.
+    ///
+    /// `omit`, `hidden`, `label`, `widget` and `blankAs` are applied to the schema before it is read, so a widget
+    /// overlay chooses the kind exactly as the schema's own `x-widget` would; `unit` and `decimals` are applied to
+    /// the read field. An overlay naming a field the schema does not have is a `SchemaError`, as is a `unit` that is
+    /// not one of a Quantity's units.
     /// @param actionType The action type the form submits (the registered type id).
     /// @param schemaJson The schema, in the vocabulary `schemaJson<A>()` emits.
+    /// @param overlays   The overlays of top-level fields, by wire name.
     /// @return The model, or the error naming where the document is malformed.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a type id and a JSON document; swapped, neither reads.
     [[nodiscard]] static std::expected<FormModel, SchemaError> fromSchema(std::string_view actionType,
-                                                                          std::string_view schemaJson) {
+                                                                          std::string_view schemaJson,
+                                                                          FieldOverlays const& overlays = {}) {
         using detail::engine::Json;
-        auto const dom = detail::engine::parseJson(schemaJson);
-        if (!dom) {
+        auto parsedDom = detail::engine::parseJson(schemaJson);
+        if (!parsedDom) {
             return std::unexpected(SchemaError{.path = "", .message = "the schema is not valid JSON"});
         }
-        if (!dom->is_object()) {
+        if (!parsedDom->is_object()) {
             return std::unexpected(SchemaError{.path = "", .message = "the schema is not a JSON object"});
         }
+        if (auto applied = applyOverlays(*parsedDom, overlays); !applied) {
+            return std::unexpected(applied.error());
+        }
+        Json const* const dom = &*parsedDom;
         FormModel model{};
         model._actionType = actionType;
         auto const* const title = detail::engine::stringAt(*dom, "title");
@@ -797,7 +836,25 @@ public:
         }
         auto const* const mode = detail::engine::stringAt(*dom, "x-submitMode");
         model._submitMode = (mode != nullptr && *mode == "explicit") ? SubmitMode::Explicit : SubmitMode::Automatic;
+        for (auto const& [name, overlay] : overlays) {
+            if (overlay.omit) {
+                continue;
+            }
+            auto const found = std::ranges::find(model._fields, name, &FieldSpec::name);
+            if (auto applied = applyUnitOverlay(*found, overlay); !applied) {
+                return std::unexpected(applied.error());
+            }
+        }
         return model;
+    }
+
+    /// @brief The same model with another submit mode: a document's `submit` choosing over `x-submitMode`.
+    /// @param mode The mode.
+    /// @return The model.
+    [[nodiscard]] FormModel withSubmitMode(SubmitMode mode) const {
+        FormModel copy = *this;
+        copy._submitMode = mode;
+        return copy;
     }
 
     /// @brief The model of a registered action's own form: `fromSchema` over
@@ -859,6 +916,90 @@ private:
             return GroupKind::Accordion;
         }
         return GroupKind::Section;
+    }
+
+    /// Writes the schema-level overlays into the schema's properties: `omit` removes the property and its `required`
+    /// entry; the rest set the keywords the reader reads.
+    [[nodiscard]] static std::expected<void, SchemaError> applyOverlays(detail::engine::Json& dom,
+                                                                        FieldOverlays const& overlays) {
+        using detail::engine::Json;
+        if (overlays.empty()) {
+            return {};
+        }
+        auto* const properties = dom.get_object().contains("properties")
+                                     ? dom.get_object().find("properties")->second.get_if<Json::object_t>()
+                                     : nullptr;
+        for (auto const& [name, overlay] : overlays) {
+            if (properties == nullptr || !properties->contains(name)) {
+                return std::unexpected(
+                    SchemaError{"fields." + name, "the overlay names a field the schema does not have"});
+            }
+            Json& property = properties->find(name)->second;
+            if (overlay.omit) {
+                properties->erase(name);
+                if (auto const required = dom.get_object().find("required"); required != dom.get_object().end()) {
+                    if (auto* const list = required->second.get_if<Json::array_t>()) {
+                        std::erase_if(*list, [&](Json const& entry) {
+                            auto const* const text = entry.get_if<std::string>();
+                            return text != nullptr && *text == name;
+                        });
+                    }
+                }
+                continue;
+            }
+            auto* const object = property.get_if<Json::object_t>();
+            if (object == nullptr) {
+                continue;
+            }
+            auto const assign = [&](std::string const& key, Json value) { object->insert_or_assign(key, value); };
+            if (overlay.hidden) {
+                Json flag{};
+                flag.data = true;
+                assign("x-hidden", flag);
+            }
+            if (overlay.label.has_value()) {
+                Json text{};
+                text.data = *overlay.label;
+                assign("title", text);
+            }
+            if (overlay.widget.has_value()) {
+                Json text{};
+                text.data = *overlay.widget;
+                assign("x-widget", text);
+            }
+            if (overlay.blankAs.has_value()) {
+                Json text{};
+                text.data = std::string{*overlay.blankAs == BlankAs::Empty ? "empty" : "omit"};
+                assign("x-blankAs", text);
+            }
+        }
+        return {};
+    }
+
+    /// Applies an overlay's `unit` and `decimals` to the field read from the schema.
+    [[nodiscard]] static std::expected<void, SchemaError> applyUnitOverlay(FieldSpec& spec,
+                                                                           FieldOverlay const& overlay) {
+        if (overlay.unit.has_value()) {
+            if (spec.units.empty()) {
+                spec.unit = *overlay.unit;
+            } else {
+                auto const found = std::ranges::find(spec.units, *overlay.unit, &UnitOption::id);
+                if (found == spec.units.end()) {
+                    return std::unexpected(SchemaError{"fields." + spec.name + ".unit",
+                                                       "\"" + *overlay.unit + "\" is not one of the field's units"});
+                }
+                spec.entryUnit = static_cast<std::size_t>(found - spec.units.begin());
+            }
+        }
+        if (overlay.decimals.has_value()) {
+            std::uint32_t const places = std::min(*overlay.decimals, math::kMaxDecimalPlaces);
+            if (spec.units.empty()) {
+                spec.displayDecimals = places;
+            } else {
+                spec.units.at(spec.entryUnit).decimals = places;
+            }
+        }
+        return {};
     }
 
     [[nodiscard]] static std::expected<std::vector<FieldGroupSpec>, SchemaError> readGroups(

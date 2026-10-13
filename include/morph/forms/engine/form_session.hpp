@@ -201,7 +201,7 @@ public:
           _siblings{siblings},
           _parent{parent},
           _text{core.runtime(), std::string{}},
-          _unit{core.runtime(), std::size_t{0}},
+          _unit{core.runtime(), spec.entryUnit},
           _engaged{core.runtime(), false},
           _rows{core.runtime(), std::vector<std::shared_ptr<RowState>>{}},
           _encoded{core.runtime(), [this] { return computeEncoding(); }},
@@ -451,8 +451,15 @@ public:
             _engaged.set(present && value->is_array());
             return;
         }
-        _text.set(present ? decodeScalar(*_spec, *value, _core->values()) : std::string{});
-        _unit.set(0);
+        std::string draft = present ? decodeScalar(*_spec, *value, _core->values()) : std::string{};
+        std::size_t const unit = _spec->entryUnit;
+        if (unit != 0 && unit < _spec->units.size() && !draft.empty()) {
+            // The wire value is in the canonical unit; the draft is shown in the entry unit.
+            draft = convertDraft(draft, _spec->units.front(), _spec->units.at(unit), _core->values().locale)
+                        .value_or(std::string{});
+        }
+        _text.set(std::move(draft));
+        _unit.set(unit);
         _engaged.set(_spec->blankAs == BlankAs::Empty && present && value->is_string());
     }
 
@@ -460,7 +467,7 @@ public:
     // NOLINTNEXTLINE(misc-no-recursion): an Object clears its members.
     void clear() {
         _text.set(std::string{});
-        _unit.set(0);
+        _unit.set(_spec->entryUnit);
         _engaged.set(false);
         for (auto const& entry : _members) {
             entry->clear();
@@ -734,7 +741,8 @@ public:
                  }},
           _body{runtime, [this] { return _ready.get() ? _assembled.get() : std::optional<std::string>{}; }},
           _mutation{runtime,
-                    [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }} {
+                    [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }},
+          _attempts{runtime, std::uint64_t{0}} {
         if (!_submit) {
             throw std::invalid_argument{"FormSession: a Submitter is required"};
         }
@@ -861,7 +869,9 @@ public:
             return;
         }
         _lastSubmitted = body;
-        _mutation.run(*body);
+        if (_mutation.run(*body)) {
+            _attempts.set(_attempts.peek() + 1);
+        }
     }
 
     /// @brief Loads a stored payload for editing. Every field is replaced (an absent member starts
@@ -924,6 +934,11 @@ public:
     ///        submission even when two replies are equal.
     /// @return The count.
     [[nodiscard]] std::uint64_t successCount() const { return _mutation.successCount(); }
+
+    /// @brief How many submissions have been sent, automatic and explicit. Tracked; a submission the `Exclusive`
+    ///        mutation refused while another was in flight does not count.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t submitAttempts() const { return _attempts.get(); }
 
     /// @brief An accordion group's collapsed state.
     /// @param group Index into `model().groups()`.
@@ -1001,7 +1016,11 @@ private:
         }
         _lastSubmitted = body;
         std::string const toSend = *body;
-        runtime().untracked([&] { _mutation.run(toSend); });
+        runtime().untracked([&] {
+            if (_mutation.run(toSend)) {
+                _attempts.set(_attempts.peek() + 1);
+            }
+        });
     }
 
     std::unique_ptr<detail::engine::SessionCore> _core;
@@ -1013,6 +1032,7 @@ private:
     reactive::Computed<bool> _ready;
     reactive::Computed<std::optional<std::string>> _body;
     reactive::Mutation<std::string, std::string> _mutation;
+    reactive::Signal<std::uint64_t> _attempts;
     std::optional<std::string> _lastSubmitted;
     std::unique_ptr<reactive::Effect> _autoSubmit;
 };
