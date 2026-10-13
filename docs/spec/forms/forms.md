@@ -988,12 +988,12 @@ server's schema validation always rejects.
 
 Typed text is split on comma, each entry trimmed of surrounding whitespace,
 and empty entries dropped: `"red, green, blue"` → `["red","green","blue"]`,
-`"  red ,, green ,"` → `["red","green"]`. A field with today's scope —
-array-of-string — is fully supported; an `items` type other than `"string"`
-still renders this control and still encodes each comma-separated entry as a
-JSON string (not, e.g., a JSON number), so a `std::vector<int>` field is
-usable but not yet type-checked per element the way a scalar `Quantity`/
-integer field is. The submitted literal for a **fully-blank** array field
+`"  red ,, green ,"` → `["red","green"]`. Each entry is encoded by the
+`items` type: an `"integer"` item as its digits (leading zeros dropped, never
+through a JS number, so an id past 2^53 stays exact), a `"number"` item as
+canonical decimal digits, a `"boolean"` item as `true`/`false`, anything else
+as a JSON string. An entry that does not read as its type leaves the field
+without a literal, as an invalid scalar does. The submitted literal for a **fully-blank** array field
 follows the same blank-means-unengaged convention as every other field
 (`fieldJsonLiteral` returns `null` for empty/whitespace-only text), so an
 optional, untouched array field is omitted from the request body entirely

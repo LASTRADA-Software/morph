@@ -158,4 +158,57 @@ TestCase {
         verify(Array.isArray(parsed.tags))
         compare(parsed.tags.length, 0)
     }
+
+    // --- items encoded by their type -------------------------------------
+
+    property var typedArraySchema: ({
+        properties: {
+            counts: { type: "array", items: { type: "integer" }, "x-order": 0 },
+            ratios: { type: "array", items: { type: "number" }, "x-order": 1 },
+            flags: { type: "array", items: { type: "boolean" }, "x-order": 2 }
+        },
+        required: ["counts"]
+    })
+
+    Component {
+        id: typedFormComponent
+        DynamicForm {
+            actionType: "CFR_Counts"
+            schema: testCase.typedArraySchema
+            controller: mockController
+        }
+    }
+
+    // The action's decoder reads std::vector<int> from [1,2,30] and refuses ["1","2","30"].
+    function test_integer_items_are_bare_exact_numbers() {
+        var form = createTemporaryObject(typedFormComponent, testCase)
+        verify(form !== null)
+        findChild(form, "field_counts").text = "1, 002, 9007199254740993, -4"
+        compare(form.ready, true)
+        // Compared as text: JSON.parse would round the id past 2^53.
+        verify(form.previewLine.indexOf('"counts":[1,2,9007199254740993,-4]') !== -1, form.previewLine)
+    }
+
+    function test_number_and_boolean_items_are_bare_literals() {
+        var form = createTemporaryObject(typedFormComponent, testCase)
+        verify(form !== null)
+        findChild(form, "field_counts").text = "1"
+        findChild(form, "field_ratios").text = "0.5, 07.25"
+        findChild(form, "field_flags").text = "true, false"
+        compare(form.ready, true)
+        verify(form.previewLine.indexOf('"ratios":[0.5,7.25]') !== -1, form.previewLine)
+        verify(form.previewLine.indexOf('"flags":[true,false]') !== -1, form.previewLine)
+    }
+
+    function test_an_item_that_does_not_encode_leaves_the_field_without_a_literal() {
+        var form = createTemporaryObject(typedFormComponent, testCase)
+        verify(form !== null)
+        findChild(form, "field_counts").text = "1, two, 3"
+        compare(form.ready, false)  // required, and its draft does not encode
+        findChild(form, "field_counts").text = "1, 2.5"
+        compare(form.ready, false)  // a fraction is not an integer
+        findChild(form, "field_counts").text = "1"
+        findChild(form, "field_flags").text = "yes"
+        compare(form.ready, false)
+    }
 }

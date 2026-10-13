@@ -208,12 +208,7 @@ struct Difference {
     std::optional<std::string_view> engineSends;
 };
 
-constexpr std::array<Difference, 2> kDifferences{{
-    // An integer array's items are integers: the QML renderer quotes every item, which the action's decoder
-    // refuses.
-    {.id = "array/integers",
-     .qml = R"({"name":"a","counts":["1","2","30"]})",
-     .engineSends = R"({"name":"a","counts":[1,2,30]})"},
+constexpr std::array<Difference, 1> kDifferences{{
     // Nested objects and collections are fields of the engine; the QML renderer leaves them unrepresentable unless
     // a slot claims them, so its form never becomes ready.
     {.id = "prefill/nested",

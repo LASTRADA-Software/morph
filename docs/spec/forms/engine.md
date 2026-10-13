@@ -375,7 +375,6 @@ Each is a named case of the body corpus, or a test of the engine's own suite:
 
 | Behaviour | QML renderer | Engine | Why |
 |---|---|---|---|
-| Integer array items | quoted strings | integers | the action's decoder refuses `["1"]` for `std::vector<int>` |
 | Nested objects, collections of objects | unrepresentable unless a slot claims them | fields with their own encoders | spec 2: nothing is unrepresentable |
 | A blank parent of a dependent Choice | clears the child's selection | keeps it (the query is idle) | no options were fetched to judge it against |
 | An operand whose draft does not encode, for `engaged` | engaged (text present) | `Unknown` | a value the server would refuse does not satisfy a condition |
