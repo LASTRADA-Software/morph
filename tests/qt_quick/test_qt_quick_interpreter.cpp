@@ -5,12 +5,6 @@
 // a dialog dismisses and reopens; lists reconcile with the fewest moves, keep focus across a reorder and carry an
 // int64 key above 2^53; and spec 5 §7's server-calculated values show in the rendered cells, stale while in flight.
 
-// First, ahead of every header that brings view.hpp: GCC's -Wshadow reports value.hpp's enumerator `Type::Key` when
-// view.hpp's `ui::Key` was declared before it.
-// clang-format off
-#include <morph/ui/value.hpp>
-// clang-format on
-
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <catch2/catch_test_macros.hpp>

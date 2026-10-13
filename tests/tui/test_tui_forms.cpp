@@ -3,12 +3,6 @@
 // A `form` document mounted on the terminal backend: the forms engine's view tree drawn on a headless screen, typed
 // into through key events, submitting the exact body through the model alias.
 
-// First, ahead of every header that brings view.hpp: GCC's -Wshadow reports value.hpp's enumerator `Type::Key` when
-// view.hpp's `ui::Key` was declared before it.
-// clang-format off
-#include <morph/ui/value.hpp>
-// clang-format on
-
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <core/net/PlatformLoop.hpp>
