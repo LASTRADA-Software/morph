@@ -186,6 +186,7 @@ add_executable(morph_tests
     test_ui_bundle.cpp
     test_ui_service.cpp
     test_ui_service_client.cpp
+    test_ui_theme.cpp
     test_ui_evaluate.cpp
     test_ui_file_store.cpp
     test_ui_file.cpp
