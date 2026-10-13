@@ -122,6 +122,7 @@ class ScreenHandle {
 public:
     virtual reactive::Computed<std::string> const& title() const = 0;
     virtual reactive::Computed<bool> const& dirty() const = 0;
+    virtual reactive::Computed<Value> const& identity() const = 0;          // re-keying a tab, §15
     virtual void requestClose(std::function<void(bool closed)> done) = 0;   // the close protocol of §3
     virtual void forceClose() = 0;       // for application quit: skips onClose, runs onUnmount, never vetoed
     virtual ~ScreenHandle() = default;
@@ -826,6 +827,8 @@ a string percent-encoded.
   keeps the focused screen's route in the browser's history (spec 3 §10).
 - A screen opened as a dialog, drawer or window (§16) has no route of its own: it answers its opener
   and is not reopened from a link.
+- A screen with a `quantity`, `timestamp`, list or record param has no route: these types have no
+  canonical text here, and a route does not invent one.
 
 ## 21. Development tools
 

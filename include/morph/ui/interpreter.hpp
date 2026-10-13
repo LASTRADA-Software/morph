@@ -1481,7 +1481,7 @@ public:
     MutationRuntime& operator=(MutationRuntime&&) = delete;
 
     /// @brief Drops the replies still to come.
-    ~MutationRuntime() { *_alive = false; }
+    ~MutationRuntime();
 
     /// @brief Runs it, queues the run or refuses it, as its concurrency says.
     /// @param body     The body.
@@ -1533,6 +1533,7 @@ private:
     RtScope* _scope;
     ModelAlias* _alias;
     std::string _typeId;
+    ScreenCore* _core;
     reactive::Signal<int> _inFlight;
     reactive::Signal<Value> _result;
     reactive::Signal<Value> _error;
@@ -1634,6 +1635,7 @@ public:
           depth{mount.depth},
           prefs{session.runtime()},
           submitted{session.runtime(), false},
+          pendingWork{session.runtime(), 0},
           _doc{std::move(doc)} {
         ValueRecord defaults;
         for (auto const& [name, point] : _doc->customize) {
@@ -1789,6 +1791,13 @@ public:
     ValueRecord prefDefaults;
     /// @brief The screen's `submitted`.
     reactive::Signal<bool> submitted;
+    /// @brief The open dialogs and drawers and the mutation runs in flight, across every scope of the screen: what
+    ///        a close waits for (spec 6 §3).
+    reactive::Signal<int> pendingWork;
+
+    /// @brief Counts pending work in or out.
+    /// @param delta What started (positive) or ended (negative).
+    void addPending(int delta) { pendingWork.set(pendingWork.peek() + delta); }
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
@@ -1917,15 +1926,39 @@ public:
         return flag != nullptr && *flag;
     }
 
+    /// @brief Whether the screen has work a close waits for: an open dialog or drawer, or a mutation run in flight, in
+    ///        any of its scopes (spec 6 §3). A tracked read, so an Effect that reads it runs again when it changes.
+    /// @return It.
+    [[nodiscard]] bool pending() const { return _core->pendingWork.get() > 0; }
+
+    /// @brief The reactive runtime the screen runs on.
+    /// @return It.
+    [[nodiscard]] reactive::Runtime& runtime() const noexcept { return _core->runtime(); }
+
     /// @brief Runs `onClose`, as the host does before it closes the screen.
     /// @return False when `onClose` ran `cancelClose`: the screen stays open.
     bool requestClose() {
+        std::shared_ptr<bool const> const cancelled = beginClose();
+        return cancelled == nullptr || !*cancelled;
+    }
+
+    /// @brief Runs `onClose`, and hands back the flag its `cancelClose` sets.
+    ///
+    /// The flag is shared with every command list `onClose` starts, such as the `onResult` of a confirm dialog it
+    /// opens, so it can still be set after this returns; a host reads it once the screen is no longer `pending()`.
+    /// @return The flag, or `nullptr` when the document declares no `onClose`.
+    [[nodiscard]] std::shared_ptr<bool const> beginClose() {
         Commands const* const commands = lifecycleList("onClose");
         if (commands == nullptr) {
-            return true;
+            return nullptr;
         }
-        return !runCommands(*commands);
+        return runCommandsFlag(*commands);
     }
+
+    /// @brief Whether the document declares a lifecycle command list.
+    /// @param key The key: `onClose`, `onSave`, …
+    /// @return It.
+    [[nodiscard]] bool declares(std::string_view key) const { return lifecycleList(key) != nullptr; }
 
     /// @brief Runs a lifecycle command list: `onSave`, `onBackendChange`, or any other the document declares.
     /// @param key The key.
@@ -1971,13 +2004,16 @@ private:
     }
 
     /// Runs a command list as the screen's own (not a user's); returns whether it ran `cancelClose`.
-    bool runCommands(Commands const& commands) {
+    bool runCommands(Commands const& commands) { return *runCommandsFlag(commands); }
+
+    /// Runs a command list as the screen's own; returns the `cancelClose` flag it and what it starts share.
+    std::shared_ptr<bool const> runCommandsFlag(Commands const& commands) {
         detail::CommandCtx const ctx{.scope = _scope,
                                      .bindings = std::make_shared<detail::Bindings>(),
                                      .cancelClose = std::make_shared<bool>(false),
                                      .boundary = nullptr};
         _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
-        return *ctx.cancelClose;
+        return ctx.cancelClose;
     }
 
     [[nodiscard]] static bool fits(CustomizePoint const& point, Value const& value) {
@@ -2119,8 +2155,11 @@ inline RtScope::RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, 
     : core{screen}, parent{std::move(enclosing)}, row{current}, nodes{screen.runtime(), depth} {}
 
 inline RtScope::~RtScope() {
-    if (owner != nullptr && owner->inner.peek() == this) {
-        owner->inner.set(nullptr);
+    if (owner != nullptr) {
+        core.addPending(-1);
+        if (owner->inner.peek() == this) {
+            owner->inner.set(nullptr);
+        }
     }
 }
 
@@ -2433,10 +2472,19 @@ inline MutationRuntime::MutationRuntime(MutationDecl const& decl, RtScope& scope
       _scope{&scope},
       _alias{alias},
       _typeId{alias->decl->type},
+      _core{&scope.core},
       _inFlight{scope.core.runtime(), 0},
       _result{scope.core.runtime()},
       _error{scope.core.runtime()},
       _errorKind{scope.core.runtime()} {}
+
+inline MutationRuntime::~MutationRuntime() {
+    *_alive = false;
+    // A run whose reply will now never be read is no longer pending.
+    if (int const running = _inFlight.peek(); running > 0) {
+        _core->addPending(-running);
+    }
+}
 
 // NOLINTBEGIN(misc-no-recursion): a mutation's commands can run another mutation, and a serial queue sends its next
 // run as the last one settles.
@@ -2450,6 +2498,7 @@ inline void MutationRuntime::run(Value body, std::shared_ptr<Bindings const> bin
         return;
     }
     _inFlight.set(_inFlight.peek() + 1);
+    _core->addPending(1);
     if (_decl->concurrency == Concurrency::Serial) {
         Value const key = evalIn(*_scope, run->bindings.get(), _decl->serialKey);
         run->serialKey = key.isNull() ? std::string{} : canonicalJson(key);
@@ -2547,6 +2596,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome a reply can have.
     core.runtime().batch([&] {
         _inFlight.set(_inFlight.peek() - 1);
+        _core->addPending(-1);
         if (reply) {
             succeeded = true;
             // The run's optimistic writes are confirmed by the reply: they become part of the confirmed rows.
@@ -4340,6 +4390,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
     Node body = lazy([this, ctx, &node, element]() -> Node {
         auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
         inner->owner = element;
+        addPending(1);
         inner->submitted = &element->submitted;
         inner->showErrors = std::string{node.name("showErrors")};
         std::vector<DocNode const*> content;
