@@ -301,6 +301,19 @@ inline Catalog corpusCatalog() {
         }
         return info;
     };
+    // The one action a `form` node of the corpora builds from.
+    catalog.schema = [](std::string_view action) -> std::optional<std::string> {
+        if (action != "Lims_CaptureConcentration") {
+            return std::nullopt;
+        }
+        return std::string{R"({"type":"object","title":"Capture","properties":{
+          "sampleId":{"type":"integer","title":"Sample","x-order":0},
+          "concentration":{"type":["object","null"],"title":"Concentration","x-decimalPlaces":2,
+            "ExtUnits":{"unitAscii":"mg_per_L","unitUnicode":"mg/L"},"x-order":1},
+          "rowIndex":{"type":["integer","null"],"x-order":2},
+          "note":{"type":["string","null"],"title":"Note","x-order":3}},
+          "required":["sampleId","concentration"]})"};
+    };
     return catalog;
 }
 
