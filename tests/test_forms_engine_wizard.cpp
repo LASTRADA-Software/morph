@@ -212,6 +212,35 @@ TEST_CASE("WizardSession: in explicit mode Next submits the ready step and moves
     CHECK(stack.wizard->stepDone(1));
 }
 
+TEST_CASE("WizardSession: a failed submission undoes an earlier success, even for the body that succeeded",
+          "[forms-engine][wizard]") {
+    Stack stack{true, [](Call const& call) -> std::optional<std::string> {
+                    if (call.action == "WizStepOne") {
+                        return std::string{R"({"id":1})"};
+                    }
+                    if (call.body.contains(R"("note":"bad")")) {
+                        return std::nullopt;  // refused by hand below
+                    }
+                    return std::string{"{}"};
+                }};
+    stack.harness.type(stack.wizard->step(0), "label", "x");
+    stack.wizard->next();
+    stack.harness.settle();
+    REQUIRE(stack.wizard->current() == 1);
+    morph::forms::FormSession& second = stack.wizard->step(1);
+    stack.harness.type(second, "note", "good");
+    second.submit();
+    stack.harness.settle();
+    REQUIRE(stack.wizard->stepDone(1));
+    stack.harness.type(second, "note", "bad");
+    second.submit();
+    stack.harness.settle();
+    stack.harness.server.rejectSubmit(stack.harness.server.submits().size() - 1, "refused");
+    stack.harness.settle();
+    stack.harness.type(second, "note", "good");  // back to the body that once succeeded
+    CHECK_FALSE(stack.wizard->stepDone(1));      // the server's last word on this step was a refusal
+}
+
 TEST_CASE("WizardSession: titles resolve through the translations", "[forms-engine][wizard]") {
     Harness harness;
     morph::forms::FormSessionOptions options{};
