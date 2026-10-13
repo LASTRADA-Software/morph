@@ -679,25 +679,32 @@ framework's claims in this spec are tested against it, not against a description
 An application has commands and values no document can define: restart the process, open a path in
 the operating system, a count the application's own sync engine keeps. They are registered by the
 application executable, named and typed, and declared to the server in the handshake exactly as host
-components are (§6):
+components are (§6). The registry is `morph::ui::HostVocabulary`, with no toolkit, so the terminal client has it
+too (`docs/spec/ui/host_vocabulary.md`):
 
 ```cpp
-qt_quick::HostCommands::add({ .name = "restartApp", .version = 1, .args = {}, .safeForUntrusted = false });
-qt_quick::HostCommands::add({ .name = "openPath", .version = 1, .args = { {"path", "string"} },
-                              .safeForUntrusted = false });
-qt_quick::HostValues::add({ .name = "sync.needsYouCount", .version = 1, .type = "int", .signal = &syncNeedsYou });
+morph::ui::HostVocabulary host;
+host.add(HostCommand{ .name = "restartApp", .version = 1, .args = {}, .safeForUntrusted = false, .run = restart });
+host.add(HostCommand{ .name = "openPath", .version = 1, .args = { {"path", "string"} },
+                      .safeForUntrusted = false, .run = openPath });
+host.add(HostValue{ .name = "sync.needsYouCount", .version = 1, .type = "int", .initial = Value{std::int64_t{0}} });
+host.connect(session);                 // values, `can` names and the runner
+host.set("sync.needsYouCount", n);     // a binding on the value updates
 ```
 
-- **Use in a document.** The command `{"host": "openPath", "args": {"path": e}}` runs the registered
-  command; the expression `{"host": "sync.needsYouCount"}` reads the registered value, which is a
-  `reactive::Signal`, so a binding on it updates. `{"can": "host:openPath"}` is true when the client
+- **Use in a document.** The command `{"host": "openPath", "args": {"obj": {"path": e}}}` runs the
+  registered command (`args` is an expression, so a record literal is written with `obj`); the expression
+  `{"host": "sync.needsYouCount"}` reads the registered value, which the session holds in a reactive signal,
+  so a binding on it updates. `{"can": "host:openPath"}` is true when the client
   has the command, so a document shows a control only where it works.
 - **Arguments are validated** against the declared types before the command runs; a mismatch is a
   reported error, not a call.
 - **Absent is safe.** A command the client lacks is skipped and reported once; a value it lacks reads
   as `null`. A document guards with `can` or with `coalesce`.
 - **Trust.** A command marked `safeForUntrusted: false` runs only from a document that came over a
-  verified connection (spec 5 §13); otherwise it is skipped and reported. A value is read-only and
+  verified connection (spec 5 §13); otherwise it is skipped and reported, and `can` is false for it. The
+  application says the connection is verified (`HostVocabulary::setConnectionVerified`), since nothing in
+  `morph::ui` observes the transport; until then unsafe commands are refused. A value is read-only and
   needs no gate.
 - **`switchBackend`** is not a host command. `{"switchBackend": "local"}` is a `ui/1` command that
   calls `AppSource::switchBackend` (§9) for a backend name the application's `AppSource` lists in

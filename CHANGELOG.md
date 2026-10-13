@@ -11,6 +11,9 @@ API surface).
 
 ### Changed
 
+- **`{"can": "host:name"}` answers from the client's host commands**, set with `Session::setHostCommands`, and no
+  longer from the server's permitted set: a `host:` name passed to `setPermitted` no longer counts.
+
 - **`morph::net::SocketBackend` queues a private bind made before its socket
   connects**, as `QtWebSocketBackend` does, and sends the queued binds in order
   once it connects. A single-threaded client can bind right after constructing
@@ -212,6 +215,15 @@ API surface).
   `ui-evaluate` with it, authorised as the action itself.
   `ui::evaluatorOver` sends one from the client, and `BridgeDispatcher` takes it
   for a document's `evaluate` queries.
+- **The host vocabulary (`host/1`): commands and values a client application registers.** Header-only, in the
+  base `morph` target (`ui/host_vocabulary.hpp`).
+  - `ui::HostVocabulary` registers commands (name, version, typed arguments, `safeForUntrusted`, `run`) and values
+    (name, version, type), checks a command's arguments against their types before it runs, refuses an unsafe
+    command until `setConnectionVerified(true)`, pushes values into the session reactively, and fills
+    `HelloRequest::hostCommands`/`hostValues` with `describe`.
+  - `ui::Session::setHostCommands` installs the client's runnable command names and the runner; a missing or
+    refused command is reported and does not run.
+
 - **The host contract (spec 6 §3, §4, §20).** `ui/host.hpp`: `ScreenHandle`
   (`title`, `dirty`, `identity`, `requestClose`, `forceClose`) and `ScreenHost`
   (`mount`, `identityOf`, `onNavigate`). `DocumentScreenHost`, the framework's
