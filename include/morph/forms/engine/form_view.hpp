@@ -21,6 +21,11 @@
 #include <variant>
 #include <vector>
 
+// clang-format off
+// value.hpp before view.hpp: GCC's -Wshadow reports value.hpp's enumerator `Type::Key` when view.hpp's `ui::Key`
+// is declared first.
+#include "../../ui/value.hpp"
+// clang-format on
 #include "../../reactive/control.hpp"
 #include "../../ui/view.hpp"
 #include "../../util/datetime.hpp"
