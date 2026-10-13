@@ -116,7 +116,7 @@ TEST_CASE("UiRegistry's digest is a function of the files alone", "[ui-service][
     UiRegistry changed = uiservice::registry();
     std::string theme{uiservice::kTheme};
     theme[theme.size() - 3] = '7';
-    REQUIRE(changed.addFile(uiservice::file(morph::ui::kMessagesFile, "en", theme)));
+    REQUIRE(changed.addFile(uiservice::file(morph::ui::kThemeFile, "changed", theme)));
     auto const rebuilt = changed.build();
     REQUIRE(rebuilt);
     REQUIRE((*rebuilt)->digest != first->digest);
@@ -458,7 +458,7 @@ TEST_CASE("ui-fetch serves equal bytes under any entry that admits the caller", 
     CatalogEntry unavailable = entry("same");
     unavailable.available = false;
     REQUIRE(registry.addScreen(unavailable, doc));
-    REQUIRE(registry.addFile(uiservice::file(morph::ui::kMessagesFile, "copy", doc)));
+    REQUIRE(registry.addFile(uiservice::file(morph::ui::kThemeFile, "copy", doc)));
     auto const built = registry.build();
     REQUIRE(built);
     UiService service{*built};
