@@ -488,4 +488,5 @@ TEST_CASE("FormSession: automatic mode sends the latest body once the submission
     harness.settle();
     REQUIRE(harness.server.submits().size() == 2);
     CHECK(harness.server.lastBody() == R"({"a":125})");
+    CHECK(form->submitAttempts() == 2);
 }
