@@ -33,9 +33,9 @@ namespace morph::forms {
 /// @brief Why a schema does not read as a form: where, and why.
 struct SchemaError {
     /// @brief Where in the schema: a dotted path such as `properties.amount` or `x-rules[2].when`.
-    std::string path{};
+    std::string path;
     /// @brief Why, in one sentence.
-    std::string message{};
+    std::string message;
     /// @brief Field-wise equality.
     /// @param other The error to compare with.
     /// @return Whether both members are equal.
@@ -226,7 +226,8 @@ public:
         auto compiled = ui::parseExpression(translation);
         if (!compiled) {
             return std::unexpected(
-                SchemaError{path, "the rule does not translate into an expression: " + compiled.error().reason});
+                SchemaError{.path = path,
+                            .message = "the rule does not translate into an expression: " + compiled.error().reason});
         }
         parsed->_expression = translation;
         parsed->_compiled = *std::move(compiled);
@@ -382,6 +383,7 @@ private:
 
         // A comparison of two kinds that do not order (a string field against a number field) is `null`, which the
         // verdict already reads as `Unknown`; there is nothing further to report.
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the evaluator's interface.
         void report(std::string_view path, std::string_view reason) const override {
             static_cast<void>(path);
             static_cast<void>(reason);
@@ -400,36 +402,40 @@ private:
         return *flag ? Tri::True : Tri::False;
     }
 
-    // NOLINTNEXTLINE(misc-no-recursion): a condition tree is read by the same function, node by node.
+    // A condition tree is read by the same function, node by node; one case per rule kind.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
     [[nodiscard]] static std::expected<RuleExpr, SchemaError> parseNode(detail::engine::Json const& node,
                                                                         std::string const& path) {
         using detail::engine::Json;
         if (!node.is_object()) {
-            return std::unexpected(SchemaError{path, "a rule must be a JSON object"});
+            return std::unexpected(SchemaError{.path = path, .message = "a rule must be a JSON object"});
         }
         auto const* const kind = detail::engine::stringAt(node, "kind");
         if (kind == nullptr) {
-            return std::unexpected(SchemaError{path, "a rule needs a string \"kind\""});
+            return std::unexpected(SchemaError{.path = path, .message = "a rule needs a string \"kind\""});
         }
         RuleExpr expr{};
         expr._kindName = *kind;
         expr._kind = kindOf(*kind);
         if (Json const* const fields = detail::engine::member(node, "fields")) {
             if (!fields->is_array()) {
-                return std::unexpected(SchemaError{path, "\"fields\" must be an array of strings"});
+                return std::unexpected(SchemaError{.path = path, .message = "\"fields\" must be an array of strings"});
             }
             for (Json const& name : fields->get_array()) {
                 auto const* const text = name.get_if<std::string>();
                 if (text == nullptr) {
-                    return std::unexpected(SchemaError{path, "\"fields\" must be an array of strings"});
+                    return std::unexpected(
+                        SchemaError{.path = path, .message = "\"fields\" must be an array of strings"});
                 }
                 expr._fields.push_back(*text);
             }
         }
+        // NOLINTNEXTLINE(misc-no-recursion): a child is a condition tree read by parseNode.
         auto const child = [&](std::string_view key) -> std::expected<void, SchemaError> {
             Json const* const nested = detail::engine::member(node, key);
             if (nested == nullptr) {
-                return std::unexpected(SchemaError{path, expr._kindName + " needs \"" + std::string{key} + "\""});
+                return std::unexpected(
+                    SchemaError{.path = path, .message = expr._kindName + " needs \"" + std::string{key} + "\""});
             }
             auto parsed = parseNode(*nested, path + "." + std::string{key});
             if (!parsed) {
@@ -440,9 +446,10 @@ private:
         };
         auto const needFields = [&](std::size_t count, bool exact) -> std::expected<void, SchemaError> {
             if (exact ? expr._fields.size() != count : expr._fields.size() < count) {
-                return std::unexpected(SchemaError{path, "\"" + expr._kindName + "\" needs " +
-                                                             (exact ? "exactly " : "at least ") +
-                                                             std::to_string(count) + " field(s)"});
+                return std::unexpected(SchemaError{.path = path,
+                                                   .message = "\"" + expr._kindName + "\" needs " +
+                                                              (exact ? "exactly " : "at least ") +
+                                                              std::to_string(count) + " field(s)"});
             }
             return {};
         };
@@ -463,8 +470,8 @@ private:
             case Kind::Or: {
                 Json const* const list = detail::engine::member(node, "conditions");
                 if (list == nullptr || !list->is_array()) {
-                    shape =
-                        std::unexpected(SchemaError{path, "\"" + expr._kindName + "\" needs a \"conditions\" array"});
+                    shape = std::unexpected(SchemaError{
+                        .path = path, .message = "\"" + expr._kindName + R"(" needs a "conditions" array)"});
                     break;
                 }
                 std::size_t index = 0;
@@ -523,7 +530,7 @@ private:
             {"or", Kind::Or},
             {"not", Kind::Not},
         }};
-        auto const found = std::ranges::find(kNames, name, &std::pair<std::string_view, Kind>::first);
+        const auto* const found = std::ranges::find(kNames, name, &std::pair<std::string_view, Kind>::first);
         return found == kNames.end() ? Kind::Unknown : found->second;
     }
 
@@ -596,6 +603,7 @@ private:
         if (_kind == Kind::RequiredWhen) {
             Json const condition = _children.front().holds(operands);
             std::vector<Json> engaged;
+            engaged.reserve(_fields.size());
             for (std::string const& field : _fields) {
                 engaged.push_back(engagedRef(operands, field));
             }
@@ -620,8 +628,8 @@ private:
     }
 
     /// Whether the node holds, as a condition. Presentation kinds and unknown kinds are not conditions: `null`.
-    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one case per kind; and, or and
-    // not translate their operands with the same function.
+    // One case per kind; and, or and not translate their operands with the same function.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
     [[nodiscard]] detail::engine::Json holds(detail::engine::RuleOperands& operands) const {
         using detail::engine::call;
         using detail::engine::choose;
@@ -654,6 +662,7 @@ private:
             case Kind::AtLeastOneOf:
             case Kind::MutuallyExclusive: {
                 std::vector<Json> engaged;
+                engaged.reserve(_fields.size());
                 for (std::string const& field : _fields) {
                     engaged.push_back(engagedRef(operands, field));
                 }
@@ -690,6 +699,7 @@ private:
                     return literal(_kind == Kind::And);
                 }
                 std::vector<Json> parts;
+                parts.reserve(_children.size());
                 for (RuleExpr const& operand : _children) {
                     parts.push_back(operand.holds(operands));
                 }
@@ -707,14 +717,14 @@ private:
     }
 
     Kind _kind = Kind::Unknown;
-    std::string _kindName{};
-    std::vector<std::string> _fields{};
-    std::vector<RuleExpr> _children{};
-    detail::engine::Json _literal{};
-    detail::engine::Json _expression{};
-    std::vector<std::string> _operands{};
-    ui::ExprPtr _compiled{};
-    ui::ExprPtr _whenCompiled{};
+    std::string _kindName;
+    std::vector<std::string> _fields;
+    std::vector<RuleExpr> _children;
+    detail::engine::Json _literal;
+    detail::engine::Json _expression;
+    std::vector<std::string> _operands;
+    ui::ExprPtr _compiled;
+    ui::ExprPtr _whenCompiled;
 };
 
 /// @brief Whether the gating rules let the form submit.
