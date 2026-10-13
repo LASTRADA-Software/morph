@@ -173,7 +173,7 @@ TEST_CASE("preferences: run outside any dispatch, the model has no person", "[ui
         owner.runFor(std::chrono::milliseconds{5});
     }
     CHECK(seen.values == 0U);
-    REQUIRE(seen.refusal);
+    REQUIRE(seen.refusal.has_value());
     CHECK(seen.refusal->contains("signed-in person"));
     CHECK(store->calls().empty());
 }
