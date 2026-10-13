@@ -190,6 +190,7 @@ add_executable(morph_tests
     test_ui_file_store.cpp
     test_ui_file.cpp
     test_ui_preferences.cpp
+    test_ui_preference_sync.cpp
 )
 
 target_link_libraries(morph_tests

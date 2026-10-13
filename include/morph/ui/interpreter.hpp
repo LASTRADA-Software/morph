@@ -1955,6 +1955,10 @@ public:
         return true;
     }
 
+    /// @brief The screen's document, whose `customize` block names the points a preferences store loads.
+    /// @return It.
+    [[nodiscard]] Document const& document() const noexcept { return _core->doc(); }
+
     /// @brief What an alias of this screen lends to a screen it opens that borrows it.
     /// @param alias The alias.
     /// @return Its channel and token; an empty channel when it has none.
