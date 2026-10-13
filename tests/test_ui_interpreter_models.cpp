@@ -44,7 +44,7 @@ TEST_CASE("interpreter models: a sequence runs across three models, each step re
     h.settle();
     REQUIRE(h.dispatcher.calls.size() == 1);
     CHECK(h.dispatcher.calls.at(0).typeId == "Lims_ClientModel");
-    CHECK(h.dispatcher.calls.at(0).sharing == morph::bridge::BindSharing::Shared);
+    CHECK(h.dispatcher.calls.at(0).sharing == morph::bridge::BindSharing::Private);  // stateless: bound privately
     h.reply(0, R"({"id":7})");
     REQUIRE(h.dispatcher.calls.size() == 2);
     CHECK(h.dispatcher.calls.at(1).typeId == "Lims_SampleModel");

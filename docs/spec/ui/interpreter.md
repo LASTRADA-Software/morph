@@ -73,7 +73,9 @@ A name resolves through the names bound at the place first (`event`, a step's `a
   the default of a model the catalog does not mark stateless, `shared` for `"shared"` and the default of
   a stateless one, `shared:<key>` for an `instance` expression (`""` while the key is `null`: the alias
   is unbound and its queries idle), the opener's token for `{"from": alias}`. A channel is bound on
-  first use and again when the token changes; the old one is released when nothing holds it.
+  first use and again when the token changes; the old one is released when nothing holds it. A `shared`
+  alias binds a private instance: it is a stateless model's (`loadDocument` refuses `"shared"` on any other),
+  whose instances are interchangeable, and what it shares with other screens is the query cache.
 - **Element values** (spec 5 §6) are read through the element's state: `draft` (what the user is
   editing), `committed`, `edited` (`dirty`), `touched`, `open`, `submitted`, a table's `selection` and
   `activeKey`, and `inner`, the dialog content's scope while it is mounted.

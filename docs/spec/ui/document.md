@@ -79,7 +79,7 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 
 | Declaration | JSON | Model |
 |---|---|---|
-| Model alias | `"alias": {"type": "T", "instance": "private" \| "shared" \| e \| {"from": alias}}` | `ModelDecl`, `InstanceMode` `Default`, `Private`, `Shared`, `Keyed` (a key expression) or `Borrowed` |
+| Model alias | `"alias": {"type": "T", "instance": "private" \| "shared" \| e \| {"from": alias}}` | `ModelDecl`, `InstanceMode` `Default`, `Private`, `Shared`, `Keyed` (a key expression) or `Borrowed`; `"shared"` on a model the catalog does not mark stateless is refused |
 | State | `"name": {"type": "T"?, "init": e?}` | `StateDecl`; without a type, the type is the init's |
 | Derived | `"name": e` under `let` | `LetDecl` |
 | Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshOn", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |

@@ -107,8 +107,8 @@ using Evaluator = std::function<async::Completion<std::string>(std::string const
 ///
 /// An evaluation goes through the `Evaluator` it was given, since that envelope belongs to the UI service, not the
 /// bridge; without one it is refused with a `std::runtime_error`. It has no offline queue: `queueOffline` is ignored.
-/// A shared binding without a key is bound unattached, which the bridge refuses at the first call; a document
-/// reaches it only for a stateful model whose alias says `"shared"`.
+/// A shared binding without a key is bound unattached, which the bridge refuses at the first call; the interpreter
+/// never binds one, since a `"shared"` alias is a stateless model's and binds privately.
 class BridgeDispatcher final : public Dispatcher {
 public:
     /// @brief Dispatches through @p bridge, and evaluates through @p evaluator.
@@ -2135,7 +2135,9 @@ namespace detail {
             break;
         }
         case InstanceMode::Shared:
-            alias.channel = core.dispatcher.bind(type, bridge::BindSharing::Shared, {});
+            // `shared` is for a stateless model, whose instances are interchangeable: its calls go to an instance of
+            // the alias's own, and what it shares with other screens is the query cache, through the token.
+            alias.channel = core.dispatcher.bind(type, bridge::BindSharing::Private, {});
             break;
         case InstanceMode::Keyed:
             alias.channel = core.dispatcher.bind(type, bridge::BindSharing::Shared, token.substr(7));
