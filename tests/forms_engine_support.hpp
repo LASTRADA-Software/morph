@@ -25,8 +25,8 @@ namespace morph::test::formsengine {
 
 /// @brief One call the engine made.
 struct Call {
-    std::string action{};
-    std::string body{};
+    std::string action;
+    std::string body;
 };
 
 /// @brief Records submits and options fetches and answers them on the owner.
@@ -72,7 +72,7 @@ private:
 
     async::Completion<std::string> record(std::vector<Call>& calls, std::vector<std::shared_ptr<Promise>>& promises,
                                           Responder const& responder, std::string_view action, std::string body) {
-        calls.push_back(Call{std::string{action}, std::move(body)});
+        calls.push_back(Call{.action = std::string{action}, .body = std::move(body)});
         auto [completion, promise] = async::Completion<std::string>::makeSettleable(_owner);
         auto const shared = std::make_shared<Promise>(std::move(promise));
         promises.push_back(shared);
@@ -87,10 +87,10 @@ private:
     exec::IExecutor* _owner;
     Responder _submitResponder = [](Call const&) { return std::optional<std::string>{R"({"ok":true})"}; };
     Responder _fetchResponder = [](Call const&) { return std::optional<std::string>{"[]"}; };
-    std::vector<Call> _submits{};
-    std::vector<Call> _fetches{};
-    std::vector<std::shared_ptr<Promise>> _submitPromises{};
-    std::vector<std::shared_ptr<Promise>> _fetchPromises{};
+    std::vector<Call> _submits;
+    std::vector<Call> _fetches;
+    std::vector<std::shared_ptr<Promise>> _submitPromises;
+    std::vector<std::shared_ptr<Promise>> _fetchPromises;
 };
 
 /// @brief Reads a schema that must be well-formed.

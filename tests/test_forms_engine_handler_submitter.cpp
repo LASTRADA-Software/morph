@@ -63,8 +63,8 @@ struct Outcome {
 };
 
 Outcome settle(morph::exec::MainThreadExecutor& owner, morph::async::Completion<std::string> completion) {
-    auto outcome = std::make_shared<Outcome>();
-    auto done = std::make_shared<std::atomic<bool>>(false);
+    auto const outcome = std::make_shared<Outcome>();
+    auto const done = std::make_shared<std::atomic<bool>>(false);
     completion
         .then([outcome, done](std::string const& reply) {
             outcome->reply = reply;

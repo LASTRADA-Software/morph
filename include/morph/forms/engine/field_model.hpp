@@ -111,9 +111,9 @@ inline constexpr std::size_t kMaxNestingDepth = 4;
 /// @brief One unit a Quantity can be entered in; the first of a field's units is canonical.
 struct UnitOption {
     /// @brief The unit id (`ExtUnits.unitAscii`, or the alternative's `id`).
-    std::string id{};
+    std::string id;
     /// @brief What a selector shows.
-    std::string display{};
+    std::string display;
     /// @brief Fraction digits accepted in this unit.
     std::uint32_t decimals = 0;
     /// @brief Numerator of the exact unit-to-canonical ratio.
@@ -129,9 +129,9 @@ struct UnitOption {
 /// @brief One selectable value of an Enum or a Choice.
 struct ChoiceOption {
     /// @brief The value as the JSON literal the body carries (`"\"Viewer\""`, `"9007199254740993"`).
-    std::string valueJson{};
+    std::string valueJson;
     /// @brief What the user sees.
-    std::string label{};
+    std::string label;
     /// @brief Member-wise equality.
     /// @param other The other option.
     /// @return `true` when value and label match.
@@ -141,13 +141,13 @@ struct ChoiceOption {
 /// @brief Where a Choice's options come from (`x-optionsAction` and its companions).
 struct ChoiceSpec {
     /// @brief The action whose result rows are the options.
-    std::string optionsAction{};
+    std::string optionsAction;
     /// @brief The row member submitted as the value (`x-optionValue`).
     std::string valueField = "id";
     /// @brief The row member shown (`x-optionLabel`).
     std::string labelField = "name";
     /// @brief Sibling wire names whose values parameterise the options request (`x-optionsDependsOn`).
-    std::vector<std::string> dependsOn{};
+    std::vector<std::string> dependsOn;
     /// @brief Member-wise equality.
     /// @param other The other descriptor.
     /// @return `true` when every member matches.
@@ -155,23 +155,24 @@ struct ChoiceSpec {
 };
 
 /// @brief Everything the engine knows about one field, from its schema property.
+// NOLINTNEXTLINE(misc-no-recursion): a field's members are fields, so copying one copies them.
 struct FieldSpec {
     /// @brief The wire name.
-    std::string name{};
+    std::string name;
     /// @brief The path from the action: `name`, `parent.name`, or `rows[].name` for a collection's member.
-    std::string path{};
+    std::string path;
     /// @brief The control and encoder.
     FieldKind kind = FieldKind::Text;
     /// @brief The first declared JSON type (`"integer"`, …), empty when the property declares none.
-    std::string jsonType{};
+    std::string jsonType;
     /// @brief The schema's title, or the wire name.
-    std::string title{};
+    std::string title;
     /// @brief The schema's `description`.
-    std::string help{};
+    std::string help;
     /// @brief `x-placeholder`.
-    std::string placeholder{};
+    std::string placeholder;
     /// @brief `x-i18nKey`: the explicit message-key stem, empty when none is declared.
-    std::string i18nKey{};
+    std::string i18nKey;
     /// @brief Named in the containing object's `required`.
     bool required = false;
     /// @brief `x-blankAs` (Text and Multiline only): whether a cleared field submits `""`.
@@ -181,41 +182,41 @@ struct FieldSpec {
     /// @brief `x-hidden`.
     bool hidden = false;
     /// @brief `x-computed.inputs`: the members a computed field derives from.
-    std::vector<std::string> computedInputs{};
+    std::vector<std::string> computedInputs;
     /// @brief `minimum`, as canonical decimal text.
-    std::optional<std::string> minimum{};
+    std::optional<std::string> minimum;
     /// @brief `maximum`, as canonical decimal text.
-    std::optional<std::string> maximum{};
+    std::optional<std::string> maximum;
     /// @brief A positive `multipleOf`, as canonical decimal text.
-    std::optional<std::string> multipleOf{};
+    std::optional<std::string> multipleOf;
     /// @brief `x-exactMinimum`: an integer bound's exact digits.
-    std::optional<std::string> exactMinimum{};
+    std::optional<std::string> exactMinimum;
     /// @brief `x-exactMaximum`: an integer bound's exact digits.
-    std::optional<std::string> exactMaximum{};
+    std::optional<std::string> exactMaximum;
     /// @brief `x-minimum`: a per-instance lower bound (`InstanceConstraints::decorate`).
-    std::optional<math::Rational> instanceMinimum{};
+    std::optional<math::Rational> instanceMinimum;
     /// @brief `x-maximum`: a per-instance upper bound.
-    std::optional<math::Rational> instanceMaximum{};
+    std::optional<math::Rational> instanceMaximum;
     /// @brief `x-decimalPlaces`: the declared precision of a Decimal or Quantity.
-    std::optional<std::uint32_t> decimalPlaces{};
+    std::optional<std::uint32_t> decimalPlaces;
     /// @brief `x-displayDecimals`: a plain Number's entry and display precision.
-    std::optional<std::uint32_t> displayDecimals{};
+    std::optional<std::uint32_t> displayDecimals;
     /// @brief The display unit (`ExtUnits.unitUnicode`, else `unitAscii`), empty when none.
-    std::string unit{};
+    std::string unit;
     /// @brief `ExtUnits.unitAscii`.
-    std::string unitAscii{};
+    std::string unitAscii;
     /// @brief A Decimal's or Quantity's entry units: the canonical one first, then `x-unitAlternatives`.
-    std::vector<UnitOption> units{};
+    std::vector<UnitOption> units;
     /// @brief An Enum's options, in schema order.
-    std::vector<ChoiceOption> enumOptions{};
+    std::vector<ChoiceOption> enumOptions;
     /// @brief A Choice's options source.
-    std::optional<ChoiceSpec> choice{};
+    std::optional<ChoiceSpec> choice;
     /// @brief `x-section`: the index of the `x-layout` group the field sits in.
-    std::optional<std::size_t> group{};
+    std::optional<std::size_t> group;
     /// @brief `x-colspan`: grid columns the field spans (at least 1).
     int colspan = 1;
     /// @brief `x-widget`, empty when none.
-    std::string widget{};
+    std::string widget;
     /// @brief A Slider's track minimum (`x-min`).
     std::int64_t sliderMin = 0;
     /// @brief A Slider's track maximum (`x-max`).
@@ -223,9 +224,9 @@ struct FieldSpec {
     /// @brief A Slider's increment (`x-step`, at least 1).
     std::int64_t sliderStep = 1;
     /// @brief An Array's item JSON type (`"string"` when undeclared).
-    std::string itemType{};
+    std::string itemType;
     /// @brief An Object's members, or an ObjectArray's element members, in `x-order`.
-    std::vector<FieldSpec> children{};
+    std::vector<FieldSpec> children;
     /// @brief An Object or ObjectArray whose members are not described: its `$ref` is already on
     ///        the path, it is deeper than `kMaxNestingDepth`, or its schema states no members.
     bool truncated = false;
@@ -234,11 +235,11 @@ struct FieldSpec {
 /// @brief One `x-layout` group, or the implicit group of the fields no group names.
 struct FieldGroupSpec {
     /// @brief The group's title (empty for the implicit group).
-    std::string title{};
+    std::string title;
     /// @brief Section, tab or accordion; the implicit group is a `Section` with `implicit` set.
     GroupKind kind = GroupKind::Section;
     /// @brief The wire names of the fields in the group, in `x-order`.
-    std::vector<std::string> fields{};
+    std::vector<std::string> fields;
     /// @brief The trailing group of fields no declared group names (or every field, without `x-layout`).
     bool implicit = false;
 };
@@ -304,7 +305,7 @@ public:
     /// @param prop A property schema.
     /// @return The resolved property.
     [[nodiscard]] Json resolveProp(Json const& prop) const {
-        Json const resolved = resolveRef(prop);
+        Json resolved = resolveRef(prop);
         Json const* branches = member(resolved, "anyOf");
         if (branches == nullptr || !branches->is_array()) {
             branches = member(resolved, "oneOf");
@@ -350,7 +351,8 @@ public:
             return fields;
         }
         if (!props->is_object()) {
-            return std::unexpected(SchemaError{pathPrefix + "properties", "\"properties\" must be an object"});
+            return std::unexpected(
+                SchemaError{.path = pathPrefix + "properties", .message = "\"properties\" must be an object"});
         }
         std::vector<std::string> required;
         if (Json const* const list = member(objectSchema, "required"); list != nullptr && list->is_array()) {
@@ -369,8 +371,11 @@ public:
             static_cast<void>(ignoredOrder);
             Json const& raw = *member(*props, name);
             if (!raw.is_object()) {
+                std::string path{"properties."};
+                path += pathPrefix;
+                path += name;
                 return std::unexpected(
-                    SchemaError{"properties." + pathPrefix + name, "a property schema must be a JSON object"});
+                    SchemaError{.path = std::move(path), .message = "a property schema must be a JSON object"});
             }
             auto field = describeOne(raw, name, depth, pathPrefix, refChain, contains(required, name));
             if (!field) {
@@ -492,7 +497,8 @@ private:
             }
             if (Json const* const literal = member(branch, "const")) {
                 auto const* const title = stringAt(branch, "title");
-                rows.push_back(ChoiceOption{toJson(*literal), title != nullptr ? *title : displayText(*literal)});
+                rows.push_back(ChoiceOption{.valueJson = toJson(*literal),
+                                            .label = title != nullptr ? *title : displayText(*literal)});
                 continue;
             }
             auto inner = nested ? constBranches(branch, false) : std::nullopt;
@@ -510,7 +516,7 @@ private:
             std::vector<ChoiceOption> rows;
             for (Json const& literal : literals->get_array()) {
                 if (!literal.is_null()) {
-                    rows.push_back(ChoiceOption{toJson(literal), displayText(literal)});
+                    rows.push_back(ChoiceOption{.valueJson = toJson(literal), .label = displayText(literal)});
                 }
             }
             return rows;
@@ -533,7 +539,8 @@ private:
             math::DecimalPlaces{static_cast<std::uint32_t>(std::min<std::uint64_t>(places, math::kMaxDecimalPlaces))}};
     }
 
-    // NOLINTNEXTLINE(misc-no-recursion) -- the other half of describe's walk
+    // The other half of describe's walk, with one branch per schema keyword a field reads.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
     [[nodiscard]] std::expected<FieldSpec, SchemaError> describeOne(Json const& raw, std::string const& name,
                                                                     std::size_t depth, std::string const& pathPrefix,
                                                                     std::vector<std::string> const& refChain,
@@ -602,7 +609,7 @@ private:
         spec.colspan =
             static_cast<int>(std::clamp<std::int64_t>(signedOf(either(raw, prop, "x-colspan")).value_or(1), 1, 1024));
 
-        auto const* const optionsAction = [&]() -> std::string const* {
+        auto const* const optionsAction = [&] -> std::string const* {
             Json const* const value = either(raw, prop, "x-optionsAction");
             return value == nullptr ? nullptr : value->get_if<std::string>();
         }();
@@ -671,7 +678,8 @@ private:
             spec.kind = FieldKind::Date;
         } else if (spec.decimalPlaces.has_value()) {
             spec.kind = member(prop, "ExtUnits") != nullptr ? FieldKind::Quantity : FieldKind::Decimal;
-            spec.units.push_back(UnitOption{spec.unitAscii, spec.unit, *spec.decimalPlaces, 1, 1});
+            spec.units.push_back(UnitOption{
+                .id = spec.unitAscii, .display = spec.unit, .decimals = *spec.decimalPlaces, .num = 1, .den = 1});
             if (Json const* const alternatives = either(raw, prop, "x-unitAlternatives");
                 spec.kind == FieldKind::Quantity && alternatives != nullptr && alternatives->is_array()) {
                 for (Json const& alternative : alternatives->get_array()) {
@@ -748,15 +756,16 @@ public:
     /// @param actionType The action type the form submits (the registered type id).
     /// @param schemaJson The schema, in the vocabulary `schemaJson<A>()` emits.
     /// @return The model, or the error naming where the document is malformed.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a type id and a JSON document; swapped, neither reads.
     [[nodiscard]] static std::expected<FormModel, SchemaError> fromSchema(std::string_view actionType,
                                                                           std::string_view schemaJson) {
         using detail::engine::Json;
         auto const dom = detail::engine::parseJson(schemaJson);
         if (!dom) {
-            return std::unexpected(SchemaError{"", "the schema is not valid JSON"});
+            return std::unexpected(SchemaError{.path = "", .message = "the schema is not valid JSON"});
         }
         if (!dom->is_object()) {
-            return std::unexpected(SchemaError{"", "the schema is not a JSON object"});
+            return std::unexpected(SchemaError{.path = "", .message = "the schema is not a JSON object"});
         }
         FormModel model{};
         model._actionType = actionType;
@@ -775,7 +784,7 @@ public:
         }
         if (Json const* const rules = detail::engine::member(*dom, "x-rules")) {
             if (!rules->is_array()) {
-                return std::unexpected(SchemaError{"x-rules", "\"x-rules\" must be an array"});
+                return std::unexpected(SchemaError{.path = "x-rules", .message = "\"x-rules\" must be an array"});
             }
             std::size_t index = 0;
             for (Json const& node : rules->get_array()) {
@@ -842,6 +851,16 @@ public:
 private:
     FormModel() = default;
 
+    [[nodiscard]] static GroupKind groupKindOf(std::string const* kind) {
+        if (kind != nullptr && *kind == "tab") {
+            return GroupKind::Tab;
+        }
+        if (kind != nullptr && *kind == "accordion") {
+            return GroupKind::Accordion;
+        }
+        return GroupKind::Section;
+    }
+
     [[nodiscard]] static std::expected<std::vector<FieldGroupSpec>, SchemaError> readGroups(
         detail::engine::Json const& dom, std::vector<FieldSpec> const& fields) {
         using detail::engine::Json;
@@ -849,7 +868,7 @@ private:
         Json const* const layout = detail::engine::member(dom, "x-layout");
         Json const* const declared = layout == nullptr ? nullptr : detail::engine::member(*layout, "groups");
         if (declared != nullptr && !declared->is_array()) {
-            return std::unexpected(SchemaError{"x-layout.groups", "\"groups\" must be an array"});
+            return std::unexpected(SchemaError{.path = "x-layout.groups", .message = "\"groups\" must be an array"});
         }
         if (declared != nullptr) {
             for (Json const& node : declared->get_array()) {
@@ -857,11 +876,7 @@ private:
                 if (auto const* const title = detail::engine::stringAt(node, "title")) {
                     group.title = *title;
                 }
-                auto const* const kind = detail::engine::stringAt(node, "kind");
-                group.kind = kind == nullptr        ? GroupKind::Section
-                             : *kind == "tab"       ? GroupKind::Tab
-                             : *kind == "accordion" ? GroupKind::Accordion
-                                                    : GroupKind::Section;
+                group.kind = groupKindOf(detail::engine::stringAt(node, "kind"));
                 groups.push_back(std::move(group));
             }
         }
@@ -880,11 +895,11 @@ private:
         return groups;
     }
 
-    std::string _actionType{};
-    std::string _title{};
-    std::vector<FieldSpec> _fields{};
-    std::vector<FieldGroupSpec> _groups{};
-    std::vector<RuleExpr> _rules{};
+    std::string _actionType;
+    std::string _title;
+    std::vector<FieldSpec> _fields;
+    std::vector<FieldGroupSpec> _groups;
+    std::vector<RuleExpr> _rules;
     SubmitMode _submitMode = SubmitMode::Automatic;
 };
 

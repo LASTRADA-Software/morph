@@ -18,7 +18,7 @@ TEST_CASE("engine text: quote matches JSON.stringify byte for byte", "[forms-eng
     CHECK(engine::quote("plain") == R"("plain")");
     CHECK(engine::quote("a\"b\\c") == R"("a\"b\\c")");
     CHECK(engine::quote("tab\tnl\ncr\r") == R"("tab\tnl\ncr\r")");
-    CHECK(engine::quote(std::string{"\x01"}) == R"("\u0001")");
+    CHECK(engine::quote("\x01") == R"("\u0001")");
     CHECK(engine::quote("kg/m\xC2\xB3") == "\"kg/m\xC2\xB3\"");  // non-ASCII passes through
 }
 
