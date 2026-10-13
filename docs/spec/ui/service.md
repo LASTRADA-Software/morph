@@ -37,6 +37,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 | `ui-catalog` | empty | `CatalogReply`: `{entries, permitted, models?, actions?}` |
 | `ui-fetch` | `FetchRequest`: `{hash}` | the file's exact bytes |
 | `ui-evaluate` | the action's JSON body; `modelType` and `actionType` name it | `EvaluateReply`: `{body, errors, ready}` |
+| `ui-file` | `FileRequest`: `{op, …}`, one step of an upload or a download | `FileReply`: the members its `op` answers |
 
 Every request carries the envelope's `session`; the server stamps the verified principal onto it before the
 service sees it. `ui-hello` refuses a client that does not speak every vocabulary the bundle needs with
@@ -71,6 +72,8 @@ Every kind calls the authoriser. The pseudo-model is `ui`.
 | `ui-fetch` of the manifest or a public file | the `ui-hello` gate |
 | `ui-fetch` of any other file | `authorize(session, "ui", "fetch")`; for a screen, also the catalog's rule below |
 | `ui-evaluate` | `authorize(session, modelType, actionType)`: a principal who may not run the action may not evaluate it |
+| `ui-file` `begin` | `authorize(session, model, action)`: as the mutation that will reference the file |
+| `ui-file` `chunk`, `end`, `read` | the upload id or file reference belongs to the session's principal |
 
 A refusal is `err "unauthorized"`. An `IAuthorizer` that switches on its model type sees `ui` for the first three
 kinds, the screen's own model types for the catalog's, and the action's model type for `ui-evaluate`.
@@ -230,10 +233,42 @@ the action's body with its computed fields filled and its field errors, without 
   members, with the field errors under `errors` and the verdict under `ready`, so `errors.<field>` attaches each
   error to its element. An action field named `errors` or `ready` is shadowed by them.
 
-## Not yet
+## Files
 
-- **`ui-file`** (spec 6 §18) follows in its own pull request. It needs a file store, chunking, and a decision on
-  how a download is authorised.
+`ui-file` is the file side channel of `files/1` (spec 6 §18). A server serves it when its `UiService` is built with
+an `IFileStore` (`ui/file_store.hpp`); without one, `ui-file` is an unknown kind.
+
+| `op` | Request | Reply |
+|---|---|---|
+| `begin` | `{name, type, size, model, action}` | `{upload}`: an upload id |
+| `chunk` | `{upload, offset, data}`: `data` is base64url without padding | `{received}`: the bytes received so far |
+| `end` | `{upload}` | `{ref}`: the file's reference |
+| `read` | `{ref, offset, length}` | `{data, total, name, type}` |
+
+- **Authorisation.** An upload is authorised as the mutation that will reference it: `begin` names that mutation's
+  model type and action, and the server asks `authorize(session, model, action)`. A download is authorised by its
+  **reference**, a capability: `file:` and 32 hex digits read straight from `std::random_device`, unguessable,
+  issued for one principal. Presenting it as that principal is the authorisation; as any other principal it is
+  `not found`, exactly as a reference that does not exist, so a reference cannot be probed.
+- **Who issues a reference.** An upload's `end` issues one to the uploader. A server that returns a file in a reply
+  issues it with `IFileStore::issue(principal, info, bytes)` for the principal the reply is for, and puts the
+  reference in the reply. A model does not know the principal, so the issuing is done where the server knows it:
+  the handler or service the application builds around the store.
+- **Chunks.** A chunk carries at most `kMaxFileChunkBytes` (256 KiB) of file, and a `ui-file` request body is at
+  most `kMaxFileRequestBytes`. A chunk's `offset` must be the bytes received so far (`bad offset` otherwise), so a
+  repeated or reordered chunk is never applied; bytes past the size `begin` announced are `too large`; `end` before
+  every byte arrived is `incomplete`. A `read` returns at most `kMaxFileChunkBytes` from `offset`.
+- **`MemoryFileStore`** bounds a file (`maxFileBytes`) and a principal (`maxBytesPerPrincipal`, counting the sizes of
+  its uploads in progress), and drops an upload that goes `uploadTtl` without a chunk. It is thread-safe: the service
+  calls it on the server strand while an application issues references from its models' strands.
+- **The client.** `FileTransfer(exchange, session)` uploads bytes (`upload(info, bytes, model, action, progress,
+  done)`) and downloads a reference (`download(ref, progress, done)`), one chunk in flight, with progress after each.
+  Reading the file the user picked is the platform's: a host's `InterpreterHost::uploadFor` reads it, then hands the
+  bytes to `FileTransfer`. The interpreter calls `uploadFor` with an `UploadRequest` that names the mutation of the
+  document's `{"upload": e, "to": "m"}`; its default calls `upload(file, …)`, so a host that overrides only that
+  keeps working.
+
+## Not yet
 - **Development reload** (spec 5 §12) is the generic client's loop over `UiClient::open`, which already fetches
   only what changed.
 - **Several vocabulary versions of one screen.** There is one vocabulary version, `ui/1`; the registry keeps one

@@ -43,6 +43,8 @@ inline constexpr std::string_view kCatalogKind = "ui-catalog";
 inline constexpr std::string_view kFetchKind = "ui-fetch";
 /// @brief The envelope kind that evaluates an action body without running it (spec 5 §7).
 inline constexpr std::string_view kEvaluateKind = "ui-evaluate";
+/// @brief The envelope kind of the file side channel (`files/1`, spec 6 §18): uploads and downloads in chunks.
+inline constexpr std::string_view kFileKind = "ui-file";
 
 /// @brief The pseudo-model the service's envelopes are authorised under: `authorize(session, "ui", <action>)`.
 inline constexpr std::string_view kServiceModel = "ui";
@@ -57,6 +59,11 @@ inline constexpr std::string_view kFetchAction = "fetch";
 inline constexpr std::string_view kHashPrefix = "sha256:";
 /// @brief The hexadecimal digits of a SHA-256 digest.
 inline constexpr std::size_t kHashDigits = 64;
+
+/// @brief The most file bytes one `ui-file` chunk carries, before base64url.
+inline constexpr std::size_t kMaxFileChunkBytes = std::size_t{256} * 1024;
+/// @brief The largest `ui-file` request body a server reads: a chunk in base64url, and the rest of the request.
+inline constexpr std::size_t kMaxFileRequestBytes = (kMaxFileChunkBytes / 3 * 4) + (std::size_t{4} * 1024);
 
 /// @brief The largest request body (`ui-hello`, `ui-fetch`) a server reads.
 inline constexpr std::size_t kMaxRequestBytes = std::size_t{64} * 1024;
@@ -185,6 +192,50 @@ struct EvaluateReply {
     std::map<std::string, std::string, std::less<>> errors;
     /// @brief Whether an `execute` of this body would reach the model.
     bool ready = false;
+};
+
+/// @brief The body of a `ui-file` request: one step of an upload or a download, named by `op`.
+struct FileRequest {
+    /// @brief `begin`, `chunk`, `end` or `read`.
+    std::string op;
+    /// @brief `begin`: the file's name.
+    std::string name;
+    /// @brief `begin`: its media type.
+    std::string type;
+    /// @brief `begin`: its size in bytes.
+    std::size_t size = 0;
+    /// @brief `begin`: the model type of the mutation that will reference the file.
+    std::string model;
+    /// @brief `begin`: that mutation's action.
+    std::string action;
+    /// @brief `chunk`, `end`: the upload id `begin` answered.
+    std::string upload;
+    /// @brief `chunk`, `read`: the first byte.
+    std::size_t offset = 0;
+    /// @brief `chunk`: the bytes, base64url without padding.
+    std::string data;
+    /// @brief `read`: the file's reference.
+    std::string ref;
+    /// @brief `read`: at most this many bytes; capped at `kMaxFileChunkBytes`.
+    std::size_t length = kMaxFileChunkBytes;
+};
+
+/// @brief The body of a `ui-file` reply: the members its `op` answers, the others absent.
+struct FileReply {
+    /// @brief `begin`: the upload id.
+    std::optional<std::string> upload;
+    /// @brief `chunk`: the bytes received so far.
+    std::optional<std::size_t> received;
+    /// @brief `end`: the file's reference.
+    std::optional<std::string> ref;
+    /// @brief `read`: the bytes, base64url without padding.
+    std::optional<std::string> data;
+    /// @brief `read`: the whole file's size.
+    std::optional<std::size_t> total;
+    /// @brief `read`: the file's name.
+    std::optional<std::string> name;
+    /// @brief `read`: its media type.
+    std::optional<std::string> type;
 };
 
 /// @brief One catalog entry (spec 6 §8).
@@ -571,6 +622,34 @@ template <typename T>
                                " field errors");
     }
     return reply;
+}
+
+/// @brief Reads a `ui-file` request body.
+///
+/// Refused: a body longer than `kMaxFileRequestBytes`, text that is not JSON or nests too deep, a must-understand
+/// key, or an `op` that is not `begin`, `chunk`, `end` or `read`.
+/// @param text The request body.
+/// @return The request, or why it was refused.
+[[nodiscard]] inline std::expected<FileRequest, std::string> parseFileRequest(std::string_view text) {
+    if (text.size() > kMaxFileRequestBytes) {
+        return std::unexpected("the ui-file request is longer than " + std::to_string(kMaxFileRequestBytes) +
+                               " bytes");
+    }
+    auto request = detail::readMessage<FileRequest>(text, "the ui-file request", {}, {});
+    if (!request) {
+        return std::unexpected(std::move(request.error()));
+    }
+    if (request->op != "begin" && request->op != "chunk" && request->op != "end" && request->op != "read") {
+        return std::unexpected("the ui-file request's op is not begin, chunk, end or read");
+    }
+    return request;
+}
+
+/// @brief Reads a `ui-file` reply body.
+/// @param text The reply body.
+/// @return The reply, or why it was refused.
+[[nodiscard]] inline std::expected<FileReply, std::string> parseFileReply(std::string_view text) {
+    return detail::readMessage<FileReply>(text, "the ui-file reply", {}, {});
 }
 
 /// @brief Reads a `ui-catalog` reply body.

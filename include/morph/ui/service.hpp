@@ -21,6 +21,7 @@
 #include "../session/session.hpp"
 #include "bundle.hpp"
 #include "document.hpp"
+#include "file_store.hpp"
 #include "value.hpp"
 
 /// @file
@@ -576,10 +577,12 @@ public:
     /// @param dispatcher The dispatcher `ui-evaluate` reads the actions from: the server's own. Borrowed: it must
     ///                   outlive the service.
     /// @throws std::invalid_argument if @p bundle is null.
+    /// @param files      The file side channel's store; `nullptr` serves no `ui-file`.
     explicit UiService(std::shared_ptr<ServedBundle const> bundle,
                        ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
-                           ::morph::model::detail::defaultDispatcher())
-        : _bundle{std::move(bundle)}, _dispatcher{&dispatcher} {
+                           ::morph::model::detail::defaultDispatcher(),
+                       std::shared_ptr<IFileStore> files = nullptr)
+        : _bundle{std::move(bundle)}, _dispatcher{&dispatcher}, _files{std::move(files)} {
         if (!_bundle) {
             throw std::invalid_argument("UiService: the bundle is null");
         }
@@ -589,7 +592,8 @@ public:
     /// @param kind The envelope kind.
     /// @return `true` for `ui-hello`, `ui-catalog`, `ui-fetch` and `ui-evaluate`.
     [[nodiscard]] bool serves(std::string_view kind) const override {
-        return kind == kHelloKind || kind == kCatalogKind || kind == kFetchKind || kind == kEvaluateKind;
+        return kind == kHelloKind || kind == kCatalogKind || kind == kFetchKind || kind == kEvaluateKind ||
+               (kind == kFileKind && _files != nullptr);
     }
 
     /// @brief Answers one request.
@@ -606,6 +610,9 @@ public:
         }
         if (request.kind == kEvaluateKind) {
             return evaluate(request, authorizer);
+        }
+        if (request.kind == kFileKind) {
+            return file(request, authorizer);
         }
         return fetch(request, authorizer);
     }
@@ -671,6 +678,69 @@ private:
         EvaluateReply reply{.body = {}, .errors = std::move(evaluation.errors), .ready = evaluation.ready};
         if (auto const error = glz::read_json(reply.body, evaluation.body)) {
             return err(request, "ui-evaluate: " + glz::format_error(error, evaluation.body));
+        }
+        return ok(request, detail::writeMessage(reply));
+    }
+
+    /// @brief One step of an upload or a download through the file side channel (spec 6 §18).
+    ///
+    /// `begin` is authorised as the mutation that will reference the file; every later step is authorised by the
+    /// upload id or reference, which belong to the principal that created them. A refusal of the store is `err` with
+    /// its text; an id or reference of another principal is `not found`, like one that does not exist.
+    /// @param request    The envelope; its body is a `FileRequest`.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply: a `FileReply`, or `err`.
+    [[nodiscard]] std::string file(::morph::wire::Envelope const& request,
+                                   ::morph::session::IAuthorizer const& authorizer) const {
+        auto parsed = parseFileRequest(request.body);
+        if (!parsed) {
+            return err(request, std::move(parsed.error()));
+        }
+        FileRequest& step = *parsed;
+        std::string const& principal = request.session.principal;
+        auto const refused = [&request](FileError error) { return err(request, std::string{fileErrorText(error)}); };
+        FileReply reply;
+        if (step.op == "begin") {
+            if (step.model.empty() || step.action.empty()) {
+                return err(request, "ui-file begin names no model and action");
+            }
+            if (!authorizer.authorize(request.session, step.model, step.action)) {
+                return err(request, "unauthorized");
+            }
+            auto upload = _files->begin(
+                principal, FileInfo{.name = std::move(step.name), .type = std::move(step.type), .size = step.size});
+            if (!upload) {
+                return refused(upload.error());
+            }
+            reply.upload = std::move(*upload);
+        } else if (step.op == "chunk") {
+            auto bytes = ::morph::session::detail::base64UrlDecode(step.data);
+            if (!bytes) {
+                return err(request, "ui-file chunk data is not base64url");
+            }
+            if (bytes->size() > kMaxFileChunkBytes) {
+                return err(request, "ui-file chunk is longer than " + std::to_string(kMaxFileChunkBytes) + " bytes");
+            }
+            auto received = _files->append(principal, step.upload, step.offset, *bytes);
+            if (!received) {
+                return refused(received.error());
+            }
+            reply.received = *received;
+        } else if (step.op == "end") {
+            auto ref = _files->finish(principal, step.upload);
+            if (!ref) {
+                return refused(ref.error());
+            }
+            reply.ref = std::move(*ref);
+        } else {
+            auto slice = _files->read(principal, step.ref, step.offset, std::min(step.length, kMaxFileChunkBytes));
+            if (!slice) {
+                return refused(slice.error());
+            }
+            reply.data = ::morph::session::detail::base64UrlEncode(slice->bytes);
+            reply.total = slice->info.size;
+            reply.name = std::move(slice->info.name);
+            reply.type = std::move(slice->info.type);
         }
         return ok(request, detail::writeMessage(reply));
     }
@@ -774,6 +844,7 @@ private:
 
     std::shared_ptr<ServedBundle const> _bundle;
     ::morph::model::detail::ActionDispatcher* _dispatcher;
+    std::shared_ptr<IFileStore> _files;
 };
 
 }  // namespace morph::ui
