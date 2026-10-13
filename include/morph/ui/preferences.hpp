@@ -216,7 +216,7 @@ public:
     /// @param request The application, the scope and the points.
     /// @return The stored JSON text of each point that has an entry.
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static): reads the store.
-    core::async::Task<PrefValues> execute(PrefLoad request) {
+    ::core::async::Task<PrefValues> execute(PrefLoad request) {
         checkName(request.app, "app");
         checkName(request.scope, "scope");
         if (request.points.size() > kMaxPrefPoints) {
@@ -244,7 +244,7 @@ public:
     /// @param request The key's application, scope and point, and the choice's JSON text.
     /// @return Whether the store took it.
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static): writes the store.
-    core::async::Task<PrefStored> execute(PrefSet request) {
+    ::core::async::Task<PrefStored> execute(PrefSet request) {
         PrefKey const key = keyOf(request.app, request.scope, request.point);
         if (request.value.size() > _options.maxValueBytes) {
             throw std::invalid_argument{"a preference is longer than " + std::to_string(_options.maxValueBytes) +
@@ -261,7 +261,7 @@ public:
     /// @param request The key's application, scope and point.
     /// @return Whether an entry was there.
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static): writes the store.
-    core::async::Task<PrefRemoved> execute(PrefRemove request) {
+    ::core::async::Task<PrefRemoved> execute(PrefRemove request) {
         PrefKey const key = keyOf(request.app, request.scope, request.point);
         bool const removed = co_await _store->remove(key);
         co_return PrefRemoved{.removed = removed};
