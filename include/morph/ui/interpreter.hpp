@@ -632,6 +632,14 @@ public:
         setFormatting(std::move(next));
     }
 
+    /// @brief Replaces the message catalogue, keeping the other formatting facts; every `t` re-resolves.
+    /// @param translations The provider, such as `MessageCatalogues::provider()`; empty shows every fallback.
+    void setTranslations(render::TranslationProvider translations) {
+        FormatContext next = *_format.peek();
+        next.translations = std::move(translations);
+        setFormatting(std::move(next));
+    }
+
     /// @brief Sets the `env` values (`widthClass`, `locale`, `platform`, `online`, `backend`).
     /// @param values The values.
     void setEnvironment(ValueRecord values) { _env.set(std::move(values)); }

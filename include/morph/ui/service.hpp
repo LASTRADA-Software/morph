@@ -20,6 +20,7 @@
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
 #include "bundle.hpp"
+#include "catalogue.hpp"
 #include "document.hpp"
 #include "file_store.hpp"
 #include "value.hpp"
@@ -354,7 +355,8 @@ public:
     ///        message catalogue (`messages`) or a delivered component (`component`).
     ///
     /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
-    /// and an app document that load-time validation refuses or whose id is not `app`.
+    /// an app document that load-time validation refuses or whose id is not `app`, and a message catalogue whose id
+    /// is not `i18n/LOCALE.json`, that `parseCatalogue` refuses, or that has a pattern outside the `ui/1` subset.
     /// @param file The file.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> addFile(BundleFile file) {
@@ -375,6 +377,18 @@ public:
         }
         if (auto reason = detail::checkServable(file.bytes)) {
             return refuse(file.id, std::move(*reason));
+        }
+        if (file.kind == kMessagesFile) {
+            if (!catalogueLocale(file.id)) {
+                return refuse(file.id, "a message catalogue's id is i18n/<locale>.json");
+            }
+            auto catalogue = parseCatalogue(file.bytes);
+            if (!catalogue) {
+                return refuse(file.id, std::move(catalogue.error()));
+            }
+            if (!catalogue->dropped.empty()) {
+                return refuse(file.id, "a message is outside the ui/1 subset: " + catalogue->dropped.front());
+            }
         }
         if (file.kind == kAppFile) {
             auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});

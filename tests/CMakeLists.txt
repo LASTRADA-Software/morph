@@ -189,6 +189,7 @@ add_executable(morph_tests
     test_ui_evaluate.cpp
     test_ui_file_store.cpp
     test_ui_file.cpp
+    test_ui_catalogue.cpp
 )
 
 target_link_libraries(morph_tests
