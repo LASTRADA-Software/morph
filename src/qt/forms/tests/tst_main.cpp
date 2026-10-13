@@ -34,7 +34,7 @@ public:
     /// @brief Replaces the corpus file.
     /// @param text The whole file.
     /// @return Whether every byte was written.
-    Q_INVOKABLE bool write(const QString& text) const {
+    [[nodiscard]] Q_INVOKABLE bool write(const QString& text) const {
         QFile file(QStringLiteral(MORPH_FORMS_BODY_CORPUS));
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
             return false;
@@ -93,6 +93,7 @@ public Q_SLOTS:
                                                   readAll(QStringLiteral(MORPH_FORMS_BODY_CORPUS)));
         engine->rootContext()->setContextProperty(QStringLiteral("bodyCorpusRegenerate"),
                                                   qEnvironmentVariableIsSet("MORPH_FORMS_WRITE_BODY_CORPUS"));
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the engine is its QObject parent and deletes it.
         engine->rootContext()->setContextProperty(QStringLiteral("bodyCorpusFile"), new BodyCorpusFile(engine));
     }
 

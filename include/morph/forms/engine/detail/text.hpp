@@ -237,6 +237,19 @@ using Json = glz::generic_u64;
     return out;
 }
 
+/// @brief The ordering the other way round: `less` for `greater`, `greater` for `less`, `equal` for `equal`.
+/// @param order The ordering.
+/// @return Its reverse.
+[[nodiscard]] constexpr std::strong_ordering reversed(std::strong_ordering order) noexcept {
+    if (std::is_lt(order)) {
+        return std::strong_ordering::greater;
+    }
+    if (std::is_gt(order)) {
+        return std::strong_ordering::less;
+    }
+    return std::strong_ordering::equal;
+}
+
 /// @brief Orders two canonical decimals exactly, at any magnitude; `-0` equals `0`.
 /// @param lhs Canonical decimal text (leading zeros allowed).
 /// @param rhs Canonical decimal text (leading zeros allowed).
@@ -271,7 +284,7 @@ using Json = glz::generic_u64;
         if (left.whole.size() != right.whole.size()) {
             return left.whole.size() <=> right.whole.size();
         }
-        if (auto const order = left.whole <=> right.whole; order != 0) {
+        if (auto const order = left.whole <=> right.whole; std::is_neq(order)) {
             return order;
         }
         return left.fraction <=> right.fraction;
@@ -285,7 +298,7 @@ using Json = glz::generic_u64;
     if (!left.negative) {
         return order;
     }
-    return 0 <=> order;
+    return reversed(order);
 }
 
 /// @brief Multiplies two non-negative digit strings exactly.
@@ -344,7 +357,7 @@ using Json = glz::generic_u64;
     std::string const scaledValue = std::to_string(math::detail::absU64(value.numerator)) + std::string(places, '0');
     std::string const scaledDecimal = multiplyDigits(digits, std::to_string(value.denominator));
     auto const order = compareDecimal(scaledValue, scaledDecimal);
-    return valueSign > 0 ? order : 0 <=> order;
+    return valueSign > 0 ? order : reversed(order);
 }
 
 /// @brief Renders @p value as canonical decimal text, rounded half away from zero to @p places.

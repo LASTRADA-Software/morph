@@ -162,7 +162,7 @@ private:
         }
         _handler->execute(*std::move(action))
             .then(_relay,
-                  [this, relay](Result const& result) {
+                  [relay](Result const& result) {
                       try {
                           std::string reply = model::ActionTraits<A>::resultToJson(result);
                           relay->resolve(std::move(reply));

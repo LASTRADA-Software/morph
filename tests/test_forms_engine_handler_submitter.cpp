@@ -33,7 +33,7 @@ struct HsCounterModel {
         count += action.by;
         return HsCount{count};
     }
-    HsCount execute(HsRead) const { return HsCount{count}; }
+    [[nodiscard]] HsCount execute(HsRead) const { return HsCount{count}; }
 };
 
 struct HsEchoModel {
