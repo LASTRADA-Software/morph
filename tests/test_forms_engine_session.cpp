@@ -472,3 +472,20 @@ TEST_CASE("FormSession: field() resolves paths and refuses unknown ones", "[form
     CHECK_THROWS_AS(form->field("nope"), std::out_of_range);
     CHECK_THROWS_AS(form->field("a.b"), std::out_of_range);
 }
+
+TEST_CASE("FormSession: automatic mode sends the latest body once the submission in flight settles",
+          "[forms-engine][session]") {
+    Harness harness;
+    harness.server.replyWith([](morph::test::formsengine::Call const&) { return std::optional<std::string>{}; });
+    auto const form =
+        harness.session("Typing", R"({"properties":{"a":{"type":"integer","x-order":0}},"required":["a"]})");
+    harness.type(*form, "a", "1");
+    REQUIRE(harness.server.submits().size() == 1);
+    harness.type(*form, "a", "12");
+    harness.type(*form, "a", "125");
+    CHECK(harness.server.submits().size() == 1);  // one in flight: nothing more is sent, and nothing is lost
+    harness.server.resolveSubmit(0, R"({"ok":true})");
+    harness.settle();
+    REQUIRE(harness.server.submits().size() == 2);
+    CHECK(harness.server.lastBody() == R"({"a":125})");
+}
