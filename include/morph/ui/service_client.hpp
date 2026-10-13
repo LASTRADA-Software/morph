@@ -21,6 +21,7 @@
 #include "../session/session.hpp"
 #include "../ui/frontend.hpp"
 #include "bundle.hpp"
+#include "file_store.hpp"
 
 /// @file
 /// @brief The client side of the UI service (spec 5 §12, "Content addressing"): `UiClient` runs `ui-hello`,
@@ -597,5 +598,201 @@ evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exe
         return std::move(completion);
     };
 }
+
+/// @brief A file a download brought back.
+struct DownloadedFile {
+    /// @brief Its bytes.
+    std::string bytes;
+    /// @brief Its name.
+    std::string name;
+    /// @brief Its media type.
+    std::string type;
+};
+
+/// @brief The client of the file side channel (`files/1`, spec 6 §18): uploads and downloads through `ui-file`, one
+///        chunk of at most `kMaxFileChunkBytes` in flight at a time, reporting progress after each.
+///
+/// What it moves is bytes: reading the file the user picked is the platform's, and an application's
+/// `InterpreterHost::upload` reads it and hands the bytes here.
+class FileTransfer {
+public:
+    /// @brief A transfer over @p exchange, its requests carrying @p session.
+    /// @param exchange The transport.
+    /// @param session  The session every request carries.
+    /// @throws std::invalid_argument for an empty @p exchange.
+    FileTransfer(Exchange exchange, ::morph::session::Context session)
+        : _shared{std::make_shared<Shared>(Shared{.exchange = std::move(exchange), .session = std::move(session)})} {
+        if (!_shared->exchange) {
+            throw std::invalid_argument("FileTransfer: the exchange is empty");
+        }
+    }
+
+    /// @brief Uploads a file, authorised as the mutation that will reference it.
+    /// @param info     Its name, type and size; `size` is taken from @p bytes.
+    /// @param bytes    The file.
+    /// @param model    The model type of the mutation that will reference it.
+    /// @param action   That mutation's action.
+    /// @param progress Called with 0 to 1 after each chunk; may be empty.
+    /// @param done     Called once with the file's reference, or why the upload failed.
+    void upload(FileInfo info, std::string bytes, std::string model, std::string action,
+                std::function<void(double)> progress,
+                std::function<void(std::expected<std::string, std::string>)> done) const {
+        auto const run = std::make_shared<Upload>(Upload{.shared = _shared,
+                                                         .bytes = std::move(bytes),
+                                                         .upload = {},
+                                                         .progress = std::move(progress),
+                                                         .done = std::move(done)});
+        FileRequest begin;
+        begin.op = "begin";
+        begin.name = std::move(info.name);
+        begin.type = std::move(info.type);
+        begin.size = run->bytes.size();
+        begin.model = std::move(model);
+        begin.action = std::move(action);
+        send(*_shared, begin, [run](std::expected<FileReply, std::string> reply) {
+            if (!reply || !reply->upload) {
+                run->fail(reply ? std::string{"the ui-file begin reply has no upload id"} : std::move(reply.error()));
+                return;
+            }
+            run->upload = std::move(*reply->upload);
+            sendChunk(run, 0);
+        });
+    }
+
+    /// @brief Downloads a file by its reference.
+    /// @param ref      The reference a reply carried.
+    /// @param progress Called with 0 to 1 after each chunk; may be empty.
+    /// @param done     Called once with the file, or why the download failed.
+    void download(std::string ref, std::function<void(double)> progress,
+                  std::function<void(std::expected<DownloadedFile, std::string>)> done) const {
+        auto const run = std::make_shared<Download>(Download{.shared = _shared,
+                                                             .ref = std::move(ref),
+                                                             .file = {},
+                                                             .progress = std::move(progress),
+                                                             .done = std::move(done)});
+        readChunk(run);
+    }
+
+private:
+    struct Shared {
+        Exchange exchange;
+        ::morph::session::Context session;
+    };
+
+    struct Upload {
+        std::shared_ptr<Shared> shared;
+        std::string bytes;
+        std::string upload;
+        std::function<void(double)> progress;
+        std::function<void(std::expected<std::string, std::string>)> done;
+
+        void fail(std::string reason) const {
+            if (done) {
+                done(std::unexpected(std::move(reason)));
+            }
+        }
+    };
+
+    struct Download {
+        std::shared_ptr<Shared> shared;
+        std::string ref;
+        DownloadedFile file;
+        std::function<void(double)> progress;
+        std::function<void(std::expected<DownloadedFile, std::string>)> done;
+    };
+
+    /// Sends one `ui-file` request and hands its reply body, or why there is none, to @p then.
+    static void send(Shared const& shared, FileRequest const& request,
+                     std::function<void(std::expected<FileReply, std::string>)> then) {
+        ::morph::wire::Envelope envelope;
+        envelope.kind = std::string{kFileKind};
+        envelope.session = shared.session;
+        envelope.body = detail::writeMessage(request);
+        shared.exchange(std::move(envelope), [then = std::move(then)](ExchangeReply reply) {
+            if (!reply) {
+                then(std::unexpected(std::move(reply.error())));
+                return;
+            }
+            if (reply->kind != "ok") {
+                then(std::unexpected(std::move(reply->message)));
+                return;
+            }
+            then(parseFileReply(reply->body));
+        });
+    }
+
+    /// Sends the chunk at @p offset, then the next, then `end`.
+    static void sendChunk(std::shared_ptr<Upload> const& run, std::size_t offset) {
+        if (offset >= run->bytes.size()) {
+            FileRequest end;
+            end.op = "end";
+            end.upload = run->upload;
+            send(*run->shared, end, [run](std::expected<FileReply, std::string> reply) {
+                if (!reply || !reply->ref) {
+                    run->fail(reply ? std::string{"the ui-file end reply has no reference"}
+                                    : std::move(reply.error()));
+                    return;
+                }
+                if (run->done) {
+                    run->done(std::move(*reply->ref));
+                }
+            });
+            return;
+        }
+        FileRequest chunk;
+        chunk.op = "chunk";
+        chunk.upload = run->upload;
+        chunk.offset = offset;
+        std::string_view const all{run->bytes};
+        chunk.data = ::morph::session::detail::base64UrlEncode(all.substr(offset, kMaxFileChunkBytes));
+        send(*run->shared, chunk, [run](std::expected<FileReply, std::string> reply) {
+            if (!reply || !reply->received) {
+                run->fail(reply ? std::string{"the ui-file chunk reply has no count"} : std::move(reply.error()));
+                return;
+            }
+            if (run->progress) {
+                run->progress(static_cast<double>(*reply->received) / static_cast<double>(run->bytes.size()));
+            }
+            sendChunk(run, *reply->received);
+        });
+    }
+
+    /// Reads the next chunk, until the whole file has arrived.
+    static void readChunk(std::shared_ptr<Download> const& run) {
+        FileRequest read;
+        read.op = "read";
+        read.ref = run->ref;
+        read.offset = run->file.bytes.size();
+        send(*run->shared, read, [run](std::expected<FileReply, std::string> reply) {
+            std::optional<std::string> bytes;
+            if (reply && reply->data && reply->total) {
+                bytes = ::morph::session::detail::base64UrlDecode(*reply->data);
+            }
+            if (!bytes) {
+                if (run->done) {
+                    run->done(std::unexpected(reply ? std::string{"the ui-file read reply is malformed"}
+                                                    : std::move(reply.error())));
+                }
+                return;
+            }
+            run->file.bytes += *bytes;
+            run->file.name = reply->name.value_or("");
+            run->file.type = reply->type.value_or("");
+            std::size_t const total = *reply->total;
+            if (run->progress && total > 0) {
+                run->progress(static_cast<double>(run->file.bytes.size()) / static_cast<double>(total));
+            }
+            if (run->file.bytes.size() >= total || bytes->empty()) {
+                if (run->done) {
+                    run->done(std::move(run->file));
+                }
+                return;
+            }
+            readChunk(run);
+        });
+    }
+
+    std::shared_ptr<Shared> _shared;
+};
 
 }  // namespace morph::ui
