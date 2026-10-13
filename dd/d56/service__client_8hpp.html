@@ -136,6 +136,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d56/service
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../core/completion.hpp&quot;</code><br />
+<code>#include &quot;../core/executor.hpp&quot;</code><br />
 <code>#include &quot;../core/wire.hpp&quot;</code><br />
 <code>#include &quot;../session/session.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">../ui/frontend.hpp</a>&quot;</code><br />
@@ -162,6 +164,13 @@ Typedefs</h2></td></tr>
 <tr class="memdesc:aa7bd52d471710378eef6816161e39f05"><td class="mdescLeft">&#160;</td><td class="mdescRight">One reply, or why the transport could not deliver it.  <br /></td></tr>
 <tr class="memitem:a96f7e4884f3c2bd61741d715df661bf2" id="r_a96f7e4884f3c2bd61741d715df661bf2"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">morph::ui::Exchange</a> = std::function&lt;void(<a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> request, std::function&lt;void(<a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a> reply)&gt; done)&gt;</td></tr>
 <tr class="memdesc:a96f7e4884f3c2bd61741d715df661bf2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends one request and calls its callback once with the reply. The transport assigns the request's <span class="tt">callId</span> and matches the reply to it; a failure to deliver either is the error.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
+Functions</h2></td></tr>
+<tr class="memitem:a633b0dc9cf83174fafc064b82d0a93ae" id="r_a633b0dc9cf83174fafc064b82d0a93ae"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae">morph::ui::evaluationValue</a> (<a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a> reply)</td></tr>
+<tr class="memdesc:a633b0dc9cf83174fafc064b82d0a93ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element.  <br /></td></tr>
+<tr class="memitem:a58c25963d99bf45c425dc9a0767058f5" id="r_a58c25963d99bf45c425dc9a0767058f5"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a58c25963d99bf45c425dc9a0767058f5">morph::ui::evaluatorOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:a58c25963d99bf45c425dc9a0767058f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluator over the UI service: each evaluation is one <span class="tt">ui-evaluate</span> request through <code class="param">exchange</code>, and resolves with <span class="tt"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae" title="The value an evaluate query takes from a ui-evaluate reply: the evaluated body&#39;s members,...">evaluationValue</a></span> of its reply. What <span class="tt"><a class="el" href="../../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html" title="A Dispatcher over the bridge&#39;s model-free seams: bindByType, executeRaw and the string-keyed attach,...">BridgeDispatcher</a></span> takes as its <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The client side of the UI service (spec 5 §12, "Content addressing"): <span class="tt">UiClient</span> runs <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> over a transport the caller supplies, verifies every file against the manifest and the manifest against the <span class="tt">ui-hello</span> digest, and keeps what it verified in a <span class="tt">VerifiedCache</span>. </p>
@@ -183,7 +192,7 @@ Typedefs</h2></td></tr>
 
 <p>One reply, or why the transport could not deliver it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -201,7 +210,91 @@ Typedefs</h2></td></tr>
 
 <p>Sends one request and calls its callback once with the reply. The transport assigns the request's <span class="tt">callId</span> and matches the reply to it; a failure to deliver either is the error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="a633b0dc9cf83174fafc064b82d0a93ae" name="a633b0dc9cf83174fafc064b82d0a93ae"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a633b0dc9cf83174fafc064b82d0a93ae">&#9670;&#160;</a></span>evaluationValue()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::string, std::string &gt; morph::ui::evaluationValue </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a></td>          <td class="paramname"><span class="paramname"><em>reply</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The value an <span class="tt">evaluate</span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element. </p>
+<p>An action field named <span class="tt">errors</span> or <span class="tt">ready</span> is shadowed by them. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">reply</td><td>The reply, or why the transport could not deliver it. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The value as JSON text, or why there is none: the transport's reason, the server's <span class="tt">err</span> message, or why the reply body was refused. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00545">545</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a58c25963d99bf45c425dc9a0767058f5" name="a58c25963d99bf45c425dc9a0767058f5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a58c25963d99bf45c425dc9a0767058f5">&#9670;&#160;</a></span>evaluatorOver()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::evaluatorOver </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a></td>          <td class="paramname"><span class="paramname"><em>exchange</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a></td>          <td class="paramname"><span class="paramname"><em>session</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An evaluator over the UI service: each evaluation is one <span class="tt">ui-evaluate</span> request through <code class="param">exchange</code>, and resolves with <span class="tt">evaluationValue</span> of its reply. What <span class="tt">BridgeDispatcher</span> takes as its <span class="tt">Evaluator</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">exchange</td><td>The transport. </td></tr>
+    <tr><td class="paramname">session</td><td>The session every request carries. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>The executor the completion is delivered on: the interpreter runtime's owner. Borrowed. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The evaluator: the model's type id, the action id and its JSON body in, the query's value out. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

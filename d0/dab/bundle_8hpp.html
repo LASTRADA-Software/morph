@@ -157,6 +157,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-hello</span> request: what the client speaks and carries.  <a href="../../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AHelloReply" id="r_morph_3A_3Aui_3A_3AHelloReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d85/structmorph_1_1ui_1_1HelloReply.html">morph::ui::HelloReply</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-hello</span> reply.  <a href="../../d3/d85/structmorph_1_1ui_1_1HelloReply.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AEvaluateReply" id="r_morph_3A_3Aui_3A_3AEvaluateReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html">morph::ui::EvaluateReply</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The body of a <span class="tt">ui-evaluate</span> reply: what <span class="tt">ActionDispatcher::evaluate</span> answered.  <a href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACatalogEntry" id="r_morph_3A_3Aui_3A_3ACatalogEntry"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">morph::ui::CatalogEntry</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One catalog entry (spec 6 §8).  <a href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACatalogReply" id="r_morph_3A_3Aui_3A_3ACatalogReply"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">morph::ui::CatalogReply</a></td></tr>
@@ -194,6 +196,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a6ba3f22aefba7ea3a281df53069e09ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-hello</span> request body.  <br /></td></tr>
 <tr class="memitem:a86a899a26869656920ddc21d4a69bc1d" id="r_a86a899a26869656920ddc21d4a69bc1d"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d3/d85/structmorph_1_1ui_1_1HelloReply.html">HelloReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a86a899a26869656920ddc21d4a69bc1d">morph::ui::parseHelloReply</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a86a899a26869656920ddc21d4a69bc1d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-hello</span> reply body.  <br /></td></tr>
+<tr class="memitem:a5b0b0410e905040be17892331b4c133e" id="r_a5b0b0410e905040be17892331b4c133e"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html">EvaluateReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5b0b0410e905040be17892331b4c133e">morph::ui::parseEvaluateReply</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a5b0b0410e905040be17892331b4c133e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-evaluate</span> reply body.  <br /></td></tr>
 <tr class="memitem:a6d7521f837bdcd48dccbf5cbdfa267aa" id="r_a6d7521f837bdcd48dccbf5cbdfa267aa"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">CatalogReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6d7521f837bdcd48dccbf5cbdfa267aa">morph::ui::parseCatalogReply</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a6d7521f837bdcd48dccbf5cbdfa267aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a <span class="tt">ui-catalog</span> reply body.  <br /></td></tr>
 <tr class="memitem:acb37e0b120545faa7a4daff4c672d9d1" id="r_acb37e0b120545faa7a4daff4c672d9d1"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../dc/da0/structmorph_1_1ui_1_1FetchRequest.html">FetchRequest</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acb37e0b120545faa7a4daff4c672d9d1">morph::ui::parseFetchRequest</a> (std::string_view text)</td></tr>
@@ -209,6 +213,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:a0c9d1c2b1c2851859e172b5dfcaf4021"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind of the catalog.  <br /></td></tr>
 <tr class="memitem:a06c23d8772feec7e0d1a12dbc9ea3667" id="r_a06c23d8772feec7e0d1a12dbc9ea3667"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a06c23d8772feec7e0d1a12dbc9ea3667">morph::ui::kFetchKind</a> = &quot;ui-fetch&quot;</td></tr>
 <tr class="memdesc:a06c23d8772feec7e0d1a12dbc9ea3667"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind that fetches a file by its hash.  <br /></td></tr>
+<tr class="memitem:acf615e33205ba746ffd92c80f8c1a2a1" id="r_acf615e33205ba746ffd92c80f8c1a2a1"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#acf615e33205ba746ffd92c80f8c1a2a1">morph::ui::kEvaluateKind</a> = &quot;ui-evaluate&quot;</td></tr>
+<tr class="memdesc:acf615e33205ba746ffd92c80f8c1a2a1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The envelope kind that evaluates an action body without running it (spec 5 §7).  <br /></td></tr>
 <tr class="memitem:aaf94945c0612a24acce5c1f47b3e8e41" id="r_aaf94945c0612a24acce5c1f47b3e8e41"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#aaf94945c0612a24acce5c1f47b3e8e41">morph::ui::kServiceModel</a> = &quot;ui&quot;</td></tr>
 <tr class="memdesc:aaf94945c0612a24acce5c1f47b3e8e41"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pseudo-model the service's envelopes are authorised under: <span class="tt">authorize(session, "ui", &lt;action&gt;)</span>.  <br /></td></tr>
 <tr class="memitem:a4621107250860ffb9a50b78c27ec8039" id="r_a4621107250860ffb9a50b78c27ec8039"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a4621107250860ffb9a50b78c27ec8039">morph::ui::kHelloAction</a> = &quot;hello&quot;</td></tr>
@@ -282,7 +288,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The hash. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +324,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">sha256:</span> followed by exactly 64 lower-case hexadecimal digits. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -359,7 +365,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +418,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00307">307</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00319">319</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -473,7 +479,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The message, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -517,7 +523,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -558,7 +564,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -611,7 +617,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the list is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00401">401</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -658,7 +664,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the map is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -694,7 +700,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -730,7 +736,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The manifest, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -766,7 +772,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00490">490</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -802,7 +808,43 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00523">523</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5b0b0410e905040be17892331b4c133e" name="a5b0b0410e905040be17892331b4c133e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5b0b0410e905040be17892331b4c133e">&#9670;&#160;</a></span>parseEvaluateReply()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; EvaluateReply, std::string &gt; morph::ui::parseEvaluateReply </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads a <span class="tt">ui-evaluate</span> reply body. </p>
+<p>Refused: text that is not JSON or nests too deep, a must-understand key at the top, a body that is not an object, or more than <span class="tt">kMaxCatalogFacts</span> field errors. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The reply body. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -838,7 +880,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00550">550</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -874,7 +916,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -983,6 +1025,32 @@ template&lt;typename T&gt; </div>
 
 </div>
 </div>
+<a id="acf615e33205ba746ffd92c80f8c1a2a1" name="acf615e33205ba746ffd92c80f8c1a2a1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf615e33205ba746ffd92c80f8c1a2a1">&#9670;&#160;</a></span>kEvaluateKind</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::kEvaluateKind = &quot;ui-evaluate&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The envelope kind that evaluates an action body without running it (spec 5 §7). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aaf94945c0612a24acce5c1f47b3e8e41" name="aaf94945c0612a24acce5c1f47b3e8e41"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaf94945c0612a24acce5c1f47b3e8e41">&#9670;&#160;</a></span>kServiceModel</h2>
 
@@ -1005,7 +1073,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-model the service's envelopes are authorised under: <span class="tt">authorize(session, "ui", &lt;action&gt;)</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1031,7 +1099,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates <span class="tt">ui-hello</span>, and the fetch of a public file or the manifest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1057,7 +1125,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates <span class="tt">ui-catalog</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1083,7 +1151,7 @@ template&lt;typename T&gt; </div>
 
 <p>The pseudo-action that gates the fetch of a file that is not public. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1109,7 +1177,7 @@ template&lt;typename T&gt; </div>
 
 <p>The prefix of a content hash. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1135,7 +1203,7 @@ template&lt;typename T&gt; </div>
 
 <p>The hexadecimal digits of a SHA-256 digest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1161,7 +1229,7 @@ template&lt;typename T&gt; </div>
 
 <p>The largest request body (<span class="tt">ui-hello</span>, <span class="tt">ui-fetch</span>) a server reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1187,7 +1255,7 @@ template&lt;typename T&gt; </div>
 
 <p>The largest file a bundle may hold, and a client accepts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1213,7 +1281,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most files a manifest, and entries a catalog, may list. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1239,7 +1307,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most action ids, model facts or action facts a catalog may carry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1265,7 +1333,7 @@ template&lt;typename T&gt; </div>
 
 <p>The most items of a list or map in a <span class="tt">ui-hello</span> (vocabularies, host components, commands, values). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1291,7 +1359,7 @@ template&lt;typename T&gt; </div>
 
 <p>The longest name: an id, a kind, a vocabulary, a host name, an application id or version. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1317,7 +1385,7 @@ template&lt;typename T&gt; </div>
 
 <p>The file kinds of a manifest. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1343,7 +1411,7 @@ template&lt;typename T&gt; </div>
 
 <p>The app document (spec 6 §5). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1369,7 +1437,7 @@ template&lt;typename T&gt; </div>
 
 <p>A theme (<span class="tt">ui-theme/1</span>, spec 6 §6). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1395,7 +1463,7 @@ template&lt;typename T&gt; </div>
 
 <p>A message catalogue. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1421,7 +1489,7 @@ template&lt;typename T&gt; </div>
 
 <p>A delivered custom component (spec 5 §10). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>

@@ -460,6 +460,7 @@ var hierarchy =
       [ "morph::ui::StaticEnvironment", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html", null ],
       [ "morph::ui::detail::ScopeEnv", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html", null ]
     ] ],
+    [ "morph::ui::EvaluateReply", "d9/d06/structmorph_1_1ui_1_1EvaluateReply.html", null ],
     [ "morph::ui::Expr", "d0/df6/structmorph_1_1ui_1_1Expr.html", null ],
     [ "morph::ui::FetchRequest", "dc/da0/structmorph_1_1ui_1_1FetchRequest.html", null ],
     [ "morph::ui::FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", null ],

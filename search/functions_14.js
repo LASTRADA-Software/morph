@@ -2,7 +2,7 @@ var searchData=
 [
   ['uiclient_0',['UiClient',['../d1/d97/classmorph_1_1ui_1_1UiClient.html#af2d208978c59bd6d349f1101fb13700d',1,'morph::ui::UiClient']]],
   ['uiregistry_1',['UiRegistry',['../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#ad9d853d15da0d8f07b0a334895a82571',1,'morph::ui::UiRegistry']]],
-  ['uiservice_2',['UiService',['../d1/d38/classmorph_1_1ui_1_1UiService.html#a433faa1e185bb8acf33d867971bbed0d',1,'morph::ui::UiService']]],
+  ['uiservice_2',['UiService',['../d1/d38/classmorph_1_1ui_1_1UiService.html#ad33e4b5c0fdf84cc6ac426c512ff3613',1,'morph::ui::UiService']]],
   ['unchangedtextkeepscursor_3',['unchangedTextKeepsCursor',['../d8/d3e/backend__conformance_8hpp.html#aef5c97669d6b7cee7529f06c48241e8e',1,'morph::ui::testing::detail']]],
   ['undolast_4',['undoLast',['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333',1,'morph::journal::SessionLog']]],
   ['unitalternatives_5',['unitAlternatives',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374',1,'morph::units::Quantity']]],

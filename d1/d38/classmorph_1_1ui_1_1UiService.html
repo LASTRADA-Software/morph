@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d38/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>The UI service: answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from one <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>, as an envelope service of a <span class="tt">RemoteServer</span> (<span class="tt">ServerConfig::services</span>).  
+<p>The UI service: answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from one <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>, and <span class="tt">ui-evaluate</span> through the server's <span class="tt">ActionDispatcher</span>, as an envelope service of a <span class="tt">RemoteServer</span> (<span class="tt">ServerConfig::services</span>).  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>&gt;</code></p>
@@ -137,8 +137,8 @@ Inheritance diagram for morph::ui::UiService:</div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a433faa1e185bb8acf33d867971bbed0d" id="r_a433faa1e185bb8acf33d867971bbed0d"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a433faa1e185bb8acf33d867971bbed0d">UiService</a> (std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt; bundle)</td></tr>
-<tr class="memdesc:a433faa1e185bb8acf33d867971bbed0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serves <code class="param">bundle</code>.  <br /></td></tr>
+<tr class="memitem:ad33e4b5c0fdf84cc6ac426c512ff3613" id="r_ad33e4b5c0fdf84cc6ac426c512ff3613"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ad33e4b5c0fdf84cc6ac426c512ff3613">UiService</a> (std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt; bundle, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</td></tr>
+<tr class="memdesc:ad33e4b5c0fdf84cc6ac426c512ff3613"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serves <code class="param">bundle</code>, and evaluates through <code class="param">dispatcher</code>.  <br /></td></tr>
 <tr class="memitem:abccafa420a95c3d6b73a35621f81bc77" id="r_abccafa420a95c3d6b73a35621f81bc77"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#abccafa420a95c3d6b73a35621f81bc77">serves</a> (std::string_view kind) const override</td></tr>
 <tr class="memdesc:abccafa420a95c3d6b73a35621f81bc77"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">kind</code> is one of the service's kinds.  <br /></td></tr>
 <tr class="memitem:a97d689952e3e755b7b1e70035f02f376" id="r_a97d689952e3e755b7b1e70035f02f376"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a97d689952e3e755b7b1e70035f02f376">handle</a> (<a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> const &amp;request, <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer) override</td></tr>
@@ -154,7 +154,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (cons
 IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnvelopeService &amp;&amp;)=delete</td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>The UI service: answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from one <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>, as an envelope service of a <span class="tt">RemoteServer</span> (<span class="tt">ServerConfig::services</span>). </p>
+<div class="textblock"><p>The UI service: answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from one <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>, and <span class="tt">ui-evaluate</span> through the server's <span class="tt">ActionDispatcher</span>, as an envelope service of a <span class="tt">RemoteServer</span> (<span class="tt">ServerConfig::services</span>). </p>
 <p>Every request is authorised (<span class="tt">docs/spec/ui/service.md</span>, "Authorisation"):</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
@@ -167,13 +167,15 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <td class="markdownTableBodyNone"><span class="tt">ui-fetch</span> of the manifest or a public file  </td><td class="markdownTableBodyNone">the <span class="tt">ui-hello</span> gate  </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">ui-fetch</span> of any other file  </td><td class="markdownTableBodyNone"><span class="tt">authorize(session, "ui", "fetch")</span>; for a screen, also the catalog's rule  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><span class="tt">ui-evaluate</span>  </td><td class="markdownTableBodyNone"><span class="tt">authorize(session, modelType, actionType)</span>: as the action it evaluates  </td></tr>
 </table>
 <p>A refusal is <span class="tt">err "unauthorized"</span>. A request body that is too large, malformed or carries a must-understand key is refused with the parser's reason. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a433faa1e185bb8acf33d867971bbed0d" name="a433faa1e185bb8acf33d867971bbed0d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a433faa1e185bb8acf33d867971bbed0d">&#9670;&#160;</a></span>UiService()</h2>
+<a id="ad33e4b5c0fdf84cc6ac426c512ff3613" name="ad33e4b5c0fdf84cc6ac426c512ff3613"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad33e4b5c0fdf84cc6ac426c512ff3613">&#9670;&#160;</a></span>UiService()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -184,8 +186,12 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
         <tr>
           <td class="memname">morph::ui::UiService::UiService </td>
           <td>(</td>
-          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>bundle</em></span></td><td>)</td>
+          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>bundle</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype">::morph::model::detail::ActionDispatcher &amp;</td>          <td class="paramname"><span class="paramname"><em>dispatcher</em></span><span class="paramdefsep"> = </span><span class="paramdefval">::morph::model::detail::defaultDispatcher()</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -195,10 +201,11 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </table>
 </div><div class="memdoc">
 
-<p>Serves <code class="param">bundle</code>. </p>
+<p>Serves <code class="param">bundle</code>, and evaluates through <code class="param">dispatcher</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">bundle</td><td>The bundle; shared, never changed. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>The dispatcher <span class="tt">ui-evaluate</span> reads the actions from: the server's own. Borrowed: it must outlive the service. </td></tr>
   </table>
   </dd>
 </dl>
@@ -209,7 +216,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00575">575</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00579">579</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -244,11 +251,11 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span>, <span class="tt">ui-fetch</span> and <span class="tt">ui-evaluate</span>. </dd></dl>
 
 <p>Implements <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a508eee14a840935f84eb6ab6ef91fece">morph::backend::IEnvelopeService</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00584">584</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +298,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 
 <p>Implements <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a8824ddf6059dffcbe63219f81da70c7c">morph::backend::IEnvelopeService</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00592">592</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00599">599</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

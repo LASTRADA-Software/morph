@@ -4,7 +4,7 @@ var searchData=
   ['ui_20document_20expr_201_20view_20tree_20mount_20frontend_20seam_1',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — the UI document, &lt;span class=&quot;tt&quot;&gt;expr/1&lt;/span&gt;, view tree, mount, frontend seam',['../index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam',1,'']]],
   ['uiclient_2',['UiClient',['../d1/d97/classmorph_1_1ui_1_1UiClient.html',1,'morph::ui::UiClient'],['../d1/d97/classmorph_1_1ui_1_1UiClient.html#af2d208978c59bd6d349f1101fb13700d',1,'morph::ui::UiClient::UiClient()']]],
   ['uiregistry_3',['UiRegistry',['../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html',1,'morph::ui::UiRegistry'],['../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#ad9d853d15da0d8f07b0a334895a82571',1,'morph::ui::UiRegistry::UiRegistry()']]],
-  ['uiservice_4',['UiService',['../d1/d38/classmorph_1_1ui_1_1UiService.html',1,'morph::ui::UiService'],['../d1/d38/classmorph_1_1ui_1_1UiService.html#a433faa1e185bb8acf33d867971bbed0d',1,'morph::ui::UiService::UiService()']]],
+  ['uiservice_4',['UiService',['../d1/d38/classmorph_1_1ui_1_1UiService.html',1,'morph::ui::UiService'],['../d1/d38/classmorph_1_1ui_1_1UiService.html#ad33e4b5c0fdf84cc6ac426c512ff3613',1,'morph::ui::UiService::UiService()']]],
   ['unavailable_5',['Unavailable',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0a453e6aa38d87b28ccae545967c53004f',1,'morph::table']]],
   ['unchangedtextkeepscursor_6',['unchangedTextKeepsCursor',['../d8/d3e/backend__conformance_8hpp.html#aef5c97669d6b7cee7529f06c48241e8e',1,'morph::ui::testing::detail']]],
   ['undelivered_7',['undelivered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef',1,'morph::offline::SyncResult']]],

@@ -30,6 +30,7 @@ var interpreter_8hpp =
     [ "morph::ui::detail::ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore" ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", "da/d2a/classmorph_1_1ui_1_1Interpreter" ],
+    [ "morph::ui::Evaluator", "db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666", null ],
     [ "morph::ui::detail::Bindings", "db/d42/interpreter_8hpp.html#ac688fc48fbdd94d382ee3860b43d0907", null ],
     [ "morph::ui::detail::RunDone", "db/d42/interpreter_8hpp.html#adb1bad3b6835a38393f5c80badce05e4", null ],
     [ "morph::ui::detail::Done", "db/d42/interpreter_8hpp.html#a82972b9a51cae8a658d17961a41c62fa", null ],

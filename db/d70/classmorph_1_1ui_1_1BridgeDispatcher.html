@@ -137,8 +137,8 @@ Inheritance diagram for morph::ui::BridgeDispatcher:</div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:ae87b32be4bf0d19c7cdd4b52dc2f6d2c" id="r_ae87b32be4bf0d19c7cdd4b52dc2f6d2c"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ae87b32be4bf0d19c7cdd4b52dc2f6d2c">BridgeDispatcher</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">bridge::Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> *cbExec)</td></tr>
-<tr class="memdesc:ae87b32be4bf0d19c7cdd4b52dc2f6d2c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches through <code class="param">bridge</code>.  <br /></td></tr>
+<tr class="memitem:acb6db9f3197970020faa23dd6848b961" id="r_acb6db9f3197970020faa23dd6848b961"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#acb6db9f3197970020faa23dd6848b961">BridgeDispatcher</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">bridge::Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> *cbExec, <a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666">Evaluator</a> evaluator={})</td></tr>
+<tr class="memdesc:acb6db9f3197970020faa23dd6848b961"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches through <code class="param">bridge</code>, and evaluates through <code class="param">evaluator</code>.  <br /></td></tr>
 <tr class="memitem:aa50537ce153bbd86ab5be94d08b59f2b" id="r_aa50537ce153bbd86ab5be94d08b59f2b"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../d0/dca/classmorph_1_1ui_1_1ModelChannel.html">ModelChannel</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa50537ce153bbd86ab5be94d08b59f2b">bind</a> (std::string const &amp;typeId, bridge::BindSharing sharing, std::string const &amp;instanceKey) override</td></tr>
 <tr class="memdesc:aa50537ce153bbd86ab5be94d08b59f2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Binds through a <span class="tt">RawHandler</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Dispatcher"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html">morph::ui::Dispatcher</a></td></tr>
@@ -153,12 +153,12 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A <span class="tt"><a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html" title="The interpreter&#39;s view of the bridge: binds a model by its type id, privately or to a shared instance...">Dispatcher</a></span> over the bridge's model-free seams: <span class="tt">bindByType</span>, <span class="tt">executeRaw</span> and the string-keyed <span class="tt">attach</span>, through <span class="tt">RawHandler</span>. </p>
-<p>It sends no <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> request (that envelope belongs to the UI service) and has no offline queue: an evaluation is refused with a <span class="tt">std::runtime_error</span>, and <span class="tt">queueOffline</span> is ignored. A shared binding without a key is bound unattached, which the bridge refuses at the first call; a document reaches it only for a stateful model whose alias says <span class="tt">"shared"</span>. </p>
+<p>An evaluation goes through the <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span> it was given, since that envelope belongs to the UI service, not the bridge; without one it is refused with a <span class="tt">std::runtime_error</span>. It has no offline queue: <span class="tt">queueOffline</span> is ignored. A shared binding without a key is bound unattached, which the bridge refuses at the first call; a document reaches it only for a stateful model whose alias says <span class="tt">"shared"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="ae87b32be4bf0d19c7cdd4b52dc2f6d2c" name="ae87b32be4bf0d19c7cdd4b52dc2f6d2c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae87b32be4bf0d19c7cdd4b52dc2f6d2c">&#9670;&#160;</a></span>BridgeDispatcher()</h2>
+<a id="acb6db9f3197970020faa23dd6848b961" name="acb6db9f3197970020faa23dd6848b961"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acb6db9f3197970020faa23dd6848b961">&#9670;&#160;</a></span>BridgeDispatcher()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -174,7 +174,12 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666">Evaluator</a></td>          <td class="paramname"><span class="paramname"><em>evaluator</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -184,16 +189,17 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
 </table>
 </div><div class="memdoc">
 
-<p>Dispatches through <code class="param">bridge</code>. </p>
+<p>Dispatches through <code class="param">bridge</code>, and evaluates through <code class="param">evaluator</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">bridge</td><td>The bridge. Borrowed: it must outlive every channel. </td></tr>
     <tr><td class="paramname">cbExec</td><td>The executor replies are delivered on: the runtime's owner. Borrowed. </td></tr>
+    <tr><td class="paramname">evaluator</td><td>What answers an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> query; empty to refuse them. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +249,7 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
 
 <p>Implements <a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html#a9766e5fd803e097af301ec552cef981a">morph::ui::Dispatcher</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

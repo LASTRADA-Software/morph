@@ -562,6 +562,7 @@ var annotated_dup =
         [ "EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", "d8/d99/structmorph_1_1ui_1_1EmptyState" ],
         [ "EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget" ],
         [ "Environment", "dc/d40/classmorph_1_1ui_1_1Environment.html", "dc/d40/classmorph_1_1ui_1_1Environment" ],
+        [ "EvaluateReply", "d9/d06/structmorph_1_1ui_1_1EvaluateReply.html", "d9/d06/structmorph_1_1ui_1_1EvaluateReply" ],
         [ "Expr", "d0/df6/structmorph_1_1ui_1_1Expr.html", "d0/df6/structmorph_1_1ui_1_1Expr" ],
         [ "FetchRequest", "dc/da0/structmorph_1_1ui_1_1FetchRequest.html", "dc/da0/structmorph_1_1ui_1_1FetchRequest" ],
         [ "FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", "d1/d36/structmorph_1_1ui_1_1FieldState" ],

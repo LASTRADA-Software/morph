@@ -31,7 +31,7 @@ var searchData=
   ['boundtextupdatesonceperchange_28',['boundTextUpdatesOncePerChange',['../d8/d3e/backend__conformance_8hpp.html#a9d6ff8af4e1854ad83a38401f58b9123',1,'morph::ui::testing::detail']]],
   ['bridge_29',['Bridge',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa2702f61353012e04fd5f4ec2ab3cfb2',1,'morph::bridge::Bridge']]],
   ['bridgedestroyederror_30',['BridgeDestroyedError',['../db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html#aabf7d3a6f7279e3ae5b62efd9d890421',1,'morph::backend::BridgeDestroyedError']]],
-  ['bridgedispatcher_31',['BridgeDispatcher',['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html#ae87b32be4bf0d19c7cdd4b52dc2f6d2c',1,'morph::ui::BridgeDispatcher']]],
+  ['bridgedispatcher_31',['BridgeDispatcher',['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html#acb6db9f3197970020faa23dd6848b961',1,'morph::ui::BridgeDispatcher']]],
   ['bridgehandler_32',['BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ac2ad5f0697f10ec9320058718e30768f',1,'morph::bridge::BridgeHandler::BridgeHandler(Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec)'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad6b1039524998f20d3b2cfd17d9eee12',1,'morph::bridge::BridgeHandler::BridgeHandler(Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec, std::shared_ptr&lt; detail::HandlerBinding &gt; binding)']]],
   ['brokenrule_33',['brokenRule',['../d1/dc0/author_8hpp.html#a9df3cc90966ee21c14ab758925b5e996',1,'morph::ui::author::detail']]],
   ['build_34',['build',['../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#a104e81c219e2531a0284d5d107d9c923',1,'morph::ui::UiRegistry']]],
