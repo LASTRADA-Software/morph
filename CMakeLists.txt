@@ -449,6 +449,7 @@ target_sources(morph
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
         include/morph/core/backend.hpp
+        include/morph/core/envelope_transport.hpp
         include/morph/core/remote.hpp
         include/morph/core/bridge.hpp
         include/morph/core/wire.hpp

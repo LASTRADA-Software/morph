@@ -178,6 +178,14 @@ API surface).
 
 ### Added
 
+- **A wire transport sends an envelope of any kind and reads its reply.**
+  `morph::backend::IEnvelopeTransport::request(envelope, cbExec)`, implemented by
+  `SocketBackend` and `QtWebSocketBackend`, sends the envelope with the session it
+  carries and resolves with the reply, `ok` or `err`; a request made before the
+  socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
+  turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
+  client can fetch an application's screens over a real connection.
+
 - **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
   `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a
   principal-bound, unguessable reference. `UiService` serves `ui-file` when given

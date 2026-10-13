@@ -15,6 +15,7 @@
 #include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
+#include <morph/core/envelope_transport.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
 #include <optional>
@@ -88,7 +89,7 @@ struct QtWebSocketBackendConfig {
 /// @par Threading
 /// Must be used from the Qt event loop thread. Every verb and the internal
 /// message handler are called on that thread.
-class QtWebSocketBackend : public ::morph::backend::detail::IBackend {
+class QtWebSocketBackend : public ::morph::backend::detail::IBackend, public ::morph::backend::IEnvelopeTransport {
 public:
     /// @brief Alias for the reconnect configuration struct.
     using Config = QtWebSocketBackendConfig;
@@ -292,6 +293,19 @@ public:
     ::morph::async::Completion<std::vector<std::string>> instances(const std::string& typeId,
                                                                    ::morph::exec::IExecutor& cbExec) override;
 
+    /// @brief Sends one request envelope of a kind the other verbs do not build (`IEnvelopeTransport::request`)
+    ///        and settles with its reply.
+    ///
+    /// The envelope gets a fresh `callId` and keeps the session it carries. Made while the socket is not connected,
+    /// it is held and sent at the next connect, the first included, as a private bind is; `cancelPending`, a drop
+    /// and the destructor reject what is pending or held. On the socket's thread.
+    /// @param envelope The request; its `callId` is replaced.
+    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the reply envelope, `ok` or `err`; rejected with
+    ///         `backend::DisconnectedError` when the connection drops before the reply or the request is cancelled.
+    ::morph::async::Completion<::morph::wire::Envelope> request(::morph::wire::Envelope envelope,
+                                                                ::morph::exec::IExecutor& cbExec) override;
+
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
     /// Nothing waits for the acknowledgement, so it is safe from a destructor.
@@ -366,6 +380,8 @@ private:
         std::function<void(const ::morph::wire::Envelope&)> reply;
         /// Rejects it, when the request is cancelled or never sent.
         std::function<void(const std::exception_ptr&)> fail;
+        /// Whether the envelope keeps the session it carries (`request`) instead of the backend's.
+        bool keepSession = false;
     };
 
     /// @brief A `PendingControl` whose reply is a bare `modelId`
@@ -416,9 +432,9 @@ private:
     ///                `cancelPending`.
     void sendControl(::morph::wire::Envelope env, PendingControl pending);
 
-    /// @brief Sends every private bind queued while the socket was not yet
-    ///        connected, in FIFO order. Called from the `connected` slot,
-    ///        before the reconnect handler fires.
+    /// @brief Sends every private bind, then every request, queued while the
+    ///        socket was not yet connected, each in FIFO order. Called from the
+    ///        `connected` slot, before the reconnect handler fires.
     void flushQueuedRegistrations();
 
     /// @brief Sends a `cancel` for every pending execute whose stop was
@@ -517,6 +533,14 @@ private:
         ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise promise;
     };
     std::vector<QueuedRegistration> _queuedRegistrations;
+
+    /// @brief One `request` made while the socket was not connected, sent at the next connect; drained by
+    ///        `cancelPending` like a queued registration.
+    struct QueuedRequest {
+        ::morph::wire::Envelope envelope;
+        PendingControl pending;
+    };
+    std::vector<QueuedRequest> _queuedRequests;
 
     /// @brief Call-ids of `deregister` envelopes still awaiting their (unused)
     ///        reply, so the reply is recognised and dropped. A late reply for

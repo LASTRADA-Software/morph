@@ -30,6 +30,7 @@ and react to backend changes.
   - [Lifetime contract](#lifetime-contract)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
+- [Envelope requests — `IEnvelopeTransport`](#envelope-requests--ienvelopetransport)
 - [Why registration needs a non-blocking path](#why-registration-needs-a-non-blocking-path)
 - [The structural registration surface — `bindModel` and `promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel)
   - [The delivery executor is the caller's owner](#the-delivery-executor-is-the-callers-owner)
@@ -214,6 +215,28 @@ carries the current session. A wire-backed backend that overrides
 `session` field it subsequently builds. `LocalBackend` does not override
 `setSession`: the local path never serialises a `Context` onto a wire
 envelope, so there is nothing to stamp.
+
+## Envelope requests — `IEnvelopeTransport`
+
+A protocol layered on the wire, such as the UI service's `ui-*` kinds (`docs/spec/ui/service.md`), needs to send
+an envelope of its own kind and read the reply. `IBackend`'s verbs each build their own envelope, so a wire
+transport offers this beside it: `morph::backend::IEnvelopeTransport` (`core/envelope_transport.hpp`), with one
+verb, `request(envelope, cbExec) -> Completion<wire::Envelope>`. `SocketBackend` and `QtWebSocketBackend`
+implement it; `LocalBackend` and `SimulatedRemoteBackend` do not, since a backend without a wire has no peer.
+It is a separate interface rather than an `IBackend` virtual so that `IBackend`'s many implementations, test
+doubles included, are untouched.
+
+- **Matching.** The request gets a fresh `callId` from the transport's one counter and is filed with the other
+  control calls; its reply settles it.
+- **The session it carries.** Unlike the control envelopes above, a request is sent with the session it carries,
+  not the one `setSession` installed: a protocol that passes its session explicitly (`ui::UiClient::open`) must not
+  have it replaced.
+- **`ok` and `err` both resolve.** An `err` is the peer's answer, which the caller's protocol reads (the UI client
+  maps `unknown envelope kind: ui-hello` to "no UI service"). Only a failure to deliver the request or its reply
+  rejects: a drop, a close, or `cancelPending`, with the exception given (`DisconnectedError` for a drop).
+- **Before the connection is up.** A request made while the socket is not connected is held and sent at the next
+  connect, as a private bind is: a client opens its source right after making the transport and cannot wait.
+  `cancelPending` and the transport's destruction reject what is held.
 
 ## Why registration needs a non-blocking path
 
@@ -1997,13 +2020,14 @@ server: each call is a loop task, so the loop serialises them.
 | `bindModel(request, cbExec)` | Builds the envelope `request`'s shape names — `register`, shared `register`, or `attach` — assigns a fresh `callId` (the same counter `execute` uses), files the pending entry in `_pendingControl[callId]` and sends. The `Completion` settles later from `onTextMessage` (or from `cancelPending` on a disconnect). A private bind on an unconnected socket is queued in `_queuedRegistrations` instead; a keyed one rejects with `"disconnected"`. |
 | `promoteModel(request, cbExec)` | Sends `assign` through the same path. An empty `primary` or zero `mid` resolves with `request.mid` without sending. |
 | `instances(typeId, cbExec)` | Sends `instances` through the same path; the reply's body is decoded into the key list. Rejects with `"disconnected"` when not connected. |
+| `request(envelope, cbExec)` | `IEnvelopeTransport`: sends the envelope through the same path with the session it carries, held in `_queuedRequests` while not connected; resolves with the reply, `ok` or `err`. `cancelPending` rejects what is pending or held. |
 | `waitForConnected(timeoutMs = 5000)` | Pumps a local `QEventLoop` until connected or timeout; returns `_connected`. Not for a WASM main thread. |
 | `negotiateProtocolVersion(replyExec)` | Opt-in: sends `hello` through the same path and settles the returned `Completion` with `wire::interpretHelloReply`'s classification; records whether the server advertised `"cancel"`, and re-sends `hello` after every reconnect. Rejects on an explicit version rejection, when not connected, or on a drop. |
 | `registerModel(typeId, factory)`, `assignPrimary(...)`, `listInstances(typeId)` | Throw `std::logic_error`: each would have to wait for a reply. `registerModelWithContext` is `IBackend`'s default, which forwards to `registerModel`. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the reply and drops it. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | On the socket's thread, takes `_pending`, `_pendingControl` and `_queuedRegistrations` out, sends a `cancel` for each `execute` when connected to a server that advertised `"cancel"`, then delivers `exc` to each — the exception itself, so a request rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
+| `cancelPending(exc)` | On the socket's thread, takes `_pending`, `_pendingControl`, `_queuedRegistrations` and `_queuedRequests` out, sends a `cancel` for each `execute` when connected to a server that advertised `"cancel"`, then delivers `exc` to each — the exception itself, so a request rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 | `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
 | `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
@@ -2060,6 +2084,7 @@ not a behavior change to the existing loopback-only default.
 | `registerModelWithContext(typeId, factory, contextKey)` | Synchronous: posts `register` carrying `contextKey` and waits on a future for the loop to settle the reply, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect, and where `runningHere()` holds (the loop's own thread, or a `Caller` loop's driving thread). Any number may be in flight, matched by `callId`. |
 | `bindModel(request, cbExec)` | Native override of the structural surface. Posts the envelope `request`'s shape names and returns immediately; the loop gives it a non-zero `callId`, files it and writes it; every shape carries `request.contextKey`, the private one included; the loop settles the `Completion` when the reply arrives, delivered on `cbExec`. Any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
 | `promoteModel(request, cbExec)` | The `assign` counterpart of `bindModel`, on the same path; resolves with `request.mid` echoed back. An empty `primary` or a zero `mid` resolves without sending, matching `assignPrimary`'s guards. |
+| `request(envelope, cbExec)` | `IEnvelopeTransport`: posted; the loop sends the envelope on the same path with the session it carries, holding it while not connected (as a private bind is held), and resolves with the reply, `ok` or `err`. Rejects with `DisconnectedError` on a drop or close, or with what `cancelPending` delivers. |
 | `deregisterModel(mid)` | **Fire-and-forget** — posted only if connected, does not wait for the ack. The loop gives it a non-zero `callId` from the same counter `execute` uses, so its unawaited `ok` is never taken for another call's reply. Needs no pending-id bookkeeping of its own: the reply router already drops a non-zero `callId` that is not pending. |
 | `execute(mid, call, cbExec)` | Serialises the action on the calling thread and posts the envelope; the loop assigns a `callId`, files the pending record and writes the frame. Returns a `Completion`, already rejected with `DisconnectedError` if not connected. Callable from any thread; any number may be in flight. |
 | `notifyBackendChanged()` | No-op. |

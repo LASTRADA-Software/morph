@@ -19,6 +19,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/detail/owner_probe.hpp>
 #include <morph/core/detail/reply_router.hpp>
+#include <morph/core/envelope_transport.hpp>
 #include <morph/core/io_loop.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/profiler.hpp>
@@ -79,7 +80,7 @@ struct SocketBackendConfig {
 /// reconnect state machine live on an `exec::IoLoop`, which it shares with
 /// every other socket, timer and probe the application builds on that loop.
 ///
-/// Cross-thread surface: `execute`, `bindModel`, `promoteModel`,
+/// Cross-thread surface: `execute`, `bindModel`, `promoteModel`, `request`,
 /// `deregisterModel`, `cancelPending`, `setSession` and `setReconnectHandler`
 /// post to the loop and return, so calls from one thread take effect in the
 /// order they were made; `waitForConnected` posts a waiter and blocks the
@@ -91,7 +92,7 @@ struct SocketBackendConfig {
 /// @par TLS
 /// Not supported. `serverUrl` must be `ws://`; `wss://` throws from the
 /// constructor. See `docs/spec/core/backend.md`'s `morph::net` section.
-class SocketBackend : public ::morph::backend::detail::IBackend {
+class SocketBackend : public ::morph::backend::detail::IBackend, public ::morph::backend::IEnvelopeTransport {
 public:
     /// @brief Alias for the reconnect configuration struct.
     using Config = SocketBackendConfig;
@@ -324,6 +325,34 @@ public:
             throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, body));
         }
         return keys;
+    }
+
+    /// @brief Sends one request envelope of a kind the other verbs do not build (`IEnvelopeTransport::request`),
+    ///        on the callId-multiplexed control path, and settles with its reply.
+    ///
+    /// Posted to the loop, which assigns the `callId` and sends the envelope with the session it carries. Made while
+    /// the socket is not connected, it is held and sent at the next connect, the first included, as a private bind
+    /// is, so a client can ask before the socket is up. `cancelPending`, a drop and the backend's destruction reject
+    /// what is pending or held.
+    /// @param envelope The request; its `callId` is replaced.
+    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the reply envelope, `ok` or `err`; rejected with
+    ///         `backend::DisconnectedError` when the connection drops before the reply or the request is cancelled.
+    ::morph::async::Completion<::morph::wire::Envelope> request(::morph::wire::Envelope envelope,
+                                                                ::morph::exec::IExecutor& cbExec) override {
+        auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::wire::Envelope>>();
+        ::morph::async::Completion<::morph::wire::Envelope> comp{state, &cbExec};
+        std::string what = envelope.kind;
+        _loop->post([core = _core, env = std::move(envelope),
+                     pending = PendingControl{.state = nullptr,
+                                              .what = std::move(what),
+                                              .echo = std::nullopt,
+                                              .body = nullptr,
+                                              .beforeConnect = BeforeConnect::Queue,
+                                              .reply = std::move(state)}]() mutable {
+            core->fileControl(std::move(env), std::move(pending));
+        });
+        return comp;
     }
 
     /// @brief Sends a `"hello"` envelope and classifies the server's reply.
@@ -602,6 +631,9 @@ private:
         std::shared_ptr<::morph::async::detail::CompletionState<::morph::wire::ProtocolNegotiationResult>> negotiation;
         /// @brief What a call filed while the socket is not connected does.
         BeforeConnect beforeConnect = BeforeConnect::Reject;
+        /// @brief State of a `request`, settled with the whole reply envelope, or null. A request keeps the session
+        ///        it carries; every other control call is sent under the backend's.
+        std::shared_ptr<::morph::async::detail::CompletionState<::morph::wire::Envelope>> reply;
 
         /// @brief Rejects whichever state this call settles.
         /// @param failure The failure.
@@ -614,6 +646,9 @@ private:
             }
             if (negotiation) {
                 negotiation->setException(failure);
+            }
+            if (reply) {
+                reply->setException(failure);
             }
         }
     };
@@ -657,6 +692,11 @@ private:
                     pending.negotiation->setException(std::current_exception());
                 }
             }
+            return;
+        }
+        if (pending.reply) {
+            // An `err` is an answer the caller reads, not a transport failure.
+            pending.reply->setValue(reply);
             return;
         }
         if (reply.kind != "ok") {
@@ -803,7 +843,9 @@ private:
             }
             std::uint64_t const callId = executes.nextCallId();
             env.callId = callId;
-            env.session = session;
+            if (!pending.reply) {
+                env.session = session;
+            }
             std::string frame;
             try {
                 frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,

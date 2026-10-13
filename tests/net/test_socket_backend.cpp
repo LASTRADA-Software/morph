@@ -2779,3 +2779,135 @@ TEST_CASE("SocketBackend: on a caller-driven loop, a synchronous verb on the dri
     CHECK_THROWS_WITH(static_cast<void>(backend.registerModel("SbEchoModel", nullptr)),
                       Catch::Matchers::ContainsSubstring("cannot wait on the I/O loop's own thread"));
 }
+
+namespace {
+
+/// Answers `probe-ok` with the kind it saw and `probe-err` with an `err`.
+class ProbeService final : public morph::backend::IEnvelopeService {
+public:
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind.starts_with("probe-"); }
+
+    [[nodiscard]] std::string handle(morph::wire::Envelope const& request,
+                                     morph::session::IAuthorizer const& /*authorizer*/) override {
+        if (request.kind == "probe-err") {
+            return morph::wire::encode(morph::wire::makeErr("probe refused", request.callId));
+        }
+        return morph::wire::encode(morph::wire::makeOk(request.callId, "saw " + request.kind));
+    }
+};
+
+morph::wire::Envelope probe(std::string kind) {
+    morph::wire::Envelope env;
+    env.kind = std::move(kind);
+    return env;
+}
+
+/// What a request settled with: the reply, or the failure's message.
+struct Settled {
+    std::optional<morph::wire::Envelope> reply;
+    std::string failure;
+    std::atomic<bool> done{false};
+};
+
+void watch(morph::async::Completion<morph::wire::Envelope>& comp, Settled& into) {
+    comp.thenDetached([&into](morph::wire::Envelope const& reply) {
+            into.reply = reply;
+            into.done.store(true);
+        })
+        .onErrorDetached([&into](std::exception_ptr const& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (std::exception const& err) {
+                into.failure = err.what();
+            }
+            into.done.store(true);
+        });
+}
+
+}  // namespace
+
+TEST_CASE("SocketBackend: request sends an envelope of its own kind and settles with the reply, ok or err",
+          "[net][socket_backend][request]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    morph::backend::ServerConfig config;
+    config.services.push_back(std::make_shared<ProbeService>());
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, config);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
+    REQUIRE(backend.waitForConnected());
+
+    Settled answered;
+    auto okComp = backend.request(probe("probe-ok"), callerExec);
+    watch(okComp, answered);
+    REQUIRE(drainUntil(callerExec, answered.done));
+    REQUIRE(answered.reply.has_value());
+    CHECK(answered.reply->kind == "ok");
+    CHECK(answered.reply->body == "saw probe-ok");
+
+    // An `err` is the peer's answer, so it resolves: only a transport failure rejects.
+    Settled refused;
+    auto errComp = backend.request(probe("probe-err"), callerExec);
+    watch(errComp, refused);
+    REQUIRE(drainUntil(callerExec, refused.done));
+    CHECK(refused.failure.empty());
+    REQUIRE(refused.reply.has_value());
+    CHECK(refused.reply->kind == "err");
+    CHECK(refused.reply->message == "probe refused");
+}
+
+// Mutation: reject a request made while not connected, instead of holding it — nothing is received.
+// Mutation: stamp the backend's session over the request's — the token reads `backend-token`.
+TEST_CASE("SocketBackend: a request made before the first connect is held, sent once connected, with its own session",
+          "[net][socket_backend][request]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+    morph::session::Context backendSession;
+    backendSession.token = "backend-token";
+    backend.setSession(backendSession);
+
+    morph::wire::Envelope env = probe("probe-ok");
+    env.session.token = "request-token";
+    Settled answered;
+    auto comp = backend.request(env, callerExec);
+    watch(comp, answered);
+
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+    // A request refused instead of held settles before anything reaches the server; caught here, it fails the case
+    // rather than blocking the read below, which has no bound.
+    while (callerExec.runOnce()) {
+    }
+    REQUIRE_FALSE(answered.done.load());
+    auto const received = fake.receiveEnvelope();
+    CHECK(received.kind == "probe-ok");
+    CHECK(received.session.token == "request-token");
+    REQUIRE(received.callId != 0U);
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(received.callId, "answered")));
+    REQUIRE(drainUntil(callerExec, answered.done));
+    REQUIRE(answered.reply.has_value());
+    CHECK(answered.reply->body == "answered");
+}
+
+// Mutation: leave the request out of PendingControl::reject — the held request never settles.
+TEST_CASE("SocketBackend: cancelPending rejects a request still held for the first connect",
+          "[net][socket_backend][request]") {
+    FakeWsServer const fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+
+    Settled answered;
+    auto comp = backend.request(probe("probe-ok"), callerExec);
+    watch(comp, answered);
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled before connect"}));
+    REQUIRE(drainUntil(callerExec, answered.done));
+    CHECK_FALSE(answered.reply.has_value());
+    CHECK(answered.failure == "cancelled before connect");
+}
