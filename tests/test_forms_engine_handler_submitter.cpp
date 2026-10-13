@@ -107,7 +107,17 @@ TEST_CASE("forms::handlerSubmitter: an action no handler serves is a failed comp
     auto const submit = morph::forms::handlerSubmitter(wiring.owner, wiring.echo);
     auto const outcome = settle(wiring.owner, submit("Test_HsBump", R"({"by":1})"));
     REQUIRE(outcome.error != nullptr);
-    CHECK_THROWS_AS(std::rethrow_exception(outcome.error), std::invalid_argument);
+    // Checked by catching rather than with CHECK_THROWS_AS: rethrow_exception never returns, and MSVC reports the
+    // code that macro places after it as unreachable.
+    bool refused = false;
+    try {
+        std::rethrow_exception(outcome.error);
+    } catch (std::invalid_argument const&) {
+        refused = true;
+    } catch (...) {
+        refused = false;
+    }
+    CHECK(refused);
 }
 
 TEST_CASE("forms::handlerChoiceFetcher: fetches options through the given handler", "[forms-engine][handler]") {

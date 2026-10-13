@@ -39,7 +39,7 @@ struct FieldError {
     ///        `not-an-option`, `out-of-range`, `incomplete`, `unrepresentable`.
     std::string code{};
     /// @brief The message, resolved through the session's translations
-    ///        (key `morph.forms.error.<code>`), else the English text.
+    ///        (key `morph.forms.error.` followed by the code), else the English text.
     std::string message{};
     /// @brief Member-wise equality.
     /// @param other The other error.
