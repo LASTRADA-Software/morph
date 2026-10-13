@@ -229,3 +229,71 @@ TEST_CASE("WizardSession: titles resolve through the translations", "[forms-engi
     CHECK(wizard.stepTitle(0) == "One");
     CHECK(wizard.stepTitle(1) == "Zwei");
 }
+
+TEST_CASE("WizardModel: a malformed wizard document names where", "[forms-engine][wizard]") {
+    auto const where = [](std::string_view json) {
+        auto const model = WizardModel::fromSchema("W", json);
+        return model.has_value() ? std::string{"(read)"} : model.error().path;
+    };
+    CHECK(where("not json").empty());
+    CHECK(where("[]").empty());
+    CHECK(where(R"({"w-steps":{}})") == "w-steps");
+    CHECK(where(R"({"w-steps":[{"action":"A","prefill":[]}]})") == "w-steps[0].prefill");
+    CHECK(where(R"({"w-steps":[{"action":"A","prefill":{"x":5}}]})") == "w-steps[0].prefill.x");
+    CHECK(where(R"({"w-steps":[{"action":"A","prefill":{"x":"nodot"}}]})") == "w-steps[0].prefill.x");
+}
+
+TEST_CASE("WizardSession: construction refuses a missing submitter or a step schema that does not read",
+          "[forms-engine][wizard]") {
+    Harness harness;
+    CHECK_THROWS_AS(WizardSession(harness.rt, wizardModel(), schemas(), {}, {}), std::invalid_argument);
+    auto const broken = [](std::string_view) -> std::optional<std::string> { return "not a schema"; };
+    CHECK_THROWS_AS(WizardSession(harness.rt, wizardModel(), broken, harness.server.submitter(), {}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(WizardSession(harness.rt, wizardModel(), {}, harness.server.submitter(), {}),
+                    std::invalid_argument);
+}
+
+TEST_CASE(
+    "WizardSession: Back on the first step stays; an unknown resolved value is absent; a prefill with nothing "
+    "resolved leaves the field blank",
+    "[forms-engine][wizard]") {
+    Stack stack{false, [](Call const& call) -> std::optional<std::string> {
+                    if (call.action == "WizStepOne") {
+                        return std::string{"[1]"};  // not an object: nothing resolved
+                    }
+                    return std::string{"{}"};
+                }};
+    stack.wizard->back();
+    CHECK(stack.wizard->current() == 0);
+    CHECK_FALSE(stack.wizard->resolved("WizStepOne.id").has_value());
+    stack.harness.type(stack.wizard->step(0), "label", "x");
+    stack.wizard->next();
+    stack.harness.settle();
+    CHECK(stack.wizard->current() == 1);
+    CHECK(stack.wizard->step(1).field("refId").text().get().empty());
+}
+
+TEST_CASE("WizardSession: a failed submission from Next stays on the step", "[forms-engine][wizard]") {
+    Stack stack{true, [](Call const& call) -> std::optional<std::string> {
+                    if (call.action == "WizStepOne") {
+                        return std::string{R"({"id":1})"};
+                    }
+                    return std::nullopt;  // step two's submissions wait
+                }};
+    stack.harness.type(stack.wizard->step(0), "label", "x");
+    stack.wizard->next();
+    stack.harness.settle();
+    REQUIRE(stack.wizard->current() == 1);
+    stack.harness.type(stack.wizard->step(1), "note", "n");
+    stack.wizard->back();  // leave the step while nothing is in flight
+    stack.wizard->next();
+    stack.harness.settle();
+    REQUIRE(stack.wizard->current() == 1);
+    stack.wizard->step(1).submit();
+    stack.harness.settle();
+    stack.harness.server.rejectSubmit(stack.harness.server.submits().size() - 1, "refused");
+    stack.harness.settle();
+    CHECK_FALSE(stack.wizard->stepDone(1));
+    CHECK(stack.wizard->current() == 1);
+}

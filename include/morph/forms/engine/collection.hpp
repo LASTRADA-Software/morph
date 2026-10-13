@@ -52,29 +52,29 @@ enum class CollectionActionScope : std::uint8_t {
 /// @brief One `v-columns` entry.
 struct CollectionColumn {
     /// @brief The row member the column reads.
-    std::string field{};
+    std::string field;
     /// @brief The header: `label`, else `field`.
-    std::string label{};
+    std::string label;
     /// @brief The column's table kind (`kind`, by `table::ColumnKind`'s JSON names); `Text` when absent.
     table::ColumnKind kind = table::ColumnKind::Text;
     /// @brief `v-hidden`: carried in the rows and the table source, not shown.
     bool hidden = false;
     /// @brief `x-decimalPlaces`: the places an exact value without its own `dp` is shown with.
-    std::optional<std::uint32_t> decimalPlaces{};
+    std::optional<std::uint32_t> decimalPlaces;
     /// @brief The unit appended to an exact value (`ExtUnits.unitUnicode`, else `unitAscii`).
-    std::string unit{};
+    std::string unit;
 };
 
 /// @brief One `v-rowAction` or `v-actions` entry.
 struct CollectionAction {
     /// @brief The action type executed.
-    std::string action{};
+    std::string action;
     /// @brief The button label: `label`, else the action type.
-    std::string label{};
+    std::string label;
     /// @brief Row or collection.
     CollectionActionScope scope = CollectionActionScope::Row;
     /// @brief `{actionField: rowField}` pairs, in document order.
-    std::vector<std::pair<std::string, std::string>> bind{};
+    std::vector<std::pair<std::string, std::string>> bind;
     /// @brief Whether the action waits for a confirmation.
     bool confirm = false;
 };
@@ -88,22 +88,24 @@ public:
     /// @brief Reads a view document.
     /// @param viewJson The document, in the vocabulary `views::viewSchemaJson<V>()` emits.
     /// @return The model, or the error naming the malformed key.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one check per `v-*` key, in document order.
     [[nodiscard]] static std::expected<CollectionModel, SchemaError> fromSchema(std::string_view viewJson) {
         using detail::engine::Json;
         auto const dom = detail::engine::parseJson(viewJson);
         if (!dom || !dom->is_object()) {
-            return std::unexpected(SchemaError{"", "a view document must be a JSON object"});
+            return std::unexpected(SchemaError{.path = "", .message = "a view document must be a JSON object"});
         }
         CollectionModel model{};
         auto const* const kind = detail::engine::stringAt(*dom, "v-kind");
         if (kind != nullptr && *kind != "collection" && *kind != "master-detail") {
-            return std::unexpected(SchemaError{"v-kind", R"("v-kind" must be "collection" or "master-detail")"});
+            return std::unexpected(
+                SchemaError{.path = "v-kind", .message = R"("v-kind" must be "collection" or "master-detail")"});
         }
         model._kind =
             (kind != nullptr && *kind == "master-detail") ? CollectionKind::MasterDetail : CollectionKind::Collection;
         auto const* const query = detail::engine::stringAt(*dom, "v-query");
         if (query == nullptr) {
-            return std::unexpected(SchemaError{"v-query", R"(a view document needs a "v-query")"});
+            return std::unexpected(SchemaError{.path = "v-query", .message = R"(a view document needs a "v-query")"});
         }
         model._query = *query;
         auto const* const title = detail::engine::stringAt(*dom, "v-title");
@@ -112,7 +114,7 @@ public:
         model._rowKey = rowKey != nullptr ? *rowKey : std::string{"id"};
         if (Json const* const columns = detail::engine::member(*dom, "v-columns")) {
             if (!columns->is_array()) {
-                return std::unexpected(SchemaError{"v-columns", R"("v-columns" must be an array)"});
+                return std::unexpected(SchemaError{.path = "v-columns", .message = R"("v-columns" must be an array)"});
             }
             for (Json const& entry : columns->get_array()) {
                 auto column = columnOf(entry);
@@ -131,7 +133,7 @@ public:
         }
         if (Json const* const actions = detail::engine::member(*dom, "v-actions")) {
             if (!actions->is_array()) {
-                return std::unexpected(SchemaError{"v-actions", R"("v-actions" must be an array)"});
+                return std::unexpected(SchemaError{.path = "v-actions", .message = R"("v-actions" must be an array)"});
             }
             for (Json const& entry : actions->get_array()) {
                 auto action = actionOf(entry, "v-actions");
@@ -179,7 +181,7 @@ private:
         using detail::engine::Json;
         auto const* const field = detail::engine::stringAt(entry, "field");
         if (field == nullptr) {
-            return std::unexpected(SchemaError{"v-columns", R"(a column needs a "field")"});
+            return std::unexpected(SchemaError{.path = "v-columns", .message = R"(a column needs a "field")"});
         }
         CollectionColumn column{};
         column.field = *field;
@@ -188,8 +190,8 @@ private:
         if (auto const* const kind = detail::engine::stringAt(entry, "kind")) {
             table::ColumnKind parsed{};
             if (glz::read_json(parsed, detail::engine::quote(*kind))) {
-                return std::unexpected(
-                    SchemaError{"v-columns." + column.field, "unknown column kind \"" + *kind + "\""});
+                return std::unexpected(SchemaError{.path = "v-columns." + column.field,
+                                                   .message = "unknown column kind \"" + *kind + "\""});
             }
             column.kind = parsed;
         }
@@ -203,8 +205,11 @@ private:
         if (Json const* const units = detail::engine::member(entry, "ExtUnits")) {
             auto const* const unicode = detail::engine::stringAt(*units, "unitUnicode");
             auto const* const ascii = detail::engine::stringAt(*units, "unitAscii");
-            column.unit =
-                unicode != nullptr && !unicode->empty() ? *unicode : (ascii != nullptr ? *ascii : std::string{});
+            if (unicode != nullptr && !unicode->empty()) {
+                column.unit = *unicode;
+            } else if (ascii != nullptr) {
+                column.unit = *ascii;
+            }
         }
         return column;
     }
@@ -213,7 +218,7 @@ private:
                                                                                std::string const& path) {
         auto const* const type = detail::engine::stringAt(node, "action");
         if (type == nullptr) {
-            return std::unexpected(SchemaError{path, R"(an action needs an "action")"});
+            return std::unexpected(SchemaError{.path = path, .message = R"(an action needs an "action")"});
         }
         CollectionAction action{};
         action.action = *type;
@@ -246,13 +251,13 @@ private:
 /// @brief One listed row.
 struct CollectionRow {
     /// @brief The row's identity for the table engine: an `int64` key, or its text when it is not one.
-    table::RowId id{};
+    table::RowId id;
     /// @brief The row key as exact text (every digit kept): what `open`, `fire` and the views address a row by.
-    std::string key{};
+    std::string key;
     /// @brief The row as JSON, every integer digit kept.
-    std::string json{};
+    std::string json;
     /// @brief The visible columns' formatted cells, in column order.
-    std::vector<std::string> cells{};
+    std::vector<std::string> cells;
     /// @brief Member-wise equality.
     /// @param other The other row.
     /// @return `true` when every member matches.
@@ -264,7 +269,7 @@ struct PendingConfirm {
     /// @brief Index into `CollectionModel::actions()`.
     std::size_t action = 0;
     /// @brief The row it was fired on (empty for a collection action).
-    std::string rowKey{};
+    std::string rowKey;
     /// @brief Member-wise equality.
     /// @param other The other pending action.
     /// @return `true` when action and row match.
@@ -290,7 +295,7 @@ namespace detail::engine {
             auto const places = SchemaReader::unsignedOf(member(*value, "dp"));
             std::uint32_t const decimals =
                 places ? static_cast<std::uint32_t>(*places) : column.decimalPlaces.value_or(0);
-            std::string text = decimalText(
+            std::string const text = decimalText(
                 math::Rational{math::Numerator{*num}, math::Denominator{*den}, math::DecimalPlaces{0}}, decimals);
             return column.unit.empty() ? text : text + " " + column.unit;
         }
@@ -467,6 +472,7 @@ public:
         if (!_editor) {
             return;
         }
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): an editor exists only for a row action.
         std::string const body = bindBody(*_model.rowAction(), rowKey);
         _rt->batch([&] {
             _openRow.set(std::string{rowKey});
@@ -523,7 +529,7 @@ private:
             CollectionRow entry{};
             Json const* const key = detail::engine::member(row, _model.rowKey());
             entry.key = key == nullptr ? std::to_string(rows.size()) : detail::engine::displayText(*key);
-            auto const whole = key == nullptr ? std::optional<std::int64_t>{std::int64_t(rows.size())}
+            auto const whole = key == nullptr ? std::optional<std::int64_t>{static_cast<std::int64_t>(rows.size())}
                                               : detail::engine::SchemaReader::signedOf(key);
             bool const integral = key == nullptr || key->get_if<double>() == nullptr;
             entry.id = whole && integral ? table::RowId{*whole} : table::RowId{entry.key};
