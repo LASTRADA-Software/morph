@@ -52,12 +52,12 @@ template <class A, class M, class S = bridge::NoSharing>
 class Form {
 public:
     /// @brief The action's registered result type.
-    using Result = typename model::ActionTraits<A>::Result;
+    using Result = model::ActionTraits<A>::Result;
 
     /// @brief The type of the member @p Member points to.
     /// @tparam Member A pointer to a data member of `A`.
     template <auto Member>
-    using MemberValue = typename bridge::detail::MemberPointerTraits<decltype(Member)>::ValueType;
+    using MemberValue = bridge::detail::MemberPointerTraits<decltype(Member)>::ValueType;
 
     /// @param runtime The runtime; its owner must be @p handler's callback executor. Borrowed.
     /// @param handler Executes the action. Borrowed: it must outlive the form.
@@ -71,14 +71,14 @@ public:
         : _rt{&runtime},
           _handler{&handler},
           _session{runtime, FormModel::forAction<A>(),
-                   [this](std::string_view, std::string body) { return execute(std::move(body)); }, std::move(choices),
+                   [this](std::string_view, const std::string& body) { return execute(body); }, std::move(choices),
                    withValidator(std::move(options))},
           _value{runtime,
-                 [this]() -> std::optional<A> {
+                 [this] -> std::optional<A> {
                      std::optional<std::string> const body = _session.body();
                      return body.has_value() ? decode(*body) : std::nullopt;
                  }},
-          _lastResult{runtime, [this]() -> std::optional<Result> {
+          _lastResult{runtime, [this] -> std::optional<Result> {
                           std::optional<std::string> const& reply = _session.lastReply();
                           if (!reply.has_value()) {
                               return std::nullopt;
@@ -154,7 +154,7 @@ private:
 
     [[nodiscard]] async::Completion<std::string> execute(std::string const& body) {
         auto [completion, promise] = async::Completion<std::string>::makeSettleable(&_rt->owner());
-        auto relay = std::make_shared<async::Completion<std::string>::Promise>(std::move(promise));
+        auto const relay = std::make_shared<async::Completion<std::string>::Promise>(std::move(promise));
         std::optional<A> action = decode(body);
         if (!action) {
             relay->reject(std::make_exception_ptr(std::invalid_argument{"Form<A>: the body does not decode"}));

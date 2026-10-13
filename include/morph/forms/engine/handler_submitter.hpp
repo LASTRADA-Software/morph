@@ -78,7 +78,7 @@ template <class... Handlers>
     requires(sizeof...(Handlers) > 0)
 [[nodiscard]] Submitter handlerSubmitter(exec::IExecutor& callbacks, Handlers&... handlers) {
     std::vector<detail::engine::JsonRoute> routes{detail::engine::routeThrough(handlers)...};
-    return [routes = std::move(routes), &callbacks](std::string_view actionType, std::string bodyJson) {
+    return [routes = std::move(routes), &callbacks](std::string_view actionType, const std::string& bodyJson) {
         return detail::engine::routeFirst(routes, callbacks, actionType, bodyJson);
     };
 }
@@ -92,7 +92,7 @@ template <class... Handlers>
     requires(sizeof...(Handlers) > 0)
 [[nodiscard]] ChoiceFetcher handlerChoiceFetcher(exec::IExecutor& callbacks, Handlers&... handlers) {
     std::vector<detail::engine::JsonRoute> routes{detail::engine::routeThrough(handlers)...};
-    return [routes = std::move(routes), &callbacks](std::string_view optionsAction, std::string bodyJson) {
+    return [routes = std::move(routes), &callbacks](std::string_view optionsAction, const std::string& bodyJson) {
         return detail::engine::routeFirst(routes, callbacks, optionsAction, bodyJson);
     };
 }

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <format>
 #include <glaze/glaze.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -131,7 +132,7 @@ using Json = glz::generic_u64;
     if (object == nullptr) {
         return nullptr;
     }
-    auto const found = object->find(key);
+    const auto* const found = object->find(key);
     return found == object->end() ? nullptr : &found->second;
 }
 
@@ -163,8 +164,8 @@ using Json = glz::generic_u64;
         }
         // 309 integer digits for DBL_MAX, a sign, and the longest shortest fraction.
         std::array<char, 400> buffer{};
-        auto const result =
-            std::to_chars(buffer.data(), buffer.data() + buffer.size(), *doubleValue, std::chars_format::fixed);
+        auto const result = std::to_chars(std::to_address(buffer.begin()), std::to_address(buffer.end()), *doubleValue,
+                                          std::chars_format::fixed);
         if (result.ec != std::errc{}) {
             return std::nullopt;
         }
@@ -218,7 +219,7 @@ using Json = glz::generic_u64;
 /// @param text The text.
 /// @return `true` for canonical integer text.
 [[nodiscard]] inline bool isCanonicalInteger(std::string_view text) noexcept {
-    return isCanonicalDecimal(text) && text.find('.') == std::string_view::npos;
+    return isCanonicalDecimal(text) && !text.contains('.');
 }
 
 /// @brief Drops a leading run of zeros that JSON forbids: `"007.50"` → `"7.50"`, `"-00"` → `"-0"`.
@@ -337,7 +338,7 @@ using Json = glz::generic_u64;
 [[nodiscard]] inline std::strong_ordering compareRationalToDecimal(math::Rational const& value,
                                                                    std::string_view decimal) {
     bool const decimalNegative = decimal.starts_with('-');
-    std::string_view magnitude = decimalNegative ? decimal.substr(1) : decimal;
+    std::string_view const magnitude = decimalNegative ? decimal.substr(1) : decimal;
     auto const dot = magnitude.find('.');
     std::string digits{magnitude.substr(0, dot)};
     std::size_t places = 0;
@@ -346,8 +347,14 @@ using Json = glz::generic_u64;
         places = magnitude.size() - dot - 1;
     }
     bool const decimalZero = std::ranges::all_of(digits, [](char chr) { return chr == '0'; });
-    int const decimalSign = decimalZero ? 0 : (decimalNegative ? -1 : 1);
-    int const valueSign = value.numerator == 0 ? 0 : (value.numerator < 0 ? -1 : 1);
+    auto const signOf = [](bool zero, bool negative) {
+        if (zero) {
+            return 0;
+        }
+        return negative ? -1 : 1;
+    };
+    int const decimalSign = signOf(decimalZero, decimalNegative);
+    int const valueSign = signOf(value.numerator == 0, value.numerator < 0);
     if (valueSign != decimalSign) {
         return valueSign <=> decimalSign;
     }

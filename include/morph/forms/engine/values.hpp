@@ -37,10 +37,10 @@ namespace morph::forms {
 struct FieldError {
     /// @brief One of `malformed`, `too-precise`, `below-minimum`, `above-maximum`, `not-a-multiple`,
     ///        `not-an-option`, `out-of-range`, `incomplete`, `unrepresentable`.
-    std::string code{};
+    std::string code;
     /// @brief The message, resolved through the session's translations
     ///        (key `morph.forms.error.` followed by the code), else the English text.
-    std::string message{};
+    std::string message;
     /// @brief Member-wise equality.
     /// @param other The other error.
     /// @return `true` when code and message match.
@@ -50,7 +50,7 @@ struct FieldError {
 /// @brief One field's encoded value.
 struct WireValue {
     /// @brief The JSON literal the body carries, byte for byte.
-    std::string json{};
+    std::string json;
     /// @brief The exact value rules compare, in the expression language's terms: an `int`, a `decimal`, a `bool`,
     ///        a `string` or a `timestamp`; `null` for objects and for a value the language cannot hold exactly
     ///        (an integer beyond int64).
@@ -71,7 +71,7 @@ struct ValueContext {
     /// @brief The display zone for date-times, in minutes east of UTC.
     int displayOffsetMinutes = 0;
     /// @brief The host's catalog, for error messages; empty means none.
-    render::TranslationProvider translations{};
+    render::TranslationProvider translations;
     /// @brief The locale to resolve messages in.
     std::string bcp47 = "en";
 };
@@ -92,11 +92,11 @@ struct ValueContext {
         {"incomplete", "A required part is missing"},
         {"unrepresentable", "Nested too deeply to edit here"},
     }};
-    auto const found = std::ranges::find(kEnglish, code, &std::pair<std::string_view, std::string_view>::first);
+    const auto* const found = std::ranges::find(kEnglish, code, &std::pair<std::string_view, std::string_view>::first);
     std::string_view const english = found == kEnglish.end() ? std::string_view{"Not a valid value"} : found->second;
     std::string const key = "morph.forms.error." + std::string{code};
-    return FieldError{std::string{code},
-                      render::resolveText(context.translations, context.bcp47, std::nullopt, key, english)};
+    return FieldError{.code = std::string{code},
+                      .message = render::resolveText(context.translations, context.bcp47, std::nullopt, key, english)};
 }
 
 namespace detail::engine {
@@ -197,7 +197,7 @@ namespace detail::engine {
             return std::unexpected(*violation);
         }
     }
-    return WireValue{normalised, integerValue(normalised)};
+    return WireValue{.json = normalised, .value = integerValue(normalised)};
 }
 
 /// @brief Encodes a plain JSON number draft.
@@ -219,7 +219,7 @@ namespace detail::engine {
         return std::unexpected(*violation);
     }
     std::string const literal = stripLeadingZeros(*canonical);
-    return WireValue{literal, decimalValue(literal)};
+    return WireValue{.json = literal, .value = decimalValue(literal)};
 }
 
 /// @brief Encodes a Decimal or Quantity draft typed in `spec.units[unit]` as the exact
@@ -232,7 +232,8 @@ namespace detail::engine {
 /// @return The encoding.
 [[nodiscard]] inline Encoding encodeExact(FieldSpec const& spec, std::string_view text, std::size_t unit,
                                           ValueContext const& context) {
-    UnitOption const fallback{spec.unitAscii, spec.unit, spec.decimalPlaces.value_or(0), 1, 1};
+    UnitOption const fallback{
+        .id = spec.unitAscii, .display = spec.unit, .decimals = spec.decimalPlaces.value_or(0), .num = 1, .den = 1};
     UnitOption const& entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
@@ -280,7 +281,7 @@ namespace detail::engine {
     }
     std::string const json = R"({"num":)" + std::to_string(num) + R"(,"den":)" + std::to_string(den) + R"(,"dp":)" +
                              std::to_string(canonDp) + "}";
-    return WireValue{json, ui::Value{ui::Decimal{value}}};
+    return WireValue{.json = json, .value = ui::Value{ui::Decimal{value}}};
 }
 
 /// @brief Encodes a comma-separated array draft by the item type.
@@ -295,7 +296,7 @@ namespace detail::engine {
     while (start <= text.size()) {
         auto const comma = text.find(',', start);
         std::string_view const item =
-            trim(text.substr(start, comma == std::string_view::npos ? text.npos : comma - start));
+            trim(text.substr(start, comma == std::string_view::npos ? std::string_view::npos : comma - start));
         start = comma == std::string_view::npos ? text.size() + 1 : comma + 1;
         if (item.empty()) {
             continue;
@@ -322,9 +323,9 @@ namespace detail::engine {
         json += (first ? "" : ",") + literal;
         first = false;
     }
-    json += "]";
+    json += ']';
     auto const parsed = parseJson(json);
-    return WireValue{json, parsed ? valueOfLiteral(*parsed) : ui::Value{}};
+    return WireValue{.json = json, .value = parsed ? valueOfLiteral(*parsed) : ui::Value{}};
 }
 
 }  // namespace detail::engine
@@ -338,25 +339,26 @@ namespace detail::engine {
 /// @param unit    For a Decimal or Quantity, the index into `spec.units` the draft is typed in.
 /// @param context The locale, display zone and translations.
 /// @return The encoding.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline Encoding encodeScalar(FieldSpec const& spec, std::string_view draft, std::size_t unit,
                                            ValueContext const& context) {
     using namespace detail::engine;
     std::string_view const text = trim(draft);
     if (text.empty()) {
         if (spec.kind == FieldKind::Boolean && spec.required) {
-            return WireValue{"false", ui::Value{false}};
+            return WireValue{.json = "false", .value = ui::Value{false}};
         }
         return std::nullopt;
     }
     switch (spec.kind) {
         case FieldKind::Text:
         case FieldKind::Multiline:
-            return WireValue{quote(text), ui::Value{std::string{text}}};
+            return WireValue{.json = quote(text), .value = ui::Value{std::string{text}}};
         case FieldKind::Date:
             if (!isIsoDate(text)) {
                 return std::unexpected(fieldError("malformed", context));
             }
-            return WireValue{quote(text), ui::Value{std::string{text}}};
+            return WireValue{.json = quote(text), .value = ui::Value{std::string{text}}};
         case FieldKind::DateTime: {
             auto const wall = parseWallClock(text);
             if (!wall) {
@@ -364,7 +366,7 @@ namespace detail::engine {
             }
             std::string const utc = formatUtc(*wall - std::chrono::minutes{context.displayOffsetMinutes});
             auto const instant = time::DateTime::fromIso8601(utc);
-            return WireValue{quote(utc), instant ? ui::Value{*instant} : ui::Value{}};
+            return WireValue{.json = quote(utc), .value = instant ? ui::Value{*instant} : ui::Value{}};
         }
         case FieldKind::EpochDateTime: {
             auto const wall = parseWallClock(text);
@@ -373,20 +375,20 @@ namespace detail::engine {
             }
             auto const seconds =
                 (*wall - std::chrono::minutes{context.displayOffsetMinutes}).time_since_epoch().count();
-            return WireValue{std::to_string(seconds), ui::Value{static_cast<std::int64_t>(seconds)}};
+            return WireValue{.json = std::to_string(seconds), .value = ui::Value{static_cast<std::int64_t>(seconds)}};
         }
         case FieldKind::EpochDate: {
             if (!isIsoDate(text)) {
                 return std::unexpected(fieldError("malformed", context));
             }
-            auto const days = std::chrono::floor<std::chrono::days>(*parseWallClock(std::string{text} + "T00:00"))
-                                  .time_since_epoch()
-                                  .count();
-            return WireValue{std::to_string(days), ui::Value{static_cast<std::int64_t>(days)}};
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): an ISO date at midnight always reads.
+            std::chrono::sys_seconds const midnight = parseWallClock(std::string{text} + "T00:00").value();
+            auto const days = std::chrono::floor<std::chrono::days>(midnight).time_since_epoch().count();
+            return WireValue{.json = std::to_string(days), .value = ui::Value{static_cast<std::int64_t>(days)}};
         }
         case FieldKind::Boolean:
             if (text == "true" || text == "false") {
-                return WireValue{std::string{text}, ui::Value{text == "true"}};
+                return WireValue{.json = std::string{text}, .value = ui::Value{text == "true"}};
             }
             return std::unexpected(fieldError("malformed", context));
         case FieldKind::Enum: {
@@ -395,14 +397,14 @@ namespace detail::engine {
                 return std::unexpected(fieldError("not-an-option", context));
             }
             auto const literal = parseJson(text);
-            return WireValue{std::string{text}, literal ? valueOfLiteral(*literal) : ui::Value{}};
+            return WireValue{.json = std::string{text}, .value = literal ? valueOfLiteral(*literal) : ui::Value{}};
         }
         case FieldKind::Choice: {
             auto const literal = parseJson(text);
             if (!literal || literal->is_object() || literal->is_array() || literal->is_null()) {
                 return std::unexpected(fieldError("malformed", context));
             }
-            return WireValue{std::string{text}, valueOfLiteral(*literal)};
+            return WireValue{.json = std::string{text}, .value = valueOfLiteral(*literal)};
         }
         case FieldKind::Integer:
             return encodeInteger(spec, text, context);
@@ -429,6 +431,7 @@ namespace detail::engine {
 /// @param value   The wire value (JSON null and a mismatched shape decode to blank).
 /// @param context The locale and display zone.
 /// @return The draft text.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline std::string decodeScalar(FieldSpec const& spec, detail::engine::Json const& value,
                                               ValueContext const& context) {
     using namespace detail::engine;
@@ -462,7 +465,10 @@ namespace detail::engine {
         }
         case FieldKind::Boolean: {
             auto const* const flag = value.get_if<bool>();
-            return flag == nullptr ? std::string{} : (*flag ? "true" : "false");
+            if (flag == nullptr) {
+                return {};
+            }
+            return *flag ? "true" : "false";
         }
         case FieldKind::Enum:
         case FieldKind::Choice:
@@ -570,7 +576,8 @@ namespace detail::engine {
             continue;
         }
         Json const* const label = member(row, spec.labelField);
-        options.push_back(ChoiceOption{toJson(*value), displayText(label != nullptr ? *label : *value)});
+        options.push_back(
+            ChoiceOption{.valueJson = toJson(*value), .label = displayText(label != nullptr ? *label : *value)});
     }
     return options;
 }

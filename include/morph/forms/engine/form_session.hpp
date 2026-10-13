@@ -55,12 +55,12 @@ struct FormSessionOptions {
     /// @brief The locale translations are resolved in.
     std::string bcp47 = "en";
     /// @brief The host's catalog; empty means every label is the schema's literal.
-    render::TranslationProvider translations{};
+    render::TranslationProvider translations;
     /// @brief The display zone for date-times, in minutes east of UTC.
     int displayOffsetMinutes = 0;
     /// @brief An extra readiness gate over the assembled body; empty means none. `Form<A>` puts
     ///        the action's own `validate()` here.
-    std::function<bool(std::string_view bodyJson)> accepts{};
+    std::function<bool(std::string_view bodyJson)> accepts;
 };
 
 class FieldState;
@@ -192,6 +192,7 @@ public:
     /// @param path     The instance path (`name`, `parent.member`, `rows#key.member`).
     /// @param siblings The fields `x-optionsDependsOn` names are looked up among. Borrowed.
     /// @param parent   The containing Object or ObjectArray field, or null at the top level.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's or ObjectArray row's members are fields, to the model's depth.
     FieldState(detail::engine::SessionCore& core MORPH_LIFETIMEBOUND, FieldSpec const& spec MORPH_LIFETIMEBOUND,
                std::string path, std::vector<std::unique_ptr<FieldState>> const* siblings, FieldState const* parent)
         : _core{&core},
@@ -205,7 +206,7 @@ public:
           _rows{core.runtime(), std::vector<std::shared_ptr<RowState>>{}},
           _encoded{core.runtime(), [this] { return computeEncoding(); }},
           _error{core.runtime(),
-                 [this]() -> std::optional<FieldError> {
+                 [this] -> std::optional<FieldError> {
                      Encoding const& encoding = _encoded.get();
                      if (encoding.has_value() && !encoding->has_value()) {
                          return encoding->error();
@@ -319,6 +320,7 @@ public:
             if (_spec->truncated) {
                 return detail::engine::trim(_text.get()).empty();
             }
+            // NOLINTNEXTLINE(misc-no-recursion): each member answers for itself.
             return std::ranges::all_of(_members, [](auto const& entry) { return entry->blank(); });
         }
         if (_spec->kind == FieldKind::ObjectArray) {
@@ -528,7 +530,8 @@ private:
     [[nodiscard]] std::optional<std::string> optionsRequest() const {
         std::string body = "{";
         bool first = true;
-        for (std::string const& parent : _spec->choice->dependsOn) {
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): only a Choice asks, and a Choice has its spec.
+        for (std::string const& parent : _spec->choice.value().dependsOn) {
             FieldState const* const source = sibling(parent);
             if (source == nullptr) {
                 return std::nullopt;
@@ -589,16 +592,19 @@ private:
         return json + "}";
     }
 
-    // NOLINTNEXTLINE(misc-no-recursion): an Object or a row encodes its members.
+    // An Object or a row encodes its members; one case per kind.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
     [[nodiscard]] Encoding computeEncoding() const {
         if (_spec->truncated) {
             std::string_view const draft = detail::engine::trim(_text.get());
             bool const array = _spec->kind == FieldKind::ObjectArray;
             if (draft.empty() && !_engaged.get()) {
-                return (array && _spec->required) ? Encoding{WireValue{"[]", ui::Value{ui::ValueList{}}}} : Encoding{};
+                return (array && _spec->required)
+                           ? Encoding{WireValue{.json = "[]", .value = ui::Value{ui::ValueList{}}}}
+                           : Encoding{};
             }
             if (array && (draft == "[]" || draft.empty())) {
-                return WireValue{"[]", ui::Value{ui::ValueList{}}};
+                return WireValue{.json = "[]", .value = ui::Value{ui::ValueList{}}};
             }
             return std::unexpected(fieldError("unrepresentable", _core->values()));
         }
@@ -610,7 +616,7 @@ private:
             if (!json) {
                 return std::unexpected(json.error());
             }
-            return WireValue{*std::move(json), ui::Value{}};
+            return WireValue{.json = *std::move(json), .value = ui::Value{}};
         }
         if (_spec->kind == FieldKind::ObjectArray) {
             auto const& rows = _rows.get();
@@ -625,7 +631,7 @@ private:
                 }
                 json += (i == 0 ? "" : ",") + *row;
             }
-            return WireValue{json + "]", ui::Value{}};
+            return WireValue{.json = json + "]", .value = ui::Value{}};
         }
         return encodeScalar(*_spec, _text.get(), _unit.get(), _core->values());
     }
@@ -777,6 +783,19 @@ public:
     /// @return The fields.
     [[nodiscard]] std::span<std::unique_ptr<FieldState> const> fields() const noexcept { return _fields; }
 
+    /// @brief A row position written in a path's brackets.
+    /// @param digits The text between the brackets.
+    /// @return The position, or `std::nullopt` unless the text is all decimal digits.
+    [[nodiscard]] static std::optional<std::size_t> rowIndexOf(std::string_view digits) {
+        std::size_t parsed = 0;
+        char const* const end = std::to_address(digits.end());
+        auto const result = std::from_chars(std::to_address(digits.begin()), end, parsed);
+        if (digits.empty() || result.ec != std::errc{} || result.ptr != end) {
+            return std::nullopt;
+        }
+        return parsed;
+    }
+
     /// @brief A field by path: `name`, `parent.member`, or `rows[i].member` (a row by position).
     /// @param path The path.
     /// @return The field.
@@ -797,13 +816,10 @@ public:
                 if (!segment.ends_with(']')) {
                     throw missing();
                 }
-                std::string_view const digits = segment.substr(bracket + 1, segment.size() - bracket - 2);
-                std::size_t parsed = 0;
-                auto const result = std::from_chars(digits.data(), digits.data() + digits.size(), parsed);
-                if (digits.empty() || result.ec != std::errc{} || result.ptr != digits.data() + digits.size()) {
+                index = rowIndexOf(segment.substr(bracket + 1, segment.size() - bracket - 2));
+                if (!index.has_value()) {
                     throw missing();
                 }
-                index = parsed;
                 segment = segment.substr(0, bracket);
             }
             auto const found =
@@ -873,6 +889,7 @@ public:
     /// @param path      The field's path (see `field`).
     /// @param jsonValue The value as JSON; text that is not JSON changes nothing.
     /// @throws std::out_of_range when no field has that path.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a path and a JSON value; swapped, the path is not found.
     void assign(std::string_view path, std::string_view jsonValue) {
         FieldState& target = field(path);
         auto const dom = detail::engine::parseJson(jsonValue);
