@@ -531,8 +531,12 @@ private:
             {"or", Kind::Or},
             {"not", Kind::Not},
         }};
-        const auto* const found = std::ranges::find(kNames, name, &std::pair<std::string_view, Kind>::first);
-        return found == kNames.end() ? Kind::Unknown : found->second;
+        for (auto const& [text, kind] : kNames) {
+            if (text == name) {
+                return kind;
+            }
+        }
+        return Kind::Unknown;
     }
 
     /// The literal `equals` compares against, as an `expr/1` literal: a bool, a string, an `int` (from `valueText`
