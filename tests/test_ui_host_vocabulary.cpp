@@ -45,12 +45,17 @@ constexpr char const* kScreen = R"({
 /// A vocabulary with an unsafe `openPath`, a safe `beep` and an `int` value, recording each run.
 struct Fixture {
     Fixture() {
-        vocabulary.add(HostCommand{
-            .name = "openPath",
-            .version = 2,
-            .args = {HostArg{.name = "path", .type = "string"}},
-            .safeForUntrusted = false,
-            .run = [this](ValueRecord const& args) { ran.push_back("openPath " + *args.at("path").asString()); }});
+        vocabulary.add(HostCommand{.name = "openPath",
+                                   .version = 2,
+                                   .args = {HostArg{.name = "path", .type = "string"}},
+                                   .safeForUntrusted = false,
+                                   .run = [this](ValueRecord const& args) {
+                                       // Tolerates a wrong type, so a broken argument check fails the `ran` checks
+                                       // instead of crashing.
+                                       std::string const* const path = args.at("path").asString();
+                                       ran.push_back("openPath " +
+                                                     (path != nullptr ? *path : std::string{"<not a string>"}));
+                                   }});
         vocabulary.add(HostCommand{.name = "beep",
                                    .version = 1,
                                    .args = {HostArg{.name = "times", .type = "int?"}},
