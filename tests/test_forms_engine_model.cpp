@@ -19,7 +19,7 @@
 // NOLINTBEGIN(misc-use-internal-linkage)
 struct FmBooking {
     std::int64_t guests = 0;
-    std::optional<std::string> note{};
+    std::optional<std::string> note;
 };
 struct FmBooked {
     bool confirmed = false;

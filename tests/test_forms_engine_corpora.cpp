@@ -57,17 +57,17 @@ namespace engine = morph::forms::detail::engine;
 // ──── The rule corpus ────────────────────────────────────────────────────────
 
 struct RuleRow {
-    std::string id{};
-    std::string action{};
-    Draft state{};
+    std::string id;
+    std::string action;
+    Draft state;
     bool ready = false;
-    std::map<std::string, bool, std::less<>> visible{};
-    std::map<std::string, bool, std::less<>> readonly{};
+    std::map<std::string, bool, std::less<>> visible;
+    std::map<std::string, bool, std::less<>> readonly;
 };
 
 struct RuleCorpus {
-    std::map<std::string, std::string, std::less<>> schemas{};
-    std::vector<RuleRow> rows{};
+    std::map<std::string, std::string, std::less<>> schemas;
+    std::vector<RuleRow> rows;
 };
 
 [[nodiscard]] RuleCorpus const& ruleCorpus() {
@@ -101,8 +101,8 @@ struct RuleCorpus {
 
 struct RuleVerdict {
     bool ready = false;
-    std::map<std::string, bool, std::less<>> visible{};
-    std::map<std::string, bool, std::less<>> readonly{};
+    std::map<std::string, bool, std::less<>> visible;
+    std::map<std::string, bool, std::less<>> readonly;
 };
 
 [[nodiscard]] RuleVerdict runRuleRow(RuleRow const& row) {
@@ -112,7 +112,7 @@ struct RuleVerdict {
         form->field(name).text().set(text);
     }
     harness.settle();
-    RuleVerdict verdict{};
+    RuleVerdict verdict;
     verdict.ready = form->ready();
     for (auto const& [name, ignored] : row.visible) {
         verdict.visible.emplace(name, form->field(name).visible().get());
@@ -126,19 +126,19 @@ struct RuleVerdict {
 // ──── The body corpus ────────────────────────────────────────────────────────
 
 struct BodyStep {
-    std::string field{};
-    std::string text{};
-    std::optional<std::size_t> unit{};
+    std::string field;
+    std::string text;
+    std::optional<std::size_t> unit;
 };
 
 struct BodyCase {
-    std::string id{};
-    std::string schema{};
-    std::string locale{};
+    std::string id;
+    std::string schema;
+    std::string locale;
     int offset = 0;
-    std::optional<std::string> prefill{};
-    std::vector<BodyStep> steps{};
-    std::optional<std::string> body{};
+    std::optional<std::string> prefill;
+    std::vector<BodyStep> steps;
+    std::optional<std::string> body;
 };
 
 [[nodiscard]] std::vector<BodyCase> const& bodyCorpus() {

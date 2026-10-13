@@ -38,8 +38,14 @@ namespace engine = morph::forms::detail::engine;
     return encoding->error().code;
 }
 
-ValueContext const kContext{};
-ValueContext const kGerman{.locale = {.decimalSeparator = ",", .groupSeparator = "."}};
+[[nodiscard]] ValueContext const& plainContext() {
+    static ValueContext const value{};
+    return value;
+}
+[[nodiscard]] ValueContext const& germanContext() {
+    static ValueContext const value{.locale = {.decimalSeparator = ",", .groupSeparator = "."}};
+    return value;
+}
 
 constexpr std::string_view kMass = R"({"$ref":"#/$defs/q","x-decimalPlaces":3,"x-unitAlternatives":[
   {"id":"g","display":"g","decimals":1,"num":1,"den":1000},{"id":"t","display":"t","decimals":4,"num":1000,"den":1}]})";
@@ -52,51 +58,54 @@ constexpr std::string_view kInt64Defs = R"({"int64_t":{"type":"integer","minimum
 
 TEST_CASE("values: a Quantity keeps the unreduced scaled digits the QML renderer sent", "[forms-engine][values]") {
     FieldSpec const mass = field(kMass, kMassDefs);
-    CHECK(json(morph::forms::encodeScalar(mass, "2650.5", 0, kContext)) == R"({"num":2650500,"den":1000,"dp":3})");
-    CHECK(json(morph::forms::encodeScalar(mass, "2650500.0", 1, kContext)) ==
+    CHECK(json(morph::forms::encodeScalar(mass, "2650.5", 0, plainContext())) ==
+          R"({"num":2650500,"den":1000,"dp":3})");
+    CHECK(json(morph::forms::encodeScalar(mass, "2650500.0", 1, plainContext())) ==
           R"({"num":26505000,"den":10000,"dp":3})");
-    CHECK(json(morph::forms::encodeScalar(mass, "1.050,25", 0, kGerman)) == R"({"num":1050250,"den":1000,"dp":3})");
-    CHECK(error(morph::forms::encodeScalar(mass, "2650.5001", 0, kContext)) == "too-precise");
-    CHECK(error(morph::forms::encodeScalar(mass, "1.5", 0, kGerman)) == "malformed");
+    CHECK(json(morph::forms::encodeScalar(mass, "1.050,25", 0, germanContext())) ==
+          R"({"num":1050250,"den":1000,"dp":3})");
+    CHECK(error(morph::forms::encodeScalar(mass, "2650.5001", 0, plainContext())) == "too-precise");
+    CHECK(error(morph::forms::encodeScalar(mass, "1.5", 0, germanContext())) == "malformed");
     FieldSpec const tenth = field(R"({"type":"object","x-decimalPlaces":1,"ExtUnits":{"unitAscii":"x"}})");
-    CHECK(json(morph::forms::encodeScalar(tenth, "-0.5", 0, kContext)) == R"({"num":-5,"den":10,"dp":1})");
-    CHECK(json(morph::forms::encodeScalar(tenth, "123456789012345678.9", 0, kContext)) ==
+    CHECK(json(morph::forms::encodeScalar(tenth, "-0.5", 0, plainContext())) == R"({"num":-5,"den":10,"dp":1})");
+    CHECK(json(morph::forms::encodeScalar(tenth, "123456789012345678.9", 0, plainContext())) ==
           R"({"num":1234567890123456789,"den":10,"dp":1})");
-    CHECK(error(morph::forms::encodeScalar(tenth, "1234567890123456789.9", 0, kContext)) == "out-of-range");
+    CHECK(error(morph::forms::encodeScalar(tenth, "1234567890123456789.9", 0, plainContext())) == "out-of-range");
     FieldSpec const decimal = field(R"({"type":"object","x-decimalPlaces":2})");
-    CHECK(json(morph::forms::encodeScalar(decimal, "3.5", 0, kContext)) == R"({"num":350,"den":100,"dp":2})");
+    CHECK(json(morph::forms::encodeScalar(decimal, "3.5", 0, plainContext())) == R"({"num":350,"den":100,"dp":2})");
 }
 
 TEST_CASE("values: Quantity bounds, instance bounds and multipleOf are checked exactly in the canonical unit",
           "[forms-engine][values]") {
     FieldSpec const budget =
         field(R"({"type":"object","x-decimalPlaces":1,"ExtUnits":{"unitAscii":"count"},"minimum":1,"multipleOf":1})");
-    CHECK(error(morph::forms::encodeScalar(budget, "0", 0, kContext)) == "below-minimum");
-    CHECK(error(morph::forms::encodeScalar(budget, "2.5", 0, kContext)) == "not-a-multiple");
-    CHECK(json(morph::forms::encodeScalar(budget, "2", 0, kContext)) == R"({"num":20,"den":10,"dp":1})");
+    CHECK(error(morph::forms::encodeScalar(budget, "0", 0, plainContext())) == "below-minimum");
+    CHECK(error(morph::forms::encodeScalar(budget, "2.5", 0, plainContext())) == "not-a-multiple");
+    CHECK(json(morph::forms::encodeScalar(budget, "2", 0, plainContext())) == R"({"num":20,"den":10,"dp":1})");
     FieldSpec const step =
         field(R"({"type":"object","x-decimalPlaces":2,"multipleOf":0.5,"ExtUnits":{"unitAscii":"u"}})");
-    CHECK((*morph::forms::encodeScalar(step, "1.5", 0, kContext)).has_value());
-    CHECK(error(morph::forms::encodeScalar(step, "0.75", 0, kContext)) == "not-a-multiple");
+    CHECK((*morph::forms::encodeScalar(step, "1.5", 0, plainContext())).has_value());
+    CHECK(error(morph::forms::encodeScalar(step, "0.75", 0, plainContext())) == "not-a-multiple");
     FieldSpec const decorated =
         field(R"({"type":["object","null"],"ExtUnits":{"unitAscii":"mg_per_L"},"x-decimalPlaces":1,
       "x-minimum":{"num":0,"den":1,"dp":1},"x-maximum":{"num":20,"den":1,"dp":1}})");
-    CHECK((*morph::forms::encodeScalar(decorated, "12.5", 0, kContext)).has_value());
-    CHECK(error(morph::forms::encodeScalar(decorated, "25", 0, kContext)) == "above-maximum");
-    CHECK(error(morph::forms::encodeScalar(decorated, "-1", 0, kContext)) == "below-minimum");
-    CHECK(error(morph::forms::encodeScalar(decorated, "12.55", 0, kContext)) == "too-precise");
+    CHECK((*morph::forms::encodeScalar(decorated, "12.5", 0, plainContext())).has_value());
+    CHECK(error(morph::forms::encodeScalar(decorated, "25", 0, plainContext())) == "above-maximum");
+    CHECK(error(morph::forms::encodeScalar(decorated, "-1", 0, plainContext())) == "below-minimum");
+    CHECK(error(morph::forms::encodeScalar(decorated, "12.55", 0, plainContext())) == "too-precise");
     FieldSpec const capped = field(R"({"$ref":"#/$defs/q","x-decimalPlaces":3,"maximum":2000,
       "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}]})",
                                    kMassDefs);
-    CHECK(error(morph::forms::encodeScalar(capped, "2000000.1", 1, kContext)) == "above-maximum");  // checked in kg
+    CHECK(error(morph::forms::encodeScalar(capped, "2000000.1", 1, plainContext())) ==
+          "above-maximum");  // checked in kg
 }
 
 TEST_CASE("values: unit conversion is exact and rounds half away from zero", "[forms-engine][values]") {
     using morph::forms::convertDraft;
     using morph::forms::UnitOption;
-    UnitOption const kilograms{"kg", "kg", 3, 1, 1};
-    UnitOption const gram{"g", "g", 1, 1, 1000};
-    UnitOption const tonne{"t", "t", 4, 1000, 1};
+    UnitOption const kilograms{.id = "kg", .display = "kg", .decimals = 3, .num = 1, .den = 1};
+    UnitOption const gram{.id = "g", .display = "g", .decimals = 1, .num = 1, .den = 1000};
+    UnitOption const tonne{.id = "t", .display = "t", .decimals = 4, .num = 1000, .den = 1};
     CHECK(convertDraft("2650.5", kilograms, gram, {}) == "2650500.0");
     CHECK(convertDraft("2650500.0", gram, kilograms, {}) == "2650.500");
     CHECK(convertDraft("2650.5", kilograms, tonne, {}) == "2.6505");
@@ -109,26 +118,29 @@ TEST_CASE("values: unit conversion is exact and rounds half away from zero", "[f
 
 TEST_CASE("values: an integer keeps every digit and prefers the exact bound", "[forms-engine][values]") {
     FieldSpec const wideId = field(R"({"$ref":"#/$defs/int64_t"})", kInt64Defs);
-    CHECK(json(morph::forms::encodeScalar(wideId, "9223372036854775807", 0, kContext)) == "9223372036854775807");
-    CHECK(json(morph::forms::encodeScalar(wideId, "-9223372036854775808", 0, kContext)) == "-9223372036854775808");
-    CHECK(error(morph::forms::encodeScalar(wideId, "9223372036854775808", 0, kContext)) == "above-maximum");
-    CHECK(error(morph::forms::encodeScalar(wideId, "-9223372036854775809", 0, kContext)) == "below-minimum");
-    CHECK(error(morph::forms::encodeScalar(wideId, "99999999999999999999", 0, kContext)) == "above-maximum");
-    CHECK(json(morph::forms::encodeScalar(wideId, "0009223372036854775807", 0, kContext)) == "9223372036854775807");
-    CHECK(json(morph::forms::encodeScalar(wideId, "-42", 0, kContext)) == "-42");
-    CHECK(error(morph::forms::encodeScalar(wideId, "banana", 0, kContext)) == "malformed");
+    CHECK(json(morph::forms::encodeScalar(wideId, "9223372036854775807", 0, plainContext())) == "9223372036854775807");
+    CHECK(json(morph::forms::encodeScalar(wideId, "-9223372036854775808", 0, plainContext())) ==
+          "-9223372036854775808");
+    CHECK(error(morph::forms::encodeScalar(wideId, "9223372036854775808", 0, plainContext())) == "above-maximum");
+    CHECK(error(morph::forms::encodeScalar(wideId, "-9223372036854775809", 0, plainContext())) == "below-minimum");
+    CHECK(error(morph::forms::encodeScalar(wideId, "99999999999999999999", 0, plainContext())) == "above-maximum");
+    CHECK(json(morph::forms::encodeScalar(wideId, "0009223372036854775807", 0, plainContext())) ==
+          "9223372036854775807");
+    CHECK(json(morph::forms::encodeScalar(wideId, "-42", 0, plainContext())) == "-42");
+    CHECK(error(morph::forms::encodeScalar(wideId, "banana", 0, plainContext())) == "malformed");
     FieldSpec const small = field(R"({"type":"integer","minimum":-10,"maximum":10})");
-    CHECK((*morph::forms::encodeScalar(small, "10", 0, kContext)).has_value());
-    CHECK(error(morph::forms::encodeScalar(small, "11", 0, kContext)) == "above-maximum");
-    CHECK(error(morph::forms::encodeScalar(small, "-11", 0, kContext)) == "below-minimum");
+    CHECK((*morph::forms::encodeScalar(small, "10", 0, plainContext())).has_value());
+    CHECK(error(morph::forms::encodeScalar(small, "11", 0, plainContext())) == "above-maximum");
+    CHECK(error(morph::forms::encodeScalar(small, "-11", 0, plainContext())) == "below-minimum");
     FieldSpec const unbounded = field(R"({"type":"integer"})");
-    CHECK(json(morph::forms::encodeScalar(unbounded, "18446744073709551615", 0, kContext)) == "18446744073709551615");
+    CHECK(json(morph::forms::encodeScalar(unbounded, "18446744073709551615", 0, plainContext())) ==
+          "18446744073709551615");
     // What a rule compares is the exact int, not a double: 2^53 + 1 survives.
-    auto const value = (*morph::forms::encodeScalar(wideId, "9007199254740993", 0, kContext))->value;
+    auto const value = (*morph::forms::encodeScalar(wideId, "9007199254740993", 0, plainContext()))->value;
     REQUIRE(value.asInt() != nullptr);
     CHECK(*value.asInt() == 9007199254740993);
     // Beyond int64 the body keeps every digit; the expression language holds no such int, so rules read null.
-    CHECK((*morph::forms::encodeScalar(unbounded, "18446744073709551615", 0, kContext))->value.isNull());
+    CHECK((*morph::forms::encodeScalar(unbounded, "18446744073709551615", 0, plainContext()))->value.isNull());
 }
 
 TEST_CASE("values: a plain number is a JSON number of the digits typed, gated by its bounds",
@@ -138,75 +150,79 @@ TEST_CASE("values: a plain number is a JSON number of the digits typed, gated by
       "float":{"type":"number","minimum":-3.4028234663852886e+38,"maximum":3.4028234663852886e+38}})";
     FieldSpec const ratio = field(R"({"$ref":"#/$defs/double"})", kDefs);
     FieldSpec const score = field(R"({"$ref":"#/$defs/float"})", kDefs);
-    CHECK(json(morph::forms::encodeScalar(ratio, "3.5", 0, kContext)) == "3.5");
-    CHECK(json(morph::forms::encodeScalar(ratio, "4", 0, kContext)) == "4");
-    CHECK(json(morph::forms::encodeScalar(ratio, "-0.25", 0, kContext)) == "-0.25");
-    CHECK(json(morph::forms::encodeScalar(ratio, "007.50", 0, kContext)) == "7.50");
+    CHECK(json(morph::forms::encodeScalar(ratio, "3.5", 0, plainContext())) == "3.5");
+    CHECK(json(morph::forms::encodeScalar(ratio, "4", 0, plainContext())) == "4");
+    CHECK(json(morph::forms::encodeScalar(ratio, "-0.25", 0, plainContext())) == "-0.25");
+    CHECK(json(morph::forms::encodeScalar(ratio, "007.50", 0, plainContext())) == "7.50");
     for (std::string_view const text : {"abc", "3.", ".5", "1e5", "--1", "1 2", "0x10", "3,5"}) {
         INFO("accepted " << text);
-        CHECK(error(morph::forms::encodeScalar(ratio, text, 0, kContext)) == "malformed");
+        CHECK(error(morph::forms::encodeScalar(ratio, text, 0, plainContext())) == "malformed");
     }
     ValueContext const grouped{.locale = {.groupSeparator = ","}};
     CHECK(json(morph::forms::encodeScalar(ratio, "1,000.5", 0, grouped)) == "1000.5");
     std::string const huge = "100000000000000000000000000000000000000000";
-    CHECK(error(morph::forms::encodeScalar(score, huge, 0, kContext)) == "above-maximum");
-    CHECK(json(morph::forms::encodeScalar(ratio, huge, 0, kContext)) == huge);
+    CHECK(error(morph::forms::encodeScalar(score, huge, 0, plainContext())) == "above-maximum");
+    CHECK(json(morph::forms::encodeScalar(ratio, huge, 0, plainContext())) == huge);
     FieldSpec const temperature = field(R"({"type":"number","minimum":-40.5,"maximum":120,"multipleOf":0.5})");
-    CHECK((*morph::forms::encodeScalar(temperature, "-40.5", 0, kContext)).has_value());
-    CHECK(error(morph::forms::encodeScalar(temperature, "-41", 0, kContext)) == "below-minimum");
-    CHECK(error(morph::forms::encodeScalar(temperature, "120.5", 0, kContext)) == "above-maximum");
-    CHECK(error(morph::forms::encodeScalar(temperature, "0.25", 0, kContext)) == "not-a-multiple");
-    CHECK(json(morph::forms::encodeScalar(temperature, "0.5", 0, kContext)) == "0.5");
+    CHECK((*morph::forms::encodeScalar(temperature, "-40.5", 0, plainContext())).has_value());
+    CHECK(error(morph::forms::encodeScalar(temperature, "-41", 0, plainContext())) == "below-minimum");
+    CHECK(error(morph::forms::encodeScalar(temperature, "120.5", 0, plainContext())) == "above-maximum");
+    CHECK(error(morph::forms::encodeScalar(temperature, "0.25", 0, plainContext())) == "not-a-multiple");
+    CHECK(json(morph::forms::encodeScalar(temperature, "0.5", 0, plainContext())) == "0.5");
     FieldSpec const density = field(R"({"type":"number","x-displayDecimals":3})");
-    CHECK(json(morph::forms::encodeScalar(density, "2.505", 0, kContext)) == "2.505");
-    CHECK(error(morph::forms::encodeScalar(density, "2.5051", 0, kContext)) == "too-precise");
+    CHECK(json(morph::forms::encodeScalar(density, "2.505", 0, plainContext())) == "2.505");
+    CHECK(error(morph::forms::encodeScalar(density, "2.5051", 0, plainContext())) == "too-precise");
     FieldSpec const whole = field(R"({"type":"number","x-displayDecimals":0})");
-    CHECK(json(morph::forms::encodeScalar(whole, "12", 0, kContext)) == "12");
-    CHECK(error(morph::forms::encodeScalar(whole, "12.5", 0, kContext)) == "too-precise");
+    CHECK(json(morph::forms::encodeScalar(whole, "12", 0, plainContext())) == "12");
+    CHECK(error(morph::forms::encodeScalar(whole, "12.5", 0, plainContext())) == "too-precise");
 }
 
 TEST_CASE("values: booleans, enums, choices, dates and arrays encode to their wire shapes", "[forms-engine][values]") {
     FieldSpec const flag = field(R"({"type":"boolean"})");
-    CHECK(json(morph::forms::encodeScalar(flag, "true", 0, kContext)) == "true");
-    CHECK(json(morph::forms::encodeScalar(flag, "", 0, kContext)) == "false");  // required: an unchecked box answers
+    CHECK(json(morph::forms::encodeScalar(flag, "true", 0, plainContext())) == "true");
+    CHECK(json(morph::forms::encodeScalar(flag, "", 0, plainContext())) ==
+          "false");  // required: an unchecked box answers
     FieldSpec optionalFlag = flag;
     optionalFlag.required = false;
-    CHECK_FALSE(morph::forms::encodeScalar(optionalFlag, "", 0, kContext).has_value());
-    CHECK(error(morph::forms::encodeScalar(flag, "banana", 0, kContext)) == "malformed");
+    CHECK_FALSE(morph::forms::encodeScalar(optionalFlag, "", 0, plainContext()).has_value());
+    CHECK(error(morph::forms::encodeScalar(flag, "banana", 0, plainContext())) == "malformed");
 
     FieldSpec const role = field(
         R"({"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},{"title":"Manager","const":"Manager"}]})");
-    CHECK(json(morph::forms::encodeScalar(role, R"("Manager")", 0, kContext)) == R"("Manager")");
-    CHECK(error(morph::forms::encodeScalar(role, R"("Emperor")", 0, kContext)) == "not-an-option");
-    CHECK(error(morph::forms::encodeScalar(role, "Manager", 0, kContext)) == "not-an-option");
+    CHECK(json(morph::forms::encodeScalar(role, R"("Manager")", 0, plainContext())) == R"("Manager")");
+    CHECK(error(morph::forms::encodeScalar(role, R"("Emperor")", 0, plainContext())) == "not-an-option");
+    CHECK(error(morph::forms::encodeScalar(role, "Manager", 0, plainContext())) == "not-an-option");
 
     FieldSpec const slot = field(R"({"type":"integer","x-optionsAction":"ListSlots"})");
-    CHECK(json(morph::forms::encodeScalar(slot, "9007199254740993", 0, kContext)) == "9007199254740993");
-    CHECK(error(morph::forms::encodeScalar(slot, "{not json", 0, kContext)) == "malformed");
+    CHECK(json(morph::forms::encodeScalar(slot, "9007199254740993", 0, plainContext())) == "9007199254740993");
+    CHECK(error(morph::forms::encodeScalar(slot, "{not json", 0, plainContext())) == "malformed");
 
     FieldSpec const when = field(R"({"type":"string","format":"date-time"})");
-    CHECK(json(morph::forms::encodeScalar(when, "2026-07-05T14:30", 0, kContext)) == R"("2026-07-05T14:30:00Z")");
+    CHECK(json(morph::forms::encodeScalar(when, "2026-07-05T14:30", 0, plainContext())) ==
+          R"("2026-07-05T14:30:00Z")");
     CHECK(json(morph::forms::encodeScalar(when, "2026-07-05T16:30:00", 0,
                                           ValueContext{.displayOffsetMinutes = 120})) == R"("2026-07-05T14:30:00Z")");
-    CHECK(error(morph::forms::encodeScalar(when, "not-a-date", 0, kContext)) == "malformed");
+    CHECK(error(morph::forms::encodeScalar(when, "not-a-date", 0, plainContext())) == "malformed");
     FieldSpec const day = field(R"({"type":"string","format":"date"})");
-    CHECK(json(morph::forms::encodeScalar(day, "2026-07-20", 0, kContext)) == R"("2026-07-20")");
-    CHECK(error(morph::forms::encodeScalar(day, "2026-07-32", 0, kContext)) == "malformed");
+    CHECK(json(morph::forms::encodeScalar(day, "2026-07-20", 0, plainContext())) == R"("2026-07-20")");
+    CHECK(error(morph::forms::encodeScalar(day, "2026-07-32", 0, plainContext())) == "malformed");
 
     FieldSpec const tags = field(R"({"type":"array","items":{"type":"string"}})");
-    CHECK(json(morph::forms::encodeScalar(tags, "red, green, blue", 0, kContext)) == R"(["red","green","blue"])");
-    CHECK(json(morph::forms::encodeScalar(tags, "  red ,, green ,   ", 0, kContext)) == R"(["red","green"])");
-    CHECK(json(morph::forms::encodeScalar(tags, " , , ", 0, kContext)) == "[]");
+    CHECK(json(morph::forms::encodeScalar(tags, "red, green, blue", 0, plainContext())) ==
+          R"(["red","green","blue"])");
+    CHECK(json(morph::forms::encodeScalar(tags, "  red ,, green ,   ", 0, plainContext())) == R"(["red","green"])");
+    CHECK(json(morph::forms::encodeScalar(tags, " , , ", 0, plainContext())) == "[]");
     FieldSpec const counts = field(R"({"type":"array","items":{"type":"integer"}})");
-    CHECK(json(morph::forms::encodeScalar(counts, "1, 2, 30", 0, kContext)) == "[1,2,30]");
-    CHECK(error(morph::forms::encodeScalar(counts, "1, x", 0, kContext)) == "malformed");
+    CHECK(json(morph::forms::encodeScalar(counts, "1, 2, 30", 0, plainContext())) == "[1,2,30]");
+    CHECK(error(morph::forms::encodeScalar(counts, "1, x", 0, plainContext())) == "malformed");
 
     FieldSpec const text = field(R"({"type":"string"})");
-    CHECK(json(morph::forms::encodeScalar(text, "  say \"hi\"  ", 0, kContext)) == R"("say \"hi\"")");
+    CHECK(json(morph::forms::encodeScalar(text, "  say \"hi\"  ", 0, plainContext())) == R"("say \"hi\"")");
 }
 
 TEST_CASE("values: decoding is the inverse of encoding, per kind", "[forms-engine][values]") {
-    auto const decode = [](FieldSpec const& spec, std::string_view value, ValueContext const& context = kContext) {
+    auto const decode = [](FieldSpec const& spec, std::string_view value,
+                           ValueContext const& context = plainContext()) {
         auto const dom = engine::parseJson(value);
         REQUIRE(dom.has_value());
         return morph::forms::decodeScalar(spec, *dom, context);
@@ -216,12 +232,12 @@ TEST_CASE("values: decoding is the inverse of encoding, per kind", "[forms-engin
     CHECK(decode(density, R"({"num":5,"den":4,"dp":2})") == "1.25");
     CHECK(decode(density, R"({"num":-1,"den":3,"dp":2})") == "-0.33");
     CHECK(decode(density, R"({"num":245050,"den":100,"dp":2})") == "2450.50");
-    CHECK(decode(density, R"({"num":245050,"den":100,"dp":2})", kGerman) == "2450,50");
+    CHECK(decode(density, R"({"num":245050,"den":100,"dp":2})", germanContext()) == "2450,50");
     CHECK(decode(density, R"("oops")").empty());
     FieldSpec const temperature = field(R"({"type":"number"})");
     CHECK(decode(temperature, "1e-7") == "0.0000001");
     CHECK(decode(temperature, "3") == "3");
-    CHECK(decode(temperature, "21.5", kGerman) == "21,5");
+    CHECK(decode(temperature, "21.5", germanContext()) == "21,5");
     FieldSpec const padded = field(R"({"type":"number","x-displayDecimals":2})");
     CHECK(decode(padded, "3") == "3.00");
     CHECK(decode(padded, "21.5") == "21.50");
@@ -276,23 +292,23 @@ TEST_CASE("values: an error message resolves through the translation provider", 
     auto const encoding = morph::forms::encodeScalar(field(R"({"type":"integer"})"), "x", 0, translated);
     REQUIRE(encoding.has_value());
     CHECK(encoding->error().message == "Ungültiger Wert");
-    CHECK(morph::forms::fieldError("too-precise", kContext).message == "Too many decimal places");
+    CHECK(morph::forms::fieldError("too-precise", plainContext()).message == "Too many decimal places");
 }
 
 TEST_CASE("values: epoch widgets enter a wall clock or a date and send the count since the epoch",
           "[forms-engine][values]") {
     FieldSpec const seconds = field(R"({"type":"integer","x-widget":"epochSeconds"})");
     CHECK(seconds.kind == morph::forms::FieldKind::EpochDateTime);
-    CHECK(json(morph::forms::encodeScalar(seconds, "1970-01-02T00:00", 0, kContext)) == "86400");
+    CHECK(json(morph::forms::encodeScalar(seconds, "1970-01-02T00:00", 0, plainContext())) == "86400");
     CHECK(json(morph::forms::encodeScalar(seconds, "2026-07-05T16:30:00", 0,
                                           ValueContext{.displayOffsetMinutes = 120})) == "1783261800");
-    CHECK(error(morph::forms::encodeScalar(seconds, "86400", 0, kContext)) == "malformed");
+    CHECK(error(morph::forms::encodeScalar(seconds, "86400", 0, plainContext())) == "malformed");
     FieldSpec const days = field(R"({"type":"integer","x-widget":"epochDays"})");
     CHECK(days.kind == morph::forms::FieldKind::EpochDate);
-    CHECK(json(morph::forms::encodeScalar(days, "1970-01-11", 0, kContext)) == "10");
-    CHECK(json(morph::forms::encodeScalar(days, "1969-12-31", 0, kContext)) == "-1");
-    CHECK(error(morph::forms::encodeScalar(days, "1970-02-30", 0, kContext)) == "malformed");
-    auto const value = (*morph::forms::encodeScalar(days, "1970-01-11", 0, kContext))->value;
+    CHECK(json(morph::forms::encodeScalar(days, "1970-01-11", 0, plainContext())) == "10");
+    CHECK(json(morph::forms::encodeScalar(days, "1969-12-31", 0, plainContext())) == "-1");
+    CHECK(error(morph::forms::encodeScalar(days, "1970-02-30", 0, plainContext())) == "malformed");
+    auto const value = (*morph::forms::encodeScalar(days, "1970-01-11", 0, plainContext()))->value;
     REQUIRE(value.asInt() != nullptr);
     CHECK(*value.asInt() == 10);
 
@@ -302,6 +318,6 @@ TEST_CASE("values: epoch widgets enter a wall clock or a date and send the count
         return morph::forms::decodeScalar(spec, *dom, context);
     };
     CHECK(decode(seconds, "1783261800", ValueContext{.displayOffsetMinutes = 120}) == "2026-07-05T16:30:00");
-    CHECK(decode(days, "-1", kContext) == "1969-12-31");
-    CHECK(decode(days, "1.5", kContext).empty());
+    CHECK(decode(days, "-1", plainContext()) == "1969-12-31");
+    CHECK(decode(days, "1.5", plainContext()).empty());
 }
