@@ -341,6 +341,12 @@ as well as on a screen. Two point kinds are added:
 the ids. It orders and hides what the document declares and never positions or sizes anything, so
 free layout editing stays out of scope (spec 5 §15).
 
+**Open: where `arrange` is declared.** The app document has no view, so an app-scope `arrange`
+point's `of` names a node of no document, while the container it orders is the overview screen's.
+Either `arrange` is a screen-scope kind, declared by the overview screen and checked like `columns`,
+or its `of` names the screen as well as the node. Until that is decided, `arrange` is parsed and
+stored like any point and not applied.
+
 **Storage seam.**
 
 ```cpp
@@ -348,11 +354,15 @@ struct PrefKey { std::string person, app, scope /* screen id or "app" */, point;
 class IPreferencesStore {
 public:
     virtual async::Completion<std::optional<std::string>> get(PrefKey const&) = 0;   // JSON text
-    virtual async::Completion<void> set(PrefKey const&, std::string json) = 0;
-    virtual async::Completion<void> remove(PrefKey const&) = 0;                      // reset to the defaults
+    virtual async::Completion<bool> set(PrefKey const&, std::string json) = 0;       // stored
+    virtual async::Completion<bool> remove(PrefKey const&) = 0;                      // an entry was there
     virtual ~IPreferencesStore() = default;
 };
 ```
+
+- A store owns the executor its completions are delivered on. The framework's store is in memory, on its own
+  strand; the preferences model (`morph.preferences`, actions `load`, `set`, `remove`) is registered explicitly
+  with the store it uses (`docs/spec/ui/preferences.md`).
 
 - `person` is derived on the server from the verified principal. The request carries no person: the
   authoriser sees only the model and the action, never the body, so the preferences model itself
@@ -364,6 +374,7 @@ public:
 - A stored value has a size bound, applied before it is written.
 - An absent entry is the document's default, never an error. A stored entry that no longer fits its
   point is ignored (spec 5 §12b).
+- Without a verified principal there is no person: nothing is read, and a write is refused.
 
 **Catalog entries** (spec 5 §12) carry what a navigator needs:
 

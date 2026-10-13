@@ -185,6 +185,17 @@ API surface).
   socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
   turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
   client can fetch an application's screens over a real connection.
+- **Preferences: customization choices stored per person on the server.** Header-only, in the base `morph`
+  target (`ui/preferences.hpp`, `ui/preference_sync.hpp`).
+  - `ui::IPreferencesStore` keeps a choice's JSON text by `PrefKey{person, app, scope, point}`;
+    `ui::MemoryPreferencesStore` is the framework's store, on its own strand.
+  - `ui::registerPreferences(store, dispatcher, registry)` registers the preferences model
+    (`morph.preferences`, actions `load`, `set`, `remove`) with a factory that injects the store. The model
+    keys every entry by the verified session's principal, never by the request; without a verified principal
+    it reads nothing and refuses writes. A value is at most 16 KiB of JSON by default.
+  - `ui::PreferenceSync` loads a mounted screen's stored choices in one call, ignoring any that no longer fit
+    the point, and writes what `preferenceChanged` and `resetPrefs` report. `ui::Screen::document()` returns
+    the mounted document.
 
 - **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
   `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a

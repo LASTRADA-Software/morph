@@ -34,7 +34,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `focus`, `hostCommand`, `switchBackend`, `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. |
 | `Session` | What screens of one client session share: the query cache, `refreshOn` bookkeeping, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged()` a backend switch. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
-| `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, or a mutation run in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
+| `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, or a mutation run in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
 
 `SessionOptions` carries the `Scheduler` (`debounce`, `refreshEvery`, cache eviction), the clock
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
@@ -197,6 +197,8 @@ applies to the width.
   `boundary.error` is the first failure's text.
 - **`customize`** lowers a `choice` point to a select and a string `value` point to a text input, each
   writing the screen's preference and calling `preferenceChanged`; other points show the point's name.
+  Storing the choices, and loading them back on mount, is `PreferenceSync`'s
+  ([`preferences.md`](preferences.md)).
 - **`custom`** lowers its component's fallback with `props` bound, inside `ui::custom`.
 - **`form`** is the forms engine's (`docs/spec/forms/engine.md`). Its element is declared like an
   input's, with or without an `id`, and builds a `forms::FormSession` when the scope is declared, so
