@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <map>
+#include <morph/ui/service.hpp>
 #include <morph/ui/theme.hpp>
 #include <string>
 #include <string_view>
@@ -211,4 +212,50 @@ TEST_CASE("theme: a malformed index is refused", "[ui][theme]") {
     CHECK(refused(R"({"vocab": "ui-theme/1", "base": "b", "!future": 1})"));
     CHECK(morph::ui::isThemeIndex(R"({"vocab": "ui-theme/1", "base": "b"})"));
     CHECK_FALSE(morph::ui::isThemeIndex(kBase));
+}
+
+TEST_CASE("theme: the UI service refuses a malformed or unresolvable theme when the bundle is registered",
+          "[ui][theme][ui-service]") {
+    auto const registry = [] {
+        return morph::ui::UiRegistry{morph::ui::ApplicationInfo{.id = "lims", .version = "1"}};
+    };
+    auto const theme = [](std::string id, std::string_view bytes) {
+        return morph::ui::BundleFile{
+            .kind = "theme", .id = std::move(id), .bytes = std::string{bytes}, .isPublic = true};
+    };
+    constexpr std::string_view kIndex =
+        R"({"vocab": "ui-theme/1", "base": "theme/base.tokens.json", "dark": "theme/dark.tokens.json"})";
+
+    morph::ui::UiRegistry good = registry();
+    REQUIRE(good.addFile(theme("theme", kIndex)));
+    REQUIRE(good.addFile(theme("theme/base.tokens.json", kBase)));
+    REQUIRE(good.addFile(theme("theme/dark.tokens.json", kDark)));
+    CHECK(good.build());
+
+    // A malformed token file or index is refused when it is added.
+    morph::ui::UiRegistry early = registry();
+    auto const badTokens =
+        early.addFile(theme("theme/x.tokens.json", R"({"x": {"$type": "color", "$value": "blue"}})"));
+    REQUIRE_FALSE(badTokens);
+    CHECK(badTokens.error().message().contains("the token file"));
+    auto const badIndex = early.addFile(theme("theme", R"({"vocab": "ui-theme/1"})"));
+    REQUIRE_FALSE(badIndex);
+    CHECK(badIndex.error().message().contains("the theme index"));
+
+    // A cycle across files, and a file the index names that the bundle lacks, refuse the bundle at build.
+    morph::ui::UiRegistry cyclic = registry();
+    REQUIRE(cyclic.addFile(theme("theme", kIndex)));
+    REQUIRE(cyclic.addFile(theme("theme/base.tokens.json", kBase)));
+    REQUIRE(cyclic.addFile(
+        theme("theme/dark.tokens.json", R"({"color": {"$type": "color", "accent": {"$value": "{color.focus}"}}})")));
+    auto const cycle = cyclic.build();
+    REQUIRE_FALSE(cycle);
+    CHECK(cycle.error().message().contains("base + dark: an alias cycle"));
+
+    morph::ui::UiRegistry missing = registry();
+    REQUIRE(missing.addFile(theme("theme", kIndex)));
+    REQUIRE(missing.addFile(theme("theme/base.tokens.json", kBase)));
+    auto const absent = missing.build();
+    REQUIRE_FALSE(absent);
+    CHECK(absent.error().message().contains("`theme/dark.tokens.json` is not in the bundle"));
 }
