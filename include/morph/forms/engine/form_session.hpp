@@ -420,7 +420,8 @@ public:
     /// @brief Replaces the draft with the decoded wire value; null or absent is blank. Does not
     ///        mark the change programmatic — the caller does, in the same batch.
     /// @param value The wire value, or null.
-    // NOLINTNEXTLINE(misc-no-recursion): an Object loads its members.
+    // An Object loads its members, a collection its rows; one case per kind.
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
     void load(detail::engine::Json const* value) {
         using detail::engine::Json;
         bool const present = value != nullptr && !value->is_null();

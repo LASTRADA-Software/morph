@@ -244,17 +244,17 @@ struct FieldOverlay {
     /// @brief Keeps the member in the body and out of the view (`x-hidden`).
     bool hidden = false;
     /// @brief Replaces the label (`title`).
-    std::optional<std::string> label{};
+    std::optional<std::string> label;
     /// @brief The unit a Quantity is entered in: the id of one of its units (its canonical unit or an alternative).
     ///        On a field without units, the unit shown beside it.
-    std::optional<std::string> unit{};
+    std::optional<std::string> unit;
     /// @brief The places a Decimal or Quantity is entered with in its entry unit, or a Number's display decimals.
     ///        The wire value keeps the schema's places.
-    std::optional<std::uint32_t> decimals{};
+    std::optional<std::uint32_t> decimals;
     /// @brief Replaces `x-widget`, so the kind is read again (`textarea`, `radio`, `slider`, `epochDays`, …).
-    std::optional<std::string> widget{};
+    std::optional<std::string> widget;
     /// @brief Replaces `x-blankAs`.
-    std::optional<BlankAs> blankAs{};
+    std::optional<BlankAs> blankAs;
 };
 
 /// @brief The overlays of a form's fields, by wire name.
@@ -920,6 +920,7 @@ private:
 
     /// Writes the schema-level overlays into the schema's properties: `omit` removes the property and its `required`
     /// entry; the rest set the keywords the reader reads.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per overlay key.
     [[nodiscard]] static std::expected<void, SchemaError> applyOverlays(detail::engine::Json& dom,
                                                                         FieldOverlays const& overlays) {
         using detail::engine::Json;
@@ -931,13 +932,13 @@ private:
                                      : nullptr;
         for (auto const& [name, overlay] : overlays) {
             if (properties == nullptr || !properties->contains(name)) {
-                return std::unexpected(
-                    SchemaError{"fields." + name, "the overlay names a field the schema does not have"});
+                return std::unexpected(SchemaError{.path = "fields." + name,
+                                                   .message = "the overlay names a field the schema does not have"});
             }
             Json& property = properties->find(name)->second;
             if (overlay.omit) {
                 properties->erase(name);
-                if (auto const required = dom.get_object().find("required"); required != dom.get_object().end()) {
+                if (auto* const required = dom.get_object().find("required"); required != dom.get_object().end()) {
                     if (auto* const list = required->second.get_if<Json::array_t>()) {
                         std::erase_if(*list, [&](Json const& entry) {
                             auto const* const text = entry.get_if<std::string>();
@@ -985,8 +986,9 @@ private:
             } else {
                 auto const found = std::ranges::find(spec.units, *overlay.unit, &UnitOption::id);
                 if (found == spec.units.end()) {
-                    return std::unexpected(SchemaError{"fields." + spec.name + ".unit",
-                                                       "\"" + *overlay.unit + "\" is not one of the field's units"});
+                    return std::unexpected(
+                        SchemaError{.path = "fields." + spec.name + ".unit",
+                                    .message = "\"" + *overlay.unit + "\" is not one of the field's units"});
                 }
                 spec.entryUnit = static_cast<std::size_t>(found - spec.units.begin());
             }

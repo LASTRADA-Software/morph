@@ -72,7 +72,7 @@ struct TuiClient {
         settle();
     }
 
-    [[nodiscard]] bool shows(std::string const& text) {
+    [[nodiscard]] bool shows(std::string const& text) const {
         auto const rows = rowsOf(screen);
         return std::ranges::any_of(rows, [&](std::string const& row) { return row.contains(text); });
     }

@@ -100,3 +100,35 @@ TEST_CASE("FormModel::withSubmitMode chooses over x-submitMode", "[forms-engine]
     CHECK(model->withSubmitMode(morph::forms::SubmitMode::Explicit).submitMode() ==
           morph::forms::SubmitMode::Explicit);
 }
+
+TEST_CASE("FieldOverlay: an overlay on a schema without the field is refused; odd shapes are passed over",
+          "[forms-engine][overlay]") {
+    FieldOverlays named;
+    named.emplace("a", FieldOverlay{.omit = true});
+    auto const noProperties = FormModel::fromSchema("X", R"({"title":"none"})", named);
+    REQUIRE_FALSE(noProperties.has_value());
+    CHECK(noProperties.error().path == "fields.a");
+
+    // `omit` with no `required` list, or one holding a non-string; an overlay on a property that is not an object.
+    FieldOverlays overlays;
+    overlays.emplace("a", FieldOverlay{.omit = true});
+    overlays.emplace("b", FieldOverlay{.omit = true});
+    overlays.emplace("c", FieldOverlay{.label = "C"});
+    overlays.emplace("d", FieldOverlay{.blankAs = morph::forms::BlankAs::Omit});
+    auto const lenient = FormModel::fromSchema(
+        "X", R"({"properties":{"a":{"type":"string"},"b":{"type":"string"},"c":5,"d":{"type":"string"}}})", overlays);
+    CHECK_FALSE(lenient.has_value());  // "c" is not a property schema: the reader refuses it, overlay or not
+    auto const withRequired = FormModel::fromSchema(
+        "X",
+        R"({"properties":{"a":{"type":"string"},"b":{"type":"string"},"d":{"type":"string"}},"required":[3,"b"]})",
+        [] {
+            FieldOverlays some;
+            some.emplace("b", FieldOverlay{.omit = true});
+            some.emplace("d", FieldOverlay{.blankAs = morph::forms::BlankAs::Omit});
+            return some;
+        }());
+    REQUIRE(withRequired.has_value());
+    CHECK(withRequired->find("b") == nullptr);
+    REQUIRE(withRequired->find("d") != nullptr);
+    CHECK(withRequired->find("d")->blankAs == morph::forms::BlankAs::Omit);
+}

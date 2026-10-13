@@ -113,6 +113,6 @@ TEST_CASE("form node: an action the catalog has no schema for is reported and sh
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "form", "model": "sample", "action": "Lims_Unknown" } })");
     REQUIRE_FALSE(h.diagnostics.empty());
-    CHECK(h.diagnostics.front().reason.find("no schema") != std::string::npos);
+    CHECK(h.diagnostics.front().reason.contains("no schema"));
     CHECK(h.backend.find("Text", "text", "Lims_Unknown").has_value());
 }

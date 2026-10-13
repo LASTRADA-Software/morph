@@ -39,7 +39,7 @@ struct FormViewOptions {
     /// @brief Columns of every section's, accordion's and tab's grid; `x-colspan` is clamped to it.
     int gridColumns = 2;
     /// @brief Columns of the implicit group's grid; unset is 1 while `gridColumns` is 2, else `gridColumns`.
-    std::optional<int> flatGridColumns{};
+    std::optional<int> flatGridColumns;
     /// @brief The explicit-mode button's label.
     std::string submitLabel = "Submit";
     /// @brief The caption of a collection's Add button.
@@ -60,6 +60,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 /// @brief The status line under a form.
 /// @param session The session.
 /// @return The line: what is missing, or how the form submits.
+// NOLINTNEXTLINE(modernize-use-string-view): the line is a bound text property, which holds a string.
 [[nodiscard]] inline std::string statusText(FormSession const& session) {
     if (!session.ready()) {
         return "fill the required (*) fields";
@@ -111,14 +112,14 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     }
     auto const instant =
         std::chrono::floor<std::chrono::seconds>((**value).value) + std::chrono::minutes{date ? 0 : offsetMinutes};
-    std::string text = formatWallClock(instant);
+    std::string const text = formatWallClock(instant);
     return date ? text.substr(0, 10) : text;
 }
 
 /// @brief The view-tree field state of a field: read-only, required, and its error as the one message shown.
 /// @param field The field.
 /// @return The state, bound to the field.
-[[nodiscard]] inline ui::FieldState fieldState(FieldState* field) {
+[[nodiscard]] inline ui::FieldState fieldState(FieldState const* field) {
     return ui::FieldState{
         .readonly = [field] { return field->readonly().get(); },
         .required = [field] { return field->required().get(); },
@@ -134,7 +135,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 /// @brief The `Common` of a field's control: its test id (`field_<path>`) and accessible name (its label).
 /// @param field The field.
 /// @return The common part.
-[[nodiscard]] inline ui::Common controlCommon(FieldState* field) {
+[[nodiscard]] inline ui::Common controlCommon(FieldState const* field) {
     ui::Common common{};
     common.testId = "field_" + field->path();
     common.a11y.name = field->label();
@@ -158,7 +159,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 }
                 return options;
             },
-        .selected = [field]() -> std::optional<ui::Key> {
+        .selected = [field] -> std::optional<ui::Key> {
             std::string_view const selected = trim(field->text().get());
             return selected.empty() ? std::nullopt : std::optional<ui::Key>{ui::Key{std::string{selected}}};
         },
@@ -179,8 +180,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 /// @param state   The field.
 /// @param options The view options (members and rows draw their own cells with them).
 /// @return The control.
-// NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one case per kind; an Object or an
-// ObjectArray draws its members' cells.
+// One case per kind; an Object or an ObjectArray draws its members' cells.
+// NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity)
 [[nodiscard]] inline ui::Node fieldControl(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState* const field = &state;
     FieldSpec const& spec = state.spec();
@@ -230,6 +231,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             return unitSuffix(textInput(ui::TextInputMode::SingleLine));
         }
         std::vector<ui::SelectOption> units;
+        units.reserve(spec.units.size());
         for (std::size_t i = 0; i < spec.units.size(); ++i) {
             units.push_back(
                 ui::SelectOption{.key = ui::Key{static_cast<std::int64_t>(i)}, .label = spec.units.at(i).display});
@@ -241,7 +243,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .children = {textInput(ui::TextInputMode::SingleLine),
                          ui::select(ui::Select{
                              .options = std::move(units),
-                             .selected = [field]() -> std::optional<ui::Key> {
+                             .selected = [field] -> std::optional<ui::Key> {
                                  return ui::Key{static_cast<std::int64_t>(field->unit().get())};
                              },
                              .onSelect =
@@ -290,7 +292,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 [field] {
                     std::string_view const text = trim(field->text().get());
                     std::int64_t value = field->spec().sliderMin;
-                    std::from_chars(text.data(), text.data() + text.size(), value);
+                    std::from_chars(std::to_address(text.begin()), std::to_address(text.end()), value);
                     return value;
                 },
             .minimum = spec.sliderMin,
@@ -316,12 +318,12 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     }
     if (spec.kind == FieldKind::ObjectArray) {
         FormSession* const owner = &session;
-        ViewOptions const shared = options;
+        ViewOptions const& shared = options;
         auto rows = ui::forEach<std::shared_ptr<RowState>>(
             [field] { return field->rows(); },
             [](std::shared_ptr<RowState> const& row) { return ui::Key{static_cast<std::int64_t>(row->key())}; },
             [field, owner, shared](reactive::Signal<std::shared_ptr<RowState>> const& slot) {
-                std::shared_ptr<RowState> const row = slot.peek();
+                std::shared_ptr<RowState> const& row = slot.peek();
                 std::vector<ui::Node> cells;
                 for (auto const& member : row->fields()) {
                     cells.push_back(fieldCell(*owner, *member, shared));
@@ -361,7 +363,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 /// @return The cell.
 // NOLINTNEXTLINE(misc-no-recursion): nested controls draw cells.
 inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions const& options) {
-    FieldState* const field = &state;
+    FieldState const* const field = &state;
     ui::Node control;
     if (Overrides::Render const* const render = options->overrides.resolve(state.spec())) {
         control = (*render)(FieldView{session, state, options});

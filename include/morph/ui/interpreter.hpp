@@ -4572,7 +4572,7 @@ inline void ScreenCore::wireForm(ElementState& element) {
     }
     // Every call goes through the alias's channel, bound for its current instance when the call is made.
     auto const call = [this, modelAlias = alias->model](std::string_view actionId,
-                                                        std::string body) -> async::Completion<std::string> {
+                                                        std::string const& body) -> async::Completion<std::string> {
         std::shared_ptr<ModelChannel> const channel = channelOf(*modelAlias, *this);
         if (channel == nullptr) {
             auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
@@ -4612,7 +4612,7 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
         if (commands == nullptr || commands->empty()) {
             return;
         }
-        auto seen = std::make_shared<std::uint64_t>(runtime().untracked(count));
+        auto const seen = std::make_shared<std::uint64_t>(runtime().untracked(count));
         ctx.scope->nodes.effect([this, held = detachedLower(ctx), commands, count, payload, seen] {
             std::uint64_t const now = count();
             if (now == *seen) {
@@ -4636,7 +4636,8 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
         });
     if (Commands const* const onError = node.event("onError"); onError != nullptr && !onError->empty()) {
         // Each failure is a new exception: run once per failure, with its text.
-        auto seen = std::make_shared<std::exception_ptr>(runtime().untracked([form] { return form->lastError(); }));
+        auto const seen =
+            std::make_shared<std::exception_ptr>(runtime().untracked([form] { return form->lastError(); }));
         ctx.scope->nodes.effect([this, held = detachedLower(ctx), onError, form, seen] {
             std::exception_ptr const error = form->lastError();
             if (error == nullptr || error == *seen) {
