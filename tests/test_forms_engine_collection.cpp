@@ -240,6 +240,13 @@ TEST_CASE("CollectionSession: a collection action fires with an empty body", "[f
     stack.harness.settle();
     CHECK(stack.lastBody("CreateRow") == "{}");
     CHECK(stack.count("ListRows") == 2);
+
+    // A collection action is on no row: its bind entries have nothing to read, even when a row key is passed.
+    Stack bound{R"({"v-query":"ListRows","v-actions":[
+      {"action":"Export","scope":"collection","bind":{"id":"id"}}]})"};
+    bound.view->fire(0, "1");
+    bound.harness.settle();
+    CHECK(bound.lastBody("Export") == "{}");
 }
 
 TEST_CASE("CollectionSession: nothing typed into one row's editor carries over to the next opening",
