@@ -918,8 +918,8 @@ private:
         return GroupKind::Section;
     }
 
-    /// Writes the schema-level overlays into the schema's properties: `omit` removes the property and its `required`
-    /// entry; the rest set the keywords the reader reads.
+    /// Writes the schema-level overlays into the schema's properties: `omit` removes the property
+    /// (a `required` entry naming it marks nothing); the rest set the keywords the reader reads.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per overlay key.
     [[nodiscard]] static std::expected<void, SchemaError> applyOverlays(detail::engine::Json& dom,
                                                                         FieldOverlays const& overlays) {
@@ -937,15 +937,8 @@ private:
             }
             Json& property = properties->find(name)->second;
             if (overlay.omit) {
+                // Its `required` entry may stay: the reader marks required only the properties it reads.
                 properties->erase(name);
-                if (auto* const required = dom.get_object().find("required"); required != dom.get_object().end()) {
-                    if (auto* const list = required->second.get_if<Json::array_t>()) {
-                        std::erase_if(*list, [&](Json const& entry) {
-                            auto const* const text = entry.get_if<std::string>();
-                            return text != nullptr && *text == name;
-                        });
-                    }
-                }
                 continue;
             }
             auto* const object = property.get_if<Json::object_t>();

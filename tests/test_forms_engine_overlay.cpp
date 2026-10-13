@@ -91,6 +91,16 @@ TEST_CASE("FieldOverlay: an omitted member leaves the body, a hidden one stays, 
     harness.settle();
     CHECK(form.field("mass").text().peek() == "2650500.00");
     CHECK(form.field("mass").unit().peek() == 1);
+    // The user's unit lasts until a prefill or a reset, which return to the entry unit.
+    form.field("mass").switchUnit(0);
+    REQUIRE(form.field("mass").unit().peek() == 0);
+    form.prefill(R"({"analystId":7,"mass":{"num":1,"den":1,"dp":3}})");
+    harness.settle();
+    CHECK(form.field("mass").unit().peek() == 1);
+    form.field("mass").switchUnit(0);
+    form.reset();
+    harness.settle();
+    CHECK(form.field("mass").unit().peek() == 1);
 }
 
 TEST_CASE("FormModel::withSubmitMode chooses over x-submitMode", "[forms-engine][overlay]") {

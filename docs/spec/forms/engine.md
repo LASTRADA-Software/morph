@@ -208,8 +208,8 @@ the schema's literal (`render::resolveText`).
 `FieldOverlay` is what a document's `fields` (spec 6 §10), or an application, changes about a top-level field
 before the session is built; `FormModel::fromSchema(action, schema, overlays)` applies it.
 
-- `omit` removes the property, and its `required` entry, from the schema: the member is out of the form and of
-  the body. `hidden` sets `x-hidden`: in the body, out of the view.
+- `omit` removes the property from the schema, so the member is out of the form and of the body; a `required`
+  entry naming it then marks nothing. `hidden` sets `x-hidden`: in the body, out of the view.
 - `label`, `widget` and `blankAs` set `title`, `x-widget` and `x-blankAs` before the schema is read, so a widget
   overlay chooses the kind as the schema's own keyword would (`textarea`, `radio`, `slider`, `epochDays`, …).
 - `unit` picks a Quantity's entry unit (`FieldSpec::entryUnit`) among its units, or replaces the unit shown on a
