@@ -151,6 +151,30 @@ TEST_CASE("choice: option values and labels keep ids beyond 2^53 distinct", "[fo
     CHECK(byName->body() == R"({"slot":9007199254740993})");
 }
 
+TEST_CASE("choice: a selection is never judged against options fetched for other parents", "[forms-engine][choice]") {
+    Harness harness;
+    harness.server.optionsWith([](morph::test::formsengine::Call const& call) -> std::optional<std::string> {
+        if (call.action == "ListCountries") {
+            return R"([{"id":1,"name":"One"},{"id":2,"name":"Two"}])";
+        }
+        if (call.body == R"({"country":1})") {
+            return R"([{"id":10,"name":"Ten"}])";
+        }
+        return std::nullopt;  // country 2's cities are answered by hand
+    });
+    auto const form = harness.session("ShipTo", kShipTo);
+    harness.type(*form, "country", "1");
+    REQUIRE(labels(form->field("city")) == std::vector<std::string>{"Ten"});
+    // Both change at once: the options shown are still country 1's, which do not offer city 20.
+    form->prefill(R"({"country":2,"city":20})");
+    harness.settle();
+    CHECK(form->field("city").text().get() == "20");
+    harness.server.resolveFetch(harness.server.fetches().size() - 1, R"([{"id":20,"name":"Twenty"}])");
+    harness.settle();
+    CHECK(form->field("city").text().get() == "20");
+    CHECK(form->body() == R"({"country":2,"city":20})");
+}
+
 TEST_CASE("choice: a prefilled selection is shown once its options arrive", "[forms-engine][choice]") {
     Harness harness;
     harness.server.optionsWith([](auto const&) {

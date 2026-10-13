@@ -487,10 +487,7 @@ public:
             reactive::Runtime& runtime = _core->runtime();
             _optionsQuery = std::make_unique<reactive::Query<std::string, std::string>>(
                 runtime,
-                [this](std::string const& request) {
-                    _issued = request;
-                    return _core->choices()(_spec->choice->optionsAction, request);
-                },
+                [this](std::string const& request) { return _core->choices()(_spec->choice->optionsAction, request); },
                 [this] { return optionsRequest(); });
             _fetched = std::make_unique<reactive::Computed<std::vector<ChoiceOption>>>(runtime, [this] {
                 std::optional<std::string> const& reply = _optionsQuery->value();
@@ -555,7 +552,7 @@ private:
         }
         // An idle query (a parent is blank or does not encode) fetched nothing to judge the selection against.
         std::optional<std::string> const request = optionsRequest();
-        if (!request.has_value() || request != _issued) {
+        if (!request.has_value()) {
             return;
         }
         std::vector<ChoiceOption> const& current = _fetched->get();
@@ -647,7 +644,6 @@ private:
     std::string _help;
     std::string _placeholder;
     std::uint64_t _nextRowKey = 1;
-    std::optional<std::string> _issued;
     reactive::Signal<std::string> _text;
     reactive::Signal<std::size_t> _unit;
     reactive::Signal<bool> _engaged;
