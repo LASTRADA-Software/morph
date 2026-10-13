@@ -380,11 +380,17 @@ public:
         }
         if (file.kind == kThemeFile) {
             if (isThemeIndex(file.bytes)) {
-                if (auto index = parseThemeIndex(file.bytes); !index) {
+                auto index = parseThemeIndex(file.bytes);
+                if (!index) {
                     return refuse(file.id, "the theme index: " + index.error());
                 }
-            } else if (auto tokens = parseTokens(file.bytes); !tokens) {
-                return refuse(file.id, "the token file: " + tokens.error());
+                _themeIndexes.emplace_back(file.id, std::move(*index));
+            } else {
+                auto tokens = parseTokens(file.bytes);
+                if (!tokens) {
+                    return refuse(file.id, "the token file: " + tokens.error());
+                }
+                _tokenFiles.emplace(file.id, std::move(*tokens));
             }
         }
         if (file.kind == kAppFile) {
@@ -433,27 +439,13 @@ private:
     ///        resolves from the bundle's token files (`checkTheme`).
     /// @return The refusal, naming the index and the combination, or nothing.
     [[nodiscard]] std::optional<Refusal> checkThemes() const {
-        std::map<std::string, TokenSet, std::less<>> tokenFiles;
-        std::vector<std::pair<std::string, ThemeIndex>> indexes;
-        for (BundleFile const& file : _files) {
-            if (file.kind != kThemeFile) {
-                continue;
-            }
-            if (isThemeIndex(file.bytes)) {
-                if (auto index = parseThemeIndex(file.bytes)) {
-                    indexes.emplace_back(file.id, std::move(*index));
-                }
-            } else if (auto tokens = parseTokens(file.bytes)) {
-                tokenFiles.emplace(file.id, std::move(*tokens));
-            }
-        }
-        TokenFileLookup const lookup = [&tokenFiles](std::string_view id) -> TokenSet const* {
-            auto const found = tokenFiles.find(id);
-            return found == tokenFiles.end() ? nullptr : &found->second;
+        TokenFileLookup const lookup = [this](std::string_view fileId) -> TokenSet const* {
+            auto const found = _tokenFiles.find(fileId);
+            return found == _tokenFiles.end() ? nullptr : &found->second;
         };
-        for (auto const& [id, index] : indexes) {
+        for (auto const& [indexId, index] : _themeIndexes) {
             if (auto reason = checkTheme(index, lookup)) {
-                return Refusal{.document = id, .path = {}, .reason = "the theme: " + std::move(*reason)};
+                return Refusal{.document = indexId, .path = {}, .reason = "the theme: " + std::move(*reason)};
             }
         }
         return std::nullopt;
@@ -594,6 +586,10 @@ private:
     Catalog _catalog;
     std::vector<Screen> _screens;
     std::vector<BundleFile> _files;
+    /// @brief The theme indexes added, by file id, as `addFile` parsed them.
+    std::vector<std::pair<std::string, ThemeIndex>> _themeIndexes;
+    /// @brief The theme token files added, by file id, as `addFile` parsed them.
+    std::map<std::string, TokenSet, std::less<>> _tokenFiles;
     std::vector<ActionRef> _appActions;
     std::vector<std::string> _appModelTypes;
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
