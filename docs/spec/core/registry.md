@@ -555,7 +555,7 @@ Maps `(modelId, actionId)` pairs to type-erased runner functions. Used by
 `RemoteServer` to dispatch incoming JSON requests.
 
 **One map, looked up by view.** Everything registered under a pair lives in one
-`ActionEntry` record — `runner`, `coalesce`, `schema`, `describe` — in a single
+`ActionEntry` record — `runner`, `evaluator`, `coalesce`, `schema`, `describe` — in a single
 `unordered_map<pair<string, string>, ActionEntry, PairKeyHash, PairKeyEqual>`.
 Two things follow:
 
@@ -587,6 +587,8 @@ class ActionDispatcher {
     void registerAction(std::string_view modelId, std::string_view actionId);
     std::string dispatch(std::string_view modelId, std::string_view actionId,
                          IModelHolder& holder, std::string_view payload);
+    Evaluation evaluate(std::string_view modelId, std::string_view actionId,
+                        std::string_view payload) const;
     bool coalesce(std::string_view modelId, std::string_view actionId) const;
     std::string schemaFor(std::string_view modelId, std::string_view actionId) const;
     std::string schemasJson(std::string_view modelId) const;
@@ -596,6 +598,18 @@ class ActionDispatcher {
 };
 ```
 
+- `evaluate` runs the gates `dispatch` runs, as checks rather than refusals,
+  and never `Model::execute`: it decodes the body, reconciles `Quantity`
+  precision, recomputes the computed fields, and returns an `Evaluation` — the
+  recomputed body (`ActionTraits<Action>::toJson`), `forms::fieldErrors` of
+  it, and `ready`, whether `dispatch` would execute it (every `Quantity` within
+  its unit's bounds, and `ActionValidator<Action>::ready`). No model instance,
+  no journal entry, no state change, so an evaluation repeats freely. Only a
+  body that does not decode, or an unregistered pair, throws. `ready` can hold
+  while `errors` is not empty: a required field is reported even for an action
+  whose validator does not require it, because `dispatch` checks only the
+  validator. This is what the UI service's `ui-evaluate` answers
+  ([ui/service.md](../ui/service.md)).
 - `registerAction` registers a runner that deserialises, reconciles any
   `Quantity` fields to their declared precision, rejects any `Quantity` field
   outside its unit's declared bounds (`morph::forms::enforceQuantityBounds`,

@@ -553,8 +553,9 @@ private:
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
 };
 
-/// @brief The UI service: answers `ui-hello`, `ui-catalog` and `ui-fetch` from one `ServedBundle`, as an envelope
-///        service of a `RemoteServer` (`ServerConfig::services`).
+/// @brief The UI service: answers `ui-hello`, `ui-catalog` and `ui-fetch` from one `ServedBundle`, and `ui-evaluate`
+///        through the server's `ActionDispatcher`, as an envelope service of a `RemoteServer`
+///        (`ServerConfig::services`).
 ///
 /// Every request is authorised (`docs/spec/ui/service.md`, "Authorisation"):
 ///
@@ -564,15 +565,21 @@ private:
 /// | `ui-catalog` | `authorize(session, "ui", "catalog")` |
 /// | `ui-fetch` of the manifest or a public file | the `ui-hello` gate |
 /// | `ui-fetch` of any other file | `authorize(session, "ui", "fetch")`; for a screen, also the catalog's rule |
+/// | `ui-evaluate` | `authorize(session, modelType, actionType)`: as the action it evaluates |
 ///
 /// A refusal is `err "unauthorized"`. A request body that is too large, malformed or carries a must-understand key
 /// is refused with the parser's reason.
 class UiService final : public ::morph::backend::IEnvelopeService {
 public:
-    /// @brief Serves @p bundle.
-    /// @param bundle The bundle; shared, never changed.
+    /// @brief Serves @p bundle, and evaluates through @p dispatcher.
+    /// @param bundle     The bundle; shared, never changed.
+    /// @param dispatcher The dispatcher `ui-evaluate` reads the actions from: the server's own. Borrowed: it must
+    ///                   outlive the service.
     /// @throws std::invalid_argument if @p bundle is null.
-    explicit UiService(std::shared_ptr<ServedBundle const> bundle) : _bundle{std::move(bundle)} {
+    explicit UiService(std::shared_ptr<ServedBundle const> bundle,
+                       ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
+                           ::morph::model::detail::defaultDispatcher())
+        : _bundle{std::move(bundle)}, _dispatcher{&dispatcher} {
         if (!_bundle) {
             throw std::invalid_argument("UiService: the bundle is null");
         }
@@ -580,9 +587,9 @@ public:
 
     /// @brief Whether @p kind is one of the service's kinds.
     /// @param kind The envelope kind.
-    /// @return `true` for `ui-hello`, `ui-catalog` and `ui-fetch`.
+    /// @return `true` for `ui-hello`, `ui-catalog`, `ui-fetch` and `ui-evaluate`.
     [[nodiscard]] bool serves(std::string_view kind) const override {
-        return kind == kHelloKind || kind == kCatalogKind || kind == kFetchKind;
+        return kind == kHelloKind || kind == kCatalogKind || kind == kFetchKind || kind == kEvaluateKind;
     }
 
     /// @brief Answers one request.
@@ -596,6 +603,9 @@ public:
         }
         if (request.kind == kCatalogKind) {
             return catalog(request, authorizer);
+        }
+        if (request.kind == kEvaluateKind) {
+            return evaluate(request, authorizer);
         }
         return fetch(request, authorizer);
     }
@@ -642,6 +652,27 @@ private:
                                                            .version = _bundle->application.version,
                                                            .vocabularies = _bundle->vocabularies,
                                                            .digest = _bundle->digest}));
+    }
+
+    /// @brief Evaluates the action body @p request carries (spec 5 §7): decoded, reconciled and recomputed, never
+    ///        executed, and answered with its field errors. Synchronous on the server strand, like the other kinds.
+    /// @param request    The envelope: `modelType`, `actionType` and the action's JSON `body`.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply: an `EvaluateReply`, or `err` for a refusal or a body that does not decode.
+    [[nodiscard]] std::string evaluate(::morph::wire::Envelope const& request,
+                                       ::morph::session::IAuthorizer const& authorizer) const {
+        if (request.modelType.empty() || request.actionType.empty()) {
+            return err(request, "ui-evaluate names no modelType and actionType");
+        }
+        if (!authorizer.authorize(request.session, request.modelType, request.actionType)) {
+            return err(request, "unauthorized");
+        }
+        auto evaluation = _dispatcher->evaluate(request.modelType, request.actionType, request.body);
+        EvaluateReply reply{.body = {}, .errors = std::move(evaluation.errors), .ready = evaluation.ready};
+        if (auto const error = glz::read_json(reply.body, evaluation.body)) {
+            return err(request, "ui-evaluate: " + glz::format_error(error, evaluation.body));
+        }
+        return ok(request, detail::writeMessage(reply));
     }
 
     [[nodiscard]] std::string catalog(::morph::wire::Envelope const& request,
@@ -742,6 +773,7 @@ private:
     }
 
     std::shared_ptr<ServedBundle const> _bundle;
+    ::morph::model::detail::ActionDispatcher* _dispatcher;
 };
 
 }  // namespace morph::ui

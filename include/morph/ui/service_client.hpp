@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "../core/completion.hpp"
+#include "../core/executor.hpp"
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
 #include "../ui/frontend.hpp"
@@ -532,5 +534,68 @@ private:
 
     std::shared_ptr<Shared> _shared;
 };
+
+/// @brief The value an `evaluate` query takes from a `ui-evaluate` reply: the evaluated body's members, with the field
+///        errors under `errors` and the verdict under `ready`, where `errors.<field>` attaches each to its element.
+///
+/// An action field named `errors` or `ready` is shadowed by them.
+/// @param reply The reply, or why the transport could not deliver it.
+/// @return The value as JSON text, or why there is none: the transport's reason, the server's `err` message, or why
+///         the reply body was refused.
+[[nodiscard]] inline std::expected<std::string, std::string> evaluationValue(ExchangeReply reply) {
+    if (!reply) {
+        return std::unexpected(std::move(reply.error()));
+    }
+    if (reply->kind != "ok") {
+        return std::unexpected(std::move(reply->message));
+    }
+    auto evaluated = parseEvaluateReply(reply->body);
+    if (!evaluated) {
+        return std::unexpected(std::move(evaluated.error()));
+    }
+    Json::object_t errors;
+    for (auto const& [field, message] : evaluated->errors) {
+        errors.insert_or_assign(field, Json(message));
+    }
+    auto& members = evaluated->body.get<Json::object_t>();
+    members.insert_or_assign("errors", Json(std::move(errors)));
+    members.insert_or_assign("ready", Json(evaluated->ready));
+    auto text = glz::write_json(evaluated->body);
+    if (!text) {
+        return std::unexpected("the ui-evaluate reply's body cannot be written");
+    }
+    return std::move(*text);
+}
+
+/// @brief An evaluator over the UI service: each evaluation is one `ui-evaluate` request through @p exchange, and
+///        resolves with `evaluationValue` of its reply. What `BridgeDispatcher` takes as its `Evaluator`.
+/// @param exchange The transport.
+/// @param session  The session every request carries.
+/// @param cbExec   The executor the completion is delivered on: the interpreter runtime's owner. Borrowed.
+/// @return The evaluator: the model's type id, the action id and its JSON body in, the query's value out.
+[[nodiscard]] inline std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&,
+                                                                           std::string const&)>
+evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exec::IExecutor* cbExec) {
+    return [exchange = std::move(exchange), session = std::move(session), cbExec](
+               std::string const& typeId, std::string const& actionId, std::string const& bodyJson) {
+        auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
+        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
+        ::morph::wire::Envelope request;
+        request.kind = std::string{kEvaluateKind};
+        request.session = session;
+        request.modelType = typeId;
+        request.actionType = actionId;
+        request.body = bodyJson;
+        exchange(std::move(request), [settle](ExchangeReply reply) {
+            auto value = evaluationValue(std::move(reply));
+            if (value) {
+                settle->resolve(std::move(*value));
+            } else {
+                settle->reject(std::make_exception_ptr(std::runtime_error{value.error()}));
+            }
+        });
+        return std::move(completion);
+    };
+}
 
 }  // namespace morph::ui

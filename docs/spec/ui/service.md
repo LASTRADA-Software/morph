@@ -36,6 +36,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 | `ui-hello` | `HelloRequest`: `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `HelloReply`: `{application, version, vocabularies, digest}` |
 | `ui-catalog` | empty | `CatalogReply`: `{entries, permitted, models?, actions?}` |
 | `ui-fetch` | `FetchRequest`: `{hash}` | the file's exact bytes |
+| `ui-evaluate` | the action's JSON body; `modelType` and `actionType` name it | `EvaluateReply`: `{body, errors, ready}` |
 
 Every request carries the envelope's `session`; the server stamps the verified principal onto it before the
 service sees it. `ui-hello` refuses a client that does not speak every vocabulary the bundle needs with
@@ -69,9 +70,10 @@ Every kind calls the authoriser. The pseudo-model is `ui`.
 | `ui-catalog` | `authorize(session, "ui", "catalog")` |
 | `ui-fetch` of the manifest or a public file | the `ui-hello` gate |
 | `ui-fetch` of any other file | `authorize(session, "ui", "fetch")`; for a screen, also the catalog's rule below |
+| `ui-evaluate` | `authorize(session, modelType, actionType)`: a principal who may not run the action may not evaluate it |
 
-A refusal is `err "unauthorized"`. An `IAuthorizer` that switches on its model type sees `ui` for these three
-calls, and the screen's own model types for the catalog's.
+A refusal is `err "unauthorized"`. An `IAuthorizer` that switches on its model type sees `ui` for the first three
+kinds, the screen's own model types for the catalog's, and the action's model type for `ui-evaluate`.
 
 - **The manifest is public to the `ui-hello` gate.** A client needs it before sign-in to find a public login
   screen. It lists the ids and hashes of every file, not their contents. A deployment that must not disclose
@@ -207,11 +209,31 @@ outlives the `UiClient` that started it.
 | Fetching | All missing files at once | One round trip of latency, not one per file. |
 | SHA-256 | The repository's implementation | No new dependency; integrity needs only a correct SHA-256, which the known-answer test pins. |
 
+## Evaluation
+
+`ui-evaluate` answers spec 5 §7's preview: a query that names `evaluate` instead of `action` asks the server for
+the action's body with its computed fields filled and its field errors, without running it.
+
+- **On the server**, `UiService` hands the body to `ActionDispatcher::evaluate` of the dispatcher it was built
+  with — the server's own, so it knows exactly the actions the server runs. That decodes, reconciles, recomputes
+  and checks, and never calls `Model::execute`: no instance, no journal or action-log entry, no effect.
+  `forms::fieldErrors` gives the errors: `required`, `out of range` (a `Quantity` outside its unit's bounds) or
+  `out of bounds` (a declared `minimum`, `maximum` or `multipleOf`), by field name. `ready` says whether an
+  `execute` of the same body would reach the model. A body that does not decode is `err` with the decoder's
+  reason; a body the checks refuse is an ordinary `ok` answer.
+- **Limits.** An evaluation runs synchronously on the server strand, like the other kinds, so it never holds an
+  in-flight slot (`LimitPolicy::maxInFlightExecutes` counts executes that wait on a model strand). The server has
+  no per-principal rate limit; spec 5 §7's "rate limits per principal" has nothing to count against until one
+  exists.
+- **On the client**, `evaluatorOver(exchange, session, cbExec)` sends each evaluation as one `ui-evaluate`, and
+  `BridgeDispatcher` takes it as its `Evaluator`. The query's value is `evaluationValue` of the reply: the body's
+  members, with the field errors under `errors` and the verdict under `ready`, so `errors.<field>` attaches each
+  error to its element. An action field named `errors` or `ready` is shadowed by them.
+
 ## Not yet
 
-- **`ui-evaluate` and `ui-file`** (spec 5 §7, spec 6 §18) follow in a second pull request. `ui-evaluate` needs an
-  evaluating runner in `ActionDispatcher` and a per-field error report; `ui-file` needs a file store, chunking,
-  and a decision on how a download is authorised.
+- **`ui-file`** (spec 6 §18) follows in its own pull request. It needs a file store, chunking, and a decision on
+  how a download is authorised.
 - **Development reload** (spec 5 §12) is the generic client's loop over `UiClient::open`, which already fetches
   only what changed.
 - **Several vocabulary versions of one screen.** There is one vocabulary version, `ui/1`; the registry keeps one

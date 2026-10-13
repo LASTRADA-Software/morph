@@ -653,7 +653,7 @@ and returns the raw document, throwing on an `"err"` reply. Like
 ## The UI service's kinds
 
 The UI service (`morph::ui::UiService`, [ui/service.md](../ui/service.md))
-adds three kinds through `RemoteServer`'s envelope services
+adds four kinds through `RemoteServer`'s envelope services
 ([backend.md](backend.md#envelope-services)). `hello` and `kProtocolVersion`
 are unchanged: `hello` is unauthorised and names no model, so it cannot carry
 an application's inventory.
@@ -663,7 +663,7 @@ an application's inventory.
 | `"ui-hello"` | `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `{application, version, vocabularies, digest}` | `authorize(session, "ui", "hello")`, the pseudo-action spec 5 writes `ui/hello`; an application with a login screen allows it for an empty principal. A client missing a vocabulary the bundle needs is answered `err "missing vocabulary: <v>[, <v>…]"`. |
 | `"ui-catalog"` | empty | `{entries, permitted, models?, actions?}` | `authorize(session, "ui", "catalog")`, then `authorize(session, modelType, action)` for every action the filter asks about. |
 | `"ui-fetch"` | `{hash}` | the file's bytes | The manifest and a public file: the `ui-hello` gate. Any other file: `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted). An unknown hash is answered `err "not found"` only past the `fetch` gate. |
-| `"ui-evaluate"` | — | — | Not yet served: as the action it evaluates. |
+| `"ui-evaluate"` | the action's JSON body, with `modelType` and `actionType` naming it | `{body, errors, ready}` | `authorize(session, modelType, actionType)`: as the action it evaluates. A body that does not decode is answered `err` with the decoder's reason. |
 | `"ui-file"` | — | — | Not yet served: as the mutation that references the file. |
 
 Every refusal is `err "unauthorized"`. A request body over 64 KiB, that is not

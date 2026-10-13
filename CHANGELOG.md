@@ -178,6 +178,14 @@ API surface).
 
 ### Added
 
+- **`ui-evaluate`: an action body evaluated on the server without running it**
+  (spec 5 §7). `ActionDispatcher::evaluate` decodes, reconciles, recomputes and
+  checks a body and returns it with its field errors (`forms::fieldErrors`) and
+  whether an `execute` of it would reach the model. `UiService` answers
+  `ui-evaluate` with it, authorised as the action itself.
+  `ui::evaluatorOver` sends one from the client, and `BridgeDispatcher` takes it
+  for a document's `evaluate` queries.
+
 - **The UI service: `ui-hello`, `ui-catalog`, `ui-fetch` and content-addressed bundles.** Header-only, in the
   base `morph` target (`ui/bundle.hpp`, `ui/service.hpp`, `ui/service_client.hpp`). `hello` and
   `kProtocolVersion` are unchanged; a server without the service answers `unknown envelope kind: ui-hello`.
