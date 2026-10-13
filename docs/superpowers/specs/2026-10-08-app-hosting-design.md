@@ -195,7 +195,8 @@ The look of an application is data first.
 application ships its own. A token file is a **Design Tokens Community Group format** document
 (version 2025.10): each token is an object with `$value` and `$type`, groups nest, and a value may
 alias another token as `"{color.accent}"`. A design tool's export is therefore a theme without a
-converter. The bundle lists the files that make up each variant:
+converter. The bundle's theme index, a `theme` file of its own told apart from a token file by its string
+`vocab`, lists the files that make up each variant (`docs/spec/ui/theme.md`):
 
 ```json
 "theme": { "vocab": "ui-theme/1",
@@ -218,8 +219,10 @@ converter. The bundle lists the files that make up each variant:
   aliases; an alias cycle or an alias to a missing token refuses the theme when the bundle is
   registered. Composite DTCG types (`shadow`, `typography`, `border`) are accepted; a `$type` the
   client does not know is ignored with the token.
-- The token paths are the closed set `ui-theme/1` defines (`color.surface`, `space.2`,
-  `control.height`, …); an unknown path is ignored, a missing one takes the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
+- The token paths are the closed set `ui-theme/1` defines: the colour roles the components read
+  (`color.surface`, `color.text`, `color.accent`, `color.focus`, …), the semantic sets below and
+  `opacity.stale`; the scale tokens (`space.2`, `control.height`, …) join it with the components that
+  read them. An unknown path is ignored, a missing one takes the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
   `Theme` singleton, so every generated screen and every host component sees the same values.
 - `{"pref": "density"}` (spec 5 §12b) selects a `density` variant at runtime.
 - The terminal renderer maps colour roles to its palette and ignores the scale.

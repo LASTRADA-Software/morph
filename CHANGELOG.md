@@ -188,6 +188,16 @@ API surface).
   socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
   turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
   client can fetch an application's screens over a real connection.
+- **Theme tokens (`ui-theme/1`).** Header-only in the base `morph` target (`ui/theme.hpp`), and
+  `qt_quick::applyTheme` in `morph::qt_quick`.
+  - DTCG 2025.10 token files are parsed (`parseTokens`), layered and alias-resolved (`resolveTokens`,
+    `resolveTheme`), refusing a cycle, a missing reference and a chain longer than 64.
+  - A theme index (`{"vocab": "ui-theme/1", "base": …}`) lists the files of each variant, density and surface;
+    `UiRegistry` refuses a theme file that does not parse, and a bundle any combination of whose theme does not
+    resolve.
+  - `themeValues` fills the closed `ui-theme/1` set, a missing token taking its `MorphUi` default; `applyTheme`
+    sets it on the `Theme` singleton, whose colour properties are now writable, and adds `accent` and `focus`.
+
 - **Message catalogues from the bundle.** Header-only, in the base `morph` target (`ui/catalogue.hpp`).
   - A `messages` file is `i18n/<locale>.json`, a flat map of key to a MessageFormat 2 pattern.
     `UiRegistry::addFile` refuses one with another id, a refused shape or a pattern outside the `ui/1` subset.
