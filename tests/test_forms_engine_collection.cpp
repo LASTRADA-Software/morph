@@ -12,7 +12,9 @@
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -297,4 +299,109 @@ TEST_CASE("CollectionSession: ids beyond 2^53 stay distinct in keys, cells, the 
     REQUIRE(submits.size() == 3);  // the list, the delete, the reload the delete triggered
     CHECK(submits[1].action == "DeleteRow");
     CHECK(submits[1].body == R"({"id":9007199254740993})");
+}
+
+TEST_CASE("CollectionModel: a malformed view document names where", "[forms-engine][collection]") {
+    auto const where = [](std::string_view json) {
+        auto const model = CollectionModel::fromSchema(json);
+        return model.has_value() ? std::string{"(read)"} : model.error().path;
+    };
+    CHECK(where("not json").empty());
+    CHECK(where("[]").empty());
+    CHECK(where(R"({"v-query":"Q","v-columns":{}})") == "v-columns");
+    CHECK(where(R"({"v-query":"Q","v-columns":[{"label":"x"}]})") == "v-columns");
+    CHECK(where(R"({"v-query":"Q","v-rowAction":{"bind":{}}})") == "v-rowAction");
+    CHECK(where(R"({"v-query":"Q","v-actions":{}})") == "v-actions");
+    CHECK(where(R"({"v-query":"Q","v-actions":[{"label":"x"}]})") == "v-actions");
+
+    auto const lenient = CollectionModel::fromSchema(R"({"v-query":"Q","v-columns":[
+      {"field":"a","v-hidden":"yes","ExtUnits":{"unitAscii":"kg","unitUnicode":""}},
+      {"field":"b","ExtUnits":{}}],
+      "v-actions":[{"action":"Go","confirm":"yes","bind":{"id":"id","n":3}}]})");
+    REQUIRE(lenient.has_value());
+    CHECK_FALSE(lenient->columns()[0].hidden);  // not a boolean: not hidden
+    CHECK(lenient->columns()[0].unit == "kg");
+    CHECK(lenient->columns()[1].unit.empty());
+    CHECK_FALSE(lenient->actions()[0].confirm);
+    CHECK(lenient->actions()[0].bind == std::vector<std::pair<std::string, std::string>>{{"id", "id"}});
+}
+
+TEST_CASE("CollectionSession: cells and table cells for every member shape", "[forms-engine][collection]") {
+    namespace engine = morph::forms::detail::engine;
+    auto const row = engine::parseJson(R"({"flag":true,"ratio":0.5,"big":18446744073709551615,"n":null,
+      "plain":{"num":5,"den":2},"odd":{"num":1,"den":0},"other":{"x":1},"list":[1]})");
+    REQUIRE(row.has_value());
+    morph::forms::CollectionColumn column{};
+    auto const cell = [&](std::string_view field, morph::table::ColumnKind kind = morph::table::ColumnKind::Text) {
+        column.field = std::string{field};
+        column.kind = kind;
+        return engine::tableCell(*row, column);
+    };
+    CHECK(std::get<bool>(cell("flag")));
+    CHECK(std::get<double>(cell("ratio", morph::table::ColumnKind::Number)) == 0.5);
+    CHECK(std::get<std::string>(cell("ratio")) == "0.5");
+    CHECK(std::get<std::string>(cell("big")) == "18446744073709551615");
+    CHECK(std::holds_alternative<std::monostate>(cell("n")));
+    CHECK(std::holds_alternative<morph::math::Rational>(cell("plain")));
+    CHECK(std::get<std::string>(cell("odd")) == R"({"num":1,"den":0})");
+    CHECK(std::get<std::string>(cell("other")) == R"({"x":1})");
+    CHECK(std::get<std::string>(cell("list")) == "[1]");
+
+    column.field = "plain";
+    column.unit.clear();
+    column.decimalPlaces = 2;
+    CHECK(engine::cellText(*row, column) == "2.50");  // no dp of its own: the column's places, no unit
+    column.field = "odd";
+    CHECK(engine::cellText(*row, column) == R"({"num":1,"den":0})");
+    column.field = "n";
+    CHECK(engine::cellText(*row, column).empty());
+}
+
+TEST_CASE("CollectionSession: a reply's rows, keys and an editor that cannot be built", "[forms-engine][collection]") {
+    Harness harness;
+    std::string reply = R"([{"name":"no key"},{"id":1.5,"name":"fraction"}])";
+    harness.server.replyWith([&reply](Call const& call) -> std::optional<std::string> {
+        if (call.action == "ListRows") {
+            return reply;
+        }
+        return std::string{"{}"};
+    });
+    auto const schemas = [](std::string_view action) -> std::optional<std::string> {
+        return action == "EditRow" ? std::optional<std::string>{"not a schema"} : std::nullopt;
+    };
+    CHECK_THROWS_AS(CollectionSession(harness.rt, viewModel(kView), schemas, {}, {}), std::invalid_argument);
+    CollectionSession view{harness.rt, viewModel(kView), schemas, harness.server.submitter(), {}};
+    harness.settle();
+    CHECK(view.editor() == nullptr);  // the row action's schema does not read
+    view.open("0");                   // no editor: nothing opens
+    CHECK_FALSE(view.openRow().has_value());
+    REQUIRE(view.rows().size() == 2);
+    CHECK(view.rows()[0].key == "0");  // no key: its position
+    CHECK(view.rows()[1].key == "1.5");
+    CHECK(std::get<std::string>(view.rows()[1].id) == "1.5");  // a fractional key is text
+    view.confirm();                                            // nothing pending: nothing sent
+    view.fire(0, "missing");
+    view.confirm();
+    harness.settle();
+    std::optional<std::string> deleted;
+    for (Call const& call : harness.server.submits()) {
+        if (call.action == "DeleteRow") {
+            deleted = call.body;
+        }
+    }
+    CHECK(deleted == R"({"id":null})");  // an unknown row binds null
+
+    reply = R"({"total":0})";
+    view.refresh();
+    harness.settle();
+    CHECK(view.rows().empty());
+    reply = "not json";
+    view.refresh();
+    harness.settle();
+    CHECK(view.rows().empty());
+    reply = R"({"total":1,"items":[{"id":3}]})";
+    view.refresh();
+    harness.settle();
+    REQUIRE(view.rows().size() == 1);
+    CHECK(view.rows()[0].key == "3");
 }

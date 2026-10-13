@@ -41,11 +41,11 @@ namespace morph::forms {
 /// @brief One `w-steps` entry.
 struct WizardStepSpec {
     /// @brief The step's action type.
-    std::string action{};
+    std::string action;
     /// @brief The step's title: `title`, else the action type.
-    std::string title{};
+    std::string title;
     /// @brief `{field: "Action.member"}`: what entering the step fills in, in document order.
-    std::vector<std::pair<std::string, std::string>> prefill{};
+    std::vector<std::pair<std::string, std::string>> prefill;
 };
 
 /// @brief The immutable model of a `w-*` wizard document.
@@ -55,12 +55,13 @@ public:
     /// @param wizardId   The wizard's registered id, the stem of its i18n keys.
     /// @param wizardJson The document, in the vocabulary `flows::wizardSchemaJson<W>()` emits.
     /// @return The model, or the error naming the malformed key.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an id and a JSON document; swapped, the document fails.
     [[nodiscard]] static std::expected<WizardModel, SchemaError> fromSchema(std::string_view wizardId,
                                                                             std::string_view wizardJson) {
         using detail::engine::Json;
         auto const dom = detail::engine::parseJson(wizardJson);
         if (!dom || !dom->is_object()) {
-            return std::unexpected(SchemaError{"", "a wizard document must be a JSON object"});
+            return std::unexpected(SchemaError{.path = "", .message = "a wizard document must be a JSON object"});
         }
         WizardModel model{};
         model._id = wizardId;
@@ -68,14 +69,15 @@ public:
         model._title = title != nullptr ? *title : std::string{wizardId};
         Json const* const steps = detail::engine::member(*dom, "w-steps");
         if (steps == nullptr || !steps->is_array()) {
-            return std::unexpected(SchemaError{"w-steps", R"(a wizard document needs a "w-steps" array)"});
+            return std::unexpected(
+                SchemaError{.path = "w-steps", .message = R"(a wizard document needs a "w-steps" array)"});
         }
         std::size_t index = 0;
         for (Json const& entry : steps->get_array()) {
             std::string const path = "w-steps[" + std::to_string(index++) + "]";
             auto const* const action = detail::engine::stringAt(entry, "action");
             if (action == nullptr) {
-                return std::unexpected(SchemaError{path, R"(a step needs an "action")"});
+                return std::unexpected(SchemaError{.path = path, .message = R"(a step needs an "action")"});
             }
             WizardStepSpec step{};
             step.action = *action;
@@ -83,13 +85,17 @@ public:
             step.title = stepTitle != nullptr ? *stepTitle : step.action;
             if (Json const* const prefill = detail::engine::member(entry, "prefill")) {
                 if (!prefill->is_object()) {
-                    return std::unexpected(SchemaError{path + ".prefill", R"("prefill" must be an object)"});
+                    return std::unexpected(
+                        SchemaError{.path = path + ".prefill", .message = R"("prefill" must be an object)"});
                 }
                 for (auto const& [field, source] : prefill->get_object()) {
                     auto const* const text = source.get_if<std::string>();
-                    if (text == nullptr || text->find('.') == std::string::npos) {
-                        return std::unexpected(
-                            SchemaError{path + ".prefill." + field, R"(a prefill path is "<Action>.<member>")"});
+                    if (text == nullptr || !text->contains('.')) {
+                        std::string where = path;
+                        where += ".prefill.";
+                        where += field;
+                        return std::unexpected(SchemaError{.path = std::move(where),
+                                                           .message = R"(a prefill path is "<Action>.<member>")"});
                     }
                     step.prefill.emplace_back(field, *text);
                 }
@@ -97,7 +103,7 @@ public:
             model._steps.push_back(std::move(step));
         }
         if (model._steps.empty()) {
-            return std::unexpected(SchemaError{"w-steps", "a wizard needs at least one step"});
+            return std::unexpected(SchemaError{.path = "w-steps", .message = "a wizard needs at least one step"});
         }
         return model;
     }
@@ -140,8 +146,11 @@ public:
     /// @param choices Fetches the steps' Choice options; may be empty.
     /// @param options Every step's session options.
     /// @throws std::invalid_argument when @p submit is empty, or a step's schema is unknown or does not read.
+    // The schema lookup, the submitter and the fetcher are distinct roles of one shape.
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     WizardSession(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, WizardModel model, SchemaLookup const& schemas,
                   Submitter submit, ChoiceFetcher const& choices, FormSessionOptions const& options = {})
+        // NOLINTEND(bugprone-easily-swappable-parameters)
         : _rt{&runtime}, _model{std::move(model)}, _submit{std::move(submit)}, _current{runtime, std::size_t{0}} {
         if (!_submit) {
             throw std::invalid_argument{"WizardSession: a Submitter is required"};
@@ -206,12 +215,12 @@ public:
     /// @brief Whether Next is possible. Tracked.
     /// @return `true` when the current step is not the last, and is done, or ready with no submission in flight.
     [[nodiscard]] bool canNext() const {
-        std::size_t const at = current();
-        if (at + 1 >= _steps.size()) {
+        std::size_t const here = current();
+        if (here + 1 >= _steps.size()) {
             return false;
         }
-        FormSession const& session = *_steps.at(at);
-        return stepDone(at) || (session.ready() && !session.pending());
+        FormSession const& session = *_steps.at(here);
+        return stepDone(here) || (session.ready() && !session.pending());
     }
 
     /// @brief Whether the current step is the last. Tracked.
@@ -224,13 +233,13 @@ public:
         if (!_rt->untracked([&] { return canNext(); })) {
             return;
         }
-        std::size_t const at = _current.peek();
-        if (_rt->untracked([&] { return stepDone(at); })) {
-            enter(at + 1);
+        std::size_t const here = _current.peek();
+        if (_rt->untracked([&] { return stepDone(here); })) {
+            enter(here + 1);
             return;
         }
-        _advanceFrom = at;
-        _steps.at(at)->submit();
+        _advanceFrom = here;
+        _steps.at(here)->submit();
     }
 
     /// @brief Returns to the previous step, its values as they were; nothing is submitted.
@@ -290,7 +299,7 @@ private:
 
     [[nodiscard]] async::Completion<std::string> relay(std::size_t index, std::string_view action, std::string body) {
         auto [completion, promise] = async::Completion<std::string>::makeSettleable(&_rt->owner());
-        auto settle = std::make_shared<async::Completion<std::string>::Promise>(std::move(promise));
+        auto const settle = std::make_shared<async::Completion<std::string>::Promise>(std::move(promise));
         std::string submitted = body;
         std::string type{action};
         _submit(action, std::move(body))
@@ -317,13 +326,17 @@ private:
         return std::move(completion);
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an action type and a JSON document.
     void record(std::string const& action, std::string const& json) {
         auto const dom = detail::engine::parseJson(json);
         if (!dom || !dom->is_object()) {
             return;
         }
         for (auto const& [name, value] : dom->get_object()) {
-            _resolved.insert_or_assign(action + "." + name, detail::engine::toJson(value));
+            std::string path = action;
+            path += '.';
+            path += name;
+            _resolved.insert_or_assign(std::move(path), detail::engine::toJson(value));
         }
     }
 
