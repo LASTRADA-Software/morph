@@ -510,3 +510,106 @@ TEST_CASE("engine edges: a malformed schema names where", "[forms-engine][edges]
     CHECK(grouped->groups()[2].kind == morph::forms::GroupKind::Section);
     CHECK(grouped->groups()[3].fields == std::vector<std::string>{"a"});  // a section past the list: implicit
 }
+
+TEST_CASE("engine edges: instants with a fraction and no zone, or a fraction before the zone",
+          "[forms-engine][edges]") {
+    auto const at = [](std::string_view wall) { return engine::parseWallClock(wall).value(); };
+    CHECK(engine::parseInstant("2024-01-01T10:00:00.5") == at("2024-01-01T10:00:00"));
+    CHECK(engine::parseInstant("2024-01-01T10:00:00.+01:00") == at("2024-01-01T09:00:00"));
+    CHECK(engine::parseInstant("2024-01-01T10:00+01:00") == at("2024-01-01T09:00"));
+    engine::Json const negative = json("-1.0");
+    engine::Json const enormous = json("2e19");
+    engine::Json const fraction = json("-2.5");
+    CHECK(engine::SchemaReader::unsignedOf(&negative) == std::nullopt);
+    CHECK(engine::SchemaReader::unsignedOf(&enormous) == std::nullopt);
+    CHECK(engine::SchemaReader::signedOf(&fraction) == -2);
+}
+
+TEST_CASE("engine edges: keywords of the wrong shape are passed over", "[forms-engine][edges]") {
+    auto const read = model(R"({"properties":{
+      "a":{"anyOf":5,"oneOf":5,"type":"string","x-order":0},
+      "b":{"anyOf":[{"type":"null"}],"type":"string","x-order":1},
+      "c":{"type":5,"x-readonly":false,"x-order":2},
+      "d":{"enum":"x","type":"string","x-order":3},
+      "e":{"type":"integer","x-computed":{},"multipleOf":"x","x-order":4},
+      "f":{"type":"integer","x-minimum":{"num":1},"x-order":5},
+      "g":{"type":"integer","x-optionsAction":"G","x-optionsDependsOn":"a","x-order":6},
+      "h":{"type":"object","x-decimalPlaces":1,"ExtUnits":{"unitAscii":"kg"},"x-unitAlternatives":5,"x-order":7},
+      "i":{"type":"object","x-decimalPlaces":1,"ExtUnits":{"unitAscii":"kg"},"x-order":8,
+           "x-unitAlternatives":[{"id":"z","num":1,"den":0},{"id":"y","num":1,"den":-1}]},
+      "j":{"type":"string","x-widget":"slider","x-min":0,"x-max":5,"x-order":9},
+      "k":{"type":"object","x-order":10},
+      "l":{"oneOf":[{"oneOf":[]}],"x-order":11}},
+      "required":"a","x-submitMode":"auto"})");
+    INFO((read ? std::string{} : read.error().path + ": " + read.error().message));
+    REQUIRE(read.has_value());
+    CHECK(read->find("a")->kind == FieldKind::Text);
+    CHECK_FALSE(read->find("a")->required);  // "required" is not a list
+    CHECK(read->find("b")->kind == FieldKind::Text);
+    CHECK(read->find("c")->kind == FieldKind::Text);  // a type that is neither a name nor a list: text
+    CHECK_FALSE(read->find("c")->readOnly);
+    CHECK(read->find("d")->enumOptions.empty());
+    CHECK(read->find("e")->computedInputs.empty());
+    CHECK_FALSE(read->find("e")->multipleOf.has_value());
+    CHECK_FALSE(read->find("f")->instanceMinimum.has_value());
+    CHECK(read->find("g")->choice->dependsOn.empty());
+    CHECK(read->find("h")->units.size() == 1);
+    CHECK(read->find("i")->units.size() == 1);        // neither alternative has a positive ratio
+    CHECK(read->find("j")->kind == FieldKind::Text);  // a slider is an integer's or a number's
+    CHECK(read->find("k")->truncated);                // an object without properties cannot be edited here
+    CHECK(read->find("l")->enumOptions.empty());
+    CHECK(read->submitMode() == morph::forms::SubmitMode::Automatic);
+}
+
+TEST_CASE("engine edges: a session's nested members, collections and dependent options", "[forms-engine][edges]") {
+    morph::test::formsengine::Harness harness;
+    morph::forms::FormSessionOptions options{};
+    options.translations = [](std::string_view, std::string_view) { return std::optional<std::string>{}; };
+    auto const session = harness.session("Edge", R"({"properties":{
+      "home":{"type":"object","x-order":0,"properties":{
+        "street":{"type":"string","x-i18nKey":"custom.street"}}},
+      "deep":{"type":"object","x-order":1},
+      "list":{"type":"array","items":{"type":"array"},"x-order":2},
+      "name":{"type":"string","x-blankAs":"empty","x-order":3},
+      "mass":{"type":"object","x-decimalPlaces":1,"ExtUnits":{"unitAscii":"kg"},"x-order":4,
+              "x-unitAlternatives":[{"id":"g","num":1,"den":1000}]},
+      "a":{"type":"integer","x-order":5},
+      "b":{"type":"integer","x-order":6},
+      "pick":{"type":"integer","x-optionsAction":"Picks","x-optionsDependsOn":["a","b"],"x-order":7}},
+      "x-rules":[{"kind":"engaged","fields":["ghost"]}]})",
+                                         std::move(options));
+    harness.settle();
+    CHECK(session->field("home.street").visible().get());
+    CHECK_FALSE(session->field("home.street").readonly().get());
+    CHECK(session->field("home.street").label() == "street");
+    CHECK(session->field("deep").addRow() == 0);  // not a collection
+    CHECK(session->field("list").addRow() == 0);  // a collection too deep to edit
+    session->prefill(R"({"deep":{"x":1},"list":[[1]],"name":""})");
+    harness.settle();
+    CHECK(session->field("name").error().get() == std::nullopt);
+    CHECK_FALSE(session->field("deep").blank());
+    CHECK_FALSE(session->field("list").blank());
+    session->field("mass").unit().set(5);  // a unit index past the list
+    session->field("mass").switchUnit(1);
+    CHECK(session->field("mass").unit().get() == 5U);
+    CHECK_THROWS_AS(static_cast<void>(session->field("list[01x]")), std::out_of_range);
+    harness.type(*session, "a", "1");
+    harness.type(*session, "b", "2");
+    REQUIRE_FALSE(harness.server.fetches().empty());
+    CHECK(harness.server.fetches().back().body == R"({"a":1,"b":2})");
+    CHECK_FALSE(session->ready());  // the rule names a field the form does not have: it never holds
+    CHECK_THROWS_AS(morph::forms::FormSession(
+                        harness.rt, morph::test::formsengine::modelOf("Edge", R"({"properties":{}})"), {}, {}),
+                    std::invalid_argument);
+}
+
+TEST_CASE("engine edges: equals literals given as digits that are not an integer", "[forms-engine][edges]") {
+    auto const literal = [](std::string_view text) {
+        auto const parsed = rule(text);
+        REQUIRE(parsed.has_value());
+        return engine::toJson(parsed->expression());
+    };
+    CHECK(literal(R"({"kind":"equals","fields":["a"],"valueText":"1.5","value":1.5})").contains(R"("num":3)"));
+    CHECK(literal(R"({"kind":"equals","fields":["a"],"valueText":"x","value":"x"})").contains(R"("x")"));
+    CHECK(literal(R"({"kind":"equals","fields":["a"],"value":{"num":1}})").contains("null"));
+}

@@ -929,6 +929,16 @@ TEST_CASE("locale_format: an empty or malformed zeroDigit reads as ASCII '0'", "
     CHECK(formatCanonicalNumber("55", {.zeroDigit = ""}) == "55");
     CHECK(normalizeLocaleNumber("55", {.zeroDigit = "\xC0"}) == "55");  // not a code point
     CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xC0"}) == "55");
+    CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xED\xA0\x80"}) == "55");      // a surrogate
+    CHECK(formatCanonicalNumber("55", {.zeroDigit = "\xF4\x90\x80\x80"}) == "55");  // past U+10FFFF
+}
+
+TEST_CASE("locale_format: the display edge rewrites only digits", "[render][locale]") {
+    morph::render::NumericLocale const arabic{.zeroDigit = "\xD9\xA0"};  // U+0660
+    CHECK(formatCanonicalNumber("1.2.3", arabic) == "\xD9\xA1.\xD9\xA2.\xD9\xA3");
+    CHECK(formatCanonicalNumber("1.2a", arabic) ==
+          "\xD9\xA1.\xD9\xA2"
+          "a");
 }
 
 // ──── The same corpora, through the parser the forms engine uses ─────────────
