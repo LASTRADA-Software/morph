@@ -234,6 +234,11 @@ public:
         log.push_back("app " + name + " " + glz::write_json(valueToJson(value)).value_or(""));
         return !refuseAll;
     }
+    bool uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
+                   std::function<void(std::expected<Value, std::string>)> done) override {
+        log.push_back("uploadFor " + request.modelType + " " + request.action);
+        return InterpreterHost::uploadFor(request, std::move(progress), std::move(done));
+    }
     bool upload(Value const& file, std::function<void(Value)> progress,
                 std::function<void(std::expected<Value, std::string>)> done) override {
         log.push_back("upload " + glz::write_json(valueToJson(file)).value_or(""));

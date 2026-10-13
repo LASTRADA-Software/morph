@@ -4,6 +4,7 @@
 // through onResult or onCancel, focus, a missing host command, switchBackend for a listed and an unlisted backend,
 // setLocale, cancelClose, transfers, the mount refusals, and every node kind lowered once.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <optional>
 #include <string>
@@ -185,6 +186,8 @@ TEST_CASE("interpreter commands: an upload reports progress, then runs its mutat
     auto screen = h.mount(kCommands, who(3));
     h.backend.click(h.byTestId("Button", "upload"));
     h.settle();
+    // The host learns the mutation the upload is for, which the server authorises it as.
+    CHECK(std::ranges::count(h.host.log, std::string{"uploadFor Lims_SampleModel Lims_Attach"}) == 1);
     CHECK(h.text("progress") == "0/true");
     h.host.uploadProgress(ui::Value{std::int64_t{1}});
     h.settle();

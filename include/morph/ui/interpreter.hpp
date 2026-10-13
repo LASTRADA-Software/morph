@@ -181,6 +181,17 @@ struct NavigateRequest {
     std::string as;
 };
 
+/// @brief What an `upload` command asks the host to send, and the mutation that will reference the file, which is what
+///        the server authorises the upload as (spec 6 §18).
+struct UploadRequest {
+    /// @brief What the user picked or dropped.
+    Value file;
+    /// @brief The model type of the mutation that will reference the file.
+    std::string modelType;
+    /// @brief That mutation's action.
+    std::string action;
+};
+
 /// @brief What the application answers for the commands a document cannot carry out alone (spec 6). Every default
 ///        answers "not supported", which the interpreter reports as a diagnostic.
 class InterpreterHost {
@@ -300,6 +311,18 @@ public:
         static_cast<void>(progress);
         static_cast<void>(done);
         return false;
+    }
+
+    /// @brief Sends a file through the server's file side channel, knowing the mutation that will reference it. The
+    ///        interpreter calls this one; the default calls `upload(file, …)`, so a host that overrides only that
+    ///        keeps working.
+    /// @param request  The file and the mutation.
+    /// @param progress Called with the progress, 0 to 1.
+    /// @param done     Called once with the file's reference, or the failure's text.
+    /// @return Whether the host can send files.
+    virtual bool uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
+                           std::function<void(std::expected<Value, std::string>)> done) {
+        return upload(request.file, std::move(progress), std::move(done));
     }
 
     /// @brief Fetches a file by reference to save it, or to a local temporary reference for a viewer.
@@ -3623,7 +3646,13 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
         transfer->progress.set(Value{std::int64_t{0}});
         transfer->error.set(Value{});
     }
-    if (!host->upload(file, progress, settled)) {
+    NameRef const* const target = scope.find(command.target);
+    UploadRequest request{.file = file, .modelType = {}, .action = {}};
+    if (target != nullptr && target->category == NameCategory::Mutation && target->mutation != nullptr) {
+        request.modelType = target->mutation->typeId();
+        request.action = target->mutation->decl().action;
+    }
+    if (!host->uploadFor(request, progress, settled)) {
         if (transfer != nullptr) {
             transfer->pending.set(false);
             transfer->progress.set(Value{});
