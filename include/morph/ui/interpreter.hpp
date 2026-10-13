@@ -1830,8 +1830,8 @@ private:
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
     void wireForm(ElementState& element);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
-    forms::Submitter aliasCalls(ModelAlias* alias);
-    forms::FormSessionOptions engineOptions() const;
+    [[nodiscard]] forms::Submitter aliasCalls(ModelAlias* alias);
+    [[nodiscard]] forms::FormSessionOptions engineOptions() const;
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
@@ -4687,7 +4687,7 @@ inline forms::FormSessionOptions ScreenCore::engineOptions() const {
 // every step's submission) goes through the node's model alias.
 inline void ScreenCore::wireComposite(ElementState& element) {
     DocNode const& node = *element.node;
-    RtScope& scope = *element.scope;
+    RtScope const& scope = *element.scope;
     bool const collection = node.kind == "collection";
     std::string const action{node.name("action")};
     Catalog const& catalog = session.options().catalog;

@@ -54,8 +54,8 @@ namespace detail::engine {
 ///        pending).
 /// @param session The session.
 /// @return The header.
-[[nodiscard]] inline ui::Node wizardHeader(WizardSession& session) {
-    WizardSession* const wizard = &session;
+[[nodiscard]] inline ui::Node wizardHeader(WizardSession const& session) {
+    WizardSession const* const wizard = &session;
     ui::Text title{.text =
                        [wizard] {
                            return wizard->title() + "  (" + std::to_string(wizard->current() + 1) + " / " +
@@ -67,10 +67,10 @@ namespace detail::engine {
         .items =
             [wizard] {
                 std::vector<ui::Step> items;
-                std::size_t const at = wizard->current();
+                std::size_t const here = wizard->current();
                 for (std::size_t i = 0; i < wizard->stepCount(); ++i) {
                     ui::StepState state = ui::StepState::Pending;
-                    if (i == at) {
+                    if (i == here) {
                         state = ui::StepState::Active;
                     } else if (wizard->stepDone(i)) {
                         state = ui::StepState::Done;
@@ -118,7 +118,7 @@ namespace detail::engine {
 /// @param options Every step's form options, the chrome and the labels.
 /// @return The view.
 [[nodiscard]] inline ui::Node wizardView(WizardSession& session, WizardViewOptions const& options = {}) {
-    WizardSession* const wizard = &session;
+    WizardSession const* const wizard = &session;
     std::vector<ui::SwitchCase> cases;
     for (std::size_t i = 0; i < session.stepCount(); ++i) {
         ui::Column step{.children = {formView(session.step(i), options.form)}};

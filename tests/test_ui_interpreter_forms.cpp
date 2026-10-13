@@ -207,7 +207,7 @@ TEST_CASE("collection and wizard nodes: a document the catalog lacks is reported
         Harness h;
         auto const screen = h.mount(document);
         REQUIRE(h.diagnostics.size() == 1);
-        CHECK(h.diagnostics.front().reason.find("document for") != std::string::npos);
+        CHECK(h.diagnostics.front().reason.contains("document for"));
         CHECK(h.backend.all("Table").empty());
         CHECK(h.backend.all("Button").empty());
     }

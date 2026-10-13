@@ -136,6 +136,39 @@ namespace detail::engine {
     return ui::row(ui::Row{.children = std::move(buttons), .gap = 1});
 }
 
+/// @brief The rows table's activation and selection: activating a row opens it when the view has a row action; in a
+///        master-detail view a row is selected while the editor is open on it, and selecting one opens it.
+/// @param session The session.
+/// @return The options, with the table's test id.
+[[nodiscard]] inline ui::TableOptions rowsTableOptions(CollectionSession& session) {
+    CollectionSession* const view = &session;
+    ui::TableOptions table{};
+    if (session.model().rowAction().has_value()) {
+        table.onActivate = [view](ui::Key const& key) {
+            if (auto const* const text = std::get_if<std::string>(&key)) {
+                view->open(*text);
+            }
+        };
+    }
+    if (session.model().kind() == CollectionKind::MasterDetail) {
+        table.selectionMode = ui::SelectionMode::Single;
+        table.selection = [view] {
+            std::optional<std::string> const& open = view->openRow();
+            return open.has_value() ? std::vector<ui::Key>{ui::Key{*open}} : std::vector<ui::Key>{};
+        };
+        table.onSelectionChange = [view](std::vector<ui::Key> const& keys) {
+            auto const* const text = keys.empty() ? nullptr : std::get_if<std::string>(&keys.front());
+            if (text == nullptr) {
+                view->close();
+            } else {
+                view->open(*text);
+            }
+        };
+    }
+    table.common.testId = "collection_rows";
+    return table;
+}
+
 /// @brief The rows: a table of the visible columns' cells and the row buttons, or a list of the row chrome's nodes.
 ///        In a master-detail view a row is selected while the editor is open on it, and selecting one opens it.
 /// @param session The session.
@@ -165,30 +198,7 @@ namespace detail::engine {
     if (buttons) {
         columns.push_back(ui::TableColumn{.label = std::string{}});
     }
-    ui::TableOptions table{};
-    if (session.model().rowAction().has_value()) {
-        table.onActivate = [view](ui::Key const& key) {
-            if (auto const* const text = std::get_if<std::string>(&key)) {
-                view->open(*text);
-            }
-        };
-    }
-    if (session.model().kind() == CollectionKind::MasterDetail) {
-        table.selectionMode = ui::SelectionMode::Single;
-        table.selection = [view] {
-            std::optional<std::string> const& open = view->openRow();
-            return open.has_value() ? std::vector<ui::Key>{ui::Key{*open}} : std::vector<ui::Key>{};
-        };
-        table.onSelectionChange = [view](std::vector<ui::Key> const& keys) {
-            auto const* const text = keys.empty() ? nullptr : std::get_if<std::string>(&keys.front());
-            if (text == nullptr) {
-                view->close();
-            } else {
-                view->open(*text);
-            }
-        };
-    }
-    table.common.testId = "collection_rows";
+    ui::TableOptions table = rowsTableOptions(session);
     return ui::table<CollectionRow>(
         std::move(columns), rows, keyOf,
         [view, options, fields, buttons](reactive::Signal<CollectionRow> const& slot) {
@@ -243,7 +253,7 @@ namespace detail::engine {
 /// @return A switch showing it while `pendingConfirm()` is engaged.
 [[nodiscard]] inline ui::Node confirmChrome(CollectionSession& session,
                                             std::function<ui::Node(CollectionSession&)> const& chrome) {
-    CollectionSession* const view = &session;
+    CollectionSession const* const view = &session;
     return ui::switchOf(ui::Switch{
         .selector = [view] { return ui::Key{std::int64_t{view->pendingConfirm().has_value() ? 1 : 0}}; },
         .cases = {ui::SwitchCase{.key = ui::Key{std::int64_t{1}}, .node = chrome(session)}},
@@ -286,7 +296,8 @@ namespace detail::engine {
         } else {
             ui::Dialog dialog{
                 .open = [view] { return view->openRow().has_value(); },
-                .title = session.model().rowAction()->action,
+                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): an editor exists only for a row action.
+                .title = session.model().rowAction().value().action,
                 .child = std::move(form),
                 .onDismiss = [view] { view->close(); },
             };

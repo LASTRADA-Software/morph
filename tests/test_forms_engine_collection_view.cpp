@@ -5,9 +5,11 @@
 // confirm and editor dialogs' visibility, the chrome slots, the master-detail layout), re-expressed on mounted
 // widgets. The session's own claims are test_forms_engine_collection.cpp's.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/forms/engine/collection_view.hpp>
@@ -141,14 +143,16 @@ struct Mounted {
     }
 
     /// Whether @p widgetId lies inside @p rootId.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the names say which is which.
     [[nodiscard]] bool within(int widgetId, int rootId) const {
-        if (widgetId == rootId) {
-            return true;
-        }
-        for (int const child : backend.children(rootId)) {
-            if (within(widgetId, child)) {
+        std::vector<int> pending{rootId};
+        while (!pending.empty()) {
+            int const current = pending.back();
+            pending.pop_back();
+            if (current == widgetId) {
                 return true;
             }
+            std::ranges::copy(backend.children(current), std::back_inserter(pending));
         }
         return false;
     }
