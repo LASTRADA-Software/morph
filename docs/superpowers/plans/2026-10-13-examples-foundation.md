@@ -24,9 +24,11 @@ translation units, `testkit/wait.hpp` over `deadline.hpp`, and "a smoke that mou
    envelope, call back once with the reply". `docs/spec/ui/service.md` says every morph transport does that, but
    `IBackend` has no such verb: `SocketBackend` and `QtWebSocketBackend` send only the envelopes their own verbs
    build. A remote client therefore cannot run `ui-hello` at all. This is the one library change of the part:
-   - `IBackend::request(wire::Envelope, exec::IExecutor& cbExec) -> async::Completion<wire::Envelope>`. The default
-     rejects with `std::logic_error`, so `LocalBackend`, `SimulatedRemoteBackend` and every test double are
-     unchanged. The reply envelope, `ok` or `err`, resolves the completion; only a transport failure rejects it.
+   - `morph::backend::IEnvelopeTransport::request(wire::Envelope, exec::IExecutor& cbExec) ->
+     async::Completion<wire::Envelope>`, in its own header (`core/envelope_transport.hpp`). A separate interface,
+     not an `IBackend` virtual: a backend without a wire has no peer, and `IBackend`'s many implementations and test
+     doubles stay untouched (and `core/backend.hpp`, which nearly every translation unit includes, unchanged). The
+     reply envelope, `ok` or `err`, resolves the completion; only a transport failure rejects it.
    - The request travels with the session it carries. The ui protocol's callers (`UiClient::open(session)`,
      `evaluatorOver(…, session, …)`) already pass the session explicitly; stamping the backend's default session
      over it would silently replace what they asked for.
@@ -34,7 +36,7 @@ translation units, `testkit/wait.hpp` over `deadline.hpp`, and "a smoke that mou
      other control calls, rejected by `cancelPending`, a drop or a close. A request made while the socket is not
      connected is held and sent at the next connect, as a private bind is, because a client opens its source right
      after making the transport.
-   - `ui::exchangeOver(IBackend&, exec::IExecutor&) -> Exchange` in `ui/service_client.hpp` adapts it.
+   - `ui::exchangeOver(IEnvelopeTransport&, exec::IExecutor&) -> Exchange` in `ui/service_client.hpp` adapts it.
    Own tests, a CHANGELOG line, `docs/spec/core/backend.md` and `docs/spec/ui/service.md`.
 3. **Local mode can run the same path.** `UiService::handle` answers one envelope synchronously. A local source
    builds the application's bundle in-process, answers its `Exchange` with `UiService::handle`, and opens it with

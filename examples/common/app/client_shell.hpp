@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <expected>
+#include <functional>
+#include <memory>
+#include <morph/ui/backend.hpp>
+#include <morph/ui/frontend.hpp>
+#include <string>
+
+#include "app/app_source.hpp"
+
+/// @file
+/// What the generic client mounts once its source is open: one screen of the bundle at a time, through the
+/// library's `DocumentScreenHost`. It stands in for the application shell of spec 6 §5 and §7 (the app document,
+/// sign-in, menus and tabs), which the hosting layer provides; it is not a framework shell.
+
+namespace morph::examples {
+
+/// @brief What a client shell reports, and how it starts.
+struct ClientShellOptions {
+    /// @brief The screen mounted first; empty for the first the source lists.
+    std::string startScreen;
+    /// @brief Called with each problem: why the source did not open, a document that did not load, a refused mount,
+    ///        an interpreter diagnostic. Empty ignores them; the shell shows the first three either way.
+    std::function<void(std::string const& problem)> onProblem;
+    /// @brief Called with the id of each screen once it is mounted.
+    std::function<void(std::string const& screenId)> onMounted;
+};
+
+/// @brief Mounts the client's shell for what @p source delivered.
+///
+/// On a bundle: loads each screen of `source.screens()` with the source's catalog facts, mounts the start screen,
+/// and on a document's `navigate` replaces it with the screen asked for, from a task posted to the owner, never from
+/// inside the handler that asked. On a `ConnectError`, or when no screen can be mounted, shows why as text.
+/// @param context The frontend's context.
+/// @param backend The view backend the screens mount on. Borrowed: it outlives the shell.
+/// @param opened  What the source delivered.
+/// @param source  The source; it outlives the shell.
+/// @param options The start screen and the observers.
+/// @return The shell; destroying it unmounts everything.
+[[nodiscard]] std::unique_ptr<ui::MountedShell> mountClientShell(ui::AppContext& context, ui::IViewBackend& backend,
+                                                                 std::expected<ui::Bundle, ui::ConnectError> opened,
+                                                                 ClientSource& source, ClientShellOptions options);
+
+}  // namespace morph::examples
