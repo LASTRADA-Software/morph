@@ -524,6 +524,8 @@ target_sources(morph
         include/morph/forms/engine/form_view.hpp
         include/morph/forms/engine/collection.hpp
         include/morph/forms/engine/wizard.hpp
+        include/morph/forms/engine/collection_view.hpp
+        include/morph/forms/engine/wizard_view.hpp
         include/morph/table/data_source.hpp
         include/morph/table/sort.hpp
         include/morph/table/filter.hpp
