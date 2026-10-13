@@ -14,6 +14,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "runEvent", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1518e227276e358136b73299fdf7fa4f", null ],
     [ "lower", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0e0356595c888ecda8e3182d524de57", null ],
     [ "lowerAll", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afc9b26ecab4c765cb138847d08f2dc48", null ],
+    [ "addPending", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a12be639fee87a3b69d74343ce8e3ef6d", null ],
     [ "session", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a24031478a39d21194a9a2d696df75bf5", null ],
     [ "dispatcher", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0c39ee4bd369def8a48484adaef1263", null ],
     [ "host", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a275559bda77cd6b29bf442fe456b8aa9", null ],
@@ -24,5 +25,6 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "reported", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a7e57710b1acc6f0ff163f2e8ea6ade94", null ],
     [ "prefs", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a495fe8944364d305c1d2b9bf4caeeb4a", null ],
     [ "prefDefaults", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a3f5c473f0727a869fe9688e9b925b241", null ],
-    [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ]
+    [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ],
+    [ "pendingWork", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af58663974e48a36f839f7b35aff5f6cf", null ]
 ];

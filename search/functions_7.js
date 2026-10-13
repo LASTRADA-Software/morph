@@ -13,12 +13,13 @@ var searchData=
   ['hasvalue_10',['hasValue',['../df/d65/structmorph_1_1forms_1_1Choice.html#a13a289f9fadeea894749645063705491',1,'morph::forms::Choice::hasValue()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#a89ef918a90efd8c9d97e5ec1fdbb78e2',1,'morph::forms::Ranged::hasValue()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a41d879bad41b4e5b09f65b6cf56ce603',1,'morph::time::Timestamp::hasValue()'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#afa91555763dd9e3d0dc557a4c45ac348',1,'morph::units::Quantity::hasValue()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#aa7778ae18ba5c97e388f4ef159c697bd',1,'morph::util::Tagged::hasValue()']]],
   ['health_11',['health',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a4e56d64c5c9a9044920337bb9b27a092',1,'morph::backend::RemoteServer']]],
   ['heldrows_12',['heldRows',['../dd/d72/classmorph_1_1table_1_1Engine.html#ac316c0ecb08c5d818ea88526a266f02b',1,'morph::table::Engine']]],
-  ['hiddencellkeepsitscolumn_13',['hiddenCellKeepsItsColumn',['../d8/d3e/backend__conformance_8hpp.html#a495fb9c0d997bfe2f36be0c76fd7a139',1,'morph::ui::testing::detail']]],
-  ['hiddenchordrunsnothing_14',['hiddenChordRunsNothing',['../d8/d3e/backend__conformance_8hpp.html#a17d70b159529b91e31a4631dcac6cf20',1,'morph::ui::testing::detail']]],
-  ['hmacsha256_15',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
-  ['hmacsha256raw_16',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
-  ['holding_17',['holding',['../db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf',1,'morph::ui::detail']]],
-  ['host_18',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
-  ['hostcommand_19',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
-  ['hostvalue_20',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]]
+  ['hexdigit_13',['hexDigit',['../d4/d2f/route_8hpp.html#ab46fe03afb94efe56cb59be59149c207',1,'morph::ui::detail::route']]],
+  ['hiddencellkeepsitscolumn_14',['hiddenCellKeepsItsColumn',['../d8/d3e/backend__conformance_8hpp.html#a495fb9c0d997bfe2f36be0c76fd7a139',1,'morph::ui::testing::detail']]],
+  ['hiddenchordrunsnothing_15',['hiddenChordRunsNothing',['../d8/d3e/backend__conformance_8hpp.html#a17d70b159529b91e31a4631dcac6cf20',1,'morph::ui::testing::detail']]],
+  ['hmacsha256_16',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
+  ['hmacsha256raw_17',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
+  ['holding_18',['holding',['../db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf',1,'morph::ui::detail']]],
+  ['host_19',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
+  ['hostcommand_20',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
+  ['hostvalue_21',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]]
 ];

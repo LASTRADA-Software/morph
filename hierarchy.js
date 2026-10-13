@@ -157,8 +157,8 @@ var hierarchy =
     [ "morph::reactive::detail::EqualityUsable&lt; T &gt;", "dc/df7/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01T_01_4.html", null ],
     [ "morph::reactive::detail::FlushBounds", "d3/d22/structmorph_1_1reactive_1_1detail_1_1FlushBounds.html", null ],
     [ "morph::reactive::detail::Node", "df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html", [
-      [ "morph::reactive::Computed< bool >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::string >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< bool >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< morph::ui::Value >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Signal< std::size_t >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::exception_ptr >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
@@ -453,13 +453,15 @@ var hierarchy =
     ] ],
     [ "morph::ui::DocNode", "df/d0e/structmorph_1_1ui_1_1DocNode.html", null ],
     [ "morph::ui::Document", "d4/d02/structmorph_1_1ui_1_1Document.html", null ],
+    [ "morph::ui::DocumentScreenHostOptions", "da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html", null ],
     [ "morph::ui::DownloadedFile", "d5/d44/structmorph_1_1ui_1_1DownloadedFile.html", null ],
     [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", null ],
     [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", null ],
     [ "morph::ui::EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", null ],
     [ "morph::ui::Environment", "dc/d40/classmorph_1_1ui_1_1Environment.html", [
       [ "morph::ui::StaticEnvironment", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html", null ],
-      [ "morph::ui::detail::ScopeEnv", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html", null ]
+      [ "morph::ui::detail::ScopeEnv", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html", null ],
+      [ "morph::ui::detail::host::ParamsEnv", "d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html", null ]
     ] ],
     [ "morph::ui::EvaluateReply", "d9/d06/structmorph_1_1ui_1_1EvaluateReply.html", null ],
     [ "morph::ui::Expr", "d0/df6/structmorph_1_1ui_1_1Expr.html", null ],
@@ -491,7 +493,9 @@ var hierarchy =
       [ "morph::ui::MemoryFileStore", "d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html", null ]
     ] ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", null ],
-    [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", null ],
+    [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", [
+      [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
+    ] ],
     [ "morph::ui::InterpreterOptions", "d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html", null ],
     [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", [
       [ "morph::qt_quick::Backend", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html", null ],
@@ -520,6 +524,7 @@ var hierarchy =
     [ "morph::ui::ModelInfo", "d1/de5/structmorph_1_1ui_1_1ModelInfo.html", null ],
     [ "morph::ui::Mounted", "d1/d57/classmorph_1_1ui_1_1Mounted.html", null ],
     [ "morph::ui::MountedShell", "d9/d90/classmorph_1_1ui_1_1MountedShell.html", null ],
+    [ "morph::ui::MountError", "d6/dc8/structmorph_1_1ui_1_1MountError.html", null ],
     [ "morph::ui::MountOptions", "d3/d5c/structmorph_1_1ui_1_1MountOptions.html", null ],
     [ "morph::ui::MutationDecl", "d7/d39/structmorph_1_1ui_1_1MutationDecl.html", null ],
     [ "morph::ui::NameResolver", "d9/df3/classmorph_1_1ui_1_1NameResolver.html", [
@@ -535,9 +540,14 @@ var hierarchy =
     [ "morph::ui::Quantity", "d8/d23/structmorph_1_1ui_1_1Quantity.html", null ],
     [ "morph::ui::QueryDecl", "da/db7/structmorph_1_1ui_1_1QueryDecl.html", null ],
     [ "morph::ui::Refusal", "de/d52/structmorph_1_1ui_1_1Refusal.html", null ],
+    [ "morph::ui::Route", "de/d2f/structmorph_1_1ui_1_1Route.html", null ],
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", null ],
     [ "morph::ui::ScopeDecl", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html", null ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", null ],
+    [ "morph::ui::ScreenHandle", "da/de8/classmorph_1_1ui_1_1ScreenHandle.html", null ],
+    [ "morph::ui::ScreenHost", "de/d1a/classmorph_1_1ui_1_1ScreenHost.html", [
+      [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
+    ] ],
     [ "morph::ui::Scroll", "dc/dae/structmorph_1_1ui_1_1Scroll.html", null ],
     [ "morph::ui::Select", "d7/d7b/structmorph_1_1ui_1_1Select.html", null ],
     [ "morph::ui::SelectOption", "d0/d75/structmorph_1_1ui_1_1SelectOption.html", null ],

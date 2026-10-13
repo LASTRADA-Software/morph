@@ -1,5 +1,7 @@
 var searchData=
 [
-  ['widget_5fhints_2ehpp_0',['widget_hints.hpp',['../d6/ddd/widget__hints_8hpp.html',1,'']]],
-  ['ws_5fconnection_2ehpp_1',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
+  ['value_2ehpp_0',['value.hpp',['../d6/dda/value_8hpp.html',1,'']]],
+  ['view_2ehpp_1',['view.hpp',['../d8/d11/view_8hpp.html',1,'']]],
+  ['view_5fchange_2ehpp_2',['view_change.hpp',['../d6/d59/view__change_8hpp.html',1,'']]],
+  ['views_2ehpp_3',['views.hpp',['../de/d49/views_8hpp.html',1,'']]]
 ];
