@@ -178,6 +178,16 @@ API surface).
 
 ### Added
 
+- **Theme tokens (`ui-theme/1`).** Header-only in the base `morph` target (`ui/theme.hpp`), and
+  `qt_quick::applyTheme` in `morph::qt_quick`.
+  - DTCG 2025.10 token files are parsed (`parseTokens`), layered and alias-resolved (`resolveTokens`,
+    `resolveTheme`), refusing a cycle, a missing reference and a chain longer than 64.
+  - A theme index (`{"vocab": "ui-theme/1", "base": …}`) lists the files of each variant, density and surface;
+    `UiRegistry` refuses a theme file that does not parse, and a bundle any combination of whose theme does not
+    resolve.
+  - `themeValues` fills the closed `ui-theme/1` set, a missing token taking its `MorphUi` default; `applyTheme`
+    sets it on the `Theme` singleton, whose colour properties are now writable, and adds `accent` and `focus`.
+
 - **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
   `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a
   principal-bound, unguessable reference. `UiService` serves `ui-file` when given

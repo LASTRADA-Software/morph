@@ -157,7 +157,9 @@ A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size
 `n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
 horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`). A stale field is dimmed; a
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour
-roles every component reads. The style is Qt Quick Controls' `Basic`.
+roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
+tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
+The style is Qt Quick Controls' `Basic`.
 
 ## Components
 
@@ -222,7 +224,8 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- Theme tokens from the bundle (`ui-theme/1`): the `Theme` singleton has fixed colours.
+- Per-subtree surfaces and a runtime density from theme tokens; the units come from the default font, not the
+  scale tokens.
 - Loading a custom component from a document: the view tree's seam (`ui::Custom` carries no props or events).
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.
