@@ -5,6 +5,7 @@
 // catalogue is refused at registration and left out at load; and a title is found in every locale the bundle has.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <map>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/catalogue.hpp>
@@ -148,4 +149,50 @@ TEST_CASE("catalogues: search matches a title in every locale the bundle has", "
     CHECK_FALSE(morph::ui::matchesInAnyLocale(catalogues, "lims.sample.title", "Sample entry", "audit"));
     // A key no catalogue has is found by its fallback alone.
     CHECK(morph::ui::matchesInAnyLocale(catalogues, "lims.audit.title", "Audit trail", "audit"));
+}
+
+TEST_CASE("catalogues: a catalogue id names its locale, and only a well-formed one", "[ui][catalogue]") {
+    CHECK(morph::ui::catalogueLocale("i18n/de.json") == "de");
+    CHECK(morph::ui::catalogueLocale("i18n/DE-at.json") == "DE-at");
+    CHECK(morph::ui::catalogueLocale("i18n/sr-Latn-1-RS.json") == "sr-Latn-1-RS");
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/de.txt").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("lang/de.json").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/.json").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/1de.json").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/-de.json").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/de_AT.json").has_value());
+    CHECK_FALSE(morph::ui::catalogueLocale("i18n/d~.json").has_value());
+}
+
+TEST_CASE("catalogues: a catalogue's keys are bounded", "[ui][catalogue]") {
+    CHECK(morph::ui::parseCatalogue(R"({")" + std::string(morph::ui::kMaxNameBytes + 1, 'k') + R"(": "x"})")
+              .error()
+              .contains("a message key is 1 to 256 bytes"));
+    std::string many = "{";
+    for (std::size_t index = 0; index <= morph::ui::kMaxCatalogueKeys; ++index) {
+        many += (index == 0 ? "\"k" : ",\"k") + std::to_string(index) + R"(": "x")";
+    }
+    many += '}';
+    CHECK(morph::ui::parseCatalogue(many).error().contains("more than 16384 keys"));
+}
+
+TEST_CASE("catalogues: loading reads only message files; search shows a fallback outside the subset as written",
+          "[ui][catalogue]") {
+    std::string const german = R"({"hello": "Hallo"})";
+    Manifest manifest;
+    manifest.files = {
+        ManifestFile{.id = "default", .kind = "theme", .hash = morph::ui::contentHash("{}"), .size = 2},
+        ManifestFile{.id = "i18n/de.json", .kind = "messages", .hash = morph::ui::contentHash(german), .size = 0}};
+    Files const files = {{morph::ui::contentHash("{}"), "{}"}, {morph::ui::contentHash(german), german}};
+    MessageCatalogues const catalogues = morph::ui::loadCatalogues(manifest, files);
+    CHECK(catalogues.locales() == std::vector<std::string>{"de"});
+    CHECK(catalogues.problems().empty());
+
+    // A fallback outside the subset cannot be formatted, so it is compared as written.
+    CHECK(morph::ui::textInEveryLocale(catalogues, "gone", "{$n :datetime}") ==
+          std::vector<std::string>{"{$n :datetime}"});
+    // With no catalogue at all, the fallback alone is searched.
+    MessageCatalogues const none;
+    CHECK(morph::ui::textInEveryLocale(none, "hello", "Hello") == std::vector<std::string>{"Hello"});
+    CHECK(morph::ui::matchesInAnyLocale(none, "hello", "Hello", "ELL"));
 }
