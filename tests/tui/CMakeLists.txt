@@ -15,6 +15,7 @@ add_executable(morph_tui_tests
     test_tui_drag.cpp
     test_tui_scheduler.cpp
     test_tui_frontend.cpp
+    test_tui_forms.cpp
 )
 
 target_link_libraries(morph_tui_tests
@@ -24,7 +25,8 @@ target_link_libraries(morph_tui_tests
 )
 # The widgets, the layout solver and the session are private to morph_tui
 # (src/tui/); their tests include them as "tui/<name>.hpp".
-target_include_directories(morph_tui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+# The forms case mounts a document through the interpreter test harness in tests/.
+target_include_directories(morph_tui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
 
 apply_warnings(morph_tui_tests)
 

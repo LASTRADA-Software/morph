@@ -469,3 +469,26 @@ TEST_CASE("qt_quick interpreter: a failed calculation keeps the stale value and 
     CHECK(cell("error", 1).shownText() == "no connection");
     CHECK(cell("error", 0).shownText().empty());
 }
+
+// A `form` node renders through Qt Quick: the forms engine's view tree, typed into on the real engine, submits the
+// exact body through the model alias.
+TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "capture",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration",
+          "fields": { "note": { "label": "Remarks" } } },
+        { "kind": "text", "testId": "ready", "text": { "if": [ { "ref": "cap.ready" }, "ready", "not ready" ] } } ] } })");
+    CHECK(QtHarness::widget("label_note").shownText() == "Remarks");
+    CHECK(QtHarness::widget("ready").shownText() == "not ready");
+    h.click("field_sampleId");
+    h.scene.type(QStringLiteral("9007199254740993"));
+    h.click("field_concentration");
+    h.scene.type(QStringLiteral("12.5"));
+    CHECK(QtHarness::widget("ready").shownText() == "ready");
+    REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") >= 1);
+    auto const& call = h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration"));
+    CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
+}
