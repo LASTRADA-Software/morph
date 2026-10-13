@@ -187,6 +187,7 @@ private:
 /// `fN.value` (the encoded value, `null` unless it is valid). The two are needed because a blank operand and an
 /// invalid one are both "no value" to the expression language, and the rules tell them apart: a comparison with a
 /// blank operand holds vacuously, one with an invalid operand is `Unknown`.
+// NOLINTNEXTLINE(misc-no-recursion): a rule's conditions are rules, so copying one copies them.
 class RuleExpr {
 public:
     /// @brief The rule kinds.
