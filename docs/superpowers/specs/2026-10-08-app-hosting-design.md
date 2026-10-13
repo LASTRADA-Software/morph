@@ -796,12 +796,17 @@ default. An application section (a logging panel) is a host component, or host v
 
 **Messages.**
 
-- The bundle manifest lists a catalogue per locale, `i18n/<locale>.json`, a flat map of key to a
-  MessageFormat 2 pattern in the subset spec 5 §4 defines, fetched by hash (spec 5 §12) and cached.
+- The bundle manifest lists a catalogue per locale, a `messages` file whose id is `i18n/<locale>.json`, a
+  flat map of key to a MessageFormat 2 pattern in the subset spec 5 §4 defines, fetched by hash (spec 5 §12)
+  and cached. The server refuses a catalogue whose shape or patterns are wrong at registration; the client
+  reads every catalogue once the bundle is verified, leaves out one it cannot use and drops a pattern
+  outside the subset, so a missing message shows its fallback and nothing is parsed first at a `t`
+  (`docs/spec/ui/catalogue.md`).
   Plural and select forms live in the pattern, so a locale with more plural categories adds variants
   in its own catalogue without changing the document. The client's `TranslationProvider` resolves
-  `(key, locale)` from them; `{"env": "locale"}` is the active locale and `{"setLocale": "de"}`
-  changes it, which re-resolves every `t`, and is stored as a preference.
+  `(key, locale)` from them, trying the exact locale and then its language (`de-AT`, then `de`);
+  `{"env": "locale"}` is the active locale and `{"setLocale": "de"}` changes it, which re-resolves
+  every `t`, and is stored as a preference through `InterpreterHost::setLocale`.
 - Keys are authored, `<screen>.<name>`; there are no keys derived from text. Porting a screen keeps
   its source text as the `fallback` and gives it an authored key, so a missing catalogue shows the
   source text.

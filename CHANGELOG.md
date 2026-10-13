@@ -178,6 +178,14 @@ API surface).
 
 ### Added
 
+- **Message catalogues from the bundle.** Header-only, in the base `morph` target (`ui/catalogue.hpp`).
+  - A `messages` file is `i18n/<locale>.json`, a flat map of key to a MessageFormat 2 pattern.
+    `UiRegistry::addFile` refuses one with another id, a refused shape or a pattern outside the `ui/1` subset.
+  - `ui::loadCatalogues` reads a verified bundle's catalogues into `ui::MessageCatalogues`, leaving out and
+    noting what it cannot use; its `provider()` tries the exact locale, then the language.
+    `ui::Session::setTranslations` installs it, and `{"setLocale": …}` re-resolves every `t` through it.
+  - `ui::textInEveryLocale` and `ui::matchesInAnyLocale` find a title in every locale the bundle has.
+
 - **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
   `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a
   principal-bound, unguessable reference. `UiService` serves `ui-file` when given

@@ -143,6 +143,8 @@ session's cache, mutations, relations and commands ·
 registration that validates it once, with the accessibility rules ·
 [`ui/service.md`](ui/service.md) — the UI service: `ui-hello`, `ui-catalog` and `ui-fetch`, the catalog
 filtered for the principal, and content-addressed bundles verified into the client's cache ·
+[`ui/catalogue.md`](ui/catalogue.md) — a bundle's message catalogues, the provider `t` resolves through, locale
+switching and search in every locale ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·
