@@ -79,7 +79,7 @@ struct LoadOptions {
 enum class InstanceMode : std::uint8_t {
     Default,   ///< None named: `shared` when the catalog marks the model stateless, `private` otherwise.
     Private,   ///< An instance of the scope's own, released when the scope unmounts.
-    Shared,    ///< The model's singleton.
+    Shared,    ///< A stateless model's instance, its queries cached with other screens'; refused for a stateful model.
     Keyed,     ///< The shared instance an expression's key selects.
     Borrowed,  ///< The opener's binding of an alias (`{"from": alias}`), for a screen opened as a dialog.
 };
@@ -2104,6 +2104,26 @@ private:
         scope.names.emplace(name, std::move(entry));
     }
 
+    /// Checks a model alias against the catalog's facts, when there is a catalog.
+    void checkCatalog(ModelDecl const& model) {
+        if (!_options->catalog.model) {
+            return;
+        }
+        auto const info = _options->catalog.model(model.type);
+        if (!info) {
+            refuse(pointerAppend(model.path, "type"), "the model type `" + model.type + "` is not in the catalog");
+        }
+        if (model.instance == InstanceMode::Shared && !info->stateless) {
+            refuse(pointerAppend(model.path, "instance"),
+                   "the model type `" + model.type +
+                       "` keeps state, so `shared` names no instance: it needs a key, or `private`");
+        }
+        if (model.instance == InstanceMode::Keyed && !info->keyed) {
+            refuse(pointerAppend(model.path, "instance"),
+                   "the model type `" + model.type + "` is not keyed, so its instance is not an expression");
+        }
+    }
+
     void declare(ScopeDecl const& decl, ScopeInfo& scope) {
         for (ModelDecl const& model : decl.models) {
             if (scope.row && model.instance == InstanceMode::Default) {
@@ -2112,18 +2132,7 @@ private:
             if (!scope.screen && model.instance == InstanceMode::Borrowed) {
                 refuse(model.path, "only a screen's own aliases borrow the opener's instance");
             }
-            if (_options->catalog.model) {
-                auto const info = _options->catalog.model(model.type);
-                if (!info) {
-                    refuse(pointerAppend(model.path, "type"),
-                           "the model type `" + model.type + "` is not in the catalog");
-                }
-                if (model.instance == InstanceMode::Keyed && !info->keyed) {
-                    refuse(pointerAppend(model.path, "instance"), "the model type `" + model.type +
-                                                                      "` is not keyed, so its instance is not an "
-                                                                      "expression");
-                }
-            }
+            checkCatalog(model);
             NameEntry entry;
             entry.category = NameCategory::Model;
             entry.path = model.path;

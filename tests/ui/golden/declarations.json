@@ -34,7 +34,7 @@
          "instance": "private"
       },
       "shared": {
-         "type": "Lims_SampleModel",
+         "type": "Auth_SessionModel",
          "instance": "shared"
       },
       "borrowed": {
@@ -116,7 +116,7 @@
          "action": "Lims_GetHeader"
       },
       "preview": {
-         "model": "shared",
+         "model": "working",
          "evaluate": "Lims_EvaluateResult",
          "body": {
             "obj": {

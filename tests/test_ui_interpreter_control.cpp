@@ -378,7 +378,7 @@ TEST_CASE("interpreter control: two queries with an equal key share one request"
       "view": { "kind": "text", "testId": "t", "text": { "fn": "format", "args": [ "{0}/{1}", { "query": "a" }, { "query": "b" } ] } } })";
     auto first = h.mount(doc);
     REQUIRE(h.dispatcher.calls.size() == 1);
-    CHECK(h.dispatcher.binds == std::vector<std::string>{"Lims_ClientModel shared "});
+    CHECK(h.dispatcher.binds == std::vector<std::string>{"Lims_ClientModel private "});
     h.reply(0, "3");
     CHECK(h.text("t") == "3/3");
 

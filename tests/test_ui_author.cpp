@@ -404,7 +404,7 @@ ui::Screen declarationsScreen() {
 
         auto sample = screen.model<SampleModel>("sample", {.instance = sampleId});
         auto working = screen.model<SampleModel>("working", {.instance = ui::Instance::Private});
-        auto shared = screen.model<SampleModel>("shared", {.instance = ui::Instance::Shared});
+        static_cast<void>(screen.model<SessionModel>("shared", {.instance = ui::Instance::Shared}));
         static_cast<void>(screen.model<SampleModel>("borrowed", {.instance = ui::Borrow{"sample"}}));
         auto session = screen.model<SessionModel>("session");
 
@@ -422,7 +422,7 @@ ui::Screen declarationsScreen() {
                                                   .staleTime = 5s,
                                                   .refreshOn = sample.actions<CaptureConcentration, LoadSample>()});
         auto header = screen.query<GetHeader>("header", working);
-        auto preview = screen.evaluate<EvaluateResult>("preview", shared, {{&EvaluateResult::resultId, picked}});
+        auto preview = screen.evaluate<EvaluateResult>("preview", working, {{&EvaluateResult::resultId, picked}});
 
         static_cast<void>(screen.mutation<CaptureConcentration>(
             "capture", sample,

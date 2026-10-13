@@ -95,8 +95,8 @@ created only through templates over `Model`. A client that compiles in no model 
 `RawHandler` wraps the three as `BridgeHandler` wraps the typed calls: it binds on construction and
 deregisters on destruction.
 
-The catalog tells the client, per model type, whether it is **stateless** (a shared singleton is
-equivalent to a private instance) and whether it is **keyed** (it can be shared by an instance key). A
+The catalog tells the client, per model type, whether it is **stateless** (any instance of it is
+equivalent to any other) and whether it is **keyed** (it can be shared by an instance key). A
 model that is not keyed cannot be given an `instance` expression; the document is refused at load.
 
 The seams come before the document and its interpreter in the delivery order, and are specified in
@@ -239,7 +239,10 @@ evaluator.
     changes, the alias rebinds, and the queries through it refetch. The model must be keyed;
   - `"private"` binds an instance of its own to the scope, so the model's state, such as an open
     record, is that scope's alone; it is released when the scope unmounts (spec 6 §3);
-  - `"shared"` is the model's singleton and needs no key.
+  - `"shared"` names a stateless model's instance and needs no key. Its calls go to an instance of the
+    alias's own, which for a stateless model is equivalent to any other, and its queries are cached with
+    every screen's `"shared"` aliases of the same model. A stateful model has no keyless shared instance:
+    `"shared"` on one is refused at load, and the document names a key or `"private"`.
   An alias that names none is `"shared"` when the catalog marks the model stateless and `"private"`
   otherwise.
 - A private instance costs a server-side model instance and, for a database-backed model, its own
