@@ -25,6 +25,9 @@
 #include "../core/backend.hpp"
 #include "../core/bridge.hpp"
 #include "../core/completion.hpp"
+#include "../forms/engine/field_model.hpp"
+#include "../forms/engine/form_session.hpp"
+#include "../forms/engine/form_view.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/scheduler.hpp"
 #include "../reactive/scope.hpp"
@@ -1041,6 +1044,8 @@ struct ElementState {
     reactive::Computed<Value>* errors = nullptr;
     /// @brief A table's rows or a select's options, for its counts and `selectedOption`.
     reactive::Computed<Value>* rows = nullptr;
+    /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
+    std::unique_ptr<forms::FormSession> form;
 };
 
 /// @brief One check at run time.
@@ -1606,12 +1611,13 @@ struct LowerCtx {
     return nullptr;
 }
 
-/// @brief Whether a node kind keeps per-element state even without an id: the inputs, dialogs and tables.
+/// @brief Whether a node kind keeps per-element state even without an id: the inputs, dialogs, tables and forms.
 /// @param kind The kind.
 /// @return It.
 [[nodiscard]] inline bool statefulKind(std::string_view kind) {
-    static constexpr std::array<std::string_view, 9> kStateful = {
-        "textInput", "checkbox", "select", "dateTimeInput", "slider", "filePicker", "dialog", "drawer", "table"};
+    static constexpr std::array<std::string_view, 10> kStateful = {
+        "textInput",  "checkbox", "select", "dateTimeInput", "slider",
+        "filePicker", "dialog",   "drawer", "table",         "form"};
     return listed(kStateful, kind);
 }
 
@@ -1811,6 +1817,8 @@ private:
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
+    void wireForm(ElementState& element);
+    Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
@@ -3015,6 +3023,10 @@ inline void ScreenCore::wireElement(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
     std::string_view const kind = node.kind;
+    if (kind == "form") {
+        wireForm(element);
+        return;
+    }
     bool const input = kind == "textInput" || kind == "checkbox" || kind == "select" || kind == "dateTimeInput" ||
                        kind == "slider" || kind == "filePicker";
     if (input) {
@@ -3070,6 +3082,75 @@ inline void ScreenCore::wireElement(ElementState& element) {
         element.rows =
             &scope.nodes.computed([&scope, expr = node.prop("rows")] { return evalIn(scope, nullptr, expr); });
     }
+}
+
+/// @brief A JSON text as a document value; `null` when it is not JSON or holds what a value cannot (a fraction).
+/// @param text The JSON text.
+/// @return The value.
+[[nodiscard]] inline Value jsonTextValue(std::string_view text) {
+    auto const json = parseJson(text);
+    if (!json) {
+        return Value{};
+    }
+    auto value = valueFromJson(*json);
+    return value ? *std::move(value) : Value{};
+}
+
+/// @brief One field of a form as a record: `value` (the encoded value, `null` while blank or invalid), `draft` (the
+///        text), `valid`, `required`, `visible`, `readonly` and `errors`. Tracked.
+/// @param field The field.
+/// @return The record.
+[[nodiscard]] inline Value formFieldValue(forms::FieldState const& field) {
+    ValueRecord record;
+    forms::Encoding const& encoding = field.encoded().get();
+    Value value;
+    if (encoding.has_value() && encoding->has_value()) {
+        value = (*encoding)->value.isNull() ? jsonTextValue((*encoding)->json) : (*encoding)->value;
+    }
+    std::optional<forms::FieldError> const& error = field.error().get();
+    record.insert_or_assign("value", std::move(value));
+    record.insert_or_assign("draft", Value{field.spec().kind == forms::FieldKind::Object ||
+                                                   field.spec().kind == forms::FieldKind::ObjectArray
+                                               ? std::string{}
+                                               : field.draft()});
+    record.insert_or_assign("valid", Value{!error.has_value()});
+    record.insert_or_assign("required", Value{field.required().get()});
+    record.insert_or_assign("visible", Value{field.visible().get()});
+    record.insert_or_assign("readonly", Value{field.readonly().get()});
+    record.insert_or_assign("errors",
+                            error.has_value() ? Value{ValueList{Value{error->message}}} : Value{ValueList{}});
+    return Value{std::move(record)};
+}
+
+/// @brief A form's element values (spec 5 §6): `ready`, `body` (the record the form would submit, `null` while not
+///        ready), `submitted` (whether a submission was sent), `pending`, and each field by its wire name. Tracked.
+/// @param element The form's element.
+/// @param name    The value's name.
+/// @return The value; `null` for a name the form does not have, or a form without a session.
+[[nodiscard]] inline Value formValue(ElementState const& element, std::string_view name) {
+    forms::FormSession const* const form = element.form.get();
+    if (form == nullptr) {
+        return Value{};
+    }
+    if (name == "ready") {
+        return form->ready();
+    }
+    if (name == "body") {
+        std::optional<std::string> const body = form->body();
+        return body.has_value() ? jsonTextValue(*body) : Value{};
+    }
+    if (name == "submitted") {
+        return form->submitAttempts() > 0;
+    }
+    if (name == "pending") {
+        return form->pending();
+    }
+    for (auto const& field : form->fields()) {
+        if (field->spec().name == name) {
+            return formFieldValue(*field);
+        }
+    }
+    return Value{};
 }
 
 inline Value ScreenCore::inputValue(ElementState const& element) const {
@@ -3155,6 +3236,9 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
             return env.control(name == "pending" ? ExprKind::Pending : ExprKind::Error, rows->name);
         }
         return name == "pending" ? Value{false} : Value{};
+    }
+    if (kind == "form") {
+        return formValue(element, name);
     }
     if (name == "draft") {
         return element.draft.get();
@@ -4382,8 +4466,189 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "customize") {
         return lowerCustomize(node, ctx);
     }
-    report(node.path, "`" + node.kind + "` needs the forms engine, which this interpreter does not lower yet");
+    if (kind == "form") {
+        return lowerForm(node, ctx, element);
+    }
+    report(node.path, "`" + node.kind + "` is a forms engine screen this interpreter does not lower yet");
     return ui::text(Text{.text = std::string{node.kind}, .role = TextRole::Muted});
+}
+
+/// @brief A document field overlay's expressions, evaluated once, as the engine's overlay.
+/// @param scope The scope the form is declared in.
+/// @param part  The `fields` entry.
+/// @param format How values read as text and numbers.
+/// @return The overlay.
+[[nodiscard]] inline forms::FieldOverlay overlayOf(RtScope const& scope, DocNode const& part,
+                                                   FormatContext const& format) {
+    auto const read = [&](std::string_view key) -> std::optional<Value> {
+        ExprPtr const expr = part.prop(key);
+        if (!expr) {
+            return std::nullopt;
+        }
+        return scope.core.runtime().untracked([&] { return evalIn(scope, nullptr, expr); });
+    };
+    auto const text = [&](std::string_view key) -> std::optional<std::string> {
+        auto const value = read(key);
+        return value.has_value() && !value->isNull() ? std::optional<std::string>{textOf(*value, format)}
+                                                     : std::nullopt;
+    };
+    auto const flag = [&](std::string_view key) {
+        auto const value = read(key);
+        bool const* const set = value.has_value() ? value->asBool() : nullptr;
+        return set != nullptr && *set;
+    };
+    forms::FieldOverlay overlay{.omit = flag("omit"), .hidden = flag("hidden")};
+    overlay.label = text("label");
+    overlay.unit = text("unit");
+    overlay.widget = text("widget");
+    if (auto const decimals = read("decimals");
+        decimals.has_value() && decimals->asInt() != nullptr && *decimals->asInt() >= 0) {
+        overlay.decimals = static_cast<std::uint32_t>(std::min<std::int64_t>(*decimals->asInt(), 18));
+    }
+    if (auto const blankAs = text("blankAs")) {
+        overlay.blankAs = *blankAs == "empty" ? forms::BlankAs::Empty : forms::BlankAs::Omit;
+    }
+    return overlay;
+}
+
+/// @brief A lowering context whose scope is held weakly: what an Effect the scope itself owns may keep, so the scope
+///        does not keep itself alive.
+struct DetachedLower {
+    /// @brief The scope, weakly.
+    std::weak_ptr<RtScope> scope;
+    /// @brief The names bound there.
+    std::shared_ptr<Bindings const> bindings;
+    /// @brief The innermost boundary.
+    std::shared_ptr<BoundaryRuntime> boundary;
+};
+
+/// @brief Detaches a lowering context's scope.
+/// @param ctx The context.
+/// @return The context, its scope held weakly.
+[[nodiscard]] inline DetachedLower detachedLower(LowerCtx const& ctx) {
+    return DetachedLower{.scope = ctx.scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+}
+
+/// @brief Puts a detached context's scope back.
+/// @param held The detached context.
+/// @return The context; its scope is null once the scope is gone.
+[[nodiscard]] inline LowerCtx attached(DetachedLower const& held) {
+    return LowerCtx{.scope = held.scope.lock(), .bindings = held.bindings, .boundary = held.boundary};
+}
+
+// Builds the form's session when its element is declared, so its values can be read before the form is drawn.
+inline void ScreenCore::wireForm(ElementState& element) {
+    DocNode const& node = *element.node;
+    RtScope& scope = *element.scope;
+    std::string const action{node.name("action")};
+    Catalog const& catalog = session.options().catalog;
+    std::optional<std::string> const schema = catalog.schema ? catalog.schema(action) : std::nullopt;
+    if (!schema.has_value()) {
+        report(node.path, "no schema for `" + action + "`: the catalog has none for a `form` to build from");
+        return;
+    }
+    NameRef const* const alias = scope.find(node.name("model"));
+    if (alias == nullptr || alias->model == nullptr) {
+        report(node.path, "`" + std::string{node.name("model")} + "` is not a model alias");
+        return;
+    }
+    forms::FieldOverlays overlays;
+    // `fields` is one record part holding a `field` part per overlaid member.
+    for (DocNodePtr const& record : node.partList("fields")) {
+        for (DocNodePtr const& part : record->partList("fields")) {
+            overlays.insert_or_assign(part->id, overlayOf(scope, *part, session.formatting()));
+        }
+    }
+    auto model = forms::FormModel::fromSchema(action, *schema, overlays);
+    if (!model) {
+        report(node.path,
+               "the form of `" + action + "` does not build: " + model.error().path + ": " + model.error().message);
+        return;
+    }
+    if (node.name("submit") == "explicit") {
+        model = model->withSubmitMode(forms::SubmitMode::Explicit);
+    } else if (node.name("submit") == "auto") {
+        model = model->withSubmitMode(forms::SubmitMode::Automatic);
+    }
+    // Every call goes through the alias's channel, bound for its current instance when the call is made.
+    auto const call = [this, modelAlias = alias->model](std::string_view actionId,
+                                                        std::string body) -> async::Completion<std::string> {
+        std::shared_ptr<ModelChannel> const channel = channelOf(*modelAlias, *this);
+        if (channel == nullptr) {
+            auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
+            promise.reject(std::make_exception_ptr(std::runtime_error{"the form's model alias is not bound"}));
+            return std::move(failed);
+        }
+        return channel->execute(std::string{actionId}, body, CallOptions{});
+    };
+    FormatContext const& format = session.formatting();
+    forms::FormSessionOptions options{};
+    options.locale = format.numeric;
+    options.bcp47 = format.locale;
+    options.translations = format.translations;
+    options.displayOffsetMinutes = format.utcOffsetMinutes;
+    element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), call, call, std::move(options));
+    if (ExprPtr const prefill = node.prop("prefill")) {
+        // A prefill follows its expression: a query's row arriving, or another record chosen, loads the form again.
+        forms::FormSession* const form = element.form.get();
+        scope.nodes.effect([this, &scope, prefill, form] {
+            Value const value = evalIn(scope, nullptr, prefill);
+            if (value.isNull()) {
+                return;
+            }
+            std::string const json = glz::write_json(valueToJson(value)).value_or(std::string{});
+            runtime().untracked([&] { form->prefill(json); });
+        });
+    }
+}
+
+inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    forms::FormSession* const form = element == nullptr ? nullptr : element->form.get();
+    if (form == nullptr) {
+        return ui::text(Text{.text = std::string{node.name("action")}, .role = TextRole::Muted});
+    }
+    // The form's events, each run once per change of the count it watches.
+    auto const watch = [this, &ctx](Commands const* commands, auto count, auto payload) {
+        if (commands == nullptr || commands->empty()) {
+            return;
+        }
+        auto seen = std::make_shared<std::uint64_t>(runtime().untracked(count));
+        ctx.scope->nodes.effect([this, held = detachedLower(ctx), commands, count, payload, seen] {
+            std::uint64_t const now = count();
+            if (now == *seen) {
+                return;
+            }
+            *seen = now;
+            runtime().untracked([&] { runEvent(commands, attached(held), payload()); });
+        });
+    };
+    watch(
+        node.event("onSubmit"), [form] { return form->submitAttempts(); },
+        [form] {
+            std::optional<std::string> const body = form->body();
+            return body.has_value() ? jsonTextValue(*body) : Value{};
+        });
+    watch(
+        node.event("onSuccess"), [form] { return form->successCount(); },
+        [form] {
+            std::optional<std::string> const& reply = form->lastReply();
+            return reply.has_value() ? jsonTextValue(*reply) : Value{};
+        });
+    if (Commands const* const onError = node.event("onError"); onError != nullptr && !onError->empty()) {
+        // Each failure is a new exception: run once per failure, with its text.
+        auto seen = std::make_shared<std::exception_ptr>(runtime().untracked([form] { return form->lastError(); }));
+        ctx.scope->nodes.effect([this, held = detachedLower(ctx), onError, form, seen] {
+            std::exception_ptr const error = form->lastError();
+            if (error == nullptr || error == *seen) {
+                return;
+            }
+            *seen = error;
+            runtime().untracked([&] { runEvent(onError, attached(held), Value{failureText(error)}); });
+        });
+    }
+    Column column{.children = {forms::formView(*form, forms::FormViewOptions{.showTitle = false})}};
+    commonOf(node, ctx, element, column.common);
+    return ui::column(std::move(column));
 }
 
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
