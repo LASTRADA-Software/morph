@@ -191,3 +191,101 @@ TEST_CASE("preferences: a load whose screen went away touches nothing", "[ui][pr
     // The reply arrives after the screen and the scope are gone, and is dropped.
     CHECK_FALSE(client.pump([&called] { return called; }, std::chrono::milliseconds{300}));
 }
+
+namespace {
+
+/// A screen with a choice, a layout and a string value, for the scripted cases.
+constexpr char const* kScripted = R"({
+  "vocab": "ui/1", "id": "scripted",
+  "customize": {
+    "density": { "kind": "choice", "options": [ "comfortable", "compact" ], "default": "comfortable" },
+    "panels": { "kind": "layout" },
+    "filter": { "kind": "value", "type": "string?", "default": null } },
+  "view": { "kind": "text", "testId": "density", "text": { "pref": "density" } } })";
+
+using Outcome = std::expected<morph::ui::PreferencesLoaded, std::string>;
+
+}  // namespace
+
+TEST_CASE("preferences: a load reply is read point by point; a reply that is not one is a failure",
+          "[ui][preferences]") {
+    morph::ui::testing::Harness h;
+    std::vector<std::string> failures;
+    morph::ui::PreferenceSync sync{h.dispatcher, "lims",
+                                   [&failures](std::string const& why) { failures.push_back(why); }};
+    auto const screen = h.mount(kScripted);
+    morph::async::CallbackScope const scope;
+
+    std::optional<Outcome> loaded;
+    sync.load(*screen, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
+    REQUIRE(h.dispatcher.binds == std::vector<std::string>{"morph.preferences private "});
+    std::size_t const call = h.dispatcher.last("load");
+    CHECK(h.dispatcher.calls.at(call).body ==
+          R"({"app":"lims","scope":"scripted","points":["density","filter","panels"]})");
+    // A choice and a layout are taken; a point the document lacks and text that is not JSON are ignored.
+    h.reply(call, R"({"values":{"density":"\"compact\"","panels":"{\"rail\":true}","gone":"1","filter":"{no"}})");
+    REQUIRE(loaded);
+    REQUIRE(loaded->has_value());
+    CHECK((*loaded)->applied == 2);
+    CHECK((*loaded)->ignored == 2);
+    CHECK(h.text("density") == "compact");
+
+    loaded.reset();
+    sync.load(*screen, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
+    h.reply(h.dispatcher.last("load"), "[1, 2]");
+    REQUIRE(loaded);
+    REQUIRE_FALSE(loaded->has_value());
+    CHECK(loaded->error().starts_with("not a preferences reply"));
+
+    loaded.reset();
+    sync.load(*screen, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
+    h.fail(h.dispatcher.last("load"));
+    REQUIRE(loaded);
+    REQUIRE_FALSE(loaded->has_value());
+    CHECK(loaded->error() == "it failed");
+
+    // Without a callback, a reply and a failure are taken quietly.
+    sync.load(*screen, scope);
+    h.reply(h.dispatcher.last("load"), R"({"values":{}})");
+    sync.load(*screen, scope);
+    h.fail(h.dispatcher.last("load"));
+    CHECK(h.dispatcher.count("load") == 5);
+    CHECK(failures.empty());
+}
+
+TEST_CASE("preferences: a screen with no points loads at once; writes report their failures", "[ui][preferences]") {
+    morph::ui::testing::Harness h;
+    std::vector<std::string> failures;
+    morph::ui::PreferenceSync sync{h.dispatcher, "lims",
+                                   [&failures](std::string const& why) { failures.push_back(why); }};
+    auto const plain = h.mount(R"({"vocab": "ui/1", "id": "plain", "view": {"kind": "text", "text": "x"}})");
+    morph::async::CallbackScope const scope;
+    std::optional<Outcome> loaded;
+    sync.load(*plain, scope, [&loaded](Outcome outcome) { loaded = std::move(outcome); });
+    REQUIRE(loaded);
+    CHECK((*loaded)->applied == 0);
+    sync.load(*plain, scope);
+    CHECK(h.dispatcher.calls.empty());
+
+    sync.changed("scripted", "density", morph::ui::Value{"compact"});
+    CHECK(h.dispatcher.calls.back().body ==
+          R"({"app":"lims","scope":"scripted","point":"density","value":"\"compact\""})");
+    h.dispatcher.fail(h.dispatcher.last("set"), "error", "refused");
+    h.settle();
+    CHECK(failures == std::vector<std::string>{"refused"});
+
+    // A single point is removed; `all` of a screen the sync never loaded removes nothing.
+    sync.reset("scripted", "density");
+    CHECK(h.dispatcher.calls.back().body == R"({"app":"lims","scope":"scripted","point":"density"})");
+    h.dispatcher.fail(h.dispatcher.last("remove"), "error", "gone");
+    h.settle();
+    CHECK(failures == std::vector<std::string>{"refused", "gone"});
+    sync.reset("never", "all");
+    CHECK(h.dispatcher.count("remove") == 1);
+
+    // A sync with nowhere to report a failure drops it.
+    morph::ui::PreferenceSync quiet{h.dispatcher, "lims"};
+    quiet.changed("scripted", "density", morph::ui::Value{"compact"});
+    h.fail(h.dispatcher.last("set"));
+    CHECK(failures.size() == 2);
+}

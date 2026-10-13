@@ -4,8 +4,17 @@
 // by the person the server derived from the verified session, and what is stored is bounded.
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <core/async/Task.hpp>
 #include <cstddef>
+#include <exception>
+#include <memory>
+#include <morph/core/coroutine.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/ui/preferences.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -115,4 +124,56 @@ TEST_CASE("preferences: a request with a name out of bounds is refused", "[ui][p
     }
     CHECK(s.call("load", R"({"app":"lims","scope":"s","points":[)" + points + "]}", "alice").kind == "err");
     CHECK(s.store->calls().empty());
+}
+
+TEST_CASE("preferences: removing an absent entry says so; a null store is refused", "[ui][preferences][remote]") {
+    Server s;
+    Envelope const removed = s.call("remove", R"({"app":"lims","scope":"s","point":"p"})", "alice");
+    REQUIRE(removed.kind == "ok");
+    CHECK(removed.body == R"({"removed":false})");
+
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    CHECK_THROWS_AS(morph::ui::registerPreferences(nullptr, dispatcher, registry), std::invalid_argument);
+    CHECK_THROWS_AS((morph::ui::PreferencesModel{nullptr, morph::ui::PreferencesOptions{}}), std::invalid_argument);
+}
+
+namespace {
+
+/// What a load and a write tell when the model runs outside any dispatch.
+struct Outside {
+    std::optional<std::size_t> values;
+    std::optional<std::string> refusal;
+};
+
+/// Loads, then writes, through @p model with no session installed, into @p seen.
+::core::async::Task<void> outsideDispatch(morph::ui::PreferencesModel* model, Outside* seen) {
+    morph::ui::PrefValues const loaded =
+        co_await model->execute(morph::ui::PrefLoad{.app = "lims", .scope = "s", .points = {"p"}});
+    seen->values = loaded.values.size();
+    try {
+        static_cast<void>(
+            co_await model->execute(morph::ui::PrefSet{.app = "lims", .scope = "s", .point = "p", .value = "1"}));
+    } catch (std::exception const& error) {
+        seen->refusal = error.what();
+    }
+}
+
+}  // namespace
+
+TEST_CASE("preferences: run outside any dispatch, the model has no person", "[ui][preferences]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor owner;
+    auto const store = std::make_shared<prefs_test::RecordingStore>(pool);
+    morph::ui::PreferencesModel model{store, morph::ui::PreferencesOptions{}};
+    Outside seen;
+    morph::async::spawn(owner, outsideDispatch(&model, &seen));
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (!seen.refusal && std::chrono::steady_clock::now() < deadline) {
+        owner.runFor(std::chrono::milliseconds{5});
+    }
+    CHECK(seen.values == 0U);
+    REQUIRE(seen.refusal);
+    CHECK(seen.refusal->contains("signed-in person"));
+    CHECK(store->calls().empty());
 }
