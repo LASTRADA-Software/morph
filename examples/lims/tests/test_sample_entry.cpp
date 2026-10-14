@@ -67,7 +67,7 @@ TEST_CASE("sample entry: sections edit the working copy and only a save stores i
     CHECK(model.execute(lims::GetHeader{}).sampleNumber == "S-" + std::to_string(*saved.sampleId));
 
     // An edit after the save stays in this instance's working copy.
-    auto header = model.execute(lims::GetHeader{});
+    auto const header = model.execute(lims::GetHeader{});
     model.execute(
         lims::HeaderSection{.clientId = header.clientId, .reference = "WW-0002", .receivedOn = 20'000, .remarks = {}});
     CHECK(model.execute(lims::GetHeader{}).reference == "WW-0002");
@@ -122,25 +122,26 @@ TEST_CASE("sample entry: the model computes the dilution series and its limits e
     auto const series = model.execute(lims::GetDilutionSeries{});
     REQUIRE(series.rows.size() == 4);
     std::vector<Rational> nominal;
+    nominal.reserve(series.rows.size());
     for (auto const& row : series.rows) {
         nominal.push_back(*row.nominal);
     }
     CHECK(nominal == std::vector<Rational>{*mgL(10), *mgL(5), *mgL(5, 2), *mgL(5, 4)});
-    CHECK(*series.rows[0].recoveryPct == pct(100));
-    CHECK(*series.rows[1].recoveryPct == pct(110));
-    CHECK(*series.rows[2].recoveryPct == pct(80));
-    CHECK_FALSE(series.rows[0].outsideLimits);
-    CHECK_FALSE(series.rows[2].outsideLimits);  // the lower limit is inside
-    CHECK_FALSE(series.rows[3].recoveryPct.hasValue());
-    CHECK_FALSE(series.rows[3].outsideLimits);  // not measured is not outside
+    CHECK(*series.rows.at(0).recoveryPct == pct(100));
+    CHECK(*series.rows.at(1).recoveryPct == pct(110));
+    CHECK(*series.rows.at(2).recoveryPct == pct(80));
+    CHECK_FALSE(series.rows.at(0).outsideLimits);
+    CHECK_FALSE(series.rows.at(2).outsideLimits);  // the lower limit is inside
+    CHECK_FALSE(series.rows.at(3).recoveryPct.hasValue());
+    CHECK_FALSE(series.rows.at(3).outsideLimits);  // not measured is not outside
 
     model.execute(lims::SamplingSection{
         .spike = mgL(10), .measured1 = mgL(121, 10), .measured2 = {}, .measured3 = {}, .measured4 = mgL(9, 10)});
     auto const outside = model.execute(lims::GetDilutionSeries{});
-    CHECK(*outside.rows[0].recoveryPct == pct(121));
-    CHECK(outside.rows[0].outsideLimits);
-    CHECK(*outside.rows[3].recoveryPct == pct(72));
-    CHECK(outside.rows[3].outsideLimits);
+    CHECK(*outside.rows.at(0).recoveryPct == pct(121));
+    CHECK(outside.rows.at(0).outsideLimits);
+    CHECK(*outside.rows.at(3).recoveryPct == pct(72));
+    CHECK(outside.rows.at(3).outsideLimits);
 }
 
 // Mutation: clear both readings for either name (the nitrate reading is gone after clearing turbidity).

@@ -581,6 +581,15 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
 - **`lims.results`** (`sampleId`) captures a concentration through a `form` node over
   `CaptureConcentration`, built from the schema the registry serves, lists the results with their
   exact decimals, verifies a result, and counts the offline conflicts.
+- **`lims.sample`** (`sampleId?`) edits one sample through a private working copy held by its own
+  `SampleModel` instance: `LoadSample` or `NewSample` fills it, and each section (header, sampling, and
+  the optional turbidity and nitrate readings) is a `form` whose submit edits the copy and nothing else.
+  `SaveSample` commits it. A refused save is a reply (`SaveError`), shown as one message per reason, not
+  an error. The dilution series, with each step's recovery and its limit check, is computed by the
+  model with exact decimals and shown through the `SeriesGrid` and `RecoveryCurve` host components,
+  whose built-in fallbacks are what a client without them shows. A "choose project" dialog picks from
+  `ListProjects`, which the table engine sorts, filters and pages. The screen's identity is its sample,
+  and it is dirty while the working copy holds unsaved edits.
 
 A model's refusal reaches the screen as the mutation's own error. Every typed field is schema-driven:
 the `x-rules` of `CaptureConcentration` run in the forms engine, not in hand-written UI code.

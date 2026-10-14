@@ -470,8 +470,9 @@ shows the integer, and the handshake says which a client speaks.
 `validation`, `connectionLost`, `denied`, `conflict`, `backendChanged`, `other`; `{"error": "m"}`
 stays the display text. The server's typed errors map onto the kinds through one table the
 application registers; `BackendChangedError` maps to `backendChanged`. A reply enum such as a save's
-validation outcome selects a message with the display functions:
-`t(concat("lims.save.", result.error), "Not saved")`, with one catalog entry per enum value.
+validation outcome selects a message per value: a `t` names its key as a literal, so the choice is
+an `if` over the enum, `if(eq(result.error, "noClient"), t("lims.save.noClient", …), …)`, with
+one catalog entry per enum value.
 
 **Calculation stays on the server.** A value derived from several rows, such as a share of a total
 with its limits and deviations, is a field of an action's reply (spec 5 §7). The
