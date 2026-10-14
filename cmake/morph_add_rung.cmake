@@ -46,7 +46,8 @@
 # build, which is the only place a cross-rung collision can exist.
 #
 # RESOURCE_LOCK is the literal string "morph_ladder_test_db" for every rung's
-# tests, matching examples/common's own ladder_common_tests — deliberately
+# tests, its screen tests and its render smoke included (a DbFixture opens
+# morph_ladder_test.db in the shared working directory), matching examples/common's own ladder_common_tests — deliberately
 # the *same* name across every rung/binary, not a per-rung one: ctest's
 # RESOURCE_LOCK serializes any two ctest cases sharing a lock name even
 # across different test *binaries*, which is exactly what's needed if two
@@ -756,7 +757,8 @@ function(_morph_rung_screen_tests _rung _dir)
     catch_discover_tests(ladder_${_rung}_screen_tests
         DISCOVERY_MODE PRE_TEST
         TEST_PREFIX "${_rung}.screens."
-        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            RESOURCE_LOCK morph_ladder_test_db)
 endfunction()
 
 # ── ladder_<rung>_render_smoke: screens/render_smoke/*.cpp on Qt Quick ─────────
@@ -803,5 +805,6 @@ function(_morph_rung_render_smoke _rung _dir)
         DISCOVERY_MODE PRE_TEST
         DL_PATHS "${_dl_paths}"
         TEST_PREFIX "${_rung}.render."
-        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            RESOURCE_LOCK morph_ladder_test_db)
 endfunction()
