@@ -11,6 +11,7 @@
 #include <app/client_shell.hpp>
 #include <chrono>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -24,6 +25,7 @@
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
+#include <morph/util/datetime.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -196,6 +198,13 @@ public:
     /// @param testId The test id.
     void toggle(std::string_view testId) { _backend.toggle(require("Checkbox", testId)); }
 
+    /// @brief Selects tab @p index of the tab bar with @p testId, which mounts its page the first time.
+    /// @param testId The tab bar's test id.
+    /// @param index  The tab, from 0.
+    void selectTab(std::string_view testId, std::size_t index) {
+        _backend.chooseIndex(require("Tabs", testId), index);
+    }
+
     /// @brief Chooses the option @p key in the select with @p testId.
     /// @param testId The test id.
     /// @param key    The option's key.
@@ -244,6 +253,49 @@ public:
         _backend.edit(*input, std::move(value));
     }
 
+    /// @brief Chooses option @p key, the option's JSON literal, in select field @p field of the form node with
+    ///        @p formTestId, as the user would.
+    /// @param formTestId The form node's test id.
+    /// @param field      The field's wire name.
+    /// @param key        The option's JSON literal, such as `"\"EUR\""` for an enum.
+    /// @throws std::runtime_error when the form or the field is not mounted.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the form, its field, then the option.
+    void chooseField(std::string_view formTestId, std::string const& field, std::string key) {
+        auto const select = findIn(formTestId, "Select", "field_" + field);
+        if (!select) {
+            throw std::runtime_error{"ScreenHarness: no select " + field + " in form " + std::string{formTestId}};
+        }
+        _backend.choose(*select, ui::Key{std::move(key)});
+    }
+
+    /// @brief Sets date field @p field of the form node with @p formTestId to @p value, as the user would.
+    /// @param formTestId The form node's test id.
+    /// @param field      The field's wire name.
+    /// @param value      The instant.
+    /// @throws std::runtime_error when the form or the field is not mounted.
+    void setDateField(std::string_view formTestId, std::string const& field, morph::time::Timestamp value) {
+        auto const input = findIn(formTestId, "DateTimeInput", "field_" + field);
+        if (!input) {
+            throw std::runtime_error{"ScreenHarness: no date field " + field + " in form " + std::string{formTestId}};
+        }
+        _backend.setDateTime(*input, value);
+    }
+
+    /// @brief Clicks the button with @p testId inside the container with @p rootTestId, such as a form's add-row
+    ///        button.
+    /// @param rootTestId The container's test id.
+    /// @param testId     The button's test id.
+    /// @throws std::runtime_error when the button is not mounted there.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the container, then the button.
+    void clickIn(std::string_view rootTestId, std::string_view testId) {
+        auto const button = findIn(rootTestId, "Button", testId);
+        if (!button) {
+            throw std::runtime_error{"ScreenHarness: no button " + std::string{testId} + " in " +
+                                     std::string{rootTestId}};
+        }
+        _backend.click(*button);
+    }
+
     /// @brief Submits the form node with @p formTestId once its submit button is enabled, which it is once the edits
     ///        have settled into the form.
     /// @param formTestId The form node's test id.
@@ -251,6 +303,9 @@ public:
     [[nodiscard]] bool submitForm(std::string_view formTestId) {
         auto const button = findIn(formTestId, "Button", "form_submit");
         if (!button || !waitFor([this, &button] { return _backend.prop(*button, "enabled") != "false"; })) {
+            if (auto const status = findIn(formTestId, "Text", "form_status")) {
+                _problems.push_back(std::string{formTestId} + " not ready: " + _backend.prop(*status, "text"));
+            }
             return false;
         }
         _backend.click(*button);
