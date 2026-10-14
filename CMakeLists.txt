@@ -492,6 +492,7 @@ target_sources(morph
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
+        include/morph/ui/workspace.hpp
         include/morph/ui/route.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/preferences.hpp
