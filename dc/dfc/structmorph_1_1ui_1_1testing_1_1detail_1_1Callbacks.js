@@ -17,6 +17,7 @@ var structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks =
     [ "drop", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#abfe3466abc65c12552e91a380f9b2ae7", null ],
     [ "component", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ae49f91cceaa3d105de4e76671c78dc78", null ],
     [ "chord", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a5ffee24591aef75778da4373ff5ac188", null ],
+    [ "hover", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a98edb0eb372717fd445d897eaee96b24", null ],
     [ "path", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#af06a82b6e286797e97260a55cee5de35", null ],
     [ "action", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a59b7b9de38d21f86d3c8741320b93c83", null ],
     [ "resize", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a07df1ae2b55da82c8172cd645a432419", null ],

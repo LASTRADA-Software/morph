@@ -20,5 +20,6 @@ var searchData=
   ['workspace_17',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui']]],
   ['workspaceoptions_18',['WorkspaceOptions',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html',1,'morph::ui']]],
   ['workspacescreen_19',['WorkspaceScreen',['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html',1,'morph::ui']]],
-  ['workspacetab_20',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]]
+  ['workspacestart_20',['WorkspaceStart',['../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html',1,'morph::ui']]],
+  ['workspacetab_21',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]]
 ];

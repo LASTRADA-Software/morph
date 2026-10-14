@@ -680,6 +680,8 @@ var annotated_dup =
         [ "MutationDecl", "d7/d39/structmorph_1_1ui_1_1MutationDecl.html", "d7/d39/structmorph_1_1ui_1_1MutationDecl" ],
         [ "NameResolver", "d9/df3/classmorph_1_1ui_1_1NameResolver.html", "d9/df3/classmorph_1_1ui_1_1NameResolver" ],
         [ "NavigateRequest", "dc/d75/structmorph_1_1ui_1_1NavigateRequest.html", "dc/d75/structmorph_1_1ui_1_1NavigateRequest" ],
+        [ "Navigator", "d6/d15/classmorph_1_1ui_1_1Navigator.html", "d6/d15/classmorph_1_1ui_1_1Navigator" ],
+        [ "NavigatorOptions", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions" ],
         [ "NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", "d9/d5b/structmorph_1_1ui_1_1NodeData" ],
         [ "Panel", "d4/d64/structmorph_1_1ui_1_1Panel.html", "d4/d64/structmorph_1_1ui_1_1Panel" ],
         [ "PanelWidget", "df/d1c/classmorph_1_1ui_1_1PanelWidget.html", "df/d1c/classmorph_1_1ui_1_1PanelWidget" ],
@@ -709,6 +711,7 @@ var annotated_dup =
         [ "Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],
         [ "ScreenHandle", "da/de8/classmorph_1_1ui_1_1ScreenHandle.html", "da/de8/classmorph_1_1ui_1_1ScreenHandle" ],
         [ "ScreenHost", "de/d1a/classmorph_1_1ui_1_1ScreenHost.html", "de/d1a/classmorph_1_1ui_1_1ScreenHost" ],
+        [ "ScreenHostRegistry", "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html", "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry" ],
         [ "Scroll", "dc/dae/structmorph_1_1ui_1_1Scroll.html", "dc/dae/structmorph_1_1ui_1_1Scroll" ],
         [ "ScrollWidget", "d1/d8b/classmorph_1_1ui_1_1ScrollWidget.html", null ],
         [ "Select", "d7/d7b/structmorph_1_1ui_1_1Select.html", "d7/d7b/structmorph_1_1ui_1_1Select" ],
@@ -764,6 +767,7 @@ var annotated_dup =
         [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", "d6/d77/classmorph_1_1ui_1_1Workspace" ],
         [ "WorkspaceOptions", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions" ],
         [ "WorkspaceScreen", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen" ],
+        [ "WorkspaceStart", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart" ],
         [ "WorkspaceTab", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab" ]
       ] ],
       [ "units", null, [

@@ -71,13 +71,14 @@ var searchData=
   ['workspace_2ehpp_68',['workspace.hpp',['../dc/de1/workspace_8hpp.html',1,'']]],
   ['workspaceoptions_69',['WorkspaceOptions',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html',1,'morph::ui']]],
   ['workspacescreen_70',['WorkspaceScreen',['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html',1,'morph::ui']]],
-  ['workspacetab_71',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]],
-  ['wrapped_72',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
-  ['wrappedmember_73',['WrappedMember',['../dd/def/query_8hpp.html#a05b2c9c396ec1ae74024242ea14fcd12',1,'morph::table::detail']]],
-  ['wrappedmodelkey_74',['WrappedModelKey',['../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html',1,'morph::model']]],
-  ['writeenvelope_75',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]],
-  ['writemessage_76',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
-  ['writeto_77',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
-  ['writtencell_78',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]],
-  ['ws_5fconnection_2ehpp_79',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
+  ['workspacestart_71',['WorkspaceStart',['../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html',1,'morph::ui']]],
+  ['workspacetab_72',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]],
+  ['wrapped_73',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['wrappedmember_74',['WrappedMember',['../dd/def/query_8hpp.html#a05b2c9c396ec1ae74024242ea14fcd12',1,'morph::table::detail']]],
+  ['wrappedmodelkey_75',['WrappedModelKey',['../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html',1,'morph::model']]],
+  ['writeenvelope_76',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]],
+  ['writemessage_77',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
+  ['writeto_78',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
+  ['writtencell_79',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]],
+  ['ws_5fconnection_2ehpp_80',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
 ];

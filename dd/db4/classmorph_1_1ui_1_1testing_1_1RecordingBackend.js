@@ -46,6 +46,7 @@ var classmorph_1_1ui_1_1testing_1_1RecordingBackend =
     [ "widget", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#af4e1ae42b91882b8b4f7ba0328786f85", null ],
     [ "focused", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a4a4fa2dc4b2ee230d3cc817975dd8e7d", null ],
     [ "press", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c", null ],
+    [ "hover", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d", null ],
     [ "click", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#abe0454ef9dad990124b9eace937fb6b2", null ],
     [ "edit", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ae0709d429fbac7d5950c34aadc908a5d", null ],
     [ "submit", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ad8a4362e5aeb47bbf8d352a4b91c08f4", null ],

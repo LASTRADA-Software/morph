@@ -189,12 +189,14 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
 <tr class="memdesc:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the widget.  <br /></td></tr>
+<tr class="memitem:ae7647f2e8d57d47de8d1297a4c5669a9 pub_methods_classmorph_1_1ui_1_1Widget" id="r_ae7647f2e8d57d47de8d1297a4c5669a9"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#ae7647f2e8d57d47de8d1297a4c5669a9">setOnHover</a> (std::function&lt; void()&gt; onHover)</td></tr>
+<tr class="memdesc:ae7647f2e8d57d47de8d1297a4c5669a9 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Calls <code class="param">onHover</code> each time the pointer comes to rest over the widget. A backend without a pointer, or one that does not report hovering, keeps the default, which never calls it: hovering is a hint, such as a prefetch, never something a widget relies on.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A choice of one keyed option. </p>
 <p>The widget keeps the key last requested by <span class="tt"><a class="el" href="#a301feb38ab667c29ff68a534e4fd9486" title="Requests the option with key. It is marked while the options contain it; otherwise none is marked....">setSelected</a></span> or chosen by the user, and marks the option with that key whenever the current options contain one. A key outside the options marks none, and stays requested: options that bring it back mark it again. Options and selection may therefore arrive in either order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a0d34e0a47dcf6c6b88476cd5fa3f4eec" name="a0d34e0a47dcf6c6b88476cd5fa3f4eec"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0d34e0a47dcf6c6b88476cd5fa3f4eec">&#9670;&#160;</a></span>setOptions()</h2>

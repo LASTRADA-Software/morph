@@ -598,6 +598,8 @@ var hierarchy =
       [ "morph::ui::detail::ScopeResolver", "d2/d63/classmorph_1_1ui_1_1detail_1_1ScopeResolver.html", null ]
     ] ],
     [ "morph::ui::NavigateRequest", "dc/d75/structmorph_1_1ui_1_1NavigateRequest.html", null ],
+    [ "morph::ui::Navigator", "d6/d15/classmorph_1_1ui_1_1Navigator.html", null ],
+    [ "morph::ui::NavigatorOptions", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html", null ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", null ],
     [ "morph::ui::Panel", "d4/d64/structmorph_1_1ui_1_1Panel.html", null ],
     [ "morph::ui::PatchDecl", "d7/db0/structmorph_1_1ui_1_1PatchDecl.html", null ],
@@ -626,6 +628,7 @@ var hierarchy =
     [ "morph::ui::ScreenHost", "de/d1a/classmorph_1_1ui_1_1ScreenHost.html", [
       [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
     ] ],
+    [ "morph::ui::ScreenHostRegistry", "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html", null ],
     [ "morph::ui::Scroll", "dc/dae/structmorph_1_1ui_1_1Scroll.html", null ],
     [ "morph::ui::Select", "d7/d7b/structmorph_1_1ui_1_1Select.html", null ],
     [ "morph::ui::SelectOption", "d0/d75/structmorph_1_1ui_1_1SelectOption.html", null ],
@@ -858,6 +861,7 @@ var hierarchy =
     [ "morph::ui::Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", null ],
     [ "morph::ui::WorkspaceOptions", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html", null ],
     [ "morph::ui::WorkspaceScreen", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html", null ],
+    [ "morph::ui::WorkspaceStart", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html", null ],
     [ "morph::ui::WorkspaceTab", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html", null ],
     [ "morph::units::Quantity&lt; U, DeclaredDecimals &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],
     [ "morph::units::Quantity&lt; U &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", [

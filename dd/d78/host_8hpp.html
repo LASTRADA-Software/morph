@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;ranges&gt;</code><br />
@@ -141,6 +142,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d4/d2f/route_8hpp_source.html">route.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../dd/d78/host_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -153,6 +155,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One mounted screen, as its host sees it.  <a href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AScreenHost" id="r_morph_3A_3Aui_3A_3AScreenHost"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html">morph::ui::ScreenHost</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What mounts screens for a host that owns its own shell; the workspace shell is one.  <a href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AScreenHostRegistry" id="r_morph_3A_3Aui_3A_3AScreenHostRegistry"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html">morph::ui::ScreenHostRegistry</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host screens an application registers by name: what a catalog entry's <span class="tt">host</span> names instead of a document.  <a href="../../db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHostOptions" id="r_morph_3A_3Aui_3A_3ADocumentScreenHostOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html">morph::ui::DocumentScreenHostOptions</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html" title="The framework&#39;s ScreenHost over UI documents: it mounts them through an Interpreter,...">DocumentScreenHost</a></span> finds documents and mounts them.  <a href="../../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3Ahost_3A_3AParamsEnv" id="r_morph_3A_3Aui_3A_3Adetail_3A_3Ahost_3A_3AParamsEnv"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html">morph::ui::detail::host::ParamsEnv</a></td></tr>
@@ -164,6 +168,8 @@ Classes</h2></td></tr>
 Typedefs</h2></td></tr>
 <tr class="memitem:a5b073a0b5244977f291a4f30780868df" id="r_a5b073a0b5244977f291a4f30780868df"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a> = <a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a></td></tr>
 <tr class="memdesc:a5b073a0b5244977f291a4f30780868df"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen's params, by name.  <br /></td></tr>
+<tr class="memitem:a8f2ba01276e59682fed7c6ce6d5447b3" id="r_a8f2ba01276e59682fed7c6ce6d5447b3"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a8f2ba01276e59682fed7c6ce6d5447b3">morph::ui::HostScreenFactory</a></td></tr>
+<tr class="memdesc:a8f2ba01276e59682fed7c6ce6d5447b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted.  <br /></td></tr>
 <tr class="memitem:a7f7de33b3491eb2ddf4b9e8208d70276" id="r_a7f7de33b3491eb2ddf4b9e8208d70276"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a7f7de33b3491eb2ddf4b9e8208d70276">morph::ui::CloseGuard</a> = std::function&lt;void(<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a>&amp; screen, std::function&lt;void(bool close)&gt; decide)&gt;</td></tr>
 <tr class="memdesc:a7f7de33b3491eb2ddf4b9e8208d70276"><td class="mdescLeft">&#160;</td><td class="mdescRight">What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. It calls <span class="tt">decide(true)</span> to close the screen, <span class="tt">decide(false)</span> to keep it open, once.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -192,7 +198,30 @@ Functions</h2></td></tr>
 
 <p>A screen's params, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8f2ba01276e59682fed7c6ce6d5447b3" name="a8f2ba01276e59682fed7c6ce6d5447b3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f2ba01276e59682fed7c6ce6d5447b3">&#9670;&#160;</a></span>HostScreenFactory</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a8f2ba01276e59682fed7c6ce6d5447b3">morph::ui::HostScreenFactory</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;std::expected&lt;std::unique_ptr&lt;ScreenHandle&gt;, <a class="code hl_struct" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a>&gt;(</div>
+<div class="line">   <a class="code hl_typedef" href="#a5b073a0b5244977f291a4f30780868df">ParamMap</a> <span class="keyword">const</span>&amp; params, <a class="code hl_class" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a>&amp; page)&gt;</div>
+<div class="ttc" id="aclassmorph_1_1ui_1_1ContainerWidget_html"><div class="ttname"><a href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></div><div class="ttdoc">A widget with children. A factory given this container appends the new widget as its last child.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dc2/ui_2backend_8hpp_source.html#l00103">backend.hpp:103</a></div></div>
+<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00036">host.hpp:36</a></div></div>
+<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00039">host.hpp:39</a></div></div>
+</div><!-- fragment -->
+<p>Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +239,7 @@ Functions</h2></td></tr>
 
 <p>What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. It calls <span class="tt">decide(true)</span> to close the screen, <span class="tt">decide(false)</span> to keep it open, once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -247,7 +276,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A string as is, <span class="tt">null</span> as empty, anything else as its canonical JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

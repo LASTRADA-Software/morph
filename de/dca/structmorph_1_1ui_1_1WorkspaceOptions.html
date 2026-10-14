@@ -130,11 +130,19 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dca/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:a4bf52d2a961791d38f3d5b435de390db" id="r_a4bf52d2a961791d38f3d5b435de390db"><td class="memItemLeft">std::function&lt; <a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html">WorkspaceScreen</a>(std::string_view)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4bf52d2a961791d38f3d5b435de390db">screens</a></td></tr>
 <tr class="memdesc:a4bf52d2a961791d38f3d5b435de390db"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog facts of a screen id; empty treats every screen as plain.  <br /></td></tr>
+<tr class="memitem:ab0d415371e314887277f7c1ec9cbf84c" id="r_ab0d415371e314887277f7c1ec9cbf84c"><td class="memItemLeft"><a class="el" href="../../db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html">ScreenHostRegistry</a> const  *&#160;</td><td class="memItemRight"><a class="el" href="#ab0d415371e314887277f7c1ec9cbf84c">hosts</a> = nullptr</td></tr>
+<tr class="memdesc:ab0d415371e314887277f7c1ec9cbf84c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host screens a catalog entry's <span class="tt">host</span> names. Borrowed; null mounts none.  <br /></td></tr>
+<tr class="memitem:a9d3f27b6400578121ce31d658b057ad3" id="r_a9d3f27b6400578121ce31d658b057ad3"><td class="memItemLeft">std::function&lt; void(std::vector&lt; std::string &gt; const  &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9d3f27b6400578121ce31d658b057ad3">onRecord</a></td></tr>
+<tr class="memdesc:a9d3f27b6400578121ce31d658b057ad3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Receives the record: the routes of the open tabs, in order, each time the tabs change. A tab with no route (a param with no route form) is left out. Empty writes no record.  <br /></td></tr>
+<tr class="memitem:a746a02ca111ff97a5fc34abe4614e889" id="r_a746a02ca111ff97a5fc34abe4614e889"><td class="memItemLeft"><a class="el" href="../../d3/d00/classmorph_1_1reactive_1_1Scheduler.html">reactive::Scheduler</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a746a02ca111ff97a5fc34abe4614e889">scheduler</a> = nullptr</td></tr>
+<tr class="memdesc:a746a02ca111ff97a5fc34abe4614e889"><td class="mdescLeft">&#160;</td><td class="mdescRight">When given, a burst of changes writes the record once, <span class="tt"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd" title="The quiet period before the record is written, with a scheduler.">recordDelay</a></span> after the last of them. Borrowed.  <br /></td></tr>
+<tr class="memitem:ae6d59c611c7c5ab7f486c526777cdadd" id="r_ae6d59c611c7c5ab7f486c526777cdadd"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd">recordDelay</a> {500}</td></tr>
+<tr class="memdesc:ae6d59c611c7c5ab7f486c526777cdadd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The quiet period before the record is written, with a scheduler.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How a <span class="tt"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html" title="Tabs over screens: one screen instance per tab, mounted into the tab&#39;s page through DocumentScreenHos...">Workspace</a></span> treats screens. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a4bf52d2a961791d38f3d5b435de390db" name="a4bf52d2a961791d38f3d5b435de390db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4bf52d2a961791d38f3d5b435de390db">&#9670;&#160;</a></span>screens</h2>
@@ -150,7 +158,79 @@ Public Attributes</h2></td></tr>
 
 <p>The catalog facts of a screen id; empty treats every screen as plain. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab0d415371e314887277f7c1ec9cbf84c" name="ab0d415371e314887277f7c1ec9cbf84c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab0d415371e314887277f7c1ec9cbf84c">&#9670;&#160;</a></span>hosts</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html">ScreenHostRegistry</a> const* morph::ui::WorkspaceOptions::hosts = nullptr</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The host screens a catalog entry's <span class="tt">host</span> names. Borrowed; null mounts none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9d3f27b6400578121ce31d658b057ad3" name="a9d3f27b6400578121ce31d658b057ad3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9d3f27b6400578121ce31d658b057ad3">&#9670;&#160;</a></span>onRecord</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(std::vector&lt;std::string&gt; const&amp;)&gt; morph::ui::WorkspaceOptions::onRecord</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Receives the record: the routes of the open tabs, in order, each time the tabs change. A tab with no route (a param with no route form) is left out. Empty writes no record. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a746a02ca111ff97a5fc34abe4614e889" name="a746a02ca111ff97a5fc34abe4614e889"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a746a02ca111ff97a5fc34abe4614e889">&#9670;&#160;</a></span>scheduler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d3/d00/classmorph_1_1reactive_1_1Scheduler.html">reactive::Scheduler</a>* morph::ui::WorkspaceOptions::scheduler = nullptr</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>When given, a burst of changes writes the record once, <span class="tt"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd" title="The quiet period before the record is written, with a scheduler.">recordDelay</a></span> after the last of them. Borrowed. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae6d59c611c7c5ab7f486c526777cdadd" name="ae6d59c611c7c5ab7f486c526777cdadd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae6d59c611c7c5ab7f486c526777cdadd">&#9670;&#160;</a></span>recordDelay</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::ui::WorkspaceOptions::recordDelay {500}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The quiet period before the record is written, with a scheduler. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

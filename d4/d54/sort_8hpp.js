@@ -20,6 +20,7 @@ var sort_8hpp =
     [ "morph::table::detail::collatorOf", "d4/d54/sort_8hpp.html#afb54edb7dda01c3373b8155a024b17e3", null ],
     [ "morph::table::detail::datesOf", "d4/d54/sort_8hpp.html#a0b7cff74aae15c2d7c5f22795b370c8c", null ],
     [ "morph::table::detail::parseInteger", "d4/d54/sort_8hpp.html#a56aeeed9920544287b6a36b53fb9b586", null ],
+    [ "morph::table::detail::parseRealClassic", "d4/d54/sort_8hpp.html#a78f848f8e3ea89d6f64825449991417a", null ],
     [ "morph::table::detail::parseReal", "d4/d54/sort_8hpp.html#aef5ebc2d406d9f9882cb5c634b909365", null ],
     [ "morph::table::buildKeys", "d4/d54/sort_8hpp.html#afc0b811b9f4059e9a19412519725d50a", null ],
     [ "morph::table::compareKeys", "d4/d54/sort_8hpp.html#a1a867dc794ab9097fc546032fe41bb91", null ],

@@ -11,5 +11,6 @@ var classmorph_1_1ui_1_1Widget =
     [ "setTooltip", "dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57", null ],
     [ "setSurface", "dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747", null ],
     [ "setKeys", "dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb", null ],
-    [ "focus", "dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173", null ]
+    [ "focus", "dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173", null ],
+    [ "setOnHover", "dc/dcb/classmorph_1_1ui_1_1Widget.html#ae7647f2e8d57d47de8d1297a4c5669a9", null ]
 ];

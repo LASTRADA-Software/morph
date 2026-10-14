@@ -14,6 +14,7 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
     [ "interpreter.hpp", "db/d42/interpreter_8hpp.html", "db/d42/interpreter_8hpp" ],
     [ "message.hpp", "d5/d8c/message_8hpp.html", "d5/d8c/message_8hpp" ],
     [ "mount.hpp", "de/d26/mount_8hpp.html", "de/d26/mount_8hpp" ],
+    [ "navigator.hpp", "da/d0b/navigator_8hpp.html", "da/d0b/navigator_8hpp" ],
     [ "preference_sync.hpp", "df/db0/preference__sync_8hpp.html", "df/db0/preference__sync_8hpp" ],
     [ "preferences.hpp", "df/d07/preferences_8hpp.html", "df/d07/preferences_8hpp" ],
     [ "route.hpp", "d4/d2f/route_8hpp.html", "d4/d2f/route_8hpp" ],

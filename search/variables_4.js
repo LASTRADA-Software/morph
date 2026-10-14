@@ -10,7 +10,7 @@ var searchData=
   ['endspan_7',['endSpan',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html#a64f1ad957ef8edd30cdc13b62482b618',1,'morph::observe::TraceSink']]],
   ['endswith_8',['endsWith',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#a86b7eed7e483df648cd7f4918e43cf92',1,'morph::table::FilterEntry']]],
   ['entitykey_9',['entityKey',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48',1,'morph::journal::LogEntry']]],
-  ['entries_10',['entries',['../de/df1/structmorph_1_1ui_1_1CatalogReply.html#a7d0f7ace569ee24a3ff9cfbcba2b5da1',1,'morph::ui::CatalogReply']]],
+  ['entries_10',['entries',['../de/df1/structmorph_1_1ui_1_1CatalogReply.html#a7d0f7ace569ee24a3ff9cfbcba2b5da1',1,'morph::ui::CatalogReply::entries'],['../db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html#a9f6d64c3fa99f29351d6ab05f8679040',1,'morph::ui::NavigatorOptions::entries']]],
   ['entry_11',['entry',['../db/d17/structmorph_1_1ui_1_1ServedScreen.html#a708dbe4d2208046182827398142e328a',1,'morph::ui::ServedScreen']]],
   ['entryunit_12',['entryUnit',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a088bb9c61c93ff826dbb00381a54ffbd',1,'morph::forms::FieldSpec']]],
   ['enumoptions_13',['enumOptions',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a3828d55ccb76b4c5c671c3793ac7c051',1,'morph::forms::FieldSpec']]],

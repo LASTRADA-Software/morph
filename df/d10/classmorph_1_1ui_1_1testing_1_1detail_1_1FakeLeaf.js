@@ -14,6 +14,7 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf =
     [ "setSurface", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0", null ],
     [ "setKeys", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57", null ],
     [ "focus", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f", null ],
+    [ "setOnHover", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aedc24008c529e4bd0b6b71468525b08e", null ],
     [ "set", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a02c2c7a69bd9d310703f50895c4b04e1", null ],
     [ "callbacks", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adcfb5e450c81840f3a19af86dc108b54", null ],
     [ "store", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a479e91548e0d21291aed6622fcf21e5b", null ],

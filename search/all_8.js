@@ -69,7 +69,7 @@ var searchData=
   ['holdsalias_66',['holdsAlias',['../d9/df6/ui_2theme_8hpp.html#a4b507ea6bdcfded23b19ecbbaeac252c',1,'morph::ui::detail']]],
   ['horizontal_67',['Horizontal',['../d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5ac1b5fa03ecdb95d4a45dd1c40b02527f',1,'morph::ui']]],
   ['host_68',['Host',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eac2ca16d048ec66e04bca283eab048ec2',1,'Hostmorph::ui'],['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ac2ca16d048ec66e04bca283eab048ec2',1,'Hostmorph::ui']]],
-  ['host_69',['host',['../d0/df2/structmorph_1_1ui_1_1author_1_1ComponentOptions.html#a14526e5e9ec7b586a82c77da0037dbd9',1,'morph::ui::author::ComponentOptions::host'],['../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html#a029c283be3d8e8c32f10f19e033809de',1,'morph::ui::CatalogEntry::host'],['../d1/d28/structmorph_1_1ui_1_1Component.html#a13faf7a2a075b3d5e33a3a5528653cf8',1,'morph::ui::Component::host'],['../db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#ac8efb79eea45eec1c109f0da94e4713b',1,'morph::ui::StaticEnvironment::host'],['../d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html#ab3b8a5315cfcc53c28f419c67bd165c1',1,'morph::ui::InterpreterOptions::host'],['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a275559bda77cd6b29bf442fe456b8aa9',1,'morph::ui::detail::ScreenCore::host'],['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author::host()']]],
+  ['host_69',['host',['../d0/df2/structmorph_1_1ui_1_1author_1_1ComponentOptions.html#a14526e5e9ec7b586a82c77da0037dbd9',1,'morph::ui::author::ComponentOptions::host'],['../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html#a029c283be3d8e8c32f10f19e033809de',1,'morph::ui::CatalogEntry::host'],['../d1/d28/structmorph_1_1ui_1_1Component.html#a13faf7a2a075b3d5e33a3a5528653cf8',1,'morph::ui::Component::host'],['../db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#ac8efb79eea45eec1c109f0da94e4713b',1,'morph::ui::StaticEnvironment::host'],['../d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html#ab3b8a5315cfcc53c28f419c67bd165c1',1,'morph::ui::InterpreterOptions::host'],['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a275559bda77cd6b29bf442fe456b8aa9',1,'morph::ui::detail::ScreenCore::host'],['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a387dfafaea0aa509e74139aca1525fb2',1,'morph::ui::WorkspaceScreen::host'],['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author::host()']]],
   ['host_2ehpp_70',['host.hpp',['../dd/d78/host_8hpp.html',1,'']]],
   ['host_5fvocabulary_2ehpp_71',['host_vocabulary.hpp',['../d4/d16/host__vocabulary_8hpp.html',1,'']]],
   ['hostarg_72',['HostArg',['../dd/d5b/structmorph_1_1ui_1_1HostArg.html',1,'morph::ui']]],
@@ -80,9 +80,12 @@ var searchData=
   ['hostcommands_77',['HostCommands',['../dd/d6a/structmorph_1_1ui_1_1HostCommands.html',1,'morph::ui']]],
   ['hostcommands_78',['hostCommands',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a487ca9e5f87255c21562f02b8bfb3229',1,'morph::ui::HelloRequest']]],
   ['hostcomponents_79',['hostComponents',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#af71515561d0782d3c63b32af2f37151e',1,'morph::ui::HelloRequest']]],
-  ['hostvalue_80',['HostValue',['../da/dd6/structmorph_1_1ui_1_1HostValue.html',1,'morph::ui']]],
-  ['hostvalue_81',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
-  ['hostvalues_82',['hostValues',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a4b4d7e632fdcf6e7e835fb5fc454dc26',1,'morph::ui::HelloRequest']]],
-  ['hostvocabulary_83',['HostVocabulary',['../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html',1,'morph::ui']]],
-  ['hybrid_84',['Hybrid',['../df/d8f/selection_8hpp.html#af31b0b480b49cbe79648d1a0a8890550afb1b6e23a3767d2a31ef7899e6dd3f1e',1,'morph::table']]]
+  ['hosts_80',['hosts',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html#ab0d415371e314887277f7c1ec9cbf84c',1,'morph::ui::WorkspaceOptions']]],
+  ['hostscreenfactory_81',['HostScreenFactory',['../dd/d78/host_8hpp.html#a8f2ba01276e59682fed7c6ce6d5447b3',1,'morph::ui']]],
+  ['hostvalue_82',['HostValue',['../da/dd6/structmorph_1_1ui_1_1HostValue.html',1,'morph::ui']]],
+  ['hostvalue_83',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
+  ['hostvalues_84',['hostValues',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a4b4d7e632fdcf6e7e835fb5fc454dc26',1,'morph::ui::HelloRequest']]],
+  ['hostvocabulary_85',['HostVocabulary',['../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html',1,'morph::ui']]],
+  ['hover_86',['hover',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a98edb0eb372717fd445d897eaee96b24',1,'morph::ui::testing::detail::Callbacks::hover'],['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend::hover()']]],
+  ['hybrid_87',['Hybrid',['../df/d8f/selection_8hpp.html#af31b0b480b49cbe79648d1a0a8890550afb1b6e23a3767d2a31ef7899e6dd3f1e',1,'morph::table']]]
 ];

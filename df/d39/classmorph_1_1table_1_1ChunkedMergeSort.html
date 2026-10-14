@@ -146,7 +146,7 @@ Static Public Attributes</h2></td></tr>
 <div class="textblock"><p>A bottom-up merge sort over row indices that can stop and resume. </p>
 <p>Runs of <span class="tt"><a class="el" href="#a0e1ec760b2c1962e53046a7d080ec7fe" title="Rows per initial run.">kRun</a></span> rows are sorted first, then merged pass by pass. <span class="tt"><a class="el" href="#ae90d467053818f0a73bed518fa34ab69" title="Sorts until done, the deadline passes, or a stop is requested.">run</a></span> returns at a deadline or a stop request and continues from there on the next call, which is how the engine sorts 100,000 rows on an owner thread in frame-sized steps, or abandons a superseded sort on a worker. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00497">497</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a551123619a3d45570c526f809357984c" name="a551123619a3d45570c526f809357984c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a551123619a3d45570c526f809357984c">&#9670;&#160;</a></span>ChunkedMergeSort()</h2>
@@ -184,7 +184,7 @@ Static Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00505">505</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -226,7 +226,7 @@ Static Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the rows are sorted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00545">545</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +256,7 @@ Static Public Attributes</h2></td></tr>
 <p>Whether the sort has finished. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once <span class="tt"><a class="el" href="#ae90d467053818f0a73bed518fa34ab69" title="Sorts until done, the deadline passes, or a stop is requested.">run</a></span> returned <span class="tt">true</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00520">520</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00551">551</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -286,7 +286,7 @@ Static Public Attributes</h2></td></tr>
 <p>The sorted rows. Valid once <span class="tt"><a class="el" href="#ab398955c4681b1c6997669fe301c91fd" title="Whether the sort has finished.">done()</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The rows, moved out. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00524">524</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00555">555</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -313,7 +313,7 @@ Static Public Attributes</h2></td></tr>
 
 <p>Rows per initial run. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00500">500</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>

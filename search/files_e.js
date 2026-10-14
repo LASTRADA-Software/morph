@@ -1,10 +1,6 @@
 var searchData=
 [
-  ['rational_2ehpp_0',['rational.hpp',['../d1/de8/rational_8hpp.html',1,'']]],
-  ['recording_5fbackend_2ehpp_1',['recording_backend.hpp',['../de/dd9/recording__backend_8hpp.html',1,'']]],
-  ['reflected_5fmember_2ehpp_2',['reflected_member.hpp',['../df/d31/reflected__member_8hpp.html',1,'']]],
-  ['reply_5frouter_2ehpp_3',['reply_router.hpp',['../d6/d41/reply__router_8hpp.html',1,'']]],
-  ['route_2ehpp_4',['route.hpp',['../d4/d2f/route_8hpp.html',1,'']]],
-  ['rules_2ehpp_5',['rules.hpp',['../d8/d26/rules_8hpp.html',1,'']]],
-  ['runtime_2ehpp_6',['runtime.hpp',['../d0/df9/runtime_8hpp.html',1,'']]]
+  ['quantity_2ehpp_0',['quantity.hpp',['../d9/db8/quantity_8hpp.html',1,'']]],
+  ['quantity_5fequation_2ehpp_1',['quantity_equation.hpp',['../d4/dc4/quantity__equation_8hpp.html',1,'']]],
+  ['query_2ehpp_2',['query.hpp',['../dd/def/query_8hpp.html',1,'']]]
 ];

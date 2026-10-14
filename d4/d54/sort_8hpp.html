@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d54/sort_8h
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
 <code>#include &lt;array&gt;</code><br />
+<code>#include &lt;cctype&gt;</code><br />
 <code>#include &lt;charconv&gt;</code><br />
 <code>#include &lt;chrono&gt;</code><br />
 <code>#include &lt;cmath&gt;</code><br />
@@ -132,16 +133,20 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d54/sort_8h
 <code>#include &lt;core/async/StopToken.hpp&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;ios&gt;</code><br />
+<code>#include &lt;locale&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d57/data__source_8hpp_source.html">morph/table/data_source.hpp</a>&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;span&gt;</code><br />
+<code>#include &lt;sstream&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;system_error&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;variant&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &lt;version&gt;</code><br />
 </div>
 <p><a href="../../d4/d54/sort_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -187,6 +192,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a0b7cff74aae15c2d7c5f22795b370c8c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The date parser to use: the service's, or the default.  <br /></td></tr>
 <tr class="memitem:a56aeeed9920544287b6a36b53fb9b586" id="r_a56aeeed9920544287b6a36b53fb9b586"><td class="memItemLeft">std::optional&lt; std::int64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a56aeeed9920544287b6a36b53fb9b586">morph::table::detail::parseInteger</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a56aeeed9920544287b6a36b53fb9b586"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a whole decimal integer, all of <code class="param">text</code>.  <br /></td></tr>
+<tr class="memitem:a78f848f8e3ea89d6f64825449991417a" id="r_a78f848f8e3ea89d6f64825449991417a"><td class="memItemLeft">std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a78f848f8e3ea89d6f64825449991417a">morph::table::detail::parseRealClassic</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a78f848f8e3ea89d6f64825449991417a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a floating-point number, all of <code class="param">text</code>, through a stream in the classic locale: the fallback of <span class="tt"><a class="el" href="#aef5ebc2d406d9f9882cb5c634b909365" title="Parses a floating-point number, all of text.">parseReal</a></span> for a standard library without floating-point <span class="tt">from_chars</span>.  <br /></td></tr>
 <tr class="memitem:aef5ebc2d406d9f9882cb5c634b909365" id="r_aef5ebc2d406d9f9882cb5c634b909365"><td class="memItemLeft">std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aef5ebc2d406d9f9882cb5c634b909365">morph::table::detail::parseReal</a> (std::string_view text)</td></tr>
 <tr class="memdesc:aef5ebc2d406d9f9882cb5c634b909365"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a floating-point number, all of <code class="param">text</code>.  <br /></td></tr>
 <tr class="memitem:afc0b811b9f4059e9a19412519725d50a" id="r_afc0b811b9f4059e9a19412519725d50a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#afc0b811b9f4059e9a19412519725d50a">morph::table::buildKeys</a> (<a class="el" href="../../d0/d78/classmorph_1_1table_1_1RowSnapshot.html">RowSnapshot</a> const &amp;snapshot, std::size_t column, <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &amp;info, <a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;services, std::size_t first, std::size_t last, <a class="el" href="../../d2/d92/structmorph_1_1table_1_1KeyColumn.html">KeyColumn</a> &amp;out)</td></tr>
@@ -229,7 +236,7 @@ Variables</h2></td></tr>
 
 <p>A multi-key sort, most significant key first. Empty means source order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -247,7 +254,7 @@ Variables</h2></td></tr>
 
 <p>A deadline for one step of work; <span class="tt">kNoDeadline</span> runs to completion. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +287,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,7 +321,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +363,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when stop is requested or the deadline has passed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -392,7 +399,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The collator; the default outlives every caller. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -428,7 +435,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The parser; the default outlives every caller. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +471,43 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value, or nothing when <code class="param">text</code> is not exactly an integer. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a78f848f8e3ea89d6f64825449991417a" name="a78f848f8e3ea89d6f64825449991417a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a78f848f8e3ea89d6f64825449991417a">&#9670;&#160;</a></span>parseRealClassic()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; double &gt; morph::table::detail::parseRealClassic </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Parses a floating-point number, all of <code class="param">text</code>, through a stream in the classic locale: the fallback of <span class="tt">parseReal</span> for a standard library without floating-point <span class="tt">from_chars</span>. </p>
+<p>The classic locale, not the global one: a filter value is the wire's text, so its decimal point is <span class="tt">.</span> whatever locale the process runs in. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The value, or nothing when <code class="param">text</code> is not exactly a number or is NaN. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -500,7 +543,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value, or nothing when <code class="param">text</code> is not exactly a number or is NaN. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -570,7 +613,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00378">378</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -623,7 +666,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Negative, zero or positive as row <code class="param">left</code> orders before, with, or after <code class="param">right</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -664,7 +707,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sorted rows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00617">617</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00648">648</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -691,7 +734,7 @@ Variables</h2></td></tr>
 
 <p>The deadline that never passes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>
@@ -717,7 +760,7 @@ Variables</h2></td></tr>
 
 <p>Elements of work between two looks at the clock and the stop token: often enough to keep an owner step near its budget, rarely enough that the clock read is noise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d54/sort_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d4/d54/sort_8hpp_source.html">sort.hpp</a>.</p>
 
 </div>
 </div>

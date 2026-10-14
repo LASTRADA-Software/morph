@@ -229,6 +229,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a4a4fa2dc4b2ee230d3cc817975dd8e7d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The widget that last took keyboard focus.  <br /></td></tr>
 <tr class="memitem:a0e5202a23d6de2864bb721d6c7c1811c" id="r_a0e5202a23d6de2864bb721d6c7c1811c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0e5202a23d6de2864bb721d6c7c1811c">press</a> (int widgetId, std::string const &amp;chord)</td></tr>
 <tr class="memdesc:a0e5202a23d6de2864bb721d6c7c1811c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Presses a keyboard chord with focus on a widget.  <br /></td></tr>
+<tr class="memitem:ac5a5e5a45ee5aa1ad66f4255c5daf77d" id="r_ac5a5e5a45ee5aa1ad66f4255c5daf77d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac5a5e5a45ee5aa1ad66f4255c5daf77d">hover</a> (int widgetId)</td></tr>
+<tr class="memdesc:ac5a5e5a45ee5aa1ad66f4255c5daf77d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rests the pointer over a widget: calls its <span class="tt">setOnHover</span> handler, if it has one and can be reached.  <br /></td></tr>
 <tr class="memitem:abe0454ef9dad990124b9eace937fb6b2" id="r_abe0454ef9dad990124b9eace937fb6b2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abe0454ef9dad990124b9eace937fb6b2">click</a> (int widgetId)</td></tr>
 <tr class="memdesc:abe0454ef9dad990124b9eace937fb6b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Activates a button, or the action button of a banner or an empty state.  <br /></td></tr>
 <tr class="memitem:ae0709d429fbac7d5950c34aadc908a5d" id="r_ae0709d429fbac7d5950c34aadc908a5d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae0709d429fbac7d5950c34aadc908a5d">edit</a> (int widgetId, std::string text)</td></tr>
@@ -286,7 +288,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <p><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a> ids are creation numbers from 1. A widget ignores every interaction helper, as a real one would, while it is hidden or disabled, or while a container around it is hidden, disabled or collapsed. A dialog, and everything inside it, ignores them until it is opened. A helper used on a kind of widget it does not apply to throws <span class="tt">std::logic_error</span>: that is a mistake in the test, not something a user can do. A helper copies the handler before calling it, so a handler may destroy its own widget.</p>
 <p>Free text in a property value is escaped as <span class="tt"><a class="el" href="../../de/dd9/recording__backend_8hpp.html#ac6e5cea6da6539df86ec7a1a443bf2d7" title="Formats free text as a property value. Line breaks and = are escaped, so the value stays on its own l...">detail::formatText</a></span> and <span class="tt"><a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3b129e6807dc0a427d7ce35b5975a63a" title="Formats free text as an element of a formatList list. Also escapes ,, [ and ], so the text reads as o...">detail::formatItem</a></span> describe, so every value stays on its line and reads as one field, or one list element. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01347">1347</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01353">1353</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aef6bdcb262adc944bfbdad5efed4947f" name="aef6bdcb262adc944bfbdad5efed4947f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aef6bdcb262adc944bfbdad5efed4947f">&#9670;&#160;</a></span>createText()</h2>
@@ -322,7 +324,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a277c320382211edad7639e600c070e76">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01349">1349</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01355">1355</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -360,7 +362,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a5d8c949499321b7b0e27051615b9f41b">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01352">1352</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01358">1358</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,7 +405,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01355">1355</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01361">1361</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -441,7 +443,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a04c823843651fea8c9dac80ab5ab72c8">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01360">1360</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01366">1366</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -484,7 +486,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a295d6e607bccd746b6ad061e578f1438">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01363">1363</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01369">1369</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -522,7 +524,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac980f626137f8bc216f3959a86af909e">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01367">1367</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01373">1373</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -565,7 +567,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a7d60e8ca9b01e140c41d14eb34080701">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01370">1370</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01376">1376</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -603,7 +605,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac15b728240fb0da4bfdc8974582d8522">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01373">1373</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01379">1379</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -641,7 +643,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a8a5de1966ba222c9079f4e111e96bde5">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01376">1376</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01382">1382</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -679,7 +681,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a1cbc57c71372346913d930ede407e2c1">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01379">1379</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01385">1385</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -722,7 +724,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f7dcdab9bf6237311f7de24344871d2">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01382">1382</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01388">1388</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -760,7 +762,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a74f2678fccced2cfe666030403bb6558">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01386">1386</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01392">1392</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -798,7 +800,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a68d9c7509883ba521c31319f5f21da2d">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01389">1389</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01395">1395</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -836,7 +838,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01392">1392</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01398">1398</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -874,7 +876,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#aa00c2863b5fcbe9b0ed205a043ec60a0">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01395">1395</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01401">1401</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -912,7 +914,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a4472eb65b0ce59376d2bc47c48e76d29">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01398">1398</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01404">1404</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -961,7 +963,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2739229e5dbbaba964f65231da91a47a">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01401">1401</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01407">1407</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -999,7 +1001,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a734309f8c777004f7d206c3146819ac9">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01407">1407</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01413">1413</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1042,7 +1044,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#aae0f5189a7f38e639594687d7e4ffb96">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01410">1410</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01416">1416</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1080,7 +1082,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#aa606329bb8d42736501d43a80e5a1d8e">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01415">1415</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01421">1421</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1118,7 +1120,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a7acf9f5029789f509edda0d84090018a">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01418">1418</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01424">1424</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1156,7 +1158,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f29af9562d158d8c8d74c61547114f6">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01421">1421</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01427">1427</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1194,7 +1196,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6d44e4ac49474fb4f8ed59c907096c69">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01424">1424</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01430">1430</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1232,7 +1234,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01427">1427</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01433">1433</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1270,7 +1272,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a55fd611d62ad8c732bd86f538c83d5e0">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01430">1430</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01436">1436</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1313,7 +1315,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f0fd93a4538e13753d79c90d459da58">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01433">1433</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01439">1439</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1356,7 +1358,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01437">1437</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01443">1443</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1394,7 +1396,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2cf5fd3cde2b484942a83b0dd6f7379c">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01441">1441</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01447">1447</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1432,7 +1434,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01444">1444</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01450">1450</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1475,7 +1477,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Reimplemented from <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8">morph::ui::IViewBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01453">1453</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01459">1459</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1510,7 +1512,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01466">1466</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01472">1472</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1562,7 +1564,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01478">1478</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01484">1484</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1592,7 +1594,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <p>The golden tree of the live widgets. </p>
 <dl class="section return"><dt>Returns</dt><dd>One line per widget, <span class="tt">Kind#id name=value …</span> in property-name order, children indented two spaces per depth, each line ending in a newline. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01488">1488</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01494">1494</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1622,7 +1624,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <p>The operation log since construction or the last <span class="tt"><a class="el" href="#a437963c7668a9911402cc5ce55465e53" title="Empties the operation log.">clearLog()</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">create Kind#id in Parent#id</span> (<span class="tt">in root</span> for a root), <span class="tt">set Kind#id name=value</span>, <span class="tt">move Kind#id to n</span>, <span class="tt">destroy Kind#id</span>, oldest first. Interaction helpers add nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01493">1493</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01499">1499</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1651,7 +1653,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Empties the operation log. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01502">1502</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1698,7 +1700,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The widget's id, or <span class="tt">nullopt</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01505">1505</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01511">1511</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1734,7 +1736,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Their ids, in creation order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01520">1520</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01526">1526</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1781,7 +1783,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01535">1535</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01541">1541</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1828,7 +1830,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01546">1546</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01552">1552</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1864,7 +1866,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>False once its destructor ran. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01553">1553</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01559">1559</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1906,7 +1908,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01559">1559</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01565">1565</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1948,7 +1950,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01565">1565</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01571">1571</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1990,7 +1992,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01571">1571</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01577">1577</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2032,7 +2034,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01577">1577</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01583">1583</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2062,7 +2064,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <p>The widget that last took keyboard focus. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its id, or 0 when no widget has, or it has since been destroyed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01581">1581</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01587">1587</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2103,7 +2105,42 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when a widget took the chord. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01590">1590</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01596">1596</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac5a5e5a45ee5aa1ad66f4255c5daf77d" name="ac5a5e5a45ee5aa1ad66f4255c5daf77d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac5a5e5a45ee5aa1ad66f4255c5daf77d">&#9670;&#160;</a></span>hover()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::RecordingBackend::hover </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>widgetId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Rests the pointer over a widget: calls its <span class="tt">setOnHover</span> handler, if it has one and can be reached. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">widgetId</td><td>The widget. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01613">1613</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2144,7 +2181,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01609">1609</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01624">1624</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2190,7 +2227,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01624">1624</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01639">1639</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2236,7 +2273,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01636">1636</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01651">1651</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2282,7 +2319,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01651">1651</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01666">1666</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2324,7 +2361,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01662">1662</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01677">1677</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2365,7 +2402,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01669">1669</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01684">1684</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2406,7 +2443,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01678">1678</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01693">1693</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2452,7 +2489,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01691">1691</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01706">1706</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2498,7 +2535,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01711">1711</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01726">1726</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2544,7 +2581,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01734">1734</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01749">1749</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2590,7 +2627,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01752">1752</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01767">1767</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2631,7 +2668,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01768">1768</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01783">1783</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2677,7 +2714,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01787">1787</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01802">1802</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2723,7 +2760,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01798">1798</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01813">1813</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2770,7 +2807,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01817">1817</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01832">1832</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2816,7 +2853,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01835">1835</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01850">1850</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2862,7 +2899,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01862">1862</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01877">1877</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2908,7 +2945,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01879">1879</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01894">1894</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -2954,7 +2991,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01891">1891</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01906">1906</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -3000,7 +3037,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01902">1902</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01917">1917</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -3047,7 +3084,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01917">1917</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01932">1932</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

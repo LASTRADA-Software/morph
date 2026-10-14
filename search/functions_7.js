@@ -28,5 +28,6 @@ var searchData=
   ['host_25',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
   ['hostcommand_26',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
   ['hostcommandrunner_27',['hostCommandRunner',['../df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84',1,'morph::ui::Session']]],
-  ['hostvalue_28',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]]
+  ['hostvalue_28',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
+  ['hover_29',['hover',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend']]]
 ];
