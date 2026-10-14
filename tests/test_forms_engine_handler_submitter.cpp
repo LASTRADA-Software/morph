@@ -42,12 +42,9 @@ struct HsEchoModel {
 // NOLINTEND(misc-use-internal-linkage)
 
 BRIDGE_REGISTER_MODEL(HsCounterModel, "Test_HsCounterModel")
-// NOLINTNEXTLINE(misc-const-correctness): the generated fromJson body declares a non-const local.
 BRIDGE_REGISTER_ACTION(HsCounterModel, HsBump, "Test_HsBump")
-// NOLINTNEXTLINE(misc-const-correctness): the generated fromJson body declares a non-const local.
 BRIDGE_REGISTER_ACTION(HsCounterModel, HsRead, "Test_HsRead")
 BRIDGE_REGISTER_MODEL(HsEchoModel, "Test_HsEchoModel")
-// NOLINTNEXTLINE(misc-const-correctness): the generated fromJson body declares a non-const local.
 BRIDGE_REGISTER_ACTION(HsEchoModel, HsEcho, "Test_HsEcho")
 
 namespace {
