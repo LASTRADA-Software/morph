@@ -520,3 +520,47 @@ TEST_CASE("ui-catalog gives the facts of a public screen it lists disabled", "[u
     REQUIRE(catalog->actions->contains("Lims_Report"));
     REQUIRE(catalog->permitted.empty());
 }
+
+namespace {
+
+/// An authoriser for an application that signs its users in: before sign-in it admits the UI service's reads and
+/// nothing else, as a token-checking authoriser that serves a login screen does.
+struct SignInFirst final : morph::session::IAuthorizer {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): IAuthorizer's signature.
+    [[nodiscard]] bool authorize(morph::session::Context const& ctx, std::string_view modelType,
+                                 std::string_view actionType) const override {
+        return !ctx.principal.empty() || morph::ui::isUiServiceRead(modelType, actionType);
+    }
+};
+
+}  // namespace
+
+// Mutation: admit `ui-evaluate`'s action too, or nothing at all (the login screen is no longer reachable).
+TEST_CASE("isUiServiceRead admits the login screen before sign-in, and no other screen", "[ui-service][catalog]") {
+    REQUIRE(morph::ui::isUiServiceRead("ui", "hello"));
+    REQUIRE(morph::ui::isUiServiceRead("ui", "catalog"));
+    REQUIRE(morph::ui::isUiServiceRead("ui", "fetch"));
+    REQUIRE_FALSE(morph::ui::isUiServiceRead("ui", "evaluate"));
+    REQUIRE_FALSE(morph::ui::isUiServiceRead("Lims_Sample", "fetch"));
+
+    auto const bundle = uiservice::bundle();
+    auto const manifest = morph::ui::parseManifest(bundle->manifest);
+    REQUIRE(manifest);
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a manifest is keyed by kind, then id.
+    auto const hashOf = [&](std::string_view kind, std::string_view id) { return manifest->find(kind, id)->hash; };
+    UiService service{bundle};
+    SignInFirst const authorizer;
+    REQUIRE(ask(service, authorizer, request("ui-hello", "", helloBody({"ui/1", "expr/1", "ui-theme/1"}))).kind ==
+            "ok");
+    Envelope const catalogReply = ask(service, authorizer, request("ui-catalog", ""));
+    REQUIRE(catalogReply.kind == "ok");
+    auto const catalog = morph::ui::parseCatalogReply(catalogReply.body);
+    REQUIRE(catalog);
+    std::vector<std::string> const listedIds = ids(*catalog);
+    CHECK(std::ranges::find(listedIds, "auth.login") != listedIds.end());
+    CHECK(std::ranges::find(listedIds, "lims.results") == listedIds.end());
+    CHECK(ask(service, authorizer, request("ui-fetch", "", fetchBody(hashOf("screen", "auth.login")))).kind == "ok");
+    Envelope const results =
+        ask(service, authorizer, request("ui-fetch", "", fetchBody(hashOf("screen", "lims.results"))));
+    CHECK(results.message == "unauthorized");
+}
