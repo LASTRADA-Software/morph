@@ -11,6 +11,7 @@
 #include <morph/ui/service.hpp>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ledger/auth/ledger_authorizer.hpp"
 #include "ledger/dto/account_dto.hpp"
@@ -201,38 +202,44 @@ ui::Nodes statementTab(ui::Scope& screen, ui::ModelHandle<LedgerModel> const& bo
             ui::text({.text = ui::coalesce({submit.error(), status.error()})}).testId("statementError")};
 }
 
-// Sign-in and a ledger, then the ledger's tabs: its accounts and entries, its budgets, its rules and its statement.
-ui::Screen ledgerScreen() {
-    return ui::screen(std::string{kLedger}, [](ui::Scope& screen) {
-        screen.title("Ledger");
+// Sign-in: the only screen served before it, so it holds no query. A successful login installs the principal it
+// answered and opens the ledger.
+ui::Screen loginScreen() {
+    return ui::screen(std::string{kLogin}, [](ui::Scope& screen) {
+        screen.title("Sign in");
         auto const auth = screen.model<AuthModel>("auth", {.instance = ui::Instance::Private});
-        auto const books = screen.model<LedgerModel>("books", {.instance = ui::Instance::Private});
-        auto const signedIn = screen.state("signedIn", false);
-        auto const ledgerId = screen.state<std::int64_t>("ledgerId");
         auto const username = ui::element("username");
-        auto const login =
-            screen.mutation<Login>("login", auth,
-                                   {.body = {{&Login::username, username.value()}},
-                                    .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::set(signedIn, true)}});
+        auto const login = screen.mutation<Login>(
+            "login", auth,
+            {.body = {{&Login::username, username.value()}},
+             .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::navigate(std::string{kLedger})}});
         return ui::column(
             {ui::row({ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
                       ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")},
-                     {.gap = 8})
-                 .testId("signInRow")
-                 .visible(!signedIn),
-             ui::form<CreateLedger>(books,
+                     {.gap = 8}),
+             ui::text({.text = login.error()}).testId("error")},
+            {.gap = 8});
+    });
+}
+
+// A ledger, then the ledger's tabs: its accounts and entries, its budgets, its rules and its statement.
+ui::Screen ledgerScreen() {
+    return ui::screen(std::string{kLedger}, [](ui::Scope& screen) {
+        screen.title("Ledger");
+        auto const books = screen.model<LedgerModel>("books", {.instance = ui::Instance::Private});
+        auto const ledgerId = screen.state<std::int64_t>("ledgerId");
+        return ui::column(
+            {ui::form<CreateLedger>(books,
                                     {.submit = "explicit", .onSuccess = {ui::set(ledgerId, ui::ref("event.id"))}})
                  .id(ui::element("ledgerForm"))
-                 .testId("ledgerForm")
-                 .visible(signedIn),
+                 .testId("ledgerForm"),
              ui::text({.text = ui::format("Ledger {0}", {ledgerId})}).testId("ledger").visible(ui::engaged(ledgerId)),
              ui::column({ui::tabs({{.label = "Ledger", .children = ledgerTab(screen, books, ledgerId)},
                                    {.label = "Budgets", .children = budgetsTab(screen, ledgerId)},
                                    {.label = "Rules", .children = rulesTab(screen, ledgerId)},
                                    {.label = "Statement", .children = statementTab(screen, books, ledgerId)}})
                              .testId("sections")})
-                 .visible(ui::engaged(ledgerId)),
-             ui::text({.text = login.error()}).testId("error")},
+                 .visible(ui::engaged(ledgerId))},
             {.gap = 8});
     });
 }
@@ -247,17 +254,29 @@ void prepareLocal() {
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
     ui::ScreenRegistry screens;
-    auto registered = screens.add(ledgerScreen());
-    if (!registered) {
-        return std::unexpected(std::move(registered.error()));
+    struct Listed {
+        std::string id;
+        std::string title;
+        decltype(screens.add(loginScreen())) registered;
+    };
+    std::vector<Listed> listed;
+    listed.push_back({.id = std::string{kLogin}, .title = "Sign in", .registered = screens.add(loginScreen())});
+    listed.push_back({.id = std::string{kLedger}, .title = "Ledger", .registered = screens.add(ledgerScreen())});
+    for (Listed const& screen : listed) {
+        if (!screen.registered) {
+            return std::unexpected(screen.registered.error());
+        }
     }
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = "1.0"},
                                  screens.catalog()};
-    morph::ui::CatalogEntry entry;
-    entry.id = std::string{kLedger};
-    entry.title = "Ledger";
-    if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
-        return std::unexpected(std::move(added.error()));
+    for (Listed const& screen : listed) {
+        morph::ui::CatalogEntry entry;
+        entry.id = screen.id;
+        entry.title = screen.title;
+        entry.isPublic = screen.id == kLogin;
+        if (auto added = served.addScreen(std::move(entry), (*screen.registered)->text); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
     }
     return served.build();
 }

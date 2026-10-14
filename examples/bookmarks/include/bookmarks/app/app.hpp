@@ -77,11 +77,13 @@ public:
     ///        convention as @p fetchInterval.
     /// @param workers       Size of the model worker pool.
     /// @param parent        Optional `QObject` parent.
+    /// @param services      Envelope services the server answers besides the models, such as the UI service that
+    ///        serves this application's screens; none by default.
     explicit App(std::filesystem::path actionLogPath, std::string tokenSecret,
                  std::shared_ptr<IBookmarkMetadataFetcher> fetcher = std::make_shared<NullMetadataFetcher>(),
                  std::chrono::milliseconds fetchInterval = std::chrono::seconds{5},
                  std::chrono::milliseconds relayInterval = std::chrono::seconds{2}, std::size_t workers = 4,
-                 QObject* parent = nullptr);
+                 QObject* parent = nullptr, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Stops both timers and detaches the process-wide action log and
     ///        token issuer.

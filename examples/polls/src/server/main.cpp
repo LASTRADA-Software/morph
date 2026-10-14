@@ -26,9 +26,15 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
+#include <expected>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <morph/ui/service.hpp>
+#include <polls_screens.hpp>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -53,7 +59,27 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 
 }  // namespace
 
-int main(int argc, char** argv) {
+namespace {
+
+/// @brief The UI service over polls's screens, served beside its models so a generic client opens them (spec 4 §1).
+/// @return The service, or why the screens do not build.
+std::expected<std::shared_ptr<::morph::backend::IEnvelopeService>, std::string> screensService() {
+    auto bundle = polls::screens::bundle();
+    if (!bundle) {
+        return std::unexpected(bundle.error().message());
+    }
+    return std::make_shared<::morph::ui::UiService>(std::move(*bundle));
+}
+
+}  // namespace
+
+namespace {
+
+/// @brief The server: everything `main` does, with what it throws left to `main`.
+/// @param argc The argument count.
+/// @param argv The arguments.
+/// @return The exit code.
+int run(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     for (int i = 1; i < argc; ++i) {
@@ -85,7 +111,12 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
-        polls::app::App app{std::filesystem::current_path() / "polls_actions.jsonl"};
+        auto screens = screensService();
+        if (!screens) {
+            std::cerr << "polls-server: the screens do not build: " << screens.error() << '\n';
+            return 1;
+        }
+        polls::app::App const app{std::filesystem::current_path() / "polls_actions.jsonl", 4, {std::move(*screens)}};
 
         ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};
         if (!wsServer.listen()) {
@@ -118,4 +149,15 @@ int main(int argc, char** argv) {
 
     std::cout << "polls-server: stopped\n";
     return exitCode;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (std::exception const& error) {
+        std::cerr << "polls-server: " << error.what() << '\n';
+        return 1;
+    }
 }

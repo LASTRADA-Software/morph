@@ -27,10 +27,14 @@
 #include <csignal>
 #include <cstdlib>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/util/datetime.hpp>
+#include <pastebin_screens.hpp>
 #include <string>
 
 #include "clock.hpp"
@@ -124,7 +128,27 @@ void seedDemoPastes() {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+namespace {
+
+/// @brief The UI service over pastebin's screens, served beside its models so a generic client opens them (spec 4 §1).
+/// @return The service, or why the screens do not build.
+std::expected<std::shared_ptr<::morph::backend::IEnvelopeService>, std::string> screensService() {
+    auto bundle = pastebin::screens::bundle();
+    if (!bundle) {
+        return std::unexpected(bundle.error().message());
+    }
+    return std::make_shared<::morph::ui::UiService>(std::move(*bundle));
+}
+
+}  // namespace
+
+namespace {
+
+/// @brief The server: everything `main` does, with what it throws left to `main`.
+/// @param argc The argument count.
+/// @param argv The arguments.
+/// @return The exit code.
+int run(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     bool seed = false;
@@ -149,7 +173,16 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
-        pastebin::app::App app{std::filesystem::current_path() / "pastebin_actions.jsonl"};
+        auto screens = screensService();
+        if (!screens) {
+            std::cerr << "pastebin-server: the screens do not build: " << screens.error() << '\n';
+            return 1;
+        }
+        pastebin::app::App const app{std::filesystem::current_path() / "pastebin_actions.jsonl",
+                                     std::chrono::seconds{5},
+                                     4,
+                                     nullptr,
+                                     {std::move(*screens)}};
 
         const char* portEnv = std::getenv("PASTEBIN_PORT");
         const int port = portEnv != nullptr ? std::atoi(portEnv) : 0;
@@ -184,4 +217,15 @@ int main(int argc, char** argv) {
 
     std::cout << "pastebin-server: stopped\n";
     return exitCode;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (std::exception const& error) {
+        std::cerr << "pastebin-server: " << error.what() << '\n';
+        return 1;
+    }
 }

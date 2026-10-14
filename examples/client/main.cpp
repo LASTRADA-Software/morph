@@ -40,15 +40,23 @@ struct ShellFactory {
     std::unique_ptr<ui::MountedShell> operator()(ui::AppContext& context, ui::IViewBackend& backend,
                                                  std::expected<ui::Bundle, ui::ConnectError> opened) const {
         auto problems = std::make_shared<int>(0);
-        examples::ClientShellOptions options{.startScreen = args->screen,
-                                             .onProblem =
-                                                 [problems](std::string const& problem) {
-                                                     ++*problems;
-                                                     std::cerr << "client: " << problem << '\n';
-                                                 },
-                                             .onMounted = {}};
+        auto const mounted = std::make_shared<bool>(false);
+        bool const exitAfterMount = args->exitAfterMount;
+        examples::ClientShellOptions options{
+            .startScreen = args->screen,
+            .onProblem =
+                [&context, problems, mounted, exitAfterMount](std::string const& problem) {
+                    ++*problems;
+                    std::cerr << "client: " << problem << '\n';
+                    // Nothing will mount: a check that waits for one ends now.
+                    if (exitAfterMount && !*mounted) {
+                        context.executor().post([&context] { context.quit(1); });
+                    }
+                },
+            .onMounted = {}};
         if (args->exitAfterMount) {
-            options.onMounted = [&context, problems](std::string const& /*screenId*/) {
+            options.onMounted = [&context, problems, mounted](std::string const& /*screenId*/) {
+                *mounted = true;
                 // Posted, so the mount's own diagnostics are counted first.
                 context.executor().post([&context, problems] { context.quit(*problems == 0 ? 0 : 1); });
             };

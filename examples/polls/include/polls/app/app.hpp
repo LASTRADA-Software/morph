@@ -48,7 +48,9 @@ public:
     ///        cap installed), and the durable action log.
     /// @param actionLogPath Where `FileActionLog` persists entries.
     /// @param workers       Size of the model worker pool.
-    explicit App(std::filesystem::path actionLogPath, std::size_t workers = 4);
+    /// @param services      Envelope services the server answers besides the models, such as the UI service that
+    ///        serves this application's screens; none by default.
+    explicit App(std::filesystem::path actionLogPath, std::size_t workers = 4, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Detaches the process-wide default action log.
     ~App();

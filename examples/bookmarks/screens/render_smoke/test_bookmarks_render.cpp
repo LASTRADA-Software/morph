@@ -45,7 +45,8 @@ TEST_CASE("bookmarks render smoke: local mode, every screen, offscreen", "[bookm
                                    .setUp = [](LocalSetup const&) { bookmarks::screens::prepareLocal(); }},
                           LocalSetup{.db = {}, .user = "alice"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
-    CHECK(report.mounted == std::vector<std::string>{std::string{bookmarks::screens::kBookmarks}});
+    CHECK(report.mounted == std::vector<std::string>{std::string{bookmarks::screens::kLogin},
+                                                     std::string{bookmarks::screens::kBookmarks}});
     // Just before the verdict: unscoped messages attach to the next assertion.
     for (std::string const& failure : report.failures) {
         UNSCOPED_INFO(failure);
