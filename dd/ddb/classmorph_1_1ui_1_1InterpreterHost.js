@@ -2,9 +2,8 @@ var classmorph_1_1ui_1_1InterpreterHost =
 [
     [ "navigate", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d", null ],
     [ "closeSelf", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ac18bcfccb5d20c16678996448909d5d7", null ],
-    [ "focus", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a28a5427b3d129b8f3be9222bc36eae7c", null ],
     [ "hostCommand", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819", null ],
-    [ "switchBackend", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a8c7a77593886afcf54a51e4fc41737a8", null ],
+    [ "switchBackend", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#af11cc32c21800be673887e1f4f44780f", null ],
     [ "resetPrefs", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a7005d17005c525201ae8d2fdcc644fc3", null ],
     [ "setLocale", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a0df04e6305f0d4a9137693929ecabb1a", null ],
     [ "notify", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ae3e4d55314c80499677bdba59b7da892", null ],

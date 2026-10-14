@@ -15,5 +15,6 @@ var classmorph_1_1ui_1_1Screen =
     [ "runLifecycle", "da/d97/classmorph_1_1ui_1_1Screen.html#ac7c8b213557228c76d193705c4f593dd", null ],
     [ "diagnostics", "da/d97/classmorph_1_1ui_1_1Screen.html#ab7cfaeb476f62ba7f4fbf88293a0bc3d", null ],
     [ "setPreference", "da/d97/classmorph_1_1ui_1_1Screen.html#a358ee252db4282b6200239b61bbf2258", null ],
+    [ "document", "da/d97/classmorph_1_1ui_1_1Screen.html#a7744c153484685f677917a8694d3e9f6", null ],
     [ "lend", "da/d97/classmorph_1_1ui_1_1Screen.html#a7af98d7f5426f912faf6d5d2467b9205", null ]
 ];

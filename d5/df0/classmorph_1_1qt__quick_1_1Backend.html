@@ -150,8 +150,8 @@ Public Member Functions</h2></td></tr>
 &#160;</td><td class="memItemRight"><b>Backend</b> (Backend &amp;&amp;)=delete</td></tr>
 <tr class="memitem:ac7f4cef980f694cc39e3cc28a4186c97" id="r_ac7f4cef980f694cc39e3cc28a4186c97"><td class="memItemLeft"><a id="ac7f4cef980f694cc39e3cc28a4186c97" name="ac7f4cef980f694cc39e3cc28a4186c97"></a>
 <a class="el" href="#a7b31dc5725321a729acd704ffd1c009b">Backend</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a7b31dc5725321a729acd704ffd1c009b">Backend</a> &amp;&amp;)=delete</td></tr>
-<tr class="memitem:a5d8f9bbe7d72db4a749124973a6c5854" id="r_a5d8f9bbe7d72db4a749124973a6c5854"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html">CustomWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5d8f9bbe7d72db4a749124973a6c5854">createCustom</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d2/d12/structmorph_1_1qt__quick_1_1CustomRequest.html">CustomRequest</a> const &amp;request)</td></tr>
-<tr class="memdesc:a5d8f9bbe7d72db4a749124973a6c5854"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a custom component by name.  <br /></td></tr>
+<tr class="memitem:a410dca2d1bf22d65bb14655de56d3a5c" id="r_a410dca2d1bf22d65bb14655de56d3a5c"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a410dca2d1bf22d65bb14655de56d3a5c">createCustom</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;request) override</td></tr>
+<tr class="memdesc:a410dca2d1bf22d65bb14655de56d3a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a custom component by name.  <br /></td></tr>
 <tr class="memitem:af52d2f06f31dda620055849bed27ceb7" id="r_af52d2f06f31dda620055849bed27ceb7"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/d89/classmorph_1_1ui_1_1TextWidget.html">ui::TextWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af52d2f06f31dda620055849bed27ceb7">createText</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:af52d2f06f31dda620055849bed27ceb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes read-only text.     <br /></td></tr>
 <tr class="memitem:ad1cb8ce9e6bba4e013afecee23775a34" id="r_ad1cb8ce9e6bba4e013afecee23775a34"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html">ui::ButtonWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad1cb8ce9e6bba4e013afecee23775a34">createButton</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -229,7 +229,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html" title="Makes widgets. Each factory appends the new widget to parent, or makes a root when it is null,...">ui::IViewBackend</a></span> over Qt Quick: each widget is a Qt Quick item made from its kind's <span class="tt">MorphUi</span> component, or from the component the restyle map names for that kind. </p>
 <p>Every root a mount makes is appended to a column the backend adds to the host item, so several roots share it top to bottom. Neither copyable nor movable. It belongs to the thread of its engine, and every widget it makes is destroyed before it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a7b31dc5725321a729acd704ffd1c009b" name="a7b31dc5725321a729acd704ffd1c009b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7b31dc5725321a729acd704ffd1c009b">&#9670;&#160;</a></span>Backend()</h2>
@@ -302,8 +302,8 @@ Static Public Member Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="a5d8f9bbe7d72db4a749124973a6c5854" name="a5d8f9bbe7d72db4a749124973a6c5854"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5d8f9bbe7d72db4a749124973a6c5854">&#9670;&#160;</a></span>createCustom()</h2>
+<a id="a410dca2d1bf22d65bb14655de56d3a5c" name="a410dca2d1bf22d65bb14655de56d3a5c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a410dca2d1bf22d65bb14655de56d3a5c">&#9670;&#160;</a></span>createCustom()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -312,19 +312,19 @@ Static Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html">CustomWidget</a> &gt; morph::qt_quick::Backend::createCustom </td>
+          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt; morph::qt_quick::Backend::createCustom </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../d2/d12/structmorph_1_1qt__quick_1_1CustomRequest.html">CustomRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -338,6 +338,8 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The widget, or null when the fallback is shown instead. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>

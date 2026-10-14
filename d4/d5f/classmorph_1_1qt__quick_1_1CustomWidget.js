@@ -1,7 +1,7 @@
 var classmorph_1_1qt__quick_1_1CustomWidget =
 [
-    [ "setTextProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#a51baca0332e755eedbf5ef99a6171212", null ],
-    [ "setBoolProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#a164627c1d7390b024f837d88704565f4", null ],
-    [ "setNumberProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#af6ee1c9032ea1e0a7d7c4c7a877bf452", null ],
-    [ "setOnEvent", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#a097b7ca46e6f7a2a2d7de114baef4e1e", null ]
+    [ "setTextProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#abfb5fd3be2818accdb807dd609173fca", null ],
+    [ "setBoolProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#af01ed3cdfafade2913a697b722946899", null ],
+    [ "setNumberProp", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#a98d8e73c2cdbf2d6141a80ead258fa9c", null ],
+    [ "setOnEvent", "d4/d5f/classmorph_1_1qt__quick_1_1CustomWidget.html#aaaa74680031235895bf9d0cbfcb89684", null ]
 ];

@@ -38,8 +38,9 @@ var searchData=
   ['wizardsteptitlekey_35',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],
   ['wizardtitlekey_36',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]],
   ['wizardview_37',['wizardView',['../df/df7/wizard__view_8hpp.html#a4834b3606dfbe8a7b13eee0bf067bad1',1,'morph::forms']]],
-  ['wrapped_38',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
-  ['writemessage_39',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
-  ['writeto_40',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
-  ['writtencell_41',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]]
+  ['workspace_38',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb',1,'morph::ui::Workspace']]],
+  ['wrapped_39',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['writemessage_40',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
+  ['writeto_41',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
+  ['writtencell_42',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]]
 ];

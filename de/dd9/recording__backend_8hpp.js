@@ -31,6 +31,7 @@ var recording__backend_8hpp =
     [ "morph::ui::testing::detail::FakeSplitter", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter" ],
     [ "morph::ui::testing::detail::FakeCollapsible", "d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible.html", "d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible" ],
     [ "morph::ui::testing::detail::FakeDropZone", "da/d2f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDropZone.html", "da/d2f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDropZone" ],
+    [ "morph::ui::testing::detail::FakeCustom", "d3/d68/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCustom.html", "d3/d68/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCustom" ],
     [ "morph::ui::testing::detail::FakeTable", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable" ],
     [ "morph::ui::testing::RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend" ],
     [ "morph::ui::testing::detail::PropList", "de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261", null ],

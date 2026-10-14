@@ -144,6 +144,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a5f63cec89bdc22a967f40c0a8cce5ec5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name and role.  <br /></td></tr>
 <tr class="memitem:aab1ee93f768cedbae69abaa22e377e8a" id="r_aab1ee93f768cedbae69abaa22e377e8a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aab1ee93f768cedbae69abaa22e377e8a">testId</a></td></tr>
 <tr class="memdesc:aab1ee93f768cedbae69abaa22e377e8a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The stable identifier an automated test finds the widget by; empty means none. Set once.  <br /></td></tr>
+<tr class="memitem:ac2726d4da8d803930b8e7e1f21e0477e" id="r_ac2726d4da8d803930b8e7e1f21e0477e"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ac2726d4da8d803930b8e7e1f21e0477e">focusId</a></td></tr>
+<tr class="memdesc:ac2726d4da8d803930b8e7e1f21e0477e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name a focus request after mount finds the widget by (<span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html#a8d024812a0c8f292c4812cf27047d959" title="Moves keyboard focus to the mounted widget whose Common::focusId is focusId, at any depth,...">Mounted::focus</a></span>), such as a document element's id; empty means none. Set once.  <br /></td></tr>
 <tr class="memitem:a2eecd3185b430971000997777e6d8df5" id="r_a2eecd3185b430971000997777e6d8df5"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2eecd3185b430971000997777e6d8df5">tooltip</a></td></tr>
 <tr class="memdesc:a2eecd3185b430971000997777e6d8df5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> shown while the pointer rests on the widget; empty shows none.  <br /></td></tr>
 <tr class="memitem:aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa" id="r_aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa">surface</a></td></tr>
@@ -302,6 +304,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="ac2726d4da8d803930b8e7e1f21e0477e" name="ac2726d4da8d803930b8e7e1f21e0477e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac2726d4da8d803930b8e7e1f21e0477e">&#9670;&#160;</a></span>focusId</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Common::focusId</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The name a focus request after mount finds the widget by (<span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html#a8d024812a0c8f292c4812cf27047d959" title="Moves keyboard focus to the mounted widget whose Common::focusId is focusId, at any depth,...">Mounted::focus</a></span>), such as a document element's id; empty means none. Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00348">348</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a2eecd3185b430971000997777e6d8df5" name="a2eecd3185b430971000997777e6d8df5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2eecd3185b430971000997777e6d8df5">&#9670;&#160;</a></span>tooltip</h2>
 
@@ -316,7 +336,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> shown while the pointer rests on the widget; empty shows none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -334,7 +354,7 @@ Public Attributes</h2></td></tr>
 
 <p>The named token set of the theme that styles this node and everything inside it; empty is the theme's default. Set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +372,7 @@ Public Attributes</h2></td></tr>
 
 <p>Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a chord listed twice, the first entry is the one called. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -370,7 +390,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the widget takes keyboard focus when the content it is part of mounts; the first such widget in document order wins. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

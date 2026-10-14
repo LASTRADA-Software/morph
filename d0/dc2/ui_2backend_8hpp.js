@@ -33,5 +33,7 @@ var ui_2backend_8hpp =
     [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget" ],
     [ "morph::ui::CollapsibleWidget", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget" ],
     [ "morph::ui::DropZoneWidget", "df/df5/classmorph_1_1ui_1_1DropZoneWidget.html", "df/df5/classmorph_1_1ui_1_1DropZoneWidget" ],
+    [ "morph::ui::CustomWidget", "d2/dd1/classmorph_1_1ui_1_1CustomWidget.html", "d2/dd1/classmorph_1_1ui_1_1CustomWidget" ],
+    [ "morph::ui::CustomRequest", "d2/d54/structmorph_1_1ui_1_1CustomRequest.html", "d2/d54/structmorph_1_1ui_1_1CustomRequest" ],
     [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", "df/dae/classmorph_1_1ui_1_1IViewBackend" ]
 ];

@@ -54,6 +54,7 @@ var view_8hpp =
     [ "morph::ui::Splitter", "d7/d07/structmorph_1_1ui_1_1Splitter.html", "d7/d07/structmorph_1_1ui_1_1Splitter" ],
     [ "morph::ui::Collapsible", "d0/db5/structmorph_1_1ui_1_1Collapsible.html", "d0/db5/structmorph_1_1ui_1_1Collapsible" ],
     [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", "d0/dcb/structmorph_1_1ui_1_1DropZone" ],
+    [ "morph::ui::CustomProp", "de/dc3/structmorph_1_1ui_1_1CustomProp.html", "de/dc3/structmorph_1_1ui_1_1CustomProp" ],
     [ "morph::ui::Custom", "db/d27/structmorph_1_1ui_1_1Custom.html", "db/d27/structmorph_1_1ui_1_1Custom" ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", "d9/d5b/structmorph_1_1ui_1_1NodeData" ],
     [ "morph::ui::TableOptions", "d7/d25/structmorph_1_1ui_1_1TableOptions.html", "d7/d25/structmorph_1_1ui_1_1TableOptions" ],

@@ -133,12 +133,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab8bfe2d9fa4c44eb00dbdbdf962d76f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts <code class="param">node</code> under <code class="param">parent</code>; <code class="param">scope</code> owns its widgets and bindings.  <br /></td></tr>
 <tr class="memitem:a196583f94b9a5bc630f668ef4596af8e" id="r_a196583f94b9a5bc630f668ef4596af8e"><td class="memItemLeft"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a196583f94b9a5bc630f668ef4596af8e">mountRoot</a> (<a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a> &amp;scope, <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> const &amp;node, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)</td></tr>
 <tr class="memdesc:a196583f94b9a5bc630f668ef4596af8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts <code class="param">node</code> as <span class="tt"><a class="el" href="#ab8bfe2d9fa4c44eb00dbdbdf962d76f7" title="Mounts node under parent; scope owns its widgets and bindings.">mount</a></span> does, as a mount of its own: the first <span class="tt">autofocus</span> widget it mounts, in document order, takes keyboard focus once the whole of it has mounted.  <br /></td></tr>
+<tr class="memitem:a23b1d4173f82e783b38ac19930736743" id="r_a23b1d4173f82e783b38ac19930736743"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a23b1d4173f82e783b38ac19930736743">focus</a> (std::string_view focusId)</td></tr>
+<tr class="memdesc:a23b1d4173f82e783b38ac19930736743"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the mounted widget whose <span class="tt">focusId</span> is <code class="param">focusId</code>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Builds widgets for nodes and wires their props and callbacks. </p>
 <p>One per <span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html" title="A view tree mounted on a backend: its widgets, built once, and the bindings that keep them current.">Mounted</a></span>. It must outlive every scope it mounted into: a <a class="el" href="../../d9/d60/structmorph_1_1ui_1_1Switch.html" title="Shows the case whose key the selector yields; remounts only when that key changes.">Switch</a>, <a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a>, <a class="el" href="../../d2/dc0/structmorph_1_1ui_1_1Dialog.html" title="A modal overlay; its content is mounted only while it is open.">Dialog</a>, <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> binding calls back into it to mount content later. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a182ae17e8bb16fecf23e99ef54735ebe" name="a182ae17e8bb16fecf23e99ef54735ebe"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a182ae17e8bb16fecf23e99ef54735ebe">&#9670;&#160;</a></span>Mounter()</h2>
@@ -174,7 +176,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -222,7 +224,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node's widget, or null for a null node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00188">188</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,7 +271,43 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node's widget, or null for a null node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a23b1d4173f82e783b38ac19930736743" name="a23b1d4173f82e783b38ac19930736743"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a23b1d4173f82e783b38ac19930736743">&#9670;&#160;</a></span>focus()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::Mounter::focus </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>focusId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Moves keyboard focus to the mounted widget whose <span class="tt">focusId</span> is <code class="param">focusId</code>. </p>
+<p>Of several such widgets (rows of a list), the one mounted first is taken. A backend that cannot move focus leaves it where it was; the request was still made. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">focusId</td><td>The name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether a mounted widget has that name. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

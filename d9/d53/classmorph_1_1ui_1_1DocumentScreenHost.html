@@ -142,6 +142,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a51c4224debcf787015d0d83ef863a34f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A host over <code class="param">session</code> and <code class="param">dispatcher</code>.  <br /></td></tr>
 <tr class="memitem:aea292812afd71e023cafbb4c4dd45540" id="r_aea292812afd71e023cafbb4c4dd45540"><td class="memItemLeft">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &gt;, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aea292812afd71e023cafbb4c4dd45540">mount</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> params) override</td></tr>
 <tr class="memdesc:aea292812afd71e023cafbb4c4dd45540"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a document screen.  <br /></td></tr>
+<tr class="memitem:ae18b34d901128c1151b06b5a1c5708ae" id="r_ae18b34d901128c1151b06b5a1c5708ae"><td class="memItemLeft">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &gt;, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae18b34d901128c1151b06b5a1c5708ae">mountInto</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;parent)</td></tr>
+<tr class="memdesc:ae18b34d901128c1151b06b5a1c5708ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a screen as <span class="tt"><a class="el" href="#aea292812afd71e023cafbb4c4dd45540" title="Mounts a document screen.">mount</a></span> does, with its root widget appended to <code class="param">parent</code> instead of made a backend root: how a shell puts a screen in its own container, such as a tab's page.  <br /></td></tr>
 <tr class="memitem:a84f98bff016d156a4ae2c320b6a30ab2" id="r_a84f98bff016d156a4ae2c320b6a30ab2"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a84f98bff016d156a4ae2c320b6a30ab2">identityOf</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params) override</td></tr>
 <tr class="memdesc:a84f98bff016d156a4ae2c320b6a30ab2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The identity a document screen would have with <code class="param">params:</code> its <span class="tt">identity</span> evaluated over the params.  <br /></td></tr>
 <tr class="memitem:ad8dd83c3ddbad125e85d47671bdc29b6" id="r_ad8dd83c3ddbad125e85d47671bdc29b6"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad8dd83c3ddbad125e85d47671bdc29b6">onNavigate</a> (<a class="el" href="../../dc/d75/structmorph_1_1ui_1_1NavigateRequest.html">NavigateRequest</a> const &amp;request)</td></tr>
@@ -267,6 +269,53 @@ Static Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ae18b34d901128c1151b06b5a1c5708ae" name="ae18b34d901128c1151b06b5a1c5708ae"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae18b34d901128c1151b06b5a1c5708ae">&#9670;&#160;</a></span>mountInto()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &gt;, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::DocumentScreenHost::mountInto </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>params</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Mounts a screen as <span class="tt"><a class="el" href="#aea292812afd71e023cafbb4c4dd45540" title="Mounts a document screen.">mount</a></span> does, with its root widget appended to <code class="param">parent</code> instead of made a backend root: how a shell puts a screen in its own container, such as a tab's page. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The screen id. </td></tr>
+    <tr><td class="paramname">params</td><td>Its params. </td></tr>
+    <tr><td class="paramname">parent</td><td>The container; it outlives the handle. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its handle, or why it could not be mounted. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a84f98bff016d156a4ae2c320b6a30ab2" name="a84f98bff016d156a4ae2c320b6a30ab2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a84f98bff016d156a4ae2c320b6a30ab2">&#9670;&#160;</a></span>identityOf()</h2>
 
@@ -306,7 +355,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a74baa68354c22a07a32a4f271c08289d">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -341,7 +390,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +425,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +461,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its root widget, or <span class="tt">nullptr</span> for a closed or foreign handle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

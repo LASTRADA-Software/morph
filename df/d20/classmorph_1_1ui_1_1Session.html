@@ -143,27 +143,41 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a8bbbaeef938005e85c039cc2b2c3a808" id="r_a8bbbaeef938005e85c039cc2b2c3a808"><td class="memItemLeft"><a class="el" href="../../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html">SessionOptions</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a8bbbaeef938005e85c039cc2b2c3a808">options</a> () const noexcept</td></tr>
 <tr class="memdesc:a8bbbaeef938005e85c039cc2b2c3a808"><td class="mdescLeft">&#160;</td><td class="mdescRight">The options.  <br /></td></tr>
 <tr class="memitem:a42fe016063e96da2b30601424bd2d1d9" id="r_a42fe016063e96da2b30601424bd2d1d9"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a42fe016063e96da2b30601424bd2d1d9">setPermitted</a> (std::set&lt; std::string, std::less&lt;&gt; &gt; permitted)</td></tr>
-<tr class="memdesc:a42fe016063e96da2b30601424bd2d1d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the action ids the principal may run, and the <span class="tt">host:&lt;command&gt;</span> names the client has, as the catalog reply lists them; <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client has a host command. A tracked read.">can</a>": ...}</span> follows them.  <br /></td></tr>
+<tr class="memdesc:a42fe016063e96da2b30601424bd2d1d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the action ids the principal may run, as the catalog reply lists them; <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client can run a host command now....">can</a>": ...}</span> follows them.  <br /></td></tr>
 <tr class="memitem:ac8c22206e89080c3a9dfcffd6c7c2fa3" id="r_ac8c22206e89080c3a9dfcffd6c7c2fa3"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3">can</a> (std::string_view action) const</td></tr>
-<tr class="memdesc:ac8c22206e89080c3a9dfcffd6c7c2fa3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal may run an action, or the client has a host command. A tracked read.  <br /></td></tr>
+<tr class="memdesc:ac8c22206e89080c3a9dfcffd6c7c2fa3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal may run an action, or the client can run a host command now. A tracked read.  <br /></td></tr>
 <tr class="memitem:ab4bb72d416ad96d9b3ddc921c77736ee" id="r_ab4bb72d416ad96d9b3ddc921c77736ee"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab4bb72d416ad96d9b3ddc921c77736ee">setFormatting</a> (<a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> format)</td></tr>
 <tr class="memdesc:ab4bb72d416ad96d9b3ddc921c77736ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the formatting facts; every <span class="tt">t</span> and display function re-evaluates.  <br /></td></tr>
 <tr class="memitem:a3c1570a1514749caf3e4d2efc71799b7" id="r_a3c1570a1514749caf3e4d2efc71799b7"><td class="memItemLeft"><a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3c1570a1514749caf3e4d2efc71799b7">formatting</a> () const</td></tr>
 <tr class="memdesc:a3c1570a1514749caf3e4d2efc71799b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The formatting facts. A tracked read.  <br /></td></tr>
 <tr class="memitem:a9f7a33567bbb6d52e4865076d20b8838" id="r_a9f7a33567bbb6d52e4865076d20b8838"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9f7a33567bbb6d52e4865076d20b8838">setLocale</a> (std::string locale)</td></tr>
 <tr class="memdesc:a9f7a33567bbb6d52e4865076d20b8838"><td class="mdescLeft">&#160;</td><td class="mdescRight">Changes the active locale, keeping the other formatting facts.  <br /></td></tr>
+<tr class="memitem:ae0cda90347b91b13370dea8934ed0e07" id="r_ae0cda90347b91b13370dea8934ed0e07"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae0cda90347b91b13370dea8934ed0e07">setTranslations</a> (<a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a> translations)</td></tr>
+<tr class="memdesc:ae0cda90347b91b13370dea8934ed0e07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the message catalogue, keeping the other formatting facts; every <span class="tt">t</span> re-resolves.  <br /></td></tr>
 <tr class="memitem:ac90b27b66cefbd76eca1395b4725eb18" id="r_ac90b27b66cefbd76eca1395b4725eb18"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac90b27b66cefbd76eca1395b4725eb18">setEnvironment</a> (<a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> values)</td></tr>
 <tr class="memdesc:ac90b27b66cefbd76eca1395b4725eb18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the <span class="tt">env</span> values (<span class="tt">widthClass</span>, <span class="tt">locale</span>, <span class="tt">platform</span>, <span class="tt">online</span>, <span class="tt">backend</span>).  <br /></td></tr>
 <tr class="memitem:a8805fa8d2258b4ea0824e8d4fb008191" id="r_a8805fa8d2258b4ea0824e8d4fb008191"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8805fa8d2258b4ea0824e8d4fb008191">setSessionValues</a> (<a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> values)</td></tr>
 <tr class="memdesc:a8805fa8d2258b4ea0824e8d4fb008191"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the <span class="tt">session</span> values (<span class="tt">principal</span>, <span class="tt">userName</span>, …).  <br /></td></tr>
 <tr class="memitem:a16accb65d71b6da3f896cbc823cb89f9" id="r_a16accb65d71b6da3f896cbc823cb89f9"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a16accb65d71b6da3f896cbc823cb89f9">setHostValues</a> (<a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> values)</td></tr>
 <tr class="memdesc:a16accb65d71b6da3f896cbc823cb89f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the <span class="tt">host</span> values the application registered.  <br /></td></tr>
+<tr class="memitem:a3763f3c07ffe556fabc45718f439014c" id="r_a3763f3c07ffe556fabc45718f439014c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3763f3c07ffe556fabc45718f439014c">setHostCommands</a> (<a class="el" href="../../dd/d6a/structmorph_1_1ui_1_1HostCommands.html">HostCommands</a> commands)</td></tr>
+<tr class="memdesc:a3763f3c07ffe556fabc45718f439014c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the client's host commands: the names <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client can run a host command now....">can</a>": "host:name"}</span> answers for, and what runs them. A session without a runner asks <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819" title="Runs a command the application registered (host/1).">InterpreterHost::hostCommand</a></span>.  <br /></td></tr>
+<tr class="memitem:a00496e47156244dc93749a10466eea84" id="r_a00496e47156244dc93749a10466eea84"><td class="memItemLeft">std::function&lt; <a class="el" href="../../d3/d01/structmorph_1_1ui_1_1HostCommandResult.html">HostCommandResult</a>(std::string const &amp;, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;)&gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a00496e47156244dc93749a10466eea84">hostCommandRunner</a> () const noexcept</td></tr>
+<tr class="memdesc:a00496e47156244dc93749a10466eea84"><td class="mdescLeft">&#160;</td><td class="mdescRight">What runs host commands.  <br /></td></tr>
 <tr class="memitem:af6699635c8893503ef8e2abeaab6b0de" id="r_af6699635c8893503ef8e2abeaab6b0de"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#af6699635c8893503ef8e2abeaab6b0de">client</a> (<a class="el" href="../../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663">ExprKind</a> form, std::string_view name) const</td></tr>
 <tr class="memdesc:af6699635c8893503ef8e2abeaab6b0de"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads <span class="tt">env</span>, <span class="tt">session</span> or <span class="tt">host</span>. A tracked read.  <br /></td></tr>
+<tr class="memitem:a1122c93a6ca2a137b0c5e09af1c672a6" id="r_a1122c93a6ca2a137b0c5e09af1c672a6"><td class="memItemLeft"><a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">detail::RtScope</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#a1122c93a6ca2a137b0c5e09af1c672a6">appScope</a> () const noexcept</td></tr>
+<tr class="memdesc:a1122c93a6ca2a137b0c5e09af1c672a6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's scope, which <span class="tt">{"ref": "app.name"}</span> reads and <span class="tt">{"set": "app.name"}</span> writes; set by <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html#abe4c07095a0a366095fa3529b3f1fef0" title="Mounts the app document as the session&#39;s root scope (spec 6 §5).">Interpreter::mountApp</a></span> for as long as the <span class="tt"><a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html" title="The app document mounted as the root scope every screen of the session shares (spec 6 §5).">AppRoot</a></span> lives.  <br /></td></tr>
+<tr class="memitem:a3cb678b90e9b7031ac55e9e07dcd160f" id="r_a3cb678b90e9b7031ac55e9e07dcd160f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3cb678b90e9b7031ac55e9e07dcd160f">setAppScope</a> (<a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">detail::RtScope</a> const *scope) noexcept</td></tr>
+<tr class="memdesc:a3cb678b90e9b7031ac55e9e07dcd160f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs or clears the app document's scope. Called by <span class="tt"><a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html" title="The app document mounted as the root scope every screen of the session shares (spec 6 §5).">AppRoot</a></span>, nothing else.  <br /></td></tr>
 <tr class="memitem:a991b82c65d0e85d5c6199ce7eb574363" id="r_a991b82c65d0e85d5c6199ce7eb574363"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a991b82c65d0e85d5c6199ce7eb574363">clear</a> ()</td></tr>
 <tr class="memdesc:a991b82c65d0e85d5c6199ce7eb574363"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops every cache entry: <span class="tt">signOut</span> and a principal change (spec 5 §5, "Isolation").  <br /></td></tr>
-<tr class="memitem:aeef475aab80a70609d4c20fcb72755c6" id="r_aeef475aab80a70609d4c20fcb72755c6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aeef475aab80a70609d4c20fcb72755c6">backendChanged</a> ()</td></tr>
-<tr class="memdesc:aeef475aab80a70609d4c20fcb72755c6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks every entry stale and refetches those a mounted query uses: a backend switch (spec 6 §9).  <br /></td></tr>
+<tr class="memitem:aeefff92eac995b68a0009bd381c37f22" id="r_aeefff92eac995b68a0009bd381c37f22"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aeefff92eac995b68a0009bd381c37f22">backendChanged</a> (std::string const &amp;backend)</td></tr>
+<tr class="memdesc:aeefff92eac995b68a0009bd381c37f22"><td class="mdescLeft">&#160;</td><td class="mdescRight">Carries out a committed backend switch (spec 6 §9), in one batch: every mounted screen's <span class="tt">onBackendChange</span> runs first, then every entry is marked stale and the mounted queries refetch, and <span class="tt">{"env": "backend"}</span> becomes <code class="param">backend</code>. A query on a private alias therefore never fetches before its screen has recovered from the switch.  <br /></td></tr>
+<tr class="memitem:a97446299853d8c608f0c7d455f0b00de" id="r_a97446299853d8c608f0c7d455f0b00de"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a97446299853d8c608f0c7d455f0b00de">attachScreen</a> (<a class="el" href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html">detail::ScreenCore</a> &amp;screen)</td></tr>
+<tr class="memdesc:a97446299853d8c608f0c7d455f0b00de"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a mounted screen or app document, whose <span class="tt">onBackendChange</span> a backend switch runs.  <br /></td></tr>
+<tr class="memitem:a905b9074abc8f1eb529c8bdf2f9be2be" id="r_a905b9074abc8f1eb529c8bdf2f9be2be"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a905b9074abc8f1eb529c8bdf2f9be2be">detachScreen</a> (<a class="el" href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html">detail::ScreenCore</a> &amp;screen)</td></tr>
+<tr class="memdesc:a905b9074abc8f1eb529c8bdf2f9be2be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets a screen or app document.  <br /></td></tr>
 <tr class="memitem:a1471e5b20261e932331861bab05504c5" id="r_a1471e5b20261e932331861bab05504c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1471e5b20261e932331861bab05504c5">prefetch</a> (std::shared_ptr&lt; <a class="el" href="../../d0/dca/classmorph_1_1ui_1_1ModelChannel.html">ModelChannel</a> &gt; const &amp;channel, std::string const &amp;token, std::string const &amp;typeId, std::string const &amp;action, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;body)</td></tr>
 <tr class="memdesc:a1471e5b20261e932331861bab05504c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts a query's request before its screen mounts, so the screen mounts on a warm cache.  <br /></td></tr>
 <tr class="memitem:aaac1cbcb43cd8bb9c5bdc2dafb832077" id="r_aaac1cbcb43cd8bb9c5bdc2dafb832077"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aaac1cbcb43cd8bb9c5bdc2dafb832077">cacheSize</a> () const noexcept</td></tr>
@@ -206,7 +220,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><p>What screens of one client session share (spec 5 §5, §12b): the query cache, <span class="tt">refreshOn</span> bookkeeping, the principal's permitted actions, the formatting facts and the client's <span class="tt">env</span>, <span class="tt">session</span> and <span class="tt">host</span> values. </p>
 <p>It belongs to the runtime's owner, outlives every screen mounted on it, and is cleared by <span class="tt">signOut</span> and on a principal change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00588">588</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aad71e52a845dd6748f22ee7a9e1d12e8" name="aad71e52a845dd6748f22ee7a9e1d12e8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aad71e52a845dd6748f22ee7a9e1d12e8">&#9670;&#160;</a></span>Session()</h2>
@@ -244,7 +258,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00615">615</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +289,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The runtime. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00633">633</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +319,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The options. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00614">614</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,7 +346,7 @@ Static Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Sets the action ids the principal may run, and the <span class="tt">host:&lt;command&gt;</span> names the client has, as the catalog reply lists them; <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client has a host command. A tracked read.">can</a>": ...}</span> follows them. </p>
+<p>Sets the action ids the principal may run, as the catalog reply lists them; <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client can run a host command now....">can</a>": ...}</span> follows them. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">permitted</td><td>The ids. </td></tr>
@@ -340,7 +354,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00619">619</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00641">641</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,8 +381,8 @@ Static Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Whether the principal may run an action, or the client has a host command. A tracked read. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Whether the principal may run an action, or the client can run a host command now. A tracked read. </p>
+<p>A <span class="tt">host:</span> name is answered from the client's own commands (<span class="tt"><a class="el" href="#a3763f3c07ffe556fabc45718f439014c" title="Sets the client&#39;s host commands: the names {&quot;can&quot;: &quot;host:name&quot;} answers for, and what runs them....">setHostCommands</a></span>), never from the server's permitted set: the two have different owners, and a catalog refresh must not drop the client's commands. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">action</td><td>The action id, or <span class="tt">host:&lt;command&gt;</span>. </td></tr>
   </table>
@@ -376,7 +390,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is permitted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00624">624</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00649">649</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -411,7 +425,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00628">628</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00659">659</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -441,7 +455,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The formatting facts. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00632">632</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -476,7 +490,42 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00636">636</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00667">667</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae0cda90347b91b13370dea8934ed0e07" name="ae0cda90347b91b13370dea8934ed0e07"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae0cda90347b91b13370dea8934ed0e07">&#9670;&#160;</a></span>setTranslations()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::setTranslations </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a></td>          <td class="paramname"><span class="paramname"><em>translations</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces the message catalogue, keeping the other formatting facts; every <span class="tt">t</span> re-resolves. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">translations</td><td>The provider, such as <span class="tt"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html#a8f4d350bd00a61681d3192f2f89c7120" title="A provider over the catalogues as they are now. It shares them, so it stays valid after this object i...">MessageCatalogues::provider()</a></span>; empty shows every fallback. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00675">675</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -511,7 +560,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00644">644</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00683">683</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -546,7 +595,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00648">648</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00687">687</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -581,7 +630,72 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3763f3c07ffe556fabc45718f439014c" name="a3763f3c07ffe556fabc45718f439014c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3763f3c07ffe556fabc45718f439014c">&#9670;&#160;</a></span>setHostCommands()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::setHostCommands </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d6a/structmorph_1_1ui_1_1HostCommands.html">HostCommands</a></td>          <td class="paramname"><span class="paramname"><em>commands</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the client's host commands: the names <span class="tt">{"<a class="el" href="#ac8c22206e89080c3a9dfcffd6c7c2fa3" title="Whether the principal may run an action, or the client can run a host command now....">can</a>": "host:name"}</span> answers for, and what runs them. A session without a runner asks <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819" title="Runs a command the application registered (host/1).">InterpreterHost::hostCommand</a></span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">commands</td><td>The names and the runner. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00696">696</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a00496e47156244dc93749a10466eea84" name="a00496e47156244dc93749a10466eea84"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a00496e47156244dc93749a10466eea84">&#9670;&#160;</a></span>hostCommandRunner()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt; <a class="el" href="../../d3/d01/structmorph_1_1ui_1_1HostCommandResult.html">HostCommandResult</a>(std::string const  &amp;, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const  &amp;)&gt; const  &amp; morph::ui::Session::hostCommandRunner </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What runs host commands. </p>
+<dl class="section return"><dt>Returns</dt><dd>It; empty when the application set none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00703">703</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -622,7 +736,72 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00658">658</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1122c93a6ca2a137b0c5e09af1c672a6" name="a1122c93a6ca2a137b0c5e09af1c672a6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1122c93a6ca2a137b0c5e09af1c672a6">&#9670;&#160;</a></span>appScope()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">detail::RtScope</a> const  * morph::ui::Session::appScope </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The app document's scope, which <span class="tt">{"ref": "app.name"}</span> reads and <span class="tt">{"set": "app.name"}</span> writes; set by <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html#abe4c07095a0a366095fa3529b3f1fef0" title="Mounts the app document as the session&#39;s root scope (spec 6 §5).">Interpreter::mountApp</a></span> for as long as the <span class="tt"><a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html" title="The app document mounted as the root scope every screen of the session shares (spec 6 §5).">AppRoot</a></span> lives. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> when no app document is mounted. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00726">726</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3cb678b90e9b7031ac55e9e07dcd160f" name="a3cb678b90e9b7031ac55e9e07dcd160f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3cb678b90e9b7031ac55e9e07dcd160f">&#9670;&#160;</a></span>setAppScope()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::setAppScope </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">detail::RtScope</a> const *</td>          <td class="paramname"><span class="paramname"><em>scope</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs or clears the app document's scope. Called by <span class="tt"><a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html" title="The app document mounted as the root scope every screen of the session shares (spec 6 §5).">AppRoot</a></span>, nothing else. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">scope</td><td>The scope, or <span class="tt">nullptr</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -651,12 +830,12 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Drops every cache entry: <span class="tt">signOut</span> and a principal change (spec 5 §5, "Isolation"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00670">670</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00733">733</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aeef475aab80a70609d4c20fcb72755c6" name="aeef475aab80a70609d4c20fcb72755c6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeef475aab80a70609d4c20fcb72755c6">&#9670;&#160;</a></span>backendChanged()</h2>
+<a id="aeefff92eac995b68a0009bd381c37f22" name="aeefff92eac995b68a0009bd381c37f22"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aeefff92eac995b68a0009bd381c37f22">&#9670;&#160;</a></span>backendChanged()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -667,7 +846,7 @@ Static Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">void morph::ui::Session::backendChanged </td>
           <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>backend</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -678,9 +857,85 @@ Static Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Marks every entry stale and refetches those a mounted query uses: a backend switch (spec 6 §9). </p>
+<p>Carries out a committed backend switch (spec 6 §9), in one batch: every mounted screen's <span class="tt">onBackendChange</span> runs first, then every entry is marked stale and the mounted queries refetch, and <span class="tt">{"env": "backend"}</span> becomes <code class="param">backend</code>. A query on a private alias therefore never fetches before its screen has recovered from the switch. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">backend</td><td>The backend now in use. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02098">2098</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02279">2279</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a97446299853d8c608f0c7d455f0b00de" name="a97446299853d8c608f0c7d455f0b00de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a97446299853d8c608f0c7d455f0b00de">&#9670;&#160;</a></span>attachScreen()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::attachScreen </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html">detail::ScreenCore</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>screen</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Registers a mounted screen or app document, whose <span class="tt">onBackendChange</span> a backend switch runs. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screen</td><td>It. Borrowed until <span class="tt"><a class="el" href="#a905b9074abc8f1eb529c8bdf2f9be2be" title="Forgets a screen or app document.">detachScreen</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00756">756</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a905b9074abc8f1eb529c8bdf2f9be2be" name="a905b9074abc8f1eb529c8bdf2f9be2be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a905b9074abc8f1eb529c8bdf2f9be2be">&#9670;&#160;</a></span>detachScreen()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::detachScreen </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html">detail::ScreenCore</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>screen</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Forgets a screen or app document. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screen</td><td>It. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00760">760</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -738,7 +993,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00693">693</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00768">768</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -768,7 +1023,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The number of entries in the cache. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00704">704</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -798,7 +1053,7 @@ Static Public Member Functions</h2></td></tr>
 <p>A fresh instance token for a private alias: what the cache key holds for its instance. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, unique in the session. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00783">783</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -828,7 +1083,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Whether the newest write to a document source was made by a user event (spec 5 §6, <span class="tt">source: "user"</span>). </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00787">787</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -857,7 +1112,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Records a write to a document source. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00715">715</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00790">790</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -892,7 +1147,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00719">719</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00794">794</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -951,7 +1206,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00812">812</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1010,7 +1265,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The entry. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00749">749</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00824">824</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1045,7 +1300,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00775">775</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1085,7 +1340,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00791">791</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00866">866</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1125,7 +1380,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00823">823</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00898">898</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1160,7 +1415,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00830">830</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1196,7 +1451,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00844">844</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00919">919</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1226,7 +1481,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The clock. </p>
 <dl class="section return"><dt>Returns</dt><dd>Now. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00925">925</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1261,7 +1516,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00860">860</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00935">935</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1296,7 +1551,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1336,7 +1591,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02111">2111</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02301">2301</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

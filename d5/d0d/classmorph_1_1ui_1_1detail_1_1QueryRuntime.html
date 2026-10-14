@@ -154,6 +154,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a241f07f87d6fab24fd23944c98a8b5f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the query has a value or a failure for its current key, or is idle. A tracked read, for a boundary.  <br /></td></tr>
 <tr class="memitem:a9483f6ce2e8ac9164bed5bf4409d8b3d" id="r_a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9483f6ce2e8ac9164bed5bf4409d8b3d">refetch</a> ()</td></tr>
 <tr class="memdesc:a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refetches the current key now, ending a debounce wait.  <br /></td></tr>
+<tr class="memitem:aa6207e8e5cdc3bbb3ae3c25293f449ca" id="r_aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa6207e8e5cdc3bbb3ae3c25293f449ca">refetchCurrent</a> ()</td></tr>
+<tr class="memdesc:aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry when it differs from the current one, and fetches the current one otherwise. A backend switch uses it, so a body <span class="tt">onBackendChange</span> changed is fetched once, with what the recovery set, and the old key is not fetched first.  <br /></td></tr>
 <tr class="memitem:a96c4a06c67ce46512d4f312f4a10ac7e" id="r_a96c4a06c67ce46512d4f312f4a10ac7e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a96c4a06c67ce46512d4f312f4a10ac7e">invalidate</a> ()</td></tr>
 <tr class="memdesc:a96c4a06c67ce46512d4f312f4a10ac7e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks its entry stale and refetches it.  <br /></td></tr>
 <tr class="memitem:a6d9018dd02099225eb2cc1c049f49411" id="r_a6d9018dd02099225eb2cc1c049f49411"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6d9018dd02099225eb2cc1c049f49411">detach</a> ()</td></tr>
@@ -170,7 +172,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A query at run time (spec 5 §5): a key over the scope, an entry of the session's cache, latest wins. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01379">1379</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01458">1458</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6730b678581e1071579ff5d97257e021" name="a6730b678581e1071579ff5d97257e021"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6730b678581e1071579ff5d97257e021">&#9670;&#160;</a></span>QueryRuntime()</h2>
@@ -214,7 +216,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02319">2319</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02517">2517</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +245,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Stops its timers and releases its entry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02330">2330</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02528">2528</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Starts it: makes its key and the Effect that follows it, and its refresh timer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02342">2342</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02540">2540</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -303,7 +305,7 @@ Public Member Functions</h2></td></tr>
 <p>The value: the entry's, kept from the previous key while the new one has none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02451">2451</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02669">2669</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +335,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a request is in flight or waiting out its debounce. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02464">2464</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02682">2682</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +365,7 @@ Public Member Functions</h2></td></tr>
 <p>The failure's text, <span class="tt">null</span> when none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02472">2472</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02690">2690</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -393,7 +395,7 @@ Public Member Functions</h2></td></tr>
 <p>The failure's kind, <span class="tt">null</span> when none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02480">2480</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02698">2698</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -423,7 +425,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the query has a value or a failure for its current key, or is idle. A tracked read, for a boundary. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02488">2488</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02706">2706</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -452,7 +454,36 @@ Public Member Functions</h2></td></tr>
 
 <p>Refetches the current key now, ending a debounce wait. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02435">2435</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02634">2634</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa6207e8e5cdc3bbb3ae3c25293f449ca" name="aa6207e8e5cdc3bbb3ae3c25293f449ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa6207e8e5cdc3bbb3ae3c25293f449ca">&#9670;&#160;</a></span>refetchCurrent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::detail::QueryRuntime::refetchCurrent </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry when it differs from the current one, and fetches the current one otherwise. A backend switch uses it, so a body <span class="tt">onBackendChange</span> changed is fetched once, with what the recovery set, and the old key is not fetched first. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02650">2650</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -481,7 +512,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks its entry stale and refetches it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01423">1423</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01508">1508</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -510,7 +541,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Forgets its entry without releasing it: the session dropped the cache. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01431">1431</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01516">1516</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -540,7 +571,7 @@ Public Member Functions</h2></td></tr>
 <p>The current entry. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> while idle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01439">1439</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01524">1524</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -570,7 +601,7 @@ Public Member Functions</h2></td></tr>
 <p>The declaration. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01443">1443</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01528">1528</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -600,7 +631,7 @@ Public Member Functions</h2></td></tr>
 <p>The model type. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01447">1447</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01532">1532</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -630,7 +661,7 @@ Public Member Functions</h2></td></tr>
 <p>The channel its alias is bound to now. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> while the alias is unbound. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02339">2339</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02537">2537</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

@@ -3,7 +3,7 @@ var searchData=
   ['back_0',['back',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html#a975e483cdc7a0f3f50f42aec42379d88',1,'morph::forms::WizardSession::back()'],['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a29dd07a64f9bdb1ad3e537db4e1d30f7',1,'morph::flows::FlowSession::back()']]],
   ['backend_1',['Backend',['../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a7b31dc5725321a729acd704ffd1c009b',1,'morph::qt_quick::Backend::Backend()'],['../d2/d8e/classmorph_1_1tui_1_1Backend.html#aa2f5d25aa29f4fc9a3bf9a7ecc869995',1,'morph::tui::Backend::Backend()']]],
   ['backend_2',['backend',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a3ce5ac62ebd304294599ba1696be87ce',1,'morph::ui::testing::ConformanceProbe']]],
-  ['backendchanged_3',['backendChanged',['../df/d20/classmorph_1_1ui_1_1Session.html#aeef475aab80a70609d4c20fcb72755c6',1,'morph::ui::Session']]],
+  ['backendchanged_3',['backendChanged',['../df/d20/classmorph_1_1ui_1_1Session.html#aeefff92eac995b68a0009bd381c37f22',1,'morph::ui::Session']]],
   ['backendchangederror_4',['BackendChangedError',['../dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html#a5cf75f058d5fcf1ed3bbb9a60acd91e6',1,'morph::backend::BackendChangedError']]],
   ['badge_5',['badge',['../d1/dc0/author_8hpp.html#a8c89c2061ea5defd5000cbf529a71482',1,'morph::ui::author::badge()'],['../d8/d11/view_8hpp.html#a22956b2dabf60d44db940378bc46d1f7',1,'morph::ui::badge()']]],
   ['banner_6',['banner',['../d1/dc0/author_8hpp.html#a8eee4067a489def87a30c7b5776086c9',1,'morph::ui::author::banner()'],['../d8/d11/view_8hpp.html#a2c7ee7ece22895a24c60e16d70b3c402',1,'morph::ui::banner()']]],

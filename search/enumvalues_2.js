@@ -13,10 +13,11 @@ var searchData=
   ['client_10',['Client',['../df/d8f/selection_8hpp.html#af31b0b480b49cbe79648d1a0a8890550a577d7068826de925ea2aec01dbadf5e4',1,'Clientmorph::table'],['../d1/dc0/author_8hpp.html#a497493840c4e698f3c78175070886ed7a577d7068826de925ea2aec01dbadf5e4',1,'Clientmorph::ui::author']]],
   ['close_11',['Close',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ead3d2e617335f08df83599665eef8a418',1,'morph::ui']]],
   ['collection_12',['Collection',['../d4/db6/collection_8hpp.html#aff7d1b04b37c736459a12f2bd0b8856aad15b505cce09406de9f918cb1f8c641c',1,'Collectionmorph::forms'],['../d4/db6/collection_8hpp.html#ab793459efd58cfa40b89c78ad469feb5ad15b505cce09406de9f918cb1f8c641c',1,'Collectionmorph::forms']]],
-  ['columnnotreadable_13',['ColumnNotReadable',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0acda1225ffc413bb710a26bb9dc04a90c',1,'morph::table']]],
-  ['commandrecord_14',['CommandRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a92953e2d74617c5ae861005df8136920',1,'morph::ui::detail']]],
-  ['commands_15',['Commands',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac441ee50c88f6e5e3a7c69fc69dad8b8',1,'morph::ui::detail']]],
-  ['condition_16',['Condition',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde',1,'morph::ui::detail']]],
-  ['content_17',['Content',['../d1/d89/structmorph_1_1ui_1_1Sizing.html#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61',1,'morph::ui::Sizing']]],
-  ['custom_18',['Custom',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895ca90589c47f06eb971d548591f23c285af',1,'morph::table']]]
+  ['color_13',['Color',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aacb5feb1b7314637725a2e73bdc9f7295',1,'morph::ui']]],
+  ['columnnotreadable_14',['ColumnNotReadable',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0acda1225ffc413bb710a26bb9dc04a90c',1,'morph::table']]],
+  ['commandrecord_15',['CommandRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a92953e2d74617c5ae861005df8136920',1,'morph::ui::detail']]],
+  ['commands_16',['Commands',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac441ee50c88f6e5e3a7c69fc69dad8b8',1,'morph::ui::detail']]],
+  ['condition_17',['Condition',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde',1,'morph::ui::detail']]],
+  ['content_18',['Content',['../d1/d89/structmorph_1_1ui_1_1Sizing.html#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61',1,'morph::ui::Sizing']]],
+  ['custom_19',['Custom',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895ca90589c47f06eb971d548591f23c285af',1,'morph::table']]]
 ];

@@ -10,5 +10,11 @@ var searchData=
   ['healthstatus_7',['HealthStatus',['../d1/d59/structmorph_1_1backend_1_1HealthStatus.html',1,'morph::backend']]],
   ['helloreply_8',['HelloReply',['../d3/d85/structmorph_1_1ui_1_1HelloReply.html',1,'morph::ui']]],
   ['hellorequest_9',['HelloRequest',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html',1,'morph::ui']]],
-  ['holder_10',['Holder',['../dc/dcd/structmorph_1_1ui_1_1ServedFile_1_1Holder.html',1,'morph::ui::ServedFile']]]
+  ['holder_10',['Holder',['../dc/dcd/structmorph_1_1ui_1_1ServedFile_1_1Holder.html',1,'morph::ui::ServedFile']]],
+  ['hostarg_11',['HostArg',['../dd/d5b/structmorph_1_1ui_1_1HostArg.html',1,'morph::ui']]],
+  ['hostcommand_12',['HostCommand',['../d3/d39/structmorph_1_1ui_1_1HostCommand.html',1,'morph::ui']]],
+  ['hostcommandresult_13',['HostCommandResult',['../d3/d01/structmorph_1_1ui_1_1HostCommandResult.html',1,'morph::ui']]],
+  ['hostcommands_14',['HostCommands',['../dd/d6a/structmorph_1_1ui_1_1HostCommands.html',1,'morph::ui']]],
+  ['hostvalue_15',['HostValue',['../da/dd6/structmorph_1_1ui_1_1HostValue.html',1,'morph::ui']]],
+  ['hostvocabulary_16',['HostVocabulary',['../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html',1,'morph::ui']]]
 ];

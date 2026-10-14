@@ -28,5 +28,6 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createDrawer", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f0fd93a4538e13753d79c90d459da58", null ],
     [ "createSplitter", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9", null ],
     [ "createCollapsible", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2cf5fd3cde2b484942a83b0dd6f7379c", null ],
-    [ "createDropZone", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c", null ]
+    [ "createDropZone", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c", null ],
+    [ "createCustom", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8", null ]
 ];

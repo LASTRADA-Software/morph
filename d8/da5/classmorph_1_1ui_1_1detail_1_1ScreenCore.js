@@ -1,6 +1,8 @@
 var classmorph_1_1ui_1_1detail_1_1ScreenCore =
 [
     [ "ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa", null ],
+    [ "~ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af885c2ccb1e563db0c786de88bc0ec50", null ],
+    [ "runLifecycleOf", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afa9e8d5bc626f0a212411a2735cceffe", null ],
     [ "doc", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a8a82b00a94205be570adac7efcb7bc71", null ],
     [ "runtime", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a45911b89afb9a9112ac4cb7cd3a4898e", null ],
     [ "report", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad9b9a949053f03dbf8d5f9f7f89f0765", null ],
@@ -19,6 +21,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "dispatcher", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0c39ee4bd369def8a48484adaef1263", null ],
     [ "host", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a275559bda77cd6b29bf442fe456b8aa9", null ],
     [ "onDiagnostic", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#aebff6fbaeb01e8efb0af9ce0c658e45f", null ],
+    [ "focusElement", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a07c6e10d4901212548c0a6f84685a07f", null ],
     [ "borrowed", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ae2d76df1996e38f5e80e158c79b05822", null ],
     [ "depth", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#aa458956c90533eaa0692dc85606a7933", null ],
     [ "diagnostics", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a954f9e97b670f79c28b637ae3ce6ab9b", null ],
@@ -26,5 +29,6 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "prefs", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a495fe8944364d305c1d2b9bf4caeeb4a", null ],
     [ "prefDefaults", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a3f5c473f0727a869fe9688e9b925b241", null ],
     [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ],
-    [ "pendingWork", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af58663974e48a36f839f7b35aff5f6cf", null ]
+    [ "pendingWork", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af58663974e48a36f839f7b35aff5f6cf", null ],
+    [ "rootScope", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a5637f1b8da5f4f5dfd3792f7d991c704", null ]
 ];

@@ -16,5 +16,9 @@ var searchData=
   ['wizardstep_13',['WizardStep',['../d8/d94/structmorph_1_1flows_1_1WizardStep.html',1,'morph::flows']]],
   ['wizardstepspec_14',['WizardStepSpec',['../d3/d06/structmorph_1_1forms_1_1WizardStepSpec.html',1,'morph::forms']]],
   ['wizardtraits_15',['WizardTraits',['../de/d61/structmorph_1_1flows_1_1WizardTraits.html',1,'morph::flows']]],
-  ['wizardviewoptions_16',['WizardViewOptions',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html',1,'morph::forms']]]
+  ['wizardviewoptions_16',['WizardViewOptions',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html',1,'morph::forms']]],
+  ['workspace_17',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui']]],
+  ['workspaceoptions_18',['WorkspaceOptions',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html',1,'morph::ui']]],
+  ['workspacescreen_19',['WorkspaceScreen',['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html',1,'morph::ui']]],
+  ['workspacetab_20',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]]
 ];

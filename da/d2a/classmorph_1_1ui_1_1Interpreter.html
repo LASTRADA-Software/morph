@@ -132,11 +132,13 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:abe6bbc68d74b6be35040b4b331978187"><td class="mdescLeft">&#160;</td><td class="mdescRight">An interpreter.  <br /></td></tr>
 <tr class="memitem:afbe6a85edd865414be8871055de28fd0" id="r_afbe6a85edd865414be8871055de28fd0"><td class="memItemLeft">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../da/d97/classmorph_1_1ui_1_1Screen.html">Screen</a> &gt;, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afbe6a85edd865414be8871055de28fd0">mount</a> (std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt; doc, <a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> const &amp;params, <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html">IViewBackend</a> &amp;backend, <a class="el" href="../../d3/d5c/structmorph_1_1ui_1_1MountOptions.html">MountOptions</a> const &amp;options={})</td></tr>
 <tr class="memdesc:afbe6a85edd865414be8871055de28fd0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a screen.  <br /></td></tr>
+<tr class="memitem:abe4c07095a0a366095fa3529b3f1fef0" id="r_abe4c07095a0a366095fa3529b3f1fef0"><td class="memItemLeft">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html">AppRoot</a> &gt;, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abe4c07095a0a366095fa3529b3f1fef0">mountApp</a> (std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt; doc)</td></tr>
+<tr class="memdesc:abe4c07095a0a366095fa3529b3f1fef0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts the app document as the session's root scope (spec 6 §5).  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02063">2063</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02237">2237</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="abe6bbc68d74b6be35040b4b331978187" name="abe6bbc68d74b6be35040b4b331978187"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abe6bbc68d74b6be35040b4b331978187">&#9670;&#160;</a></span>Interpreter()</h2>
@@ -180,7 +182,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02069">2069</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02243">2243</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +236,43 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05190">5190</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05564">5564</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abe4c07095a0a366095fa3529b3f1fef0" name="abe4c07095a0a366095fa3529b3f1fef0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abe4c07095a0a366095fa3529b3f1fef0">&#9670;&#160;</a></span>mountApp()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::unique_ptr&lt; <a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html">AppRoot</a> &gt;, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::Interpreter::mountApp </td>
+          <td>(</td>
+          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>doc</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Mounts the app document as the session's root scope (spec 6 §5). </p>
+<p>Refused: a document whose id is not <span class="tt">app</span>, and a second app document while one is mounted on the session. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">doc</td><td>The app document, loaded. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The root, or the refusal. Keep it as long as the session's screens may read <span class="tt">app.*</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05639">5639</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

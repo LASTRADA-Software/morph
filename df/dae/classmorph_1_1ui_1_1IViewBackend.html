@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/dae/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null.  
+<p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null, except <span class="tt"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8" title="Loads the component a custom node names, if this backend can. The only factory that may return null: ...">createCustom</a></span>, whose null shows a custom node's fallback.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>&gt;</code></p>
@@ -205,11 +205,13 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <tr class="memdesc:a2cf5fd3cde2b484942a83b0dd6f7379c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a collapsible section.  <br /></td></tr>
 <tr class="memitem:adb0d4528494cfbf9a2b53f49c295d93c" id="r_adb0d4528494cfbf9a2b53f49c295d93c"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html">DropZoneWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adb0d4528494cfbf9a2b53f49c295d93c">createDropZone</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
 <tr class="memdesc:adb0d4528494cfbf9a2b53f49c295d93c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a drop zone.  <br /></td></tr>
+<tr class="memitem:a6528c7bb0bdc2531fe0d2349859a11b8" id="r_a6528c7bb0bdc2531fe0d2349859a11b8"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8">createCustom</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;request)</td></tr>
+<tr class="memdesc:a6528c7bb0bdc2531fe0d2349859a11b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the component a <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a></span> node names, if this backend can. The only factory that may return null: null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no components keeps this default.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null. </p>
+<div class="textblock"><p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null, except <span class="tt"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8" title="Loads the component a custom node names, if this backend can. The only factory that may return null: ...">createCustom</a></span>, whose null shows a custom node's fallback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00653">653</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a277c320382211edad7639e600c070e76" name="a277c320382211edad7639e600c070e76"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a277c320382211edad7639e600c070e76">&#9670;&#160;</a></span>createText()</h2>
@@ -1298,6 +1300,49 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a5d8bd32381b7dc912e6980f1db52f50d">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#aa4b65fdf7783f28e29196edd433e92ce">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a451ea2fc54e82e6f8211cbcaae17124c">morph::ui::testing::RecordingBackend</a>.</p>
+
+</div>
+</div>
+<a id="a6528c7bb0bdc2531fe0d2349859a11b8" name="a6528c7bb0bdc2531fe0d2349859a11b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6528c7bb0bdc2531fe0d2349859a11b8">&#9670;&#160;</a></span>createCustom()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt; morph::ui::IViewBackend::createCustom </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Loads the component a <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a></span> node names, if this backend can. The only factory that may return null: null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no components keeps this default. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append it to; null makes a root. </td></tr>
+    <tr><td class="paramname">request</td><td>The component, the props the document declares and the host component's lowest version. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The component, or null to show the fallback. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a410dca2d1bf22d65bb14655de56d3a5c">morph::qt_quick::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#afacd4f48d7f848bf775bf1ff3f3775eb">morph::ui::testing::RecordingBackend</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00826">826</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

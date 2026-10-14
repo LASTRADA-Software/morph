@@ -1,0 +1,16 @@
+var classmorph_1_1ui_1_1Workspace =
+[
+    [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb", null ],
+    [ "~Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255", null ],
+    [ "root", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a4dc7cee5793b4171dae5c385e6cd1983", null ],
+    [ "open", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a275a2594b0c3c45b75133aaf576e8083", null ],
+    [ "activate", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a0976f2df2a338d17c0ce49aee8dcec7e", null ],
+    [ "next", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a92487597c42d1022148641483f885b72", null ],
+    [ "previous", "d6/d77/classmorph_1_1ui_1_1Workspace.html#acd4aa984fdb6fd1c01d154c205fcf79e", null ],
+    [ "close", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a587dff86a721be64596642d75484ef13", null ],
+    [ "closeOthers", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ae540962c958ef12c5d0a0e79be608b57", null ],
+    [ "closeAll", "d6/d77/classmorph_1_1ui_1_1Workspace.html#aa5e83f98b4979fe0d18c96c854a95098", null ],
+    [ "closeSaved", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a20905db6ad9a8347936a52870a23ea6a", null ],
+    [ "active", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ae818ab3fa0bd893cba6a6d5485213e7c", null ],
+    [ "tabs", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c", null ]
+];
