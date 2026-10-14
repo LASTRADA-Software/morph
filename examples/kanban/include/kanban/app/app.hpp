@@ -54,7 +54,10 @@ public:
     ///        value, which is why there is one parameter: a token minted by
     ///        one has to verify against the other.
     /// @param workers       Size of the model worker pool.
-    explicit App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size_t workers = 4);
+    /// @param services      Envelope services the server answers besides the models, such as the UI service that
+    ///        serves this application's screens; none by default.
+    explicit App(std::filesystem::path actionLogPath, std::string const& tokenSecret, std::size_t workers = 4,
+                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Detaches the process-wide default action log and token issuer.
     ~App();

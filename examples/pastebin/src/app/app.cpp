@@ -32,7 +32,7 @@ namespace {
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::chrono::milliseconds sweepInterval, std::size_t workers,
-         QObject* parent)
+         QObject* parent, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety — see that header's comment.
     : QObject{parent},
@@ -40,7 +40,8 @@ App::App(std::filesystem::path actionLogPath, std::chrono::milliseconds sweepInt
       // strands on `_pool`, and every append runs there, one at a time.
       _actionLog{std::make_shared<::morph::journal::FileActionLog>(_sweepExecutor, std::move(actionLogPath))},
       _pool{workers},
-      _server{std::make_shared<::morph::backend::RemoteServer>(_pool)},
+      _server{std::make_shared<::morph::backend::RemoteServer>(
+          _pool, ::morph::backend::ServerConfig{.services = std::move(services)})},
       _sweepBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _sweepExecutor} {
     ::morph::journal::setActionLog(_actionLog);
     connect(&_sweepTimer, &QTimer::timeout, this, &App::sweepExpiredOnce);

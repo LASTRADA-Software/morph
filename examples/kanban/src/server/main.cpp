@@ -27,10 +27,17 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
+#include <expected>
 #include <filesystem>
 #include <iostream>
+#include <kanban_screens.hpp>
+#include <memory>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session_auth.hpp>
+#include <morph/ui/file_store.hpp>
+#include <morph/ui/service.hpp>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -56,7 +63,29 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 
 }  // namespace
 
-int main(int argc, char** argv) {
+namespace {
+
+/// @brief The UI service over kanban's screens, served beside its models so a generic client opens them (spec 4 §1).
+/// @return The service, or why the screens do not build.
+// Attachments are uploaded through the file side channel; this server keeps them in memory for its run.
+std::expected<std::shared_ptr<::morph::backend::IEnvelopeService>, std::string> screensService() {
+    auto bundle = kanban::screens::bundle();
+    if (!bundle) {
+        return std::unexpected(bundle.error().message());
+    }
+    return std::make_shared<::morph::ui::UiService>(std::move(*bundle), ::morph::model::detail::defaultDispatcher(),
+                                                    std::make_shared<::morph::ui::MemoryFileStore>());
+}
+
+}  // namespace
+
+namespace {
+
+/// @brief The server: everything `main` does, with what it throws left to `main`.
+/// @param argc The argument count.
+/// @param argv The arguments.
+/// @return The exit code.
+int run(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     for (int i = 1; i < argc; ++i) {
@@ -129,7 +158,13 @@ int main(int argc, char** argv) {
         // App installs both the KanbanAuthorizer and the process-global
         // TokenIssuer from the same tokenSecret -- see App's own constructor
         // doc comment for why they must share one value.
-        kanban::app::App app{std::filesystem::current_path() / "kanban_actions.jsonl", tokenSecret};
+        auto screens = screensService();
+        if (!screens) {
+            std::cerr << "kanban-server: the screens do not build: " << screens.error() << '\n';
+            return 1;
+        }
+        kanban::app::App const app{
+            std::filesystem::current_path() / "kanban_actions.jsonl", tokenSecret, 4, {std::move(*screens)}};
 
         ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};
         if (!wsServer.listen()) {
@@ -179,4 +214,15 @@ int main(int argc, char** argv) {
 
     std::cout << "kanban-server: stopped\n";
     return exitCode;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (std::exception const& error) {
+        std::cerr << "kanban-server: " << error.what() << '\n';
+        return 1;
+    }
 }

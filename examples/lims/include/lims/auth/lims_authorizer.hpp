@@ -5,6 +5,7 @@
 #include <functional>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
+#include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -114,6 +115,11 @@ public:
     [[nodiscard]] bool authorize(const ::morph::session::Context& ctx,
                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                  std::string_view modelType, std::string_view actionType) const override {
+        // lims serves its sign-in screen, so a client with no token yet may greet the UI service, read its catalog
+        // and fetch that screen; every other screen stays behind its own queries' authorisation.
+        if (::morph::ui::isUiServiceRead(modelType, actionType)) {
+            return true;
+        }
         if (!::morph::session::SigningAuthorizer::authorize(ctx, modelType, actionType)) {
             return false;
         }

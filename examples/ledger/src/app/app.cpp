@@ -74,10 +74,13 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 ///        concurrent clients, not a limit a real session will meet.
 constexpr std::size_t kMaxLiveModels = 256;
 
-/// @brief The server's configuration: the live-model cap above.
+/// @brief The server's configuration: the live-model cap above, and @p services.
+/// @param services The envelope services the server answers besides the models.
 /// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
-::morph::backend::ServerConfig serverConfig() {
+::morph::backend::ServerConfig serverConfig(
+    std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
     ::morph::backend::ServerConfig config;
+    config.services = std::move(services);
     config.limits.maxLiveModels = kMaxLiveModels;
     return config;
 }
@@ -138,7 +141,8 @@ struct DispatchTicket {
 
 }  // namespace
 
-App::App(std::string tokenSecret, std::chrono::milliseconds runInterval, std::size_t workers, QObject* parent)
+App::App(std::string const& tokenSecret, std::chrono::milliseconds runInterval, std::size_t workers, QObject* parent,
+         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety -- see that header's comment.
     : QObject{parent},
@@ -148,7 +152,8 @@ App::App(std::string tokenSecret, std::chrono::milliseconds runInterval, std::si
       // constructor, whose MacFunction default is dropped entirely under
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
-          _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256), serverConfig())},
+          _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
+          serverConfig(std::move(services)))},
       _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _reportExecutor} {
     // Installed process-wide so AuthModel::execute(const Login&) can mint
     // tokens against this exact secret -- the same "registry-constructed
