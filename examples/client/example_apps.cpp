@@ -14,6 +14,12 @@
 #include "bank/db/database.hpp"
 #endif
 
+#if MORPH_CLIENT_HAS_KANBAN
+#include <kanban_screens.hpp>
+
+#include "kanban/db/database.hpp"
+#endif
+
 #if MORPH_CLIENT_HAS_POLLS
 #include <polls_screens.hpp>
 
@@ -50,6 +56,14 @@ std::vector<LocalApp> localApps() {
                                 std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
                                 bank::db::setup("DRIVER=SQLite3;Database=" + file);
                             }});
+#endif
+#if MORPH_CLIENT_HAS_KANBAN
+    apps.push_back(
+        LocalApp{.name = "kanban", .bundle = &kanban::screens::bundle, .setUp = [](LocalSetup const& setup) {
+                     std::string const file = setup.db.empty() ? std::string{"kanban.db"} : setup.db;
+                     kanban::db::setup("DRIVER=SQLite3;Database=" + file);
+                     kanban::screens::prepareLocal();
+                 }});
 #endif
 #if MORPH_CLIENT_HAS_POLLS
     apps.push_back(LocalApp{.name = "polls", .bundle = &polls::screens::bundle, .setUp = [](LocalSetup const& setup) {

@@ -31,6 +31,19 @@ other rung stays deliberately unstyled.
   CRUD + polling is enough for boards.
   [Planka](https://github.com/plankanban/planka) is the maintained equivalent.
 
+
+## Server-defined screens
+
+[`screens/kanban_screens.cpp`](screens/kanban_screens.cpp) declares kanban's screens as UI documents (spec 4):
+- **`kanban.projects`**: sign-in (a `Login` mutation whose reply `signIn` installs), the person's projects, and
+  creating one, which opens its board.
+- **`kanban.board`** (`projectId`): the keyed board, forms for columns, swimlanes and tasks, and the grid of
+  swimlanes by columns. A card is draggable with its task id. A cell is a drop target that moves the task to the
+  end of the cell, and a card is one that moves it before the card, through a `serial` `MoveTaskPosition`.
+
+In process, `screens::prepareLocal()` installs a development token issuer. `morph_examples_client --app kanban` runs
+it (`--db`, default `kanban.db`). Attachments over the file side channel and the offline queue are not on these
+screens yet.
 ## What to implement
 
 Models: `BoardModel` keyed by project id (shared instance — every viewer of a
