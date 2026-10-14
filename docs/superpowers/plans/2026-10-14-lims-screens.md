@@ -107,6 +107,19 @@ What building slice (b) found:
 `LabApp` as the app shell (forms, the intake wizard, `SamplesView` as a `collection`), `--typed` through
 `forms::Form<A>` in local mode; the CLI unchanged.
 
+What building slice (c) found:
+
+- **No client could build a `collection` or a `wizard`.** The interpreter builds each from
+  `Catalog::view` or `Catalog::wizard`, but nothing outside a test filled them: no bundle carried the
+  documents and no request fetched them. `collection<View>` and `wizard<Wizard>` now record the
+  documents in the node's catalog facts, and the `ui-catalog` reply carries them.
+- **The screens are four catalog entries, not an app document.** `LabApp`'s menu is the client's
+  navigator over them. The model keeps its samples in memory, so each screen works on an instance of
+  its own.
+- **`--typed` is not built.** It needs a C++ form renderer in local mode, which the generic client
+  does not have. It is left to the QML forms renderer's retirement.
+- **The QML GUI (`gui_qml/`) stays.** Retiring it belongs with the QML forms renderer it demonstrates.
+
 ## Verification
 
 Per slice:
