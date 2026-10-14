@@ -17,7 +17,6 @@
 namespace morph::ui::author {
 
 /// @brief A view descriptor: a `views::` kind and the registered query action it lists.
-/// @tparam V The type tested.
 template <typename V>
 concept ViewDescriptor = requires {
     typename V::kind;
@@ -25,7 +24,6 @@ concept ViewDescriptor = requires {
 };
 
 /// @brief A `flows::Wizard`: a title and its steps.
-/// @tparam W The type tested.
 template <typename W>
 concept WizardDescriptor = requires {
     typename W::steps;

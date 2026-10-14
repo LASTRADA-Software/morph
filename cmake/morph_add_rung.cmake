@@ -174,16 +174,15 @@ function(morph_add_rung)
     # ── ladder_<rung>_screens: the rung's UI documents (spec 4 §6) ──────
     # Toolkit-free by its link set: morph and the rung's own models, nothing
     # else, so the server, the generic client's local mode and the screen tests
-    # all link the same screens.
+    # all link the same screens. The screens name the models' action types, so
+    # they are built only where the models are (not in a client-only WebAssembly
+    # build).
     file(GLOB _screen_sources CONFIGURE_DEPENDS "${_dir}/screens/*.cpp")
-    if(_screen_sources)
+    if(_screen_sources AND TARGET ladder_${_rung}_lib)
         add_library(ladder_${_rung}_screens STATIC ${_screen_sources})
         add_library(morph::ladder_${_rung}_screens ALIAS ladder_${_rung}_screens)
         target_include_directories(ladder_${_rung}_screens PUBLIC "${_dir}/screens")
-        target_link_libraries(ladder_${_rung}_screens PUBLIC morph::morph)
-        if(TARGET ladder_${_rung}_lib)
-            target_link_libraries(ladder_${_rung}_screens PUBLIC morph::ladder_${_rung}_lib)
-        endif()
+        target_link_libraries(ladder_${_rung}_screens PUBLIC morph::morph morph::ladder_${_rung}_lib)
         target_compile_features(ladder_${_rung}_screens PUBLIC cxx_std_23)
         apply_warnings(ladder_${_rung}_screens)
         apply_bigobj(ladder_${_rung}_screens)
