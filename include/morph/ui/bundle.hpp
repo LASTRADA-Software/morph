@@ -672,8 +672,8 @@ template <typename T>
 /// @param text The reply body.
 /// @return The reply, or why it was refused.
 [[nodiscard]] inline std::expected<CatalogReply, std::string> parseCatalogReply(std::string_view text) {
-    auto reply = detail::readMessage<CatalogReply>(text, "the catalog", {"entries"},
-                                                   {"models", "actions", "views", "wizards"});
+    auto reply =
+        detail::readMessage<CatalogReply>(text, "the catalog", {"entries"}, {"models", "actions", "views", "wizards"});
     if (!reply) {
         return std::unexpected(std::move(reply.error()));
     }
