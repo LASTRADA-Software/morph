@@ -156,7 +156,7 @@ place a kind is described.
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
-| `form` | `model`, `action` (required), `prefill`, `submit`, `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
+| `form` | `model`, `action` (required), `prefill`, `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
 | `collection`, `wizard` | `model`, `action` (required) | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
