@@ -494,6 +494,7 @@ target_sources(morph
         include/morph/ui/expression.hpp
         include/morph/ui/document.hpp
         include/morph/ui/interpreter.hpp
+        include/morph/ui/queueing_dispatcher.hpp
         include/morph/ui/author.hpp
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
