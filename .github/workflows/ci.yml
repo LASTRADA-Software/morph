@@ -1897,8 +1897,14 @@ jobs:
       # below rather than after, so a build whose test selection is ambiguous
       # says so before the suite is spent on it. The gate's own self-test is in
       # drift-guard.yml, which needs no build.
+      # QT_QPA_PLATFORM=offscreen: the check lists the tests with `ctest
+      # --show-only=json-v1`, which runs every PRE_TEST discovery, and
+      # morph_qt_quick_tests' discovery aborts on this headless runner without
+      # it, taking the whole listing down.
       - name: Check no two ctest tests share a name
         if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_ctest_name_collisions.sh build/gcc-debug
 
       - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
