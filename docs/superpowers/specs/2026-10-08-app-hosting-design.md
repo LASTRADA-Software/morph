@@ -331,9 +331,11 @@ are the catalog entry's (§8).
 - **Window chrome** (title bar, window controls, user menu) is the host's: the shell is an item the
   host places in its own window. The generic client supplies a plain default.
 
-The shell is a document-free framework component, in `include/morph/forms/engine/workspace.hpp`
-beside `app_shell.hpp`: its state is reactive nodes (spec 1), its view is a view tree (spec 1 §5),
-and it mounts screens through the same `ScreenHost` an embedding host uses.
+The shell is a document-free framework component, `ui::Workspace` in `include/morph/ui/workspace.hpp`
+(`docs/spec/ui/workspace.md`): it needs only the host contract, the view backend and the catalog's
+facts, none of the forms engine. Its state is reactive nodes (spec 1); it drives a `TabsWidget` itself,
+one page slot per tab, because the view tree's `Tabs` fixes its pages at mount; and it mounts screens
+into those pages through `DocumentScreenHost::mountInto`.
 
 ## 8. Preferences and catalog
 

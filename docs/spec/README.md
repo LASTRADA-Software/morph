@@ -153,6 +153,10 @@ preferences model, keyed by the verified session, and loaded back into a mounted
 switching and search in every locale ·
 [`ui/theme.md`](ui/theme.md) — theme tokens: DTCG 2025.10 files, aliases and layering, the checks at registration,
 the closed `ui-theme/1` set and its defaults, and applying it on Qt Quick ·
+[`ui/host.md`](ui/host.md) — the host contract: `ScreenHost`, `ScreenHandle`, the close protocol, call and return,
+and `DocumentScreenHost` mounting screens as roots or into a host's container ·
+[`ui/workspace.md`](ui/workspace.md) — the workspace shell: tabs over screens, focus by identity, singleton and
+placeholder tabs, closing tab by tab until a veto, and the most-recently-used walk ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·

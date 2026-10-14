@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **`ui::Workspace`, the workspace shell** (spec 6 §7, §15): tabs over screens mounted through
+  `DocumentScreenHost::mountInto`. Opening an identity that is open focuses its tab, a singleton screen has one tab,
+  and a `reuseEmpty` placeholder is replaced in place. `close`, `closeOthers`, `closeAll` and `closeSaved` run each
+  screen's close protocol one tab at a time and stop at the first veto. Ctrl+Tab and Ctrl+Shift+Tab walk the tabs
+  most recently used first, and Ctrl+W closes the active one. A tab's caption is its title, with ` •` while it has
+  unsaved changes.
+
 - **`DocumentScreenHost::mountInto(screenId, params, parent)`** mounts a screen with its root widget appended to the
   host's own container, such as a tab's page, instead of as a backend root. On Qt Quick a host places a screen
   through `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which a test now drives end to end.
