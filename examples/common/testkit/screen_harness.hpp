@@ -79,10 +79,15 @@ protected:
             return std::unexpected(
                 ui::ConnectError{.kind = ui::ConnectError::Kind::Unsupported, .message = bundle.error().message()});
         }
+        if (_app.setUp) {
+            _app.setUp(LocalSetup{});
+        }
         _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
         backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(std::move(*bundle)));
-        _server = std::make_shared<backend::RemoteServer>(*_workers, config);
+        _server = _app.serverAuthorizer
+                      ? std::make_shared<backend::RemoteServer>(*_workers, _app.serverAuthorizer(), config)
+                      : std::make_shared<backend::RemoteServer>(*_workers, config);
         ui::Exchange exchange = [server = _server](wire::Envelope const& request,
                                                    std::function<void(ui::ExchangeReply)> const& done) {
             try {
