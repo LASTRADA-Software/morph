@@ -18,6 +18,7 @@
 #include <morph/ui/service_client.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /// @file
@@ -67,6 +68,10 @@ struct LocalApp {
     std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle;
     /// @brief Run once before the first model call, with the client's options; empty for none.
     std::function<void(LocalSetup const&)> setUp;
+    /// @brief The authorizer the application's own server checks requests with, for an in-process server to check
+    ///        them the same way; empty for one that lets every request through. Only a test's simulated server calls
+    ///        it.
+    std::function<std::shared_ptr<session::IAuthorizer>()> serverAuthorizer;
 };
 
 /// @brief The vocabularies the generic client speaks.
@@ -92,6 +97,11 @@ public:
     /// @return Their ids.
     [[nodiscard]] std::vector<std::string> screens() const;
 
+    /// @brief Whether the catalog marks @p screenId public: a screen served before sign-in, such as a login screen.
+    /// @param screenId The screen.
+    /// @return Whether it is listed and public.
+    [[nodiscard]] bool isPublic(std::string_view screenId) const;
+
     /// @brief Opens the source: the transport, the bridge and the bundle, verified.
     /// @param context The running frontend's context.
     /// @param ready   Called once, on the owner, unless `close` comes first.
@@ -105,12 +115,22 @@ public:
     /// @brief Drops a `ready` not yet delivered and releases the bridge, the transport and the bundle.
     void close() final;
 
-    /// @brief Makes @p principal the one every later model call carries: what a screen's `signIn` installs (spec 6
-    ///        §5). The default adopts it into the request session and the bridge's default session.
-    /// @param principal The principal the sign-in mutation answered; empty ends the session.
-    /// @return Whether the source adopted it; a source whose server derives the principal from a token it issued
-    ///         cannot adopt a bare principal.
-    virtual bool adoptPrincipal(std::string principal);
+    /// @brief Installs a sign-in (spec 6 §5): a session built from the current one with @p principal and @p token
+    ///        replaced, carried by every later model call and UI-service request, then the catalog reloaded for it.
+    /// @param principal The principal the sign-in mutation answered.
+    /// @param token     The session token it answered; empty when the source's server needs none, as in process.
+    /// @param done      Called once, on the owner, once the catalog for the new session is current, with whether it
+    ///                  loaded; not called after `close`.
+    void signIn(std::string principal, std::string token, std::function<void(bool)> done);
+
+    /// @brief Ends the session: back to the principal before any sign-in, with no token, and the catalog reloaded
+    ///        for it.
+    /// @param done As `signIn`'s.
+    void signOut(std::function<void(bool)> done);
+
+    /// @brief The bundle the catalog currently lists.
+    /// @return It; null before a bundle was delivered.
+    [[nodiscard]] ui::Bundle const* bundle() const noexcept { return _loaded ? &_loaded->bundle : nullptr; }
 
     /// @brief The file side channel (`files/1`) over the source's exchange, carrying its session: what a screen's
     ///        `upload` and `download` move bytes through.
@@ -168,6 +188,17 @@ private:
     // The schema of each action, by action id, fetched for every model type the catalog names.
     std::map<std::string, std::string, std::less<>> _schemas;
     std::optional<ui::LoadedBundle> _loaded;
+    // The catalog the screens read through `catalog()`: replaced in place when a sign-in reloads it, so a session
+    // built over the first catalog sees the facts of the current one.
+    struct CurrentCatalog {
+        ui::Catalog facts;
+        std::map<std::string, std::string, std::less<>> schemas;
+    };
+    std::shared_ptr<CurrentCatalog> _current = std::make_shared<CurrentCatalog>();
+    // Verified files, kept across reloads: a reload fetches only what the new catalog adds.
+    std::shared_ptr<ui::IBundleStore> _store;
+    // Fetches the catalog and the bundle for the current session, then the schemas; `done` once they are current.
+    void reload(std::shared_ptr<bool> const& alive, std::function<void(std::expected<void, ui::ConnectError>)> done);
     reactive::TimerHandle _timeout;
 };
 
@@ -182,11 +213,6 @@ public:
     /// @brief Refused: a remote server derives the principal from a token it issued, which a bare principal is not.
     /// @param principal Ignored.
     /// @return `false`.
-    bool adoptPrincipal(std::string principal) override {
-        static_cast<void>(principal);
-        return false;
-    }
-
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     [[nodiscard]] std::chrono::milliseconds openTimeout() const override { return _timeout; }

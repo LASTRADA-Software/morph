@@ -126,6 +126,11 @@ public:
         if (modelType == kAnonymousModelType && actionType == kAnonymousActionType) {
             return true;
         }
+        // kanban serves its sign-in screen, so a client with no token yet may greet the UI service and read its
+        // catalog and screens. Each screen is still listed only to whoever may run its queries.
+        if (modelType == "ui" && (actionType == "hello" || actionType == "catalog" || actionType == "fetch")) {
+            return true;
+        }
         return SigningAuthorizer::authorize(ctx, modelType, actionType);
     }
 };

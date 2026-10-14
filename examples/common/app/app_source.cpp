@@ -115,11 +115,33 @@ ui::Catalog ClientSource::catalog() const {
     if (!_loaded) {
         return ui::Catalog{};
     }
-    ui::Catalog catalog = _loaded->catalog.facts();
-    catalog.schema = [schemas = std::make_shared<std::map<std::string, std::string, std::less<>> const>(_schemas)](
-                         std::string_view actionId) -> std::optional<std::string> {
-        auto const found = schemas->find(actionId);
-        if (found == schemas->end()) {
+    // Every fact reads the current catalog, so one taken before a sign-in follows the reload after it. A lookup the
+    // catalog does not answer stays empty, which skips the rules that need it.
+    std::shared_ptr<CurrentCatalog const> const current = _current;
+    ui::Catalog catalog;
+    if (current->facts.model) {
+        catalog.model = [current](std::string_view typeId) {
+            return current->facts.model ? current->facts.model(typeId) : std::nullopt;
+        };
+    }
+    if (current->facts.action) {
+        catalog.action = [current](std::string_view actionId) {
+            return current->facts.action ? current->facts.action(actionId) : std::nullopt;
+        };
+    }
+    if (current->facts.view) {
+        catalog.view = [current](std::string_view actionId) {
+            return current->facts.view ? current->facts.view(actionId) : std::nullopt;
+        };
+    }
+    if (current->facts.wizard) {
+        catalog.wizard = [current](std::string_view actionId) {
+            return current->facts.wizard ? current->facts.wizard(actionId) : std::nullopt;
+        };
+    }
+    catalog.schema = [current](std::string_view actionId) -> std::optional<std::string> {
+        auto const found = current->schemas.find(actionId);
+        if (found == current->schemas.end()) {
             return std::nullopt;
         }
         return found->second;
@@ -157,6 +179,12 @@ std::vector<std::string> ClientSource::screens() const {
         }
     }
     return ids;
+}
+
+bool ClientSource::isPublic(std::string_view screenId) const {
+    return _loaded && std::ranges::any_of(_loaded->catalog.entries, [screenId](ui::CatalogEntry const& entry) {
+               return entry.id == screenId && entry.isPublic;
+           });
 }
 
 std::vector<std::string> ClientSource::modelTypes() const {
@@ -230,28 +258,28 @@ void ClientSource::open(ui::AppContext& context,
         }
         inner(std::move(request), std::move(done));
     };
-    _dispatcher =
-        std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, ui::evaluatorOver(guarded, _session, &owner));
+    // An evaluation carries the session current when it is made, which a sign-in replaces.
+    ui::Evaluator evaluate = [this, &owner](std::string const& typeId, std::string const& actionId,
+                                            std::string const& bodyJson) {
+        return ui::evaluatorOver(_exchange, _session, &owner)(typeId, actionId, bodyJson);
+    };
+    _dispatcher = std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, std::move(evaluate));
     _exchange = guarded;
+    _store = std::make_shared<ui::MemoryBundleStore>();
 
-    // Shared by the client's answer and the timeout: whichever comes first is delivered, once.
-    auto const deliver = std::make_shared<std::function<void(std::expected<ui::LoadedBundle, ui::ConnectError>)>>(
+    // Shared by the reload's answer and the timeout: whichever comes first is delivered, once.
+    auto const deliver = std::make_shared<std::function<void(std::expected<void, ui::ConnectError>)>>(
         [this, alive, delivered = false,
-         ready = std::move(ready)](std::expected<ui::LoadedBundle, ui::ConnectError> opened) mutable {
+         ready = std::move(ready)](std::expected<void, ui::ConnectError> loaded) mutable {
             if (!*alive || delivered) {
                 return;
             }
             delivered = true;
-            if (!opened) {
-                ready(std::unexpected(std::move(opened.error())));
+            if (!loaded) {
+                ready(std::unexpected(std::move(loaded.error())));
                 return;
             }
-            _loaded = std::move(*opened);
-            loadSchemas(alive, [this, alive, ready = std::move(ready)] {
-                if (*alive) {
-                    ready(_loaded->bundle);
-                }
-            });
+            ready(_loaded->bundle);
         });
     if (std::chrono::milliseconds const bound = openTimeout(); bound.count() > 0) {
         _timeout = context.scheduler().after(bound, [deliver, bound] {
@@ -260,13 +288,49 @@ void ClientSource::open(ui::AppContext& context,
                 .message = "no answer from the server within " + std::to_string(bound.count()) + " ms"}));
         });
     }
+    reload(alive, [deliver](std::expected<void, ui::ConnectError> loaded) { (*deliver)(std::move(loaded)); });
+}
+
+void ClientSource::reload(std::shared_ptr<bool> const& alive,
+                          std::function<void(std::expected<void, ui::ConnectError>)> done) {
     ui::HelloRequest hello;
     hello.vocabularies = clientVocabularies();
-    ui::UiClient const client{std::move(guarded), std::move(hello), std::make_shared<ui::MemoryBundleStore>()};
-    client.open(_session, [deliver](std::expected<ui::LoadedBundle, ui::ConnectError> opened) {
-        (*deliver)(std::move(opened));
+    ui::UiClient const client{_exchange, std::move(hello), _store};
+    client.open(_session, [this, alive,
+                           done = std::move(done)](std::expected<ui::LoadedBundle, ui::ConnectError> opened) mutable {
+        if (!*alive) {
+            return;
+        }
+        if (!opened) {
+            done(std::unexpected(std::move(opened.error())));
+            return;
+        }
+        _loaded = std::move(*opened);
+        loadSchemas(alive, [this, alive, done = std::move(done)] {
+            if (*alive) {
+                *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                done({});
+            }
+        });
     });
 }
+
+void ClientSource::signIn(std::string principal, std::string token, std::function<void(bool)> done) {
+    _session.principal = std::move(principal);
+    _session.token = std::move(token);
+    if (_bridge) {
+        _bridge->setDefaultSession(_session);
+    }
+    if (!_exchange || !_alive) {
+        done(false);
+        return;
+    }
+    reload(_alive, [done = std::move(done)](std::expected<void, ui::ConnectError> const& loaded) {
+        done(loaded.has_value());
+    });
+}
+
+void ClientSource::signOut(std::function<void(bool)> done) { signIn(signedOutPrincipal(), {}, std::move(done)); }
 
 void ClientSource::switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) {
     done(std::unexpected("this client does not switch backends; the switch to `" + backend.name +
@@ -290,14 +354,6 @@ std::optional<ui::FileTransfer> ClientSource::files() const {
         return std::nullopt;
     }
     return ui::FileTransfer{_exchange, _session};
-}
-
-bool ClientSource::adoptPrincipal(std::string principal) {
-    _session.principal = std::move(principal);
-    if (_bridge) {
-        _bridge->setDefaultSession(_session);
-    }
-    return true;
 }
 
 // ── RemoteAppSource ─────────────────────────────────────────────────────────
