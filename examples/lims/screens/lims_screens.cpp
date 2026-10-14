@@ -36,8 +36,8 @@ ui::Screen registerScreen() {
         auto client = screen.let("client", registerClient.result());
         auto registered = screen.let("registered", registerSample.result());
         // A registered sample opens in its own lifecycle screen.
-        screen.watch(registerSample.result(),
-                     ui::ifThen(ui::engaged(registerSample.result()),
+        screen.watch(registered,
+                     ui::ifThen(ui::engaged(registered),
                                 ui::navigate(std::string{kLifecycle},
                                              {.params = ui::obj({{"sampleId", registered.at(&SampleView::id)}})})));
         auto clientName = ui::element("clientName");
