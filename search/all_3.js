@@ -171,7 +171,7 @@ var searchData=
   ['collatorof_168',['collatorOf',['../d4/d54/sort_8hpp.html#afb54edb7dda01c3373b8155a024b17e3',1,'morph::table::detail']]],
   ['collatorordefault_169',['collatorOrDefault',['../d8/d47/structmorph_1_1table_1_1Services.html#a88686599c602f5e397634b8bed661607',1,'morph::table::Services']]],
   ['collection_170',['Collection',['../d4/db6/collection_8hpp.html#aff7d1b04b37c736459a12f2bd0b8856aad15b505cce09406de9f918cb1f8c641c',1,'Collectionmorph::forms'],['../d4/db6/collection_8hpp.html#ab793459efd58cfa40b89c78ad469feb5ad15b505cce09406de9f918cb1f8c641c',1,'Collectionmorph::forms']]],
-  ['collection_171',['collection',['../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2386249559cbedb11911818a512e2c09',1,'morph::ui::detail::ElementState::collection'],['../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90',1,'morph::ui::author::collection()']]],
+  ['collection_171',['collection',['../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2386249559cbedb11911818a512e2c09',1,'morph::ui::detail::ElementState::collection'],['../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90',1,'morph::ui::author::collection(ModelHandle&lt; Model &gt; const &amp;model)'],['../d0/d4d/author__forms_8hpp.html#a4b311c7c76f291fa0ef74ba05d291cef',1,'morph::ui::author::collection(ModelHandle&lt; Model &gt; const &amp;model)']]],
   ['collection_2ehpp_172',['collection.hpp',['../d4/db6/collection_8hpp.html',1,'']]],
   ['collection_5fview_2ehpp_173',['collection_view.hpp',['../d0/d0a/collection__view_8hpp.html',1,'']]],
   ['collectionaction_174',['CollectionAction',['../de/dcb/structmorph_1_1forms_1_1CollectionAction.html',1,'morph::forms']]],

@@ -34,7 +34,9 @@ var concepts =
             [ "Operand", "d0/de7/conceptmorph_1_1ui_1_1author_1_1detail_1_1Operand.html", null ],
             [ "HandleOperands", "d8/de8/conceptmorph_1_1ui_1_1author_1_1detail_1_1HandleOperands.html", null ]
           ] ],
-          [ "Runs", "d4/d58/conceptmorph_1_1ui_1_1author_1_1Runs.html", null ]
+          [ "Runs", "d4/d58/conceptmorph_1_1ui_1_1author_1_1Runs.html", null ],
+          [ "ViewDescriptor", "d7/d86/conceptmorph_1_1ui_1_1author_1_1ViewDescriptor.html", null ],
+          [ "WizardDescriptor", "df/df0/conceptmorph_1_1ui_1_1author_1_1WizardDescriptor.html", null ]
         ] ],
         [ "detail", null, [
           [ "ConstantConvertible", "d5/d2a/conceptmorph_1_1ui_1_1detail_1_1ConstantConvertible.html", null ]

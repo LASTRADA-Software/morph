@@ -757,6 +757,7 @@ var namespaces_dup =
         [ "loadCatalogues", "d1/d1e/catalogue_8hpp.html#aa05cc67c04981b6b969f96379db95aa8", null ],
         [ "textInEveryLocale", "d1/d1e/catalogue_8hpp.html#afd37662fba518c148e132a5d8113159e", null ],
         [ "matchesInAnyLocale", "d1/d1e/catalogue_8hpp.html#a6c81785729676e28fe2b27748dbe05b5", null ],
+        [ "documentLookup", "dd/d39/document_8hpp.html#a645e3ba148441136c51da8eefa964f82", null ],
         [ "loadDocument", "dd/d39/document_8hpp.html#a79167372e38f780fc1fa45f373e5709a", null ],
         [ "loadDocumentText", "dd/d39/document_8hpp.html#a9e11168834f5c779093ce6aa6cb34109", null ],
         [ "nodeKinds", "dd/d39/document_8hpp.html#a28e47c6b98b9d7587dadb9dcf9aa520f", null ],

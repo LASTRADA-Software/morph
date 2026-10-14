@@ -10,5 +10,7 @@ var structmorph_1_1ui_1_1ServedBundle =
     [ "appModelTypes", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a6d3b67cfb01610b7fea5c75b57618a78", null ],
     [ "allActions", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a194a70b238c8e5cb0348cf6285f78eb3", null ],
     [ "models", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#ad4361dcdfb3772ee0e69c001d1bf4897", null ],
-    [ "actions", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8", null ]
+    [ "actions", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8", null ],
+    [ "views", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a3b57667d9c1e1b737f9a68c8d76e1188", null ],
+    [ "wizards", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9bf33f1a83cbbcbc86b6f0a652ce0526", null ]
 ];

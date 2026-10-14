@@ -95,7 +95,7 @@ var searchData=
   ['collapsible_92',['collapsible',['../d1/dc0/author_8hpp.html#a1f3b8cd9f76bcbdb692771e161251465',1,'morph::ui::author::collapsible()'],['../d8/d11/view_8hpp.html#a0735c59e8fed7c1e25bb578d6ae89abd',1,'morph::ui::collapsible()']]],
   ['collatorof_93',['collatorOf',['../d4/d54/sort_8hpp.html#afb54edb7dda01c3373b8155a024b17e3',1,'morph::table::detail']]],
   ['collatorordefault_94',['collatorOrDefault',['../d8/d47/structmorph_1_1table_1_1Services.html#a88686599c602f5e397634b8bed661607',1,'morph::table::Services']]],
-  ['collection_95',['collection',['../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90',1,'morph::ui::author']]],
+  ['collection_95',['collection',['../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90',1,'morph::ui::author::collection(ModelHandle&lt; Model &gt; const &amp;model)'],['../d0/d4d/author__forms_8hpp.html#a4b311c7c76f291fa0ef74ba05d291cef',1,'morph::ui::author::collection(ModelHandle&lt; Model &gt; const &amp;model)']]],
   ['collectionsession_96',['CollectionSession',['../df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a55649f41505efa5713f2994e0889710a',1,'morph::forms::CollectionSession']]],
   ['collectionview_97',['collectionView',['../d0/d0a/collection__view_8hpp.html#a898f36a01726d8622d5850f2a9730618',1,'morph::forms']]],
   ['colorof_98',['colorOf',['../d9/df6/ui_2theme_8hpp.html#a93eb91ae910694309f7ac47801f2b58a',1,'morph::ui']]],

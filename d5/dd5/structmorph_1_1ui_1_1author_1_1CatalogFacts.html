@@ -146,6 +146,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8f558c736b861401f7db5b17a7eb200c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Model facts by registered type id.  <br /></td></tr>
 <tr class="memitem:a32afb572c8c410bc439bc61b92d00179" id="r_a32afb572c8c410bc439bc61b92d00179"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../d0/db7/structmorph_1_1ui_1_1ActionInfo.html">ActionInfo</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a32afb572c8c410bc439bc61b92d00179">actions</a></td></tr>
 <tr class="memdesc:a32afb572c8c410bc439bc61b92d00179"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f" title="A widget event handler taking no arguments.">Action</a> facts by action id.  <br /></td></tr>
+<tr class="memitem:a89202627688ddb37ed0f62bd999aa775" id="r_a89202627688ddb37ed0f62bd999aa775"><td class="memItemLeft">std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a89202627688ddb37ed0f62bd999aa775">views</a></td></tr>
+<tr class="memdesc:a89202627688ddb37ed0f62bd999aa775"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">v-*</span> view documents <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> nodes build from, by the action of their <span class="tt">v-query</span>.  <br /></td></tr>
+<tr class="memitem:a415a8f6a23614adee0757b62ab5b1c02" id="r_a415a8f6a23614adee0757b62ab5b1c02"><td class="memItemLeft">std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a415a8f6a23614adee0757b62ab5b1c02">wizards</a></td></tr>
+<tr class="memdesc:a415a8f6a23614adee0757b62ab5b1c02"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">w-*</span> wizard documents <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#acdaa662c33689582aa26424bf39411b9" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> nodes build from, by the action of their first step.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The catalog facts the builders gathered from the model and action types a screen names. </p>
@@ -183,7 +187,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +224,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -259,7 +263,7 @@ requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496ba
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +293,7 @@ requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496ba
 <p>The facts as a <span class="tt"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html" title="The facts load-time validation needs from the application&#39;s catalog. Local mode answers them from the...">ui::Catalog</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Lookups over a copy of the facts, so the catalog outlives this object. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,6 +331,42 @@ requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496ba
 <p><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f" title="A widget event handler taking no arguments.">Action</a> facts by action id. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a89202627688ddb37ed0f62bd999aa775" name="a89202627688ddb37ed0f62bd999aa775"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a89202627688ddb37ed0f62bd999aa775">&#9670;&#160;</a></span>views</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::map&lt;std::string, std::string, std::less&lt;&gt; &gt; morph::ui::author::CatalogFacts::views</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The <span class="tt">v-*</span> view documents <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a23e279bfc1c91e2d1f59e0f63da00e90" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> nodes build from, by the action of their <span class="tt">v-query</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a415a8f6a23614adee0757b62ab5b1c02" name="a415a8f6a23614adee0757b62ab5b1c02"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a415a8f6a23614adee0757b62ab5b1c02">&#9670;&#160;</a></span>wizards</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::map&lt;std::string, std::string, std::less&lt;&gt; &gt; morph::ui::author::CatalogFacts::wizards</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The <span class="tt">w-*</span> wizard documents <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#acdaa662c33689582aa26424bf39411b9" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> nodes build from, by the action of their first step. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

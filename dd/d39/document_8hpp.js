@@ -95,6 +95,7 @@ var document_8hpp =
       [ "Element", "dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a231afe47f3f37d3808096b36c28b4ded", null ],
       [ "Transfer", "dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a6950810f0d2bba97a6f710c7b965b84e", null ]
     ] ],
+    [ "morph::ui::documentLookup", "dd/d39/document_8hpp.html#a645e3ba148441136c51da8eefa964f82", null ],
     [ "morph::ui::detail::refuse", "dd/d39/document_8hpp.html#ae1cb3f282b4780a3cc73e31a63a3d4fc", null ],
     [ "morph::ui::detail::findKind", "dd/d39/document_8hpp.html#a969a946fd76093fb35769d51ad2d4fb2", null ],
     [ "morph::ui::detail::listed", "dd/d39/document_8hpp.html#aaa8c991e9d296dc29eb3132f2c9bb606", null ],

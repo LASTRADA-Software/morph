@@ -1,5 +1,7 @@
 var NAVTREEINDEX4 =
 {
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a49e26794b9c47ea986af10067b1f6ae4":[3,0,0,24,0,36],
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a50057a546c1896b7cff674647bc82f40":[3,0,0,24,0,29],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a5189c9b04b64393f7b3e4b10782b025b":[3,0,0,24,0,38],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a5d37f81ae2525d3e644b5aa9b6f1b041":[3,0,0,24,0,21],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a65002093b91d1c6b8b4493372e262eb3":[3,0,0,24,0,24],
@@ -200,11 +202,11 @@ var NAVTREEINDEX4 =
 "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html#a05e385bdf8afe439c1b6c1163df19b7d":[3,0,0,16,0,2,0],
 "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html#ab52b6a3897ce9118cfe5ffa2f113fda3":[3,0,0,16,0,2,1],
 "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html#ac38ca1080e7a58724e82e52e644368ed":[3,0,0,16,0,2,2],
-"d3/d31/service_8hpp.html":[4,0,0,14,18],
+"d3/d31/service_8hpp.html":[4,0,0,14,19],
 "d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8":[1,0,0,1,0,146],
 "d3/d31/service_8hpp.html#acab995b09a00bc773a70a72f080437eb":[1,0,0,1,0,144],
 "d3/d31/service_8hpp.html#ad9e64f82f50f869f0a17e7dd6365a259":[1,0,0,1,0,145],
-"d3/d31/service_8hpp_source.html":[4,0,0,14,18],
+"d3/d31/service_8hpp_source.html":[4,0,0,14,19],
 "d3/d34/structmorph_1_1table_1_1detail_1_1IsOptional_3_01std_1_1optional_3_01T_01_4_01_4.html":[3,0,0,21,0,1],
 "d3/d39/structmorph_1_1ui_1_1HostCommand.html":[1,0,0,1,85],
 "d3/d39/structmorph_1_1ui_1_1HostCommand.html":[3,0,0,25,87],
@@ -247,7 +249,5 @@ var NAVTREEINDEX4 =
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a19101d56c7db10b0f306c8563f506f69":[3,0,0,21,7,3],
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a230a16b9bf6b807c2dbc18a7581b4eb2":[3,0,0,21,7,4],
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a24ea2a67b49837f23c6e2748839ec4d4":[3,0,0,21,7,0],
-"d3/d45/structmorph_1_1table_1_1ColumnInfo.html#aed7a0ed2956192435ac92bb808ed6c32":[3,0,0,21,7,1],
-"d3/d45/structmorph_1_1table_1_1ColumnInfo.html#afcc65e273545fc9e7edcc24e08c35cc7":[3,0,0,21,7,2],
-"d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html":[3,0,0,25,0,38]
+"d3/d45/structmorph_1_1table_1_1ColumnInfo.html#aed7a0ed2956192435ac92bb808ed6c32":[3,0,0,21,7,1]
 };

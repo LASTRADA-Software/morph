@@ -32,7 +32,7 @@ var searchData=
   ['withsubmitmode_29',['withSubmitMode',['../d5/dbe/classmorph_1_1forms_1_1FormModel.html#a9b2c7438cb7687ab3e6257cbd483a47d',1,'morph::forms::FormModel']]],
   ['withtext_30',['withText',['../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a05298e42c5aa059a57fc8dbc03258c4f',1,'morph::ui::author::Node']]],
   ['withunit_31',['withUnit',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#aa6636da984bed65d0aba30158e8dfa27',1,'morph::forms::FieldMeta']]],
-  ['wizard_32',['wizard',['../d1/dc0/author_8hpp.html#acdaa662c33689582aa26424bf39411b9',1,'morph::ui::author']]],
+  ['wizard_32',['wizard',['../d1/dc0/author_8hpp.html#acdaa662c33689582aa26424bf39411b9',1,'morph::ui::author::wizard(ModelHandle&lt; Model &gt; const &amp;model)'],['../d0/d4d/author__forms_8hpp.html#acaee1e2b0e40ab65f97629c1d302bfc5',1,'morph::ui::author::wizard(ModelHandle&lt; Model &gt; const &amp;model)']]],
   ['wizardschemajson_33',['wizardSchemaJson',['../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27',1,'morph::flows']]],
   ['wizardsession_34',['WizardSession',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html#a059eb26c3701699739ac842b35e0ad22',1,'morph::forms::WizardSession']]],
   ['wizardsteptitlekey_35',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],

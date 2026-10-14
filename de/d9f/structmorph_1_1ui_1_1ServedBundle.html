@@ -150,6 +150,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ad4361dcdfb3772ee0e69c001d1bf4897"><td class="mdescLeft">&#160;</td><td class="mdescRight">The model facts the registry's catalog gave, for every model type a document names; absent when it has no model lookup.  <br /></td></tr>
 <tr class="memitem:a9753af171d05e310b61428b051b338f8" id="r_a9753af171d05e310b61428b051b338f8"><td class="memItemLeft">std::optional&lt; std::map&lt; std::string, <a class="el" href="../../d0/db7/structmorph_1_1ui_1_1ActionInfo.html">ActionInfo</a>, std::less&lt;&gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9753af171d05e310b61428b051b338f8">actions</a></td></tr>
 <tr class="memdesc:a9753af171d05e310b61428b051b338f8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The action facts the registry's catalog gave, for every action a document names; absent when it has no action lookup.  <br /></td></tr>
+<tr class="memitem:a3b57667d9c1e1b737f9a68c8d76e1188" id="r_a3b57667d9c1e1b737f9a68c8d76e1188"><td class="memItemLeft">std::optional&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3b57667d9c1e1b737f9a68c8d76e1188">views</a></td></tr>
+<tr class="memdesc:a3b57667d9c1e1b737f9a68c8d76e1188"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view documents the registry's catalog gave, by the action of their <span class="tt">v-query</span>, for every action a document names; absent when it has no view lookup.  <br /></td></tr>
+<tr class="memitem:a9bf33f1a83cbbcbc86b6f0a652ce0526" id="r_a9bf33f1a83cbbcbc86b6f0a652ce0526"><td class="memItemLeft">std::optional&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9bf33f1a83cbbcbc86b6f0a652ce0526">wizards</a></td></tr>
+<tr class="memdesc:a9bf33f1a83cbbcbc86b6f0a652ce0526"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wizard documents the registry's catalog gave, by the action of their first step, for every action a document names; absent when it has no wizard lookup.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>An application's bundle, built and immutable: what <span class="tt"><a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html" title="The UI service: answers ui-hello, ui-catalog and ui-fetch from one ServedBundle, and ui-evaluate thro...">UiService</a></span> serves. </p>
@@ -351,6 +355,42 @@ Public Attributes</h2></td></tr>
 <p>The action facts the registry's catalog gave, for every action a document names; absent when it has no action lookup. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3b57667d9c1e1b737f9a68c8d76e1188" name="a3b57667d9c1e1b737f9a68c8d76e1188"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3b57667d9c1e1b737f9a68c8d76e1188">&#9670;&#160;</a></span>views</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::map&lt;std::string, std::string, std::less&lt;&gt; &gt; &gt; morph::ui::ServedBundle::views</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The view documents the registry's catalog gave, by the action of their <span class="tt">v-query</span>, for every action a document names; absent when it has no view lookup. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9bf33f1a83cbbcbc86b6f0a652ce0526" name="a9bf33f1a83cbbcbc86b6f0a652ce0526"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9bf33f1a83cbbcbc86b6f0a652ce0526">&#9670;&#160;</a></span>wizards</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::map&lt;std::string, std::string, std::less&lt;&gt; &gt; &gt; morph::ui::ServedBundle::wizards</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The wizard documents the registry's catalog gave, by the action of their first step, for every action a document names; absent when it has no wizard lookup. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
