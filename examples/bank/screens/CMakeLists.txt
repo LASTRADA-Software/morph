@@ -5,11 +5,17 @@
 
 add_library(bank_screens STATIC bank_screens.cpp bank_screens.hpp)
 target_include_directories(bank_screens PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bank_screens PUBLIC morph::morph bank_lib)
-# bank_lib links Lightweight PUBLIC with plain include directories; its headers do not meet this project's warnings.
-get_target_property(_bank_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
-if(_bank_lightweight_includes)
-    target_include_directories(bank_screens SYSTEM PUBLIC ${_bank_lightweight_includes})
+# bank's models: over SQLite natively, in memory in a WebAssembly build (the browser has no ODBC).
+if(TARGET bank_lib)
+    target_link_libraries(bank_screens PUBLIC morph::morph bank_lib)
+    # bank_lib links Lightweight PUBLIC with plain include directories; its headers do not meet this project's
+    # warnings.
+    get_target_property(_bank_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
+    if(_bank_lightweight_includes)
+        target_include_directories(bank_screens SYSTEM PUBLIC ${_bank_lightweight_includes})
+    endif()
+else()
+    target_link_libraries(bank_screens PUBLIC morph::morph bank_memory_lib)
 endif()
 apply_warnings(bank_screens)
 apply_bigobj(bank_screens)

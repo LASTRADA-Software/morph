@@ -322,7 +322,7 @@ void LocalAppSource::fetchSchemas(std::string const& modelType,
     done(model::detail::defaultDispatcher().schemasJson(modelType));
 }
 
-std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect(ui::AppContext& /*context*/) {
+std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect(ui::AppContext& context) {
     try {
         if (!_setUp && _app.setUp) {
             _app.setUp(_setup);
@@ -342,7 +342,6 @@ std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect
                                                 .message = _app.name + ": " + bundle.error().message()});
     }
     _service = std::make_shared<ui::UiService>(std::move(*bundle));
-    _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
     // The UI service answers in process, synchronously, exactly as the server's strand would.
     ui::Exchange exchange = [service = _service, authorizer = session::allowAllAuthorizer()](
                                 wire::Envelope const& request, std::function<void(ui::ExchangeReply)> const& done) {
@@ -352,7 +351,15 @@ std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect
             done(std::unexpected(std::string{error.what()}));
         }
     };
+#ifdef __EMSCRIPTEN__
+    // A single-threaded build has no worker to run the models on: they run on the owner, between frames.
+    return Transport{.backend = std::make_unique<backend::LocalBackend>(context.executor()),
+                     .exchange = std::move(exchange)};
+#else
+    static_cast<void>(context);
+    _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
     return Transport{.backend = std::make_unique<backend::LocalBackend>(*_workers), .exchange = std::move(exchange)};
+#endif
 }
 
 void LocalAppSource::disconnect() {

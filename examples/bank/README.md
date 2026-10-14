@@ -14,8 +14,8 @@ It ships the models, a full test suite, a scripted CLI driver, and a **Qt 6
 desktop GUI** — which also builds to **WebAssembly** and runs entirely in the browser.
 
 > **▶ Try the live demo:** **https://lastrada-software.github.io/morph/demo/**
-> It opens signed in as a seeded demo user (`demo` / `demo1234`) with two accounts.
-> Everything runs client-side — no server. First load fetches a ~31 MB `.wasm`, so
+> Sign in as the seeded demo user (`demo` / `demo1234`), who has two accounts.
+> Everything runs client-side — no server. First load fetches a ~46 MB `.wasm`, so
 > give it a few seconds. (See [WebAssembly demo](#webassembly-demo-self-contained-github-pages).)
 
 ## Bank and the application ladder
@@ -29,7 +29,7 @@ bank is absent from [`examples/rungs.txt`](../rungs.txt) and never calls
 `morph_add_rung()`, which is what keeps it out of `ci.yml`'s `ladder-tests`
 and `ladder-sanitizers`, `wasm-ladder.yml`'s build loop, `coverage.sh` and
 `codecov.yml`'s per-rung components — the only workflow that builds bank at all
-is `wasm-demo.yml`, and only its WebAssembly GUI. `ladder_bank_server` below is a local `add_executable` for the same
+is `wasm-demo.yml`, and only for the browser demo. `ladder_bank_server` below is a local `add_executable` for the same
 reason; the `ladder_` prefix is the scenario tooling's naming convention, not a
 rung claim.
 
@@ -313,39 +313,38 @@ and grabs a PNG of each page.
 
 **Open it in a browser — nothing to install:** **https://lastrada-software.github.io/morph/demo/**
 
-You land signed in as the seeded demo user (`demo` / `demo1234`) with two accounts;
-open accounts, deposit/withdraw/transfer, issue cards, add payees & pay bills, and take
-a loan. It's a static page — the first load fetches a ~31 MB `.wasm` (streaming-compiled
-by the browser), then it's instant. Published from `master` by
+Sign in as the seeded demo user (`demo` / `demo1234`), who has two accounts; open
+accounts, deposit/withdraw/transfer, issue cards, add payees and take a loan. It's a
+static page — the first load fetches a ~46 MB `.wasm` (streaming-compiled by the
+browser), then it's instant. Published from `master` by
 [`.github/workflows/wasm-demo.yml`](../../.github/workflows/wasm-demo.yml).
 
-`gui_wasm/` is a **single-threaded WebAssembly** build of the same GUI that runs
-**entirely in the browser** — the morph model layer is the "server in the background,"
-with no external process. Since Lightweight (ODBC/SQLite) can't run in a browser, the
-WASM build swaps persistence for an **in-memory store** (`gui_wasm/include/bank/wasm/`)
-behind **shadow model headers** that shine ahead of the native ones on the include path,
-so the QML, controllers and DTOs are reused unchanged. `BankClient` is dual-moded
-(`#ifdef __EMSCRIPTEN__`): models run on the Qt event loop via `QtExecutor` (no thread
-pool, no database). Single-threaded ⇒ no SharedArrayBuffer ⇒ **no COOP/COEP headers**, so
-plain GitHub Pages hosts it. A demo user (`demo` / `demo1234`) and two accounts are
-seeded and auto-signed-in.
+The page is the generic client ([`examples/client`](../client)) built for
+**single-threaded WebAssembly**, running bank's [server-defined screens](#server-defined-screens)
+in process on the Qt Quick renderer — the same screens the native client and bank's server
+serve. Since Lightweight (ODBC/SQLite) can't run in a browser, bank's models link against
+an **in-memory store** (`bank_memory_lib`: `gui_wasm/src/models/*_wasm.cpp` behind the
+shadow model headers in `gui_wasm/include/bank/wasm/`, which come ahead of the native ones
+on the include path), seeded by `bank::wasm::seedDemo()`. The models run on the Qt event
+loop. Single-threaded ⇒ no SharedArrayBuffer ⇒ **no COOP/COEP headers**, so plain GitHub
+Pages hosts it. The client links with Asyncify, because the Qt Quick frontend waits for
+events in its own event loop.
 
-Build locally (needs Qt-for-WASM + a matching emsdk):
+Build locally (needs Qt 6.10 for WASM and its emsdk, 4.0.7):
 
 ```
 source /path/to/qt6-wasm/emsdk/emsdk_env.sh
 export EM_CACHE="$PWD/.emcache"
-/path/to/qt6-wasm/bin/qt-cmake -S . -B build-wasm -G Ninja \
-  -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
-  -DMORPH_BUILD_BANK_GUI=ON -DMORPH_BUILD_TESTS=OFF
-cmake --build build-wasm --target bank_gui_wasm
-python3 -m http.server -d build-wasm/examples/bank/gui_wasm 8000   # open bank_gui_wasm.html
+/path/to/qt6-wasm/bin/qt-cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON \
+  -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON -DMORPH_BUILD_TESTS=OFF
+cmake --build build-wasm --target morph_examples_client
+python3 -m http.server -d build-wasm/examples/client 8000   # open morph_examples_client.html
 ```
 
 CI (`.github/workflows/wasm-demo.yml`) builds the bundle with a matched host+wasm Qt pair
 and publishes it to `…github.io/<repo>/demo/`, coexisting with the Doxygen docs at the
-site root. The native (non-Emscripten) build is unaffected — the whole native stack is
-gated `if(NOT EMSCRIPTEN)` in `CMakeLists.txt`.
+site root.
 
 ## Server-defined screens
 

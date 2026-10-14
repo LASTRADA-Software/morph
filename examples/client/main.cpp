@@ -65,6 +65,13 @@ struct ShellFactory {
 int run(int argc, char** argv) {
     std::span<char*> const raw{argv, static_cast<std::size_t>(argc)};
     std::vector<std::string> args{raw.begin(), raw.end()};
+#ifdef MORPH_CLIENT_DEFAULT_APP
+    // A build with no command line, such as the browser's, opens its default application.
+    if (args.size() <= 1) {
+        args.emplace_back("--app");
+        args.emplace_back(MORPH_CLIENT_DEFAULT_APP);
+    }
+#endif
     auto clientArgs = examples::readClientArgs(args);
     if (!clientArgs) {
         std::cerr << "client: " << clientArgs.error() << '\n';

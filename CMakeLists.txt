@@ -50,6 +50,13 @@ endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_NET           "Build the morph::net raw-socket WebSocket transport (POSIX only; see docs/spec/core/backend.md)" OFF)
 option(MORPH_BUILD_TUI           "Build morph::tui, the terminal frontend over core-cpp's core::tui (a compiled library; fetches libunicode if not installed)" OFF)
+# Emscripten aborts on a throw unless catching is enabled, and morph reports refusals, invalid input and failed calls
+# as exceptions: a WebAssembly build compiles and links every target with it.
+if(EMSCRIPTEN)
+    add_compile_options(-fexceptions)
+    add_link_options(-fexceptions)
+endif()
+
 # core-cpp builds no core::tui under Emscripten, so there is nothing for
 # morph::tui to wrap there.
 if(MORPH_BUILD_TUI AND EMSCRIPTEN)
@@ -1147,7 +1154,8 @@ if(MORPH_BUILD_QT)
         add_subdirectory(tests/qt_quick)
     endif()
 
-    if(MORPH_BUILD_EXAMPLES)
+    # Qt for WebAssembly has no TLS sockets: a browser's WebSocket carries the TLS.
+    if(MORPH_BUILD_EXAMPLES AND NOT EMSCRIPTEN)
         add_subdirectory(examples/qt_tls_client)
     endif()
 endif()
@@ -1210,11 +1218,12 @@ endif()
 # common target links the transports that were built (morph::qt, morph::net),
 # and its tests and the gallery's use Catch2 and morph_test_main. The client is
 # built when a frontend is (Qt Quick or the terminal).
-if(MORPH_BUILD_EXAMPLES AND NOT EMSCRIPTEN)
+# Under Emscripten too: the generic client runs in the browser, over bank's in-memory models.
+if(MORPH_BUILD_EXAMPLES)
     add_subdirectory(examples/common/app)
     add_subdirectory(examples/gallery)
     add_subdirectory(examples/forms/screens)
-    if(TARGET bank_lib)
+    if(TARGET bank_lib OR TARGET bank_memory_lib)
         add_subdirectory(examples/bank/screens)
     endif()
     if(MORPH_BUILD_QT_QUICK OR MORPH_BUILD_TUI)

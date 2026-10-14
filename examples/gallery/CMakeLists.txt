@@ -15,7 +15,7 @@ if(AF_COVERAGE)
 endif()
 
 # Servers stay on Qt (spec 4 §1).
-if(TARGET morph_qt_impl)
+if(TARGET morph_qt_impl AND NOT EMSCRIPTEN)
     add_executable(gallery_server src/server/main.cpp)
     target_link_libraries(gallery_server PRIVATE gallery_screens morph::qt morph_qt_impl)
     apply_warnings(gallery_server)
