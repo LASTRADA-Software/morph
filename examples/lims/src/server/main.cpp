@@ -33,7 +33,8 @@ namespace {
 /// @param fallback What an unset one reads as.
 /// @return The value.
 std::string environment(char const* name, std::string_view fallback) {
-    char const* const value = std::getenv(name);  // NOLINT(concurrency-mt-unsafe): read once, before any thread starts.
+    char const* const value =
+        std::getenv(name);  // NOLINT(concurrency-mt-unsafe): read once, before any thread starts.
     return value == nullptr ? std::string{fallback} : std::string{value};
 }
 

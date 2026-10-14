@@ -51,7 +51,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 /// @brief The server's configuration: the live-model cap above, and @p services.
 /// @param services The envelope services the server answers besides the models.
 /// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
-::morph::backend::ServerConfig serverConfig(std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
+::morph::backend::ServerConfig serverConfig(
+    std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
     ::morph::backend::ServerConfig config;
     config.services = std::move(services);
     config.limits.maxLiveModels = kMaxLiveModels;
@@ -60,7 +61,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 
 }  // namespace
 
-App::App(std::filesystem::path actionLogPath, std::size_t workers, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
+App::App(std::filesystem::path actionLogPath, std::size_t workers,
+         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
     : _pool{workers},
       _actionLog{std::make_shared<::morph::journal::FileActionLog>(_journalOwner, std::move(actionLogPath))},
       _server{std::make_shared<::morph::backend::RemoteServer>(_pool, std::make_shared<auth::PollsAuthorizer>(),

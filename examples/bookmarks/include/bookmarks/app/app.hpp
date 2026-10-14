@@ -83,7 +83,8 @@ public:
                  std::shared_ptr<IBookmarkMetadataFetcher> fetcher = std::make_shared<NullMetadataFetcher>(),
                  std::chrono::milliseconds fetchInterval = std::chrono::seconds{5},
                  std::chrono::milliseconds relayInterval = std::chrono::seconds{2}, std::size_t workers = 4,
-                 QObject* parent = nullptr, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
+                 QObject* parent = nullptr,
+                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Stops both timers and detaches the process-wide action log and
     ///        token issuer.
