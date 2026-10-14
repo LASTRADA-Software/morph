@@ -656,6 +656,19 @@ private:
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
 };
 
+/// @brief Whether an authoriser is asked about one of the UI service's reads: `ui`'s `hello`, `catalog` or `fetch`.
+///
+/// An application that serves a login screen admits these for a session with no principal yet, so a client can greet
+/// the service, read the catalog and fetch the login screen. Admitting them discloses no other screen: `ui-catalog`
+/// lists, and `ui-fetch` serves, a non-public screen only to a principal who may run its queries, which the
+/// authoriser still decides.
+/// @param modelType  The model type asked about.
+/// @param actionType The action asked about.
+/// @return Whether it is one of those reads.
+[[nodiscard]] constexpr bool isUiServiceRead(std::string_view modelType, std::string_view actionType) noexcept {
+    return modelType == "ui" && (actionType == "hello" || actionType == "catalog" || actionType == "fetch");
+}
+
 /// @brief The UI service: answers `ui-hello`, `ui-catalog` and `ui-fetch` from one `ServedBundle`, and `ui-evaluate`
 ///        through the server's `ActionDispatcher`, as an envelope service of a `RemoteServer`
 ///        (`ServerConfig::services`).
