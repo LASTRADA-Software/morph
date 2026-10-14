@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cassert>
 #include <core/async/IExecutor.hpp>
+#include <cstdio>
 
 /// @file
 /// @brief The check every loop-owned body makes on entry: "am I on my owner?"
@@ -45,6 +46,15 @@ inline void noteOwner(char const* site, ::core::async::IExecutor const& owner, b
         probe(site, owner);
         return;
     }
+#ifndef NDEBUG
+    // The assertion's text is fixed; the site says which misuse it was: off the owner, or another the owner's
+    // component reports through here, such as a duplicate row key.
+    if (!onOwner) {
+        static_cast<void>(std::fputs("morph: ", stderr));
+        static_cast<void>(std::fputs(site, stderr));
+        static_cast<void>(std::fputs("\n", stderr));
+    }
+#endif
     assert(onOwner && "a loop-owned body ran off its owner's thread");
     static_cast<void>(onOwner);
 }
