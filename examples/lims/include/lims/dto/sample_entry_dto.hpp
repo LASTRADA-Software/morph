@@ -41,11 +41,7 @@ inline constexpr std::string_view kTurbidity = "turbidity";
 inline constexpr std::string_view kNitrate = "nitrate";
 
 /// @brief Starts a new, empty working copy; nothing is stored until it is saved.
-struct NewSample {
-    /// @brief Always well-formed.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct NewSample {};
 
 /// @brief Loads a stored sample's entry data into the working copy, and attaches the handler to the sample.
 struct LoadSample {
@@ -67,11 +63,7 @@ enum class SaveError : std::uint8_t {
 };
 
 /// @brief Commits the working copy: registers the sample when it is new, then stores its entry data.
-struct SaveSample {
-    /// @brief Always well-formed: what the working copy lacks is the reply's `error`.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct SaveSample {};
 
 /// @brief What a save did.
 struct SaveSampleResult {
@@ -82,11 +74,7 @@ struct SaveSampleResult {
 };
 
 /// @brief Deletes the stored sample the working copy was loaded from, and discards the working copy.
-struct DeleteSample {
-    /// @brief Always well-formed.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct DeleteSample {};
 
 /// @brief What a delete removed.
 struct DeleteSampleResult {
@@ -107,10 +95,6 @@ struct HeaderSection {
 
     /// @brief Members a client may leave out.
     static constexpr std::array optionalFields{std::string_view{"receivedOn"}, std::string_view{"remarks"}};
-
-    /// @brief Always well-formed: an incomplete header is refused at save, not while it is edited.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
 
     /// @brief A section is submitted with its own button.
     static constexpr bool explicitSubmit = true;
@@ -134,10 +118,6 @@ struct SamplingSection {
     static constexpr std::array optionalFields{std::string_view{"spike"}, std::string_view{"measured1"},
                                                std::string_view{"measured2"}, std::string_view{"measured3"},
                                                std::string_view{"measured4"}};
-
-    /// @brief Always well-formed: a step may stay unmeasured.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
 
     /// @brief A section is submitted with its own button.
     static constexpr bool explicitSubmit = true;
@@ -180,11 +160,7 @@ struct ClearOptionalMeasurement {
 };
 
 /// @brief Reads the working copy's header.
-struct GetHeader {
-    /// @brief Always well-formed.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct GetHeader {};
 
 /// @brief The working copy's header.
 struct HeaderView {
@@ -207,11 +183,7 @@ struct HeaderView {
 };
 
 /// @brief Reads the working copy's optional measurements.
-struct GetMeasurements {
-    /// @brief Always well-formed.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct GetMeasurements {};
 
 /// @brief The working copy's optional measurements, and which of them hold data.
 struct MeasurementsView {
@@ -226,11 +198,7 @@ struct MeasurementsView {
 };
 
 /// @brief Reads the dilution series the working copy's sampling section implies.
-struct GetDilutionSeries {
-    /// @brief Always well-formed.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
-};
+struct GetDilutionSeries {};
 
 /// @brief One dilution step, computed by the model.
 struct SeriesRow {
@@ -272,10 +240,6 @@ struct ProjectRow {
 struct ListProjects {
     /// @brief The sort, filters and page.
     ::morph::table::TableQuery query;
-
-    /// @brief Always well-formed; the table engine bounds the query.
-    /// @return `true`.
-    [[nodiscard]] bool validate() const noexcept { return true; }
 };
 
 /// @brief Files the working copy under a project.

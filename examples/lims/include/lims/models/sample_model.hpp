@@ -496,6 +496,8 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
 
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::NewSample, "NewSample", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::LoadSample, "LoadSample", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SaveSample, "SaveSample")
@@ -511,6 +513,7 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetMeasurements, "GetMeasurement
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetDilutionSeries, "GetDilutionSeries", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListProjects, "ListProjects", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SelectProject, "SelectProject", ::morph::model::Loggable::No)
+// NOLINTEND(misc-const-correctness)
 
 // `OpenSample` is the action that names a sample, so it defines the model's
 // key. `BRIDGE_MODEL_KEY` deduces the key *type* from the member it is handed,
