@@ -130,8 +130,7 @@ TEST_CASE("QueueingDispatcher keeps a call whose replay still cannot reach the s
 }
 
 // Mutation: hold a replay the server refused (onError never runs, and the queue never drains).
-TEST_CASE("QueueingDispatcher fails a caller whose replay the server refuses, and replays the next",
-          "[ui][offline]") {
+TEST_CASE("QueueingDispatcher fails a caller whose replay the server refuses, and replays the next", "[ui][offline]") {
     Rig rig;
     auto const refused = rig.send("MoveTaskPosition");
     rig.unreachable(0);
@@ -153,4 +152,74 @@ TEST_CASE("QueueingDispatcher never holds a call that does not ask to be queued"
     rig.unreachable(0);
     CHECK(plain->failure.has_value());
     CHECK(rig.queueing.held() == 0);
+}
+
+namespace {
+
+// A mutation sent through the offline queue: its pending flag, and what its success and its error set.
+constexpr char const* kQueuedDocument = R"({
+  "vocab": "ui/1", "id": "queued",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "outcome": { "init": "none" } },
+  "mutations": { "attach": { "model": "sample", "action": "Lims_Attach", "body": { "obj": { "kind": "csv" } },
+                             "offline": "queue",
+                             "onSuccess": [ { "set": "outcome", "value": "saved" } ],
+                             "onError": [ { "set": "outcome", "value": "refused" } ] } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "attach", "label": "attach", "onClick": { "run": "attach" } },
+    { "kind": "text", "testId": "pending", "text": { "fn": "format", "args": [ "{0}", { "pending": "attach" } ] } },
+    { "kind": "text", "testId": "outcome", "text": { "ref": "outcome" } } ] } })";
+
+/// A document on an interpreter whose calls go through the offline queue.
+struct QueuedScreen {
+    morph::ui::testing::Harness h;
+    QueueingDispatcher queueing{h.dispatcher, &h.owner};
+    morph::ui::Interpreter interpreter{h.session, queueing, morph::ui::InterpreterOptions{.host = &h.host}};
+    std::unique_ptr<morph::ui::Screen> screen;
+
+    QueuedScreen() {
+        auto mounted = interpreter.mount(
+            morph::ui::testing::loadOrFail(kQueuedDocument, morph::ui::testing::corpusCatalog()), {}, h.backend);
+        REQUIRE(mounted);
+        screen = std::move(*mounted);
+        h.settle();
+    }
+
+    /// Runs the mutation, which the server cannot be reached for.
+    void runOffline() {
+        h.backend.click(h.backend.find("Button", "testId", "attach").value());
+        h.settle();
+        REQUIRE(h.dispatcher.calls.size() == 1);
+        h.dispatcher.calls.at(0).answered = true;
+        h.dispatcher.calls.at(0).promise.reject(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+        h.settle();
+    }
+};
+
+}  // namespace
+
+// Mutation: settle the caller when its call cannot reach the server (pending drops and onError runs at once).
+TEST_CASE("an offline-queued mutation stays pending until its replay, then runs onSuccess", "[ui][offline]") {
+    QueuedScreen queued;
+    queued.runOffline();
+    CHECK(queued.h.text("pending") == "true");
+    CHECK(queued.h.text("outcome") == "none");
+    queued.queueing.replay();
+    queued.h.settle();
+    REQUIRE(queued.h.dispatcher.calls.size() == 2);
+    queued.h.reply(1, "{}");
+    CHECK(queued.h.text("pending") == "false");
+    CHECK(queued.h.text("outcome") == "saved");
+}
+
+// Mutation: resolve the caller of a refused replay (onError never runs).
+TEST_CASE("an offline-queued mutation whose replay the server refuses runs onError", "[ui][offline]") {
+    QueuedScreen queued;
+    queued.runOffline();
+    queued.queueing.replay();
+    queued.h.settle();
+    REQUIRE(queued.h.dispatcher.calls.size() == 2);
+    queued.h.fail(1, "conflict");
+    CHECK(queued.h.text("pending") == "false");
+    CHECK(queued.h.text("outcome") == "refused");
 }
