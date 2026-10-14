@@ -10,8 +10,11 @@
 
 #if MORPH_CLIENT_HAS_BANK
 #include <bank_screens.hpp>
-
+#ifdef __EMSCRIPTEN__
+#include "bank/wasm/demo_seed.hpp"
+#else
 #include "bank/db/database.hpp"
+#endif
 #endif
 
 #if MORPH_CLIENT_HAS_LEDGER
@@ -58,10 +61,16 @@ std::vector<LocalApp> localApps() {
     std::vector<LocalApp> apps{gallery::localApp()};
     apps.push_back(LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}});
 #if MORPH_CLIENT_HAS_BANK
+#ifdef __EMSCRIPTEN__
+    // In the browser: bank's in-memory models, seeded with the hosted demo's customer (demo / demo1234).
+    apps.push_back(LocalApp{
+        .name = "bank", .bundle = &bank::screens::bundle, .setUp = [](LocalSetup const&) { bank::wasm::seedDemo(); }});
+#else
     apps.push_back(LocalApp{.name = "bank", .bundle = &bank::screens::bundle, .setUp = [](LocalSetup const& setup) {
                                 std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
                                 bank::db::setup("DRIVER=SQLite3;Database=" + file);
                             }});
+#endif
 #endif
 #if MORPH_CLIENT_HAS_LEDGER
     apps.push_back(

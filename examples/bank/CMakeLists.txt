@@ -21,7 +21,25 @@ endif()
 # ODBC) cannot exist in the browser, so the whole native stack — Lightweight,
 # bank_lib, the CLI and the tests — is skipped. Only the self-contained WASM GUI
 # (its own in-memory backend) is built. See gui_wasm/.
+# bank_memory_lib is that backend: the GUI-facing models over an in-memory store, under the same class names as the
+# native ones (gui_wasm/include shadows bank/models), which the generic client's bank screens link too.
 if(EMSCRIPTEN)
+    add_library(bank_memory_lib STATIC
+        gui_wasm/src/models/auth_model_wasm.cpp
+        gui_wasm/src/models/account_model_wasm.cpp
+        gui_wasm/src/models/customer_model_wasm.cpp
+        gui_wasm/src/models/transaction_model_wasm.cpp
+        gui_wasm/src/models/card_model_wasm.cpp
+        gui_wasm/src/models/payee_model_wasm.cpp
+        gui_wasm/src/models/payment_model_wasm.cpp
+        gui_wasm/src/models/loan_model_wasm.cpp
+        src/core/money.cpp)
+    target_include_directories(bank_memory_lib BEFORE PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui_wasm/include  # shadow models + bank/wasm store
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)          # shared bank/dto, bank/core
+    target_link_libraries(bank_memory_lib PUBLIC morph::morph)
+    target_compile_features(bank_memory_lib PUBLIC cxx_std_23)
+    apply_bigobj(bank_memory_lib)
     if(MORPH_BUILD_BANK_GUI)
         add_subdirectory(gui_wasm)
     endif()
