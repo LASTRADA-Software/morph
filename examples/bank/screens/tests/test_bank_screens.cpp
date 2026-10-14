@@ -50,50 +50,6 @@ void reportProblems(ScreenHarness const& harness) {
     }
 }
 
-/// A widget of one form: the form container's test id, then the widget's kind and test id.
-struct InForm {
-    std::string_view form;
-    std::string_view kind;
-    std::string testId;
-};
-
-/// The widget @p where names, under its form container.
-std::optional<int> inForm(ScreenHarness& harness, InForm const& where) {
-    auto const root = harness.find("Column", where.form);
-    if (!root) {
-        return std::nullopt;
-    }
-    auto const& backend = harness.backend();
-    std::vector<int> pending{root.value()};
-    while (!pending.empty()) {
-        int const widget = pending.back();
-        pending.pop_back();
-        if (backend.kindOf(widget) == where.kind && backend.prop(widget, "testId") == where.testId) {
-            return widget;
-        }
-        for (int const child : backend.children(widget)) {
-            pending.push_back(child);
-        }
-    }
-    return std::nullopt;
-}
-
-/// Types @p value into the field @p field.testId names (without its `field_` prefix) of the form @p field.form.
-void editField(ScreenHarness& harness, InForm field, std::string value) {
-    INFO("form " << field.form << ", field " << field.testId);
-    field.kind = "TextInput";
-    field.testId = "field_" + field.testId;
-    harness.backend().edit(inForm(harness, field).value(), std::move(value));
-}
-
-/// Submits a form once its edits have settled into it.
-void submit(ScreenHarness& harness, std::string_view form) {
-    INFO("form " << form);
-    int const button = inForm(harness, {.form = form, .kind = "Button", .testId = "form_submit"}).value();
-    REQUIRE(harness.waitFor([&harness, button] { return harness.backend().prop(button, "enabled") != "false"; }));
-    harness.backend().click(button);
-}
-
 /// The number of `Text` widgets under @p root.
 std::size_t textsUnder(ScreenHarness& harness, int root) {
     auto const& backend = harness.backend();
@@ -133,10 +89,10 @@ std::vector<std::int64_t> optionKeys(ScreenHarness& harness, std::string_view te
 
 /// Opens one account through the accounts screen's form, and waits for the list to show @p count accounts.
 void openAccount(ScreenHarness& harness, std::size_t count) {
-    editField(harness, {.form = "openForm", .kind = {}, .testId = "kind"}, "0");
-    editField(harness, {.form = "openForm", .kind = {}, .testId = "currency"}, "0");
-    editField(harness, {.form = "openForm", .kind = {}, .testId = "overdraftMinor"}, "0");
-    submit(harness, "openForm");
+    harness.editField("openForm", "kind", "0");
+    harness.editField("openForm", "currency", "0");
+    harness.editField("openForm", "overdraftMinor", "0");
+    REQUIRE(harness.submitForm("openForm"));
     REQUIRE(harness.waitFor([&harness, count] { return optionKeys(harness, "historyAccount").size() == count; }));
 }
 
@@ -207,8 +163,8 @@ TEST_CASE("bank screens: the account chosen on Move money keeps naming the accou
     harness.backend().choose(harness.find("Select", "account").value(), morph::ui::Key{second});
     REQUIRE(harness.waitForText("balance", "Balance 0.00"));
 
-    editField(harness, {.form = "depositForm", .kind = {}, .testId = "amountMinor"}, "1250");
-    submit(harness, "depositForm");
+    harness.editField("depositForm", "amountMinor", "1250");
+    REQUIRE(harness.submitForm("depositForm"));
     bool const deposited = harness.waitForText("balance", "Balance 12.50");
     reportProblems(harness);
     CHECK(deposited);
@@ -231,11 +187,11 @@ TEST_CASE("bank screens: a loan's schedule is the model's, through the schedule 
     }
     ScreenHarness harness = open(bank::screens::kLoans, user);
     REQUIRE(harness.waitFor([&harness] { return harness.find("Column", "applyForm").has_value(); }));
-    editField(harness, {.form = "applyForm", .kind = {}, .testId = "accountId"}, std::to_string(accountId));
-    editField(harness, {.form = "applyForm", .kind = {}, .testId = "principalMinor"}, "120000");
-    editField(harness, {.form = "applyForm", .kind = {}, .testId = "rateBps"}, "600");
-    editField(harness, {.form = "applyForm", .kind = {}, .testId = "termMonths"}, "12");
-    submit(harness, "applyForm");
+    harness.editField("applyForm", "accountId", std::to_string(accountId));
+    harness.editField("applyForm", "principalMinor", "120000");
+    harness.editField("applyForm", "rateBps", "600");
+    harness.editField("applyForm", "termMonths", "12");
+    REQUIRE(harness.submitForm("applyForm"));
     REQUIRE(harness.waitFor([&harness] { return optionKeys(harness, "scheduleLoan").size() == 1; }));
     harness.backend().choose(harness.find("Select", "scheduleLoan").value(),
                              morph::ui::Key{optionKeys(harness, "scheduleLoan").at(0)});
