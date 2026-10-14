@@ -45,7 +45,8 @@ TEST_CASE("lims render smoke: local mode, every screen, offscreen", "[lims][rend
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted ==
           std::vector<std::string>{std::string{lims::screens::kRegister}, std::string{lims::screens::kLifecycle},
-                                   std::string{lims::screens::kResults}, std::string{lims::screens::kSample}});
+                                   std::string{lims::screens::kResults}, std::string{lims::screens::kSample},
+                                   std::string{lims::screens::kLogin}});
     // Just before the verdict: unscoped messages attach to the next assertion.
     for (std::string const& failure : report.failures) {
         UNSCOPED_INFO(failure);
