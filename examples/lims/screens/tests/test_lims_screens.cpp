@@ -127,7 +127,7 @@ TEST_CASE("lims screens: a model's refusal reaches the screen as its own message
         auto const error = harness.text("error");
         return error && !error->empty();
     }));
-    CHECK(harness.text("error")->find("424242") != std::string::npos);
+    CHECK(harness.text("error")->contains("424242"));
 }
 
 // Mutation: list a result's value as a double (12.5, not 12.500).

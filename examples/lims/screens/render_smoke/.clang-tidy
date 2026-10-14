@@ -1,0 +1,7 @@
+# Test idiom, not a defect: Catch2's REQUIRE(a == b) expands to a chained comparison. The reasoning, and why the
+# file is per directory, is in examples/common/testkit/.clang-tidy.
+Checks: '-bugprone-chained-comparison'
+CheckOptions:
+  - key:   readability-function-cognitive-complexity.IgnoreMacros
+    value: "true"
+InheritParentConfig: true

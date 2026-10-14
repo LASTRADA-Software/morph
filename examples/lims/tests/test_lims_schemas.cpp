@@ -44,14 +44,14 @@ TEST_CASE("lims' capture form carries its cross-field rules", "[lims][forms][sch
     REQUIRE(dom.contains("CaptureConcentration"));
     REQUIRE(dom["CaptureConcentration"].contains("x-rules"));
     std::string const rules = glz::write_json(dom["CaptureConcentration"]["x-rules"]).value_or(std::string{});
-    CHECK(rules.find("exactlyOneOf") != std::string::npos);
-    CHECK(rules.find("requiredWhen") != std::string::npos);
-    CHECK(rules.find("visibleWhen") != std::string::npos);
+    CHECK(rules.contains("exactlyOneOf"));
+    CHECK(rules.contains("requiredWhen"));
+    CHECK(rules.contains("visibleWhen"));
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 // `x-submitMode` is opt-in: a read-only query declares no `explicitSubmit`, so its schema carries no mode at all.
 TEST_CASE("a read-only lims action's schema carries no submit mode", "[lims][forms][schemas]") {
     std::string const& schema = morph::forms::schemaJson<lims::GetSample>();
-    CHECK(schema.find("x-submitMode") == std::string::npos);
+    CHECK_FALSE(schema.contains("x-submitMode"));
 }
