@@ -949,7 +949,14 @@ endfunction()
 # hand from another directory is the same coupling that lets the object list
 # shrink unnoticed.
 # DEFER on this directory runs the call after every add_subdirectory() of the
-# scope that included this file completes, which is when the last
-# apply_coverage() has run.
+# scope that included this file completes. Deferred calls run in the order they
+# were registered, and this one is registered early, so other deferred calls
+# that make test targets (a rung's screen tests, which wait for
+# examples/common) would run after it and be left out. The first deferred call
+# therefore defers the write once more, which queues it behind every call
+# registered during configure: it runs when the last apply_coverage() has.
+function(_morph_defer_coverage_manifest)
+    cmake_language(DEFER DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" CALL morph_write_coverage_object_manifest)
+endfunction()
 cmake_language(DEFER DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-               CALL morph_write_coverage_object_manifest)
+               CALL _morph_defer_coverage_manifest)
