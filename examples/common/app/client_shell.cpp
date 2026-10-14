@@ -37,6 +37,33 @@ private:
     std::function<void(std::string, ui::ParamMap)> _navigate;
 };
 
+/// The application's side of the commands the library's host does not answer itself: sign-in and sign-out, which
+/// install the principal a sign-in mutation answered into the source.
+class Application final : public ui::InterpreterHost {
+public:
+    explicit Application(ClientSource& source) : _source{&source} {}
+
+    // The reply's `principal`, when it names one and does not say `ok: false`.
+    bool signIn(ui::Value const& reply) override {
+        ui::ValueRecord const* const record = reply.asRecord();
+        if (record == nullptr) {
+            return false;
+        }
+        auto const accepted = record->find("ok");
+        if (accepted != record->end() && accepted->second.asBool() != nullptr && !*accepted->second.asBool()) {
+            return false;
+        }
+        auto const principal = record->find("principal");
+        std::string const* const name = principal == record->end() ? nullptr : principal->second.asString();
+        return name != nullptr && !name->empty() && _source->adoptPrincipal(*name);
+    }
+
+    void signOut() override { static_cast<void>(_source->adoptPrincipal(_source->signedOutPrincipal())); }
+
+private:
+    ClientSource* _source;
+};
+
 class Shell final : public ui::MountedShell {
 public:
     Shell(ui::AppContext& context, ui::IViewBackend& backend, ClientShellOptions options)
@@ -87,6 +114,8 @@ public:
             return found == _documents.end() ? nullptr : found->second;
         };
         hostOptions.backend = _backend;
+        _application = std::make_unique<Application>(source);
+        hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
             *_session, source.dispatcher(), std::move(hostOptions), [this](std::string screenId, ui::ParamMap params) {
@@ -144,6 +173,7 @@ private:
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
     std::unique_ptr<ui::Session> _session;
+    std::unique_ptr<Application> _application;
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ScreenHandle> _current;
     std::optional<ui::Mounted> _message;

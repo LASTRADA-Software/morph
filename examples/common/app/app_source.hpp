@@ -105,6 +105,17 @@ public:
     /// @brief Drops a `ready` not yet delivered and releases the bridge, the transport and the bundle.
     void close() final;
 
+    /// @brief Makes @p principal the one every later model call carries: what a screen's `signIn` installs (spec 6
+    ///        §5). The default adopts it into the request session and the bridge's default session.
+    /// @param principal The principal the sign-in mutation answered; empty ends the session.
+    /// @return Whether the source adopted it; a source whose server derives the principal from a token it issued
+    ///         cannot adopt a bare principal.
+    virtual bool adoptPrincipal(std::string principal);
+
+    /// @brief The principal before any sign-in, which `signOut` returns to.
+    /// @return It; empty for none.
+    [[nodiscard]] virtual std::string signedOutPrincipal() const { return {}; }
+
 protected:
     /// @brief What a concrete source opens with: the bridge's backend and the exchange the UI service is reached by.
     struct Transport {
@@ -163,6 +174,14 @@ public:
     /// @param timeout How long to wait for the bundle before reporting the server unreachable.
     explicit RemoteAppSource(std::string url, std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
+    /// @brief Refused: a remote server derives the principal from a token it issued, which a bare principal is not.
+    /// @param principal Ignored.
+    /// @return `false`.
+    bool adoptPrincipal(std::string principal) override {
+        static_cast<void>(principal);
+        return false;
+    }
+
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     [[nodiscard]] std::chrono::milliseconds openTimeout() const override { return _timeout; }
@@ -185,6 +204,10 @@ public:
     LocalAppSource& operator=(LocalAppSource const&) = delete;
     LocalAppSource(LocalAppSource&&) = delete;
     LocalAppSource& operator=(LocalAppSource&&) = delete;
+
+    /// @brief The development user, from `--user`.
+    /// @return It.
+    [[nodiscard]] std::string signedOutPrincipal() const override { return _setup.user; }
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
