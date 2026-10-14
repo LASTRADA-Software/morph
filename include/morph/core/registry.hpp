@@ -1773,7 +1773,7 @@ void actionSourceRegistrationRequired() {}
             /* caller-supplied string field would otherwise produce a body the  */                             \
             /* peer's reader rejects, or be silently mangled by glaze's chunked */                             \
             /* fast path — see its doc comment in registry.hpp.                 */                             \
-            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(action, out)) {         \
+            if (auto const errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(action, out)) {   \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \
@@ -1792,7 +1792,7 @@ void actionSourceRegistrationRequired() {}
                recognise as altered. Deciding that a silently-altered payload is a                             \
                protocol violation belongs here, where we know the bytes came off a wire. */                    \
             ::morph::math::WireClampScope const clampedRationals;                                              \
-            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
+            if (auto const errCode = glz::read<kLenientRead>(action, jsonStr)) {                               \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
             if (clampedRationals.clamped() != 0) {                                                             \
@@ -1806,7 +1806,7 @@ void actionSourceRegistrationRequired() {}
             /* EscapingWriteOpts: see toJson() above — a result body carries    */                             \
             /* caller data back (a paste's content, a fetched record) and needs */                             \
             /* the identical treatment.                                          */                            \
-            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(result, out)) {         \
+            if (auto const errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(result, out)) {   \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \
@@ -1815,7 +1815,7 @@ void actionSourceRegistrationRequired() {}
             Result result{};                                                                                   \
             /* null_terminated=false: see the identical fix on fromJson() above. */                            \
             static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                     \
+            if (auto const errCode = glz::read<kLenientRead>(result, jsonStr)) {                               \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
             return result;                                                                                     \

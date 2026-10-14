@@ -70,7 +70,6 @@ struct RreCounterModel {
 BRIDGE_REGISTER_MODEL(RreCounterModel, "RRE_CounterModel")
 // The generated fromJson body declares a non-const `WireClampScope`, which
 // lives in the macro in registry.hpp rather than here.
-// NOLINTNEXTLINE(misc-const-correctness)
 BRIDGE_REGISTER_ACTION(RreCounterModel, RreAddTo, "RRE_AddTo")
 BRIDGE_MODEL_KEY(RreCounterModel, RreAddTo, &RreAddTo::id);
 

@@ -158,7 +158,6 @@ struct BlockModel {
 
 BRIDGE_REGISTER_MODEL(BlockModel, "TestR_BlockModel")
 // The generated fromJson body declares a non-const local inside the macro.
-// NOLINTNEXTLINE(misc-const-correctness)
 BRIDGE_REGISTER_ACTION(BlockModel, BlockAction, "TestR_BlockAction")
 
 TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending fails every call still in flight",
