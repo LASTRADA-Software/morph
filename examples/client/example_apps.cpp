@@ -14,6 +14,12 @@
 #include "bank/db/database.hpp"
 #endif
 
+#if MORPH_CLIENT_HAS_BOOKMARKS
+#include <bookmarks_screens.hpp>
+
+#include "bookmarks/db/database.hpp"
+#endif
+
 #if MORPH_CLIENT_HAS_PASTEBIN
 #include <pastebin_screens.hpp>
 
@@ -38,6 +44,14 @@ std::vector<LocalApp> localApps() {
                                 std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
                                 bank::db::setup("DRIVER=SQLite3;Database=" + file);
                             }});
+#endif
+#if MORPH_CLIENT_HAS_BOOKMARKS
+    apps.push_back(
+        LocalApp{.name = "bookmarks", .bundle = &bookmarks::screens::bundle, .setUp = [](LocalSetup const& setup) {
+                     std::string const file = setup.db.empty() ? std::string{"bookmarks.db"} : setup.db;
+                     bookmarks::db::setup("DRIVER=SQLite3;Database=" + file);
+                     bookmarks::screens::prepareLocal();
+                 }});
 #endif
 #if MORPH_CLIENT_HAS_PASTEBIN
     apps.push_back(

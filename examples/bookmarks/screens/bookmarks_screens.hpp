@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <expected>
+#include <memory>
+#include <morph/ui/service.hpp>
+#include <string_view>
+
+/// @file
+/// bookmarks' screen as a UI document (spec 4 §5): sign-in, the bookmark forms over three models, the bookmark list
+/// with a bulk archive, and the tags. Served by the bookmarks server and linked in process by the generic client's
+/// local mode. Toolkit-free: this target links morph and the rung's models only.
+
+namespace bookmarks::screens {
+
+/// @brief The application's id, as `ui-hello` names it.
+inline constexpr std::string_view kApplicationId = "bookmarks";
+
+/// @brief Everything in one screen: sign-in, the forms, the list and the tags.
+inline constexpr std::string_view kBookmarks = "bookmarks.main";
+
+/// @brief Prepares bookmarks to run in process: installs a token issuer with a development secret, which `Login`
+///        mints its tokens with and a server installs at start-up.
+void prepareLocal();
+
+/// @brief The application's bundle: the bookmarks screen, registered and validated.
+/// @return The bundle, or the refusal.
+[[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();
+
+}  // namespace bookmarks::screens

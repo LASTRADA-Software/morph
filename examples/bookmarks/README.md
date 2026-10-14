@@ -44,6 +44,18 @@ outbox relay, and — because `LocalBackend` runs no authorizer at all — is
 single-user by construction. The two-user isolation this rung is *about* is
 only meaningful against the server.
 
+
+## Server-defined screen
+
+[`screens/bookmarks_screens.cpp`](screens/bookmarks_screens.cpp) declares `bookmarks.main` as a UI document (spec 4)
+over three models, AuthModel, BookmarkModel and TagModel:
+- **Sign-in** is a mutation of `Login` whose reply is installed with `signIn`. `signIn` takes a mutation, not a
+  `form`. The bookmark and tag queries wait for the sign-in.
+- **CreateBookmark, EditBookmark, ImportBookmarks, RenameTag and MergeTags** are `form` nodes.
+- **The list** is a table with multiple selection. Archiving the selection is one `BulkEdit`.
+
+In process, `screens::prepareLocal()` installs a development token issuer, which a server installs at start-up.
+`morph_examples_client --app bookmarks` runs it (`--db`, default `bookmarks.db`).
 ## Reference implementations
 
 - **[linkding](https://github.com/sissbruecker/linkding)** (Python/Django,
