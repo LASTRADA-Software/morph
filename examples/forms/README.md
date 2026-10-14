@@ -131,6 +131,22 @@ reference renderer for the `v-*` view-schema layer). To see it, change
 
 See `docs/spec/forms/views.md` for the full `v-*` schema contract.
 
+## 5. Server-defined screens
+
+[`screens/forms_screens.cpp`](screens/forms_screens.cpp) declares the demo's screens as UI documents
+(spec 4) with the C++ builders:
+- **`lab.density`**: the `ComputeDryDensity` form. The model divides the two quantities, and the screen
+  shows the reply.
+- **`lab.measure`**: the `RecordMeasurement` form, with its sample choice.
+- **`lab.intake`**: `IntakeWizard` as a `wizard` node. The registered sample's id is bound forward
+  into the measurement step.
+- **`lab.samples`**: `SamplesView` as a `collection` node, with its row and collection actions.
+
+`collection<SamplesView>` and `wizard<IntakeWizard>` (`morph/ui/author_forms.hpp`) carry the view's
+and the wizard's documents in the bundle's catalog, so the generic client builds both without knowing
+the types. `morph_examples_client --app forms` runs them in process. The model keeps its samples in
+memory, so each screen has an instance of its own.
+
 ## Tests
 
 The demo ships with its own test vectors (they run as part of `ctest`):
