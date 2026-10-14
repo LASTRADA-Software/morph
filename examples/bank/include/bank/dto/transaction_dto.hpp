@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /// @file
@@ -30,6 +32,8 @@ struct Deposit {
     std::int64_t accountId = 0;
     std::int64_t amountMinor = 0;
     std::string description;
+    /// @brief A form may leave the description out.
+    static constexpr std::array optionalFields{std::string_view{"description"}};
 
     [[nodiscard]] bool validate() const { return accountId > 0 && amountMinor > 0; }
 };
@@ -39,6 +43,8 @@ struct Withdraw {
     std::int64_t accountId = 0;
     std::int64_t amountMinor = 0;
     std::string description;
+    /// @brief A form may leave the description out.
+    static constexpr std::array optionalFields{std::string_view{"description"}};
 
     [[nodiscard]] bool validate() const { return accountId > 0 && amountMinor > 0; }
 };
@@ -49,6 +55,8 @@ struct Transfer {
     std::int64_t toAccountId = 0;
     std::int64_t amountMinor = 0;
     std::string description;
+    /// @brief A form may leave the description out.
+    static constexpr std::array optionalFields{std::string_view{"description"}};
 
     [[nodiscard]] bool validate() const {
         return fromAccountId > 0 && toAccountId > 0 && fromAccountId != toAccountId && amountMinor > 0;
