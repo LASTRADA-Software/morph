@@ -22,6 +22,7 @@ var annotated_dup =
         [ "HandlerDestroyedError", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError" ],
         [ "HealthStatus", "d1/d59/structmorph_1_1backend_1_1HealthStatus.html", "d1/d59/structmorph_1_1backend_1_1HealthStatus" ],
         [ "IEnvelopeService", "d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html", "d6/de2/classmorph_1_1backend_1_1IEnvelopeService" ],
+        [ "IEnvelopeTransport", "d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html", "d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport" ],
         [ "LimitPolicy", "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html", "de/dc7/structmorph_1_1backend_1_1LimitPolicy" ],
         [ "LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", "d8/dfd/classmorph_1_1backend_1_1LocalBackend" ],
         [ "RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", "d4/dc1/classmorph_1_1backend_1_1RemoteServer" ],

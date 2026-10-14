@@ -129,8 +129,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d98/classmo
 Inheritance diagram for morph::net::SocketBackend:</div>
 <div class="dyncontent">
  <div class="center">
-  <img src="../../d5/d98/classmorph_1_1net_1_1SocketBackend.png" alt=""/>
- </div></div>
+  <img src="../../d5/d98/classmorph_1_1net_1_1SocketBackend.png" usemap="#morph_3A_3Anet_3A_3ASocketBackend_map" alt=""/>
+  <map id="morph_3A_3Anet_3A_3ASocketBackend_map" name="morph_3A_3Anet_3A_3ASocketBackend_map">
+<area href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html" title="What a wire transport offers beside IBackend: one request, one reply, matched by callId." alt="morph::backend::IEnvelopeTransport" shape="rect" coords="227,0,444,24"/>
+  </map>
+</div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
@@ -167,6 +170,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a39d4848c41081eb7d3c7d8d05e67b04b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files an already-live server-side instance under a key, without blocking the calling thread.  <br /></td></tr>
 <tr class="memitem:aa8b1294c215041aadde4f2345237c074" id="r_aa8b1294c215041aadde4f2345237c074"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa8b1294c215041aadde4f2345237c074">listInstances</a> (const std::string &amp;typeId) override</td></tr>
 <tr class="memdesc:aa8b1294c215041aadde4f2345237c074"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server for the live shared primary keys of <code class="param">typeId</code> and waits for the reply, never on the loop's own thread.  <br /></td></tr>
+<tr class="memitem:aef17a873379873c4eaee0cf8cf0e7ba1" id="r_aef17a873379873c4eaee0cf8cf0e7ba1"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;<a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aef17a873379873c4eaee0cf8cf0e7ba1">request</a> (<a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> envelope, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec) override</td></tr>
+<tr class="memdesc:aef17a873379873c4eaee0cf8cf0e7ba1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends one request envelope of a kind the other verbs do not build (<span class="tt">IEnvelopeTransport::request</span>), on the callId-multiplexed control path, and settles with its reply.  <br /></td></tr>
 <tr class="memitem:aad7beb8fc323e3a487bfe2fcc8c07e0c" id="r_aad7beb8fc323e3a487bfe2fcc8c07e0c"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::wire::ProtocolNegotiationResult &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aad7beb8fc323e3a487bfe2fcc8c07e0c">negotiateProtocolVersion</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
 <tr class="memdesc:aad7beb8fc323e3a487bfe2fcc8c07e0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">"hello"</span> envelope and classifies the server's reply.  <br /></td></tr>
 <tr class="memitem:ac24914155bba1992eb56f3bf9a50a06d" id="r_ac24914155bba1992eb56f3bf9a50a06d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
@@ -181,14 +186,23 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7d71bd27960963577df9ff8490fb2f03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler posted to <code class="param">exec</code> after each <em>subsequent</em> successful (re)connect.  <br /></td></tr>
 <tr class="memitem:a80e37124e8a3792b6b07541f64d0e690" id="r_a80e37124e8a3792b6b07541f64d0e690"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690">setSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) override</td></tr>
 <tr class="memdesc:a80e37124e8a3792b6b07541f64d0e690"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the session stamped onto every control envelope this backend subsequently builds (<span class="tt">register</span>, <span class="tt">registerShared</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">deregister</span>, <span class="tt">instances</span>). See <span class="tt">IBackend::setSession</span>.  <br /></td></tr>
+<tr class="inherit_header pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">morph::backend::IEnvelopeTransport</a></td></tr>
+<tr class="memitem:a0624caafdb2cf9fb5235bbfd0a618589 pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport" id="r_a0624caafdb2cf9fb5235bbfd0a618589"><td class="memItemLeft">
+&#160;</td><td class="memItemRight"><b>IEnvelopeTransport</b> (IEnvelopeTransport const &amp;)=delete</td></tr>
+<tr class="memitem:ab43d3be11cdaf8b0200d497f6461630a pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport" id="r_ab43d3be11cdaf8b0200d497f6461630a"><td class="memItemLeft">
+IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnvelopeTransport const &amp;)=delete</td></tr>
+<tr class="memitem:a1f9a91bbb2cc1259cf972a8b08106495 pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport" id="r_a1f9a91bbb2cc1259cf972a8b08106495"><td class="memItemLeft">
+&#160;</td><td class="memItemRight"><b>IEnvelopeTransport</b> (IEnvelopeTransport &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a1fa16fac8c6f8522c8964b2911378490 pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport" id="r_a1fa16fac8c6f8522c8964b2911378490"><td class="memItemLeft">
+IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnvelopeTransport &amp;&amp;)=delete</td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IBackend</span> implementation that communicates with a <span class="tt">RemoteServer</span> over a raw-socket RFC 6455 WebSocket connection — no Qt, no GUI event loop required. </p>
 <p>Mirrors <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">morph::qt::QtWebSocketBackend</a></span>'s observable behavior (<span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span> fire-and-forget, <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> and <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> asynchronous and callId-multiplexed, <span class="tt">DisconnectedError</span>/reconnect semantics). Its socket, its pending calls, its session, its reconnect handler and its reconnect state machine live on an <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, for IoLoopDriver::OwnThread natively, the one thread that runs it...">exec::IoLoop</a></span>, which it shares with every other socket, timer and probe the application builds on that loop.</p>
-<p>Cross-thread surface: <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span>, <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>, <span class="tt"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b" title="Files an already-live server-side instance under a key, without blocking the calling thread.">promoteModel</a></span>, <span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span>, <span class="tt"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5" title="Resolves every pending call&#39;s Completion with exc.">cancelPending</a></span>, <span class="tt"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690" title="Installs the session stamped onto every control envelope this backend subsequently builds (register,...">setSession</a></span> and <span class="tt"><a class="el" href="#a7d71bd27960963577df9ff8490fb2f03" title="Installs the handler posted to exec after each subsequent successful (re)connect.">setReconnectHandler</a></span> post to the loop and return, so calls from one thread take effect in the order they were made; <span class="tt"><a class="el" href="#a870c4edbdf1b6d0e9bfdceab0eeba2ac" title="Blocks the calling thread until connected or timeout elapses.">waitForConnected</a></span> posts a waiter and blocks the caller, never the loop; the synchronous control verbs (<span class="tt"><a class="el" href="#a5702aa3a4c63c5ed991124a15579822a" title="Registers a private instance and waits for the reply.">registerModel</a></span>, <span class="tt"><a class="el" href="#aecb66ba53780b9762d8fd8caa489dad2" title="Registers a private instance carrying contextKey and waits for the reply.">registerModelWithContext</a></span>, <span class="tt"><a class="el" href="#a4e873f2e34acf90020418052004dc563" title="Files a live server-side instance under primary and waits for the reply.">assignPrimary</a></span>, <span class="tt"><a class="el" href="#aa8b1294c215041aadde4f2345237c074" title="Asks the server for the live shared primary keys of typeId and waits for the reply,...">listInstances</a></span>) issue the same posted request and wait for its reply, never on the loop's own thread. Every field is touched only on the loop, except the <span class="tt">connected</span> flag.</p>
+<p>Cross-thread surface: <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span>, <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>, <span class="tt"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b" title="Files an already-live server-side instance under a key, without blocking the calling thread.">promoteModel</a></span>, <span class="tt"><a class="el" href="#aef17a873379873c4eaee0cf8cf0e7ba1" title="Sends one request envelope of a kind the other verbs do not build (IEnvelopeTransport::request),...">request</a></span>, <span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span>, <span class="tt"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5" title="Resolves every pending call&#39;s Completion with exc.">cancelPending</a></span>, <span class="tt"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690" title="Installs the session stamped onto every control envelope this backend subsequently builds (register,...">setSession</a></span> and <span class="tt"><a class="el" href="#a7d71bd27960963577df9ff8490fb2f03" title="Installs the handler posted to exec after each subsequent successful (re)connect.">setReconnectHandler</a></span> post to the loop and return, so calls from one thread take effect in the order they were made; <span class="tt"><a class="el" href="#a870c4edbdf1b6d0e9bfdceab0eeba2ac" title="Blocks the calling thread until connected or timeout elapses.">waitForConnected</a></span> posts a waiter and blocks the caller, never the loop; the synchronous control verbs (<span class="tt"><a class="el" href="#a5702aa3a4c63c5ed991124a15579822a" title="Registers a private instance and waits for the reply.">registerModel</a></span>, <span class="tt"><a class="el" href="#aecb66ba53780b9762d8fd8caa489dad2" title="Registers a private instance carrying contextKey and waits for the reply.">registerModelWithContext</a></span>, <span class="tt"><a class="el" href="#a4e873f2e34acf90020418052004dc563" title="Files a live server-side instance under primary and waits for the reply.">assignPrimary</a></span>, <span class="tt"><a class="el" href="#aa8b1294c215041aadde4f2345237c074" title="Asks the server for the live shared primary keys of typeId and waits for the reply,...">listInstances</a></span>) issue the same posted request and wait for its reply, never on the loop's own thread. Every field is touched only on the loop, except the <span class="tt">connected</span> flag.</p>
 <dl class="section user"><dt>TLS</dt><dd>Not supported. <span class="tt">serverUrl</span> must be <span class="tt">ws://</span>; <span class="tt">wss://</span> throws from the constructor. See <span class="tt">docs/spec/core/backend.md</span>'s <span class="tt">morph::net</span> section. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a755c2c6460ac094c256a5910c2776c7e" name="a755c2c6460ac094c256a5910c2776c7e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a755c2c6460ac094c256a5910c2776c7e">&#9670;&#160;</a></span>Config</h2>
@@ -204,7 +218,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +271,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -303,7 +317,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +347,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the connection and rejects every pending call with <span class="tt">DisconnectedError</span>. </p>
 <p>The close runs on the loop: inline when this runs on the loop's own thread (from a callback), posted and waited for otherwise. It never waits for a connect in progress: a dial that completes afterwards finds the backend closed and drops its socket. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -372,7 +386,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if connected before the timeout, <span class="tt">false</span> otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -419,7 +433,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -472,7 +486,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +532,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -562,7 +576,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the bound <span class="tt">ModelId</span>; rejected with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> if a keyed bind finds the socket down, if the socket drops before the reply, or if a queued bind is cancelled; or with a <span class="tt">std::runtime_error</span> carrying the server's own error message. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -604,7 +618,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">request.mid</span>, or rejected as <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> documents. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -646,7 +660,50 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aef17a873379873c4eaee0cf8cf0e7ba1" name="aef17a873379873c4eaee0cf8cf0e7ba1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aef17a873379873c4eaee0cf8cf0e7ba1">&#9670;&#160;</a></span>request()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;<a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &gt; morph::net::SocketBackend::request </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a></td>          <td class="paramname"><span class="paramname"><em>envelope</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends one request envelope of a kind the other verbs do not build (<span class="tt">IEnvelopeTransport::request</span>), on the callId-multiplexed control path, and settles with its reply. </p>
+<p>Posted to the loop, which assigns the <span class="tt">callId</span> and sends the envelope with the session it carries. Made while the socket is not connected, it is held and sent at the next connect, the first included, as a private bind is, so a client can ask before the socket is up. <span class="tt"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5" title="Resolves every pending call&#39;s Completion with exc.">cancelPending</a></span>, a drop and the backend's destruction reject what is pending or held. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">envelope</td><td>The request; its <span class="tt">callId</span> is replaced. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the answer is delivered on. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the reply envelope, <span class="tt">ok</span> or <span class="tt">err</span>; rejected with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> when the connection drops before the reply or the request is cancelled. </dd></dl>
+
+<p>Implements <a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">morph::backend::IEnvelopeTransport</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00341">341</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -682,7 +739,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">Negotiated</span> or <span class="tt">LegacyPeer</span>; rejected with a <span class="tt">std::runtime_error</span> if the server refuses the version, and with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> if the socket is down or drops before the reply. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -719,7 +776,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -766,7 +823,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolved asynchronously when the server's reply arrives, or with <span class="tt">DisconnectedError</span> if the backend is not connected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -795,7 +852,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -830,7 +887,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -870,7 +927,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -905,7 +962,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

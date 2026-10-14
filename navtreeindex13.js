@@ -1,5 +1,7 @@
 var NAVTREEINDEX13 =
 {
+"d8/d2e/classmorph_1_1ui_1_1author_1_1Case.html":[3,0,0,25,0,44],
+"d8/d2e/classmorph_1_1ui_1_1author_1_1Case.html#a0d4e0d6c46e579ca2348351fb9fe37da":[3,0,0,25,0,44,2],
 "d8/d2e/classmorph_1_1ui_1_1author_1_1Case.html#ab75a2e5cffb324b6a2967be697c90615":[3,0,0,25,0,44,1],
 "d8/d2e/classmorph_1_1ui_1_1author_1_1Case.html#adfe7fa5a90e7317075fd85b793b10366":[3,0,0,25,0,44,0],
 "d8/d2f/sqlite__offline__queue_8hpp_source.html":[4,0,0,5,5],
@@ -73,6 +75,8 @@ var NAVTREEINDEX13 =
 "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#adc51d7a615d6833a2bc6a1158dc0c59a":[3,0,0,25,0,11,9],
 "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#aee7477cc704a41c6116a3b4caa3896ef":[3,0,0,25,0,11,3],
 "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#af0664b3fdaee7340a3988fb9e7cd3a56":[3,0,0,25,0,11,2],
+"d8/d53/envelope__transport_8hpp.html":[4,0,0,0,7],
+"d8/d53/envelope__transport_8hpp_source.html":[4,0,0,0,7],
 "d8/d57/values_8hpp.html":[4,0,0,2,1,10],
 "d8/d57/values_8hpp_source.html":[4,0,0,2,1,10],
 "d8/d62/owned__state_8hpp.html":[4,0,0,0,0,2],
@@ -245,9 +249,5 @@ var NAVTREEINDEX13 =
 "d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html":[3,0,0,25,0,57],
 "d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#a00c7c2dfd2e9f7d0d388c148f6db3f84":[3,0,0,25,0,57,2],
 "d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#a1a68b4b6d5a7e9bcd87fe16101366ba4":[3,0,0,25,0,57,3],
-"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#a855dea8f081af635cc2e737da72667bb":[3,0,0,25,0,57,0],
-"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#a98eb7fbe8c8552fddc7269204276fc90":[3,0,0,25,0,57,1],
-"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#abd73b4215143671a0e90a841faa79f0a":[3,0,0,25,0,57,5],
-"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#ac2dec8462832c2e8871a41df0cb675b5":[3,0,0,25,0,57,4],
-"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#adcf69a035741c92f552fa359ba8a84f2":[3,0,0,25,0,57,6]
+"d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#a855dea8f081af635cc2e737da72667bb":[3,0,0,25,0,57,0]
 };

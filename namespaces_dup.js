@@ -707,6 +707,7 @@ var namespaces_dup =
         [ "routeOf", "d4/d2f/route_8hpp.html#a1c3cb00e57a91b4f2716515b3d39c42e", null ],
         [ "routeOf", "d4/d2f/route_8hpp.html#ab3cac97d9054916cebeb7f171060ab31", null ],
         [ "parseRoute", "d4/d2f/route_8hpp.html#ae6db4b445375482d0484c54afd16c020", null ],
+        [ "exchangeOver", "dd/d56/service__client_8hpp.html#a21da2dab2785509c0d05243580445c67", null ],
         [ "evaluationValue", "dd/d56/service__client_8hpp.html#a633b0dc9cf83174fafc064b82d0a93ae", null ],
         [ "evaluatorOver", "dd/d56/service__client_8hpp.html#a58c25963d99bf45c425dc9a0767058f5", null ],
         [ "pointerAppend", "d6/dda/value_8hpp.html#ae838472ab2151910811a39595d263557", null ],

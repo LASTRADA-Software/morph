@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d56/service
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
@@ -136,7 +137,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d56/service
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../attributes.hpp&quot;</code><br />
 <code>#include &quot;../core/completion.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html">../core/envelope_transport.hpp</a>&quot;</code><br />
 <code>#include &quot;../core/executor.hpp&quot;</code><br />
 <code>#include &quot;../core/wire.hpp&quot;</code><br />
 <code>#include &quot;../session/session.hpp&quot;</code><br />
@@ -172,6 +175,8 @@ Typedefs</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a21da2dab2785509c0d05243580445c67" id="r_a21da2dab2785509c0d05243580445c67"><td class="memItemLeft"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a>&#160;</td><td class="memItemRight"><a class="el" href="#a21da2dab2785509c0d05243580445c67">morph::ui::exchangeOver</a> (<a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">::morph::backend::IEnvelopeTransport</a> &amp;backend, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec)</td></tr>
+<tr class="memdesc:a21da2dab2785509c0d05243580445c67"><td class="mdescLeft">&#160;</td><td class="mdescRight">An <span class="tt"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2" title="Sends one request and calls its callback once with the reply. The transport assigns the request&#39;s cal...">Exchange</a></span> over a transport: each request is one <span class="tt">IEnvelopeTransport::request</span>, and its reply, <span class="tt">ok</span> or <span class="tt">err</span>, is the exchange's reply; a failure to deliver either is the error, as its message.  <br /></td></tr>
 <tr class="memitem:a633b0dc9cf83174fafc064b82d0a93ae" id="r_a633b0dc9cf83174fafc064b82d0a93ae"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae">morph::ui::evaluationValue</a> (<a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a> reply)</td></tr>
 <tr class="memdesc:a633b0dc9cf83174fafc064b82d0a93ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element.  <br /></td></tr>
 <tr class="memitem:a58c25963d99bf45c425dc9a0767058f5" id="r_a58c25963d99bf45c425dc9a0767058f5"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a58c25963d99bf45c425dc9a0767058f5">morph::ui::evaluatorOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
@@ -197,7 +202,7 @@ Functions</h2></td></tr>
 
 <p>One reply, or why the transport could not deliver it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -215,11 +220,52 @@ Functions</h2></td></tr>
 
 <p>Sends one request and calls its callback once with the reply. The transport assigns the request's <span class="tt">callId</span> and matches the reply to it; a failure to deliver either is the error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="a21da2dab2785509c0d05243580445c67" name="a21da2dab2785509c0d05243580445c67"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a21da2dab2785509c0d05243580445c67">&#9670;&#160;</a></span>exchangeOver()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Exchange morph::ui::exchangeOver </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">::morph::backend::IEnvelopeTransport</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>backend</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An <span class="tt">Exchange</span> over a transport: each request is one <span class="tt">IEnvelopeTransport::request</span>, and its reply, <span class="tt">ok</span> or <span class="tt">err</span>, is the exchange's reply; a failure to deliver either is the error, as its message. </p>
+<p>Call it on <code class="param">cbExec's</code> thread, where its replies arrive: <span class="tt">UiClient</span> sends each request from the reply before it, so a client opened there stays there. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">backend</td><td>The transport: <span class="tt">SocketBackend</span> or <span class="tt">QtWebSocketBackend</span>. Borrowed: it must outlive every request sent through the exchange, so a caller that may destroy it first guards the exchange itself. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>The executor replies are delivered on: the interpreter runtime's owner. Borrowed. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The exchange. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a633b0dc9cf83174fafc064b82d0a93ae" name="a633b0dc9cf83174fafc064b82d0a93ae"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a633b0dc9cf83174fafc064b82d0a93ae">&#9670;&#160;</a></span>evaluationValue()</h2>
 
@@ -252,7 +298,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value as JSON text, or why there is none: the transport's reason, the server's <span class="tt">err</span> message, or why the reply body was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -299,7 +345,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The evaluator: the model's type id, the action id and its JSON body in, the query's value out. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00579">579</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

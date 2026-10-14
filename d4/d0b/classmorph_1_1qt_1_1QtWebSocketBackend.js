@@ -13,6 +13,7 @@ var classmorph_1_1qt_1_1QtWebSocketBackend =
     [ "promoteModel", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abff050c08a6c5c3ddf90bbdd50bce7c9", null ],
     [ "listInstances", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084", null ],
     [ "instances", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a538a814bdd796e082a35ba5ebe0b2e34", null ],
+    [ "request", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0fae273d4dbcd3c6f0a23a410516cf7c", null ],
     [ "deregisterModel", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a", null ],
     [ "execute", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74", null ],
     [ "notifyBackendChanged", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0", null ],

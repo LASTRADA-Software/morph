@@ -21,6 +21,10 @@ var hierarchy =
     [ "morph::backend::IEnvelopeService", "d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html", [
       [ "morph::ui::UiService", "d1/d38/classmorph_1_1ui_1_1UiService.html", null ]
     ] ],
+    [ "morph::backend::IEnvelopeTransport", "d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html", [
+      [ "morph::net::SocketBackend", "d5/d98/classmorph_1_1net_1_1SocketBackend.html", null ],
+      [ "morph::qt::QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html", null ]
+    ] ],
     [ "morph::backend::LimitPolicy", "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html", null ],
     [ "morph::backend::RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", null ],
     [ "morph::backend::ServerConfig", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html", null ],

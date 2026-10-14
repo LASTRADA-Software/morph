@@ -163,7 +163,7 @@ var NAVTREEINDEX1 =
 "d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c":[3,0,0,15,10,2],
 "d0/df9/runtime_8hpp.html":[4,0,0,8,3],
 "d0/df9/runtime_8hpp_source.html":[4,0,0,8,3],
-"d0/dfc/remote_8hpp_source.html":[4,0,0,0,19],
+"d0/dfc/remote_8hpp_source.html":[4,0,0,0,20],
 "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html":[1,0,0,1,10],
 "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html":[3,0,0,25,12],
 "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html#a148b985fb4a7ec470e459e3d151be635":[1,0,0,1,10,2],
