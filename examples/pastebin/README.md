@@ -54,6 +54,17 @@ below plus its design records. Deferred from rung 1: the convergence
 assertion (its `poll()`/`lastEventId()` hooks exist only from rung 3) and
 the full hostile-content corpus suite (start with a representative subset).
 
+## Server-defined screen
+
+[`screens/pastebin_screens.cpp`](screens/pastebin_screens.cpp) declares `pastebin.pastes` as a UI document (spec 4):
+- creating a paste is a `form`, and the list is a query;
+- opening a paste is an `exclusive` mutation of `GetPaste`, because each open consumes one of the paste's allowed
+  reads. A refetch never repeats it, and a second open while one is in flight is refused;
+- deleting a paste invalidates the list.
+
+`morph_examples_client --app pastebin` runs it in process (`--db`, default `pastebin.db`). Its screen tests and
+render smoke are under `screens/`.
+
 ## Reference implementations
 
 - **[MicroBin](https://github.com/szabodanika/microbin)** (Rust, Actix,
