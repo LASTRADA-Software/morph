@@ -116,8 +116,10 @@ public:
                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                  std::string_view modelType, std::string_view actionType) const override {
         // lims serves its sign-in screen, so a client with no token yet may greet the UI service, read its catalog
-        // and fetch that screen; every other screen stays behind its own queries' authorisation.
-        if (::morph::ui::isUiServiceRead(modelType, actionType)) {
+        // and fetch that screen; every other screen stays behind its own queries' authorisation. Signing in is how a
+        // client gets its token, so it needs none.
+        if (::morph::ui::isUiServiceRead(modelType, actionType) ||
+            (modelType == "LimsAuth" && actionType == "LimsLogin")) {
             return true;
         }
         if (!::morph::session::SigningAuthorizer::authorize(ctx, modelType, actionType)) {

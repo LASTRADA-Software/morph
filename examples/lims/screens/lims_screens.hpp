@@ -28,6 +28,14 @@ inline constexpr std::string_view kResults = "lims.results";
 /// @brief Sample entry: a private working copy of one sample (or a new one), edited section by section and saved.
 inline constexpr std::string_view kSample = "lims.sample";
 
+/// @brief Sign-in, the one screen served before it: a successful login opens sample registration. In process the
+///        client signs in its `--user` itself, so this is the server's way in.
+inline constexpr std::string_view kLogin = "lims.login";
+
+/// @brief Prepares lims to run in process: installs a token issuer with a development secret, which `LimsLogin` mints
+///        its tokens with and a server installs at start-up.
+void prepareLocal();
+
 /// @brief The application's bundle: every lims screen, registered and validated.
 /// @return The bundle, or the refusal.
 [[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();

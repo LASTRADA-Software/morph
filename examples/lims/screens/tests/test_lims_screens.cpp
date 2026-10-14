@@ -8,17 +8,22 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <memory>
+#include <morph/session/session_auth.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
 
+#include "lims/auth/lims_authorizer.hpp"
 #include "lims/dto/analysis_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
+#include "lims/models/auth_model.hpp"
 #include "lims/models/sample_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
@@ -166,4 +171,29 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
         }
     }
     CHECK(listed);
+}
+
+// Mutation: keep the login screen non-public (nothing is listed before sign-in), or skip the token (registration's
+// calls are refused).
+TEST_CASE("lims screens: signing in to a server opens sample registration", "[lims-screens]") {
+    DbFixture fixture;
+    LocalApp app = limsApp();
+    app.setUp = [](LocalSetup const&) { lims::screens::prepareLocal(); };
+    // The secret prepareLocal's issuer signs with, which the simulated server verifies, with lims' own role lookup.
+    app.serverAuthorizer = [] {
+        return std::make_shared<lims::auth::LimsAuthorizer>(
+            "lims-local-development", morph::session::hmacSha256,
+            [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
+    };
+    ScreenHarness harness{app, std::string{lims::screens::kLogin}, RigMode::Simulated, {}, LocalSetup{}};
+    harness.edit("username", "tech");
+    harness.click("signIn");
+    bool const opened = harness.waitFor(
+        [&harness] { return !harness.mounted().empty() && harness.mounted().back() == lims::screens::kRegister; });
+    for (std::string const& problem : harness.problems()) {
+        UNSCOPED_INFO(problem);
+    }
+    INFO("error: " << harness.text("error").value_or(""));
+    CHECK(opened);
+    CHECK(harness.problems().empty());
 }
