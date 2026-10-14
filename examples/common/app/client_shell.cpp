@@ -99,7 +99,7 @@ public:
                     }
                 });
             });
-        mount(start, {});
+        mount(start, _options.startParams);
     }
 
     /// Shows @p text in place of any screen, and reports it.

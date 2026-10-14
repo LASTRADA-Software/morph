@@ -4,6 +4,7 @@
 #include <chrono>
 #include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -125,6 +126,13 @@ protected:
     /// @brief Releases what `connect` made beside the backend; called by `close`, after the bridge is gone.
     virtual void disconnect() {}
 
+    /// @brief Fetches the `{actionType: schema}` document of one model type, which a `form`, `collection` or
+    ///        `wizard` node is built from. The default sends a `schemas` envelope over the source's exchange.
+    /// @param modelType The model type id.
+    /// @param done      Called once with the document's JSON text, or why there is none.
+    virtual void fetchSchemas(std::string const& modelType,
+                              std::function<void(std::expected<std::string, std::string>)> done);
+
     /// @brief The session every request carries, for a source to fill before `open` sends anything.
     /// @return It.
     [[nodiscard]] session::Context& requestSession() noexcept { return _session; }
@@ -134,6 +142,11 @@ private:
     std::shared_ptr<bool> _alive;
     std::unique_ptr<bridge::Bridge> _bridge;
     std::unique_ptr<ui::BridgeDispatcher> _dispatcher;
+    ui::Exchange _exchange;
+    // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
+    void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
+    // The schema of each action, by action id, fetched for every model type the catalog names.
+    std::map<std::string, std::string, std::less<>> _schemas;
     std::optional<ui::LoadedBundle> _loaded;
     reactive::TimerHandle _timeout;
 };
@@ -172,6 +185,8 @@ public:
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     void disconnect() override;
+    void fetchSchemas(std::string const& modelType,
+                      std::function<void(std::expected<std::string, std::string>)> done) override;
 
 private:
     LocalApp _app;
