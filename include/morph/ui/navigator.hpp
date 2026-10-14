@@ -229,9 +229,10 @@ private:
         for (Group& group : _groups) {
             bool any = false;
             for (Item& item : group.items) {
-                bool const shown = wanted.empty() || std::ranges::any_of(item.titles, [&wanted](std::string const& t) {
-                                       return lower(t).contains(wanted);
-                                   });
+                bool const shown =
+                    wanted.empty() || std::ranges::any_of(item.titles, [&wanted](std::string const& title) {
+                        return lower(title).contains(wanted);
+                    });
                 item.button->setVisible(shown);
                 any = any || shown;
             }
