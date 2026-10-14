@@ -203,6 +203,60 @@ public:
         _backend.choose(require("Select", testId), ui::Key{std::move(key)});
     }
 
+    /// @brief A widget under another: the first of @p kind with @p testId inside the `Column` with @p rootTestId, such
+    ///        as a field of one form when a screen has several, whose fields repeat their test ids.
+    /// @param rootTestId The container's test id, such as a form node's.
+    /// @param kind       The widget kind.
+    /// @param testId     The widget's test id.
+    /// @return Its id, or nothing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the container, then the widget's kind and test id.
+    [[nodiscard]] std::optional<int> findIn(std::string_view rootTestId, std::string_view kind,
+                                            std::string_view testId) const {
+        auto const root = find("Column", rootTestId);
+        if (!root) {
+            return std::nullopt;
+        }
+        std::vector<int> pending{*root};
+        while (!pending.empty()) {
+            int const widget = pending.back();
+            pending.pop_back();
+            if (_backend.kindOf(widget) == kind && _backend.prop(widget, "testId") == testId) {
+                return widget;
+            }
+            for (int const child : _backend.children(widget)) {
+                pending.push_back(child);
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Types @p value into field @p field of the form node with @p formTestId, as the user would.
+    /// @param formTestId The form node's test id.
+    /// @param field      The field's wire name.
+    /// @param value      The new text.
+    /// @throws std::runtime_error when the form or the field is not mounted.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the form, then its field.
+    void editField(std::string_view formTestId, std::string const& field, std::string value) {
+        auto const input = findIn(formTestId, "TextInput", "field_" + field);
+        if (!input) {
+            throw std::runtime_error{"ScreenHarness: no field " + field + " in form " + std::string{formTestId}};
+        }
+        _backend.edit(*input, std::move(value));
+    }
+
+    /// @brief Submits the form node with @p formTestId once its submit button is enabled, which it is once the edits
+    ///        have settled into the form.
+    /// @param formTestId The form node's test id.
+    /// @return Whether the button was enabled in time and clicked.
+    [[nodiscard]] bool submitForm(std::string_view formTestId) {
+        auto const button = findIn(formTestId, "Button", "form_submit");
+        if (!button || !waitFor([this, &button] { return _backend.prop(*button, "enabled") != "false"; })) {
+            return false;
+        }
+        _backend.click(*button);
+        return true;
+    }
+
     /// @brief Pumps the owner until @p pred holds.
     /// @param pred   The condition.
     /// @param budget The unscaled budget.
