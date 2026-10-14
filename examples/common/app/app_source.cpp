@@ -52,6 +52,9 @@ std::array<ValueOption, 5> const& valueOptions() {
 
 constexpr std::string_view kExitAfterMount = "--exit-after-mount";
 
+// How often the offline queue is retried while it holds a call.
+constexpr std::chrono::seconds kReplayEvery{2};
+
 }  // namespace
 
 std::expected<ClientArgs, std::string> readClientArgs(std::vector<std::string>& args) {
@@ -105,10 +108,10 @@ std::vector<std::string> clientVocabularies() {
 // ── ClientSource ────────────────────────────────────────────────────────────
 
 ui::Dispatcher& ClientSource::dispatcher() {
-    if (!_dispatcher || !_loaded) {
+    if (!_queue || !_loaded) {
         throw std::logic_error{"ClientSource::dispatcher: the source has delivered no bundle"};
     }
-    return *_dispatcher;
+    return *_queue;
 }
 
 ui::Catalog ClientSource::catalog() const {
@@ -264,6 +267,16 @@ void ClientSource::open(ui::AppContext& context,
         return ui::evaluatorOver(_exchange, _session, &owner)(typeId, actionId, bodyJson);
     };
     _dispatcher = std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, std::move(evaluate));
+    // A mutation the screen marks for the offline queue waits while the server cannot be reached, and is retried every
+    // few seconds until the replay reaches it.
+    _queue = std::make_unique<ui::QueueingDispatcher>(*_dispatcher, &owner);
+    _queue->setOnHeld([this, &scheduler = context.scheduler()](std::size_t held) {
+        if (held == 0) {
+            _replay.reset();
+        } else if (!_replay) {
+            _replay = scheduler.every(kReplayEvery, [this] { _queue->replay(); });
+        }
+    });
     _exchange = guarded;
     _store = std::make_shared<ui::MemoryBundleStore>();
 
@@ -343,6 +356,8 @@ void ClientSource::close() {
     }
     _timeout = {};
     // The dispatcher and the bridge before what the concrete source made: the bridge's backend may run on it.
+    _replay.reset();
+    _queue.reset();
     _dispatcher.reset();
     _bridge.reset();
     _loaded.reset();
