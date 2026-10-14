@@ -159,3 +159,10 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000009, "Create lims_operators table") {
         .RequiredColumn("granted_by", Varchar(64))
         .RequiredColumn("granted_at", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261014000001, "Create lims_sample_entries table") {
+    plan.CreateTableIfNotExists("lims_sample_entries")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("sample_id", Bigint(), limsSamplesRef())
+        .RequiredColumn("payload", Text(4096));
+}

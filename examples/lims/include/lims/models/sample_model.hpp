@@ -8,6 +8,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/offline/offline_queue.hpp>
+#include <morph/table/query.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
+#include "lims/dto/sample_entry_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 
 /// @file
@@ -150,6 +152,99 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The three "no number" codes, with display text.
     ListResultQualifiersResult execute(const ListResultQualifiers& action);
+
+    /// @brief Starts a new, empty working copy and detaches the handler from any sample.
+    /// @param action Carries no fields of its own.
+    /// @return The new working copy's header.
+    HeaderView execute(const NewSample& action);
+
+    /// @brief Loads a stored sample's entry data into the working copy and attaches the handler to the sample.
+    /// @param action The sample.
+    /// @return The working copy's header.
+    /// @throws ValidationError if no sample is named.
+    /// @throws NotFound if the sample does not exist.
+    HeaderView execute(const LoadSample& action);
+
+    /// @brief Commits the working copy: registers the sample when it is new, then stores its entry data.
+    ///
+    /// An incomplete working copy is an outcome, not an exception: the reply's `error` names what is missing, so
+    /// a client shows one message per reason and the working copy stays as it was.
+    /// @param action Carries no fields of its own.
+    /// @return The saved sample, or why the save was refused.
+    /// @throws NotFound if the header's client does not exist.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    SaveSampleResult execute(const SaveSample& action);
+
+    /// @brief Deletes the stored sample the working copy was loaded from, and discards the working copy.
+    /// @param action Carries no fields of its own.
+    /// @return The deleted sample.
+    /// @throws NotFound if the working copy was never saved.
+    /// @throws IllegalTransition if the sample has left `Registered`.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    DeleteSampleResult execute(const DeleteSample& action);
+
+    /// @brief Replaces the working copy's header.
+    /// @param action The header.
+    /// @return The working copy's header.
+    /// @throws NotFound if there is no working copy.
+    HeaderView execute(const HeaderSection& action);
+
+    /// @brief Replaces the working copy's sampling section.
+    /// @param action The spike and the measurements.
+    /// @return The dilution series it implies.
+    /// @throws NotFound if there is no working copy.
+    DilutionSeries execute(const SamplingSection& action);
+
+    /// @brief Sets the working copy's turbidity reading.
+    /// @param action The reading.
+    /// @return The optional measurements.
+    /// @throws NotFound if there is no working copy.
+    MeasurementsView execute(const TurbiditySection& action);
+
+    /// @brief Sets the working copy's nitrate reading.
+    /// @param action The reading.
+    /// @return The optional measurements.
+    /// @throws NotFound if there is no working copy.
+    MeasurementsView execute(const NitrateSection& action);
+
+    /// @brief Removes an optional measurement's reading from the working copy.
+    /// @param action The measurement.
+    /// @return The optional measurements.
+    /// @throws ValidationError if the measurement is not an optional one.
+    /// @throws NotFound if there is no working copy.
+    MeasurementsView execute(const ClearOptionalMeasurement& action);
+
+    /// @brief Reads the working copy's header.
+    /// @param action Carries no fields of its own.
+    /// @return The header.
+    /// @throws NotFound if there is no working copy.
+    HeaderView execute(const GetHeader& action);
+
+    /// @brief Reads the working copy's optional measurements.
+    /// @param action Carries no fields of its own.
+    /// @return The measurements, and which of them hold data.
+    /// @throws NotFound if there is no working copy.
+    MeasurementsView execute(const GetMeasurements& action);
+
+    /// @brief Computes the dilution series from the working copy's sampling section.
+    ///
+    /// The recovery and the limit check are the model's, never a client's: the value shown is the value judged.
+    /// @param action Carries no fields of its own.
+    /// @return The series; empty until a spike is entered.
+    /// @throws NotFound if there is no working copy.
+    DilutionSeries execute(const GetDilutionSeries& action);
+
+    /// @brief Lists the projects a sample can be filed under, sorted, filtered and paged by the table engine.
+    /// @param action The table query.
+    /// @return The page.
+    /// @throws ValidationError if the query names a column the rows do not have, or exceeds the limits.
+    ::morph::table::Page<ProjectRow> execute(const ListProjects& action);
+
+    /// @brief Files the working copy under a project.
+    /// @param action The project.
+    /// @return The working copy's header.
+    /// @throws NotFound if there is no working copy, or no such project.
+    HeaderView execute(const SelectProject& action);
 
     /// @brief Every role @p principal currently holds.
     ///
@@ -350,6 +445,18 @@ private:
     /// @return `true` when the key is recorded in `lims_replayed_ops`.
     [[nodiscard]] static bool alreadyDecided(const std::string& opKey);
 
+    /// @brief The working copy, or throws.
+    /// @return The working copy.
+    /// @throws NotFound if no sample was created or loaded.
+    [[nodiscard]] SampleDraft& draft();
+
+    /// @brief The working copy's header as a client sees it.
+    /// @return The header.
+    [[nodiscard]] HeaderView headerView() const;
+
+    /// @brief The working copy, set by `NewSample` and `LoadSample`; unset until then.
+    std::optional<SampleDraft> _draft;
+
     /// @brief The sample this handler is attached to, set by `RegisterSample`
     ///        or `OpenSample`. Unset until then.
     std::optional<std::int64_t> _sampleId;
@@ -388,6 +495,22 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GrantRole, "GrantRole")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
+
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::NewSample, "NewSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::LoadSample, "LoadSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SaveSample, "SaveSample")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::DeleteSample, "DeleteSample")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::HeaderSection, "HeaderSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SamplingSection, "SamplingSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::TurbiditySection, "TurbiditySection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::NitrateSection, "NitrateSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ClearOptionalMeasurement, "ClearOptionalMeasurement",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetHeader, "GetHeader", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetMeasurements, "GetMeasurements", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetDilutionSeries, "GetDilutionSeries", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListProjects, "ListProjects", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SelectProject, "SelectProject", ::morph::model::Loggable::No)
 
 // `OpenSample` is the action that names a sample, so it defines the model's
 // key. `BRIDGE_MODEL_KEY` deduces the key *type* from the member it is handed,
