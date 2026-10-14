@@ -131,9 +131,10 @@ mount's keyed operations — an append, a destroy, and the fewest `moveChild` ca
 order) — and each of those is one operation on the Qt side. Nothing re-creates or re-orders a kept row's item.
 
 **Tables.** A horizontal stack the mount makes inside a table is one of its rows (`MorphTableRow`). A row places its
-cells by column index at the table's column widths — fixed units, the header's width for content, a share of the rest
-for stretch — so a hidden cell keeps its column and the cells after it stay under their headers; it places them again
-whenever a cell's implicit size changes. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
+cells by column index at the table's column widths — fixed units, the widest of the header and the column's shown cells
+for content (as the terminal backend sizes it), a share of the rest for stretch — so a hidden cell keeps its column
+and the cells after it stay under their headers; a cell's implicit size changing widens its content column and places
+the rows again. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
 click or Enter activates it without toggling the selection. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
