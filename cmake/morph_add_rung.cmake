@@ -722,6 +722,7 @@ function(_morph_rung_screen_tests _rung _dir)
     if(NOT MORPH_BUILD_TESTS OR NOT TARGET morph::examples_common OR NOT TARGET ladder_${_rung}_screens)
         return()
     endif()
+    _morph_rung_render_smoke("${_rung}" "${_dir}")
     file(GLOB _sources CONFIGURE_DEPENDS "${_dir}/screens/tests/*.cpp")
     if(NOT _sources)
         return()
@@ -756,5 +757,52 @@ function(_morph_rung_screen_tests _rung _dir)
     catch_discover_tests(ladder_${_rung}_screen_tests
         DISCOVERY_MODE PRE_TEST
         TEST_PREFIX "${_rung}.screens."
+        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endfunction()
+
+# ── ladder_<rung>_render_smoke: screens/render_smoke/*.cpp on Qt Quick ─────────
+# Every screen of the rung mounted by the Qt Quick renderer, offscreen (spec 4
+# §7). Its own executable with a plain Catch2 main: the Qt Quick frontend makes
+# the QGuiApplication it needs only when no application exists yet, and the
+# rung tests' main makes a QCoreApplication.
+function(_morph_rung_render_smoke _rung _dir)
+    if(NOT TARGET morph_qt_quick)
+        return()
+    endif()
+    file(GLOB _sources CONFIGURE_DEPENDS "${_dir}/screens/render_smoke/*.cpp")
+    if(NOT _sources)
+        return()
+    endif()
+    add_executable(ladder_${_rung}_render_smoke ${_sources})
+    target_link_libraries(ladder_${_rung}_render_smoke PRIVATE
+        morph::ladder_${_rung}_screens morph::examples_common morph::qt_quick morph::ladder_testkit morph_test_main)
+    target_include_directories(ladder_${_rung}_render_smoke PRIVATE "${_dir}/tests")
+    if(TARGET ladder_${_rung}_lib)
+        target_link_libraries(ladder_${_rung}_render_smoke PRIVATE
+            "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>")
+        get_target_property(_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
+        if(_lightweight_includes)
+            target_include_directories(ladder_${_rung}_render_smoke SYSTEM PRIVATE ${_lightweight_includes})
+        endif()
+    endif()
+    target_compile_features(ladder_${_rung}_render_smoke PRIVATE cxx_std_23)
+    apply_warnings(ladder_${_rung}_render_smoke)
+    apply_bigobj(ladder_${_rung}_render_smoke)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(ladder_${_rung}_render_smoke ${AF_SANITIZER})
+    endif()
+    include(Catch)
+    get_target_property(_qt_core Qt6::Core IMPORTED_LOCATION)
+    if(NOT _qt_core)
+        get_target_property(_qt_core Qt6::Core IMPORTED_LOCATION_RELEASE)
+    endif()
+    set(_dl_paths "")
+    if(_qt_core)
+        cmake_path(GET _qt_core PARENT_PATH _dl_paths)
+    endif()
+    catch_discover_tests(ladder_${_rung}_render_smoke
+        DISCOVERY_MODE PRE_TEST
+        DL_PATHS "${_dl_paths}"
+        TEST_PREFIX "${_rung}.render."
         PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
