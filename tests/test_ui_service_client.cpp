@@ -6,14 +6,19 @@
 // `!`-key) and its "Security" cases for delivery (a changed byte in a served
 // file refuses the bundle), and the verified cache.
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <latch>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/envelope_transport.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -671,4 +676,83 @@ TEST_CASE("UiClient::openOffline keeps only the kinds the client uses", "[ui-ser
     REQUIRE(opened->files.contains(morph::ui::contentHash(messages)));
     REQUIRE_FALSE(opened->files.contains(morph::ui::contentHash(font)));
     REQUIRE(opened->bundle.documents.empty());
+}
+
+// ── exchangeOver: the exchange over a transport's request verb ──────────────
+
+namespace {
+
+/// A transport whose `request` answers from a `RemoteServer` in process, or fails as a dropped connection does.
+class RequestBackend final : public morph::backend::IEnvelopeTransport {
+public:
+    explicit RequestBackend(std::shared_ptr<morph::backend::RemoteServer> server) : _server{std::move(server)} {}
+    ~RequestBackend() = default;
+    RequestBackend(RequestBackend const&) = delete;
+    RequestBackend& operator=(RequestBackend const&) = delete;
+    RequestBackend(RequestBackend&&) = delete;
+    RequestBackend& operator=(RequestBackend&&) = delete;
+
+    morph::async::Completion<Envelope> request(Envelope envelope, morph::exec::IExecutor& cbExec) override {
+        sessions.push_back(envelope.session.token);
+        auto [completion, promise] = morph::async::Completion<Envelope>::makeSettleable(&cbExec);
+        if (dropped) {
+            promise.reject(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+        } else {
+            envelope.callId = ++_nextCallId;
+            promise.resolve(morph::wire::decode(_server->handleInline(morph::wire::encode(envelope))));
+        }
+        return std::move(completion);
+    }
+
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test sets and reads these.
+    bool dropped = false;
+    std::vector<std::string> sessions;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+private:
+    std::shared_ptr<morph::backend::RemoteServer> _server;
+    std::uint64_t _nextCallId = 0;
+};
+
+/// Runs @p owner's queue until @p result holds a value.
+OpenResult drainOpen(morph::exec::MainThreadExecutor& owner, std::optional<OpenResult>& result) {
+    for (int turn = 0; turn < 1000 && !result.has_value(); ++turn) {
+        static_cast<void>(owner.runOnce());
+    }
+    REQUIRE(result.has_value());
+    return std::move(*result);
+}
+
+}  // namespace
+
+TEST_CASE("exchangeOver: UiClient opens a bundle through a transport's request verb", "[ui-service][client]") {
+    Harness const harness;
+    RequestBackend transport{harness.server};
+    morph::exec::MainThreadExecutor owner;
+    UiClient const client{morph::ui::exchangeOver(transport, owner), fullClient(), harness.store};
+    std::optional<OpenResult> result;
+    client.open(as("tech"), [&result](OpenResult opened) { result = std::move(opened); });
+    OpenResult const opened = drainOpen(owner, result);
+    REQUIRE(opened.has_value());
+    CHECK(opened->bundle.applicationId == "lims");
+    CHECK(opened->bundle.documents.contains("lims.results"));
+    // Every request carried the client's session.
+    REQUIRE_FALSE(transport.sessions.empty());
+    CHECK(std::ranges::all_of(transport.sessions, [](std::string const& token) { return token == "tech"; }));
+}
+
+// Mutation: hand the exchange an empty reply instead of the failure — the run reports Unsupported, not Unreachable.
+TEST_CASE("exchangeOver: a request the transport could not deliver is Unreachable, with its reason",
+          "[ui-service][client]") {
+    Harness const harness;
+    RequestBackend transport{harness.server};
+    transport.dropped = true;
+    morph::exec::MainThreadExecutor owner;
+    UiClient const client{morph::ui::exchangeOver(transport, owner), fullClient(), harness.store};
+    std::optional<OpenResult> result;
+    client.open(as("tech"), [&result](OpenResult opened) { result = std::move(opened); });
+    OpenResult const opened = drainOpen(owner, result);
+    REQUIRE_FALSE(opened.has_value());
+    CHECK(opened.error().kind == ConnectError::Kind::Unreachable);
+    CHECK(opened.error().message == morph::backend::DisconnectedError{}.what());
 }

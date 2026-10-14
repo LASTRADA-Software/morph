@@ -17,6 +17,7 @@
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <core/async/AsyncQueue.hpp>
 #include <core/async/Cancellation.hpp>
@@ -38,6 +39,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <testkit/log_level.hpp>
 #include <thread>
 #include <utility>
@@ -2875,4 +2877,97 @@ TEST_CASE("morph::qt::QtWebSocketBackend: destroying the bridge cancels its call
     }
     pumpUntil([] { return wsParkProbe().stopped.load() == 1; }, 300);
     CHECK(wsParkProbe().stopped.load() == 1);
+}
+
+// ── request: an envelope of a kind the other verbs do not build ─────────────
+namespace {
+
+/// Answers `probe-ok` with the token the request carried and `probe-err` with an `err`.
+class ProbeService final : public morph::backend::IEnvelopeService {
+public:
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind.starts_with("probe-"); }
+
+    [[nodiscard]] std::string handle(morph::wire::Envelope const& request,
+                                     morph::session::IAuthorizer const& /*authorizer*/) override {
+        if (request.kind == "probe-err") {
+            return morph::wire::encode(morph::wire::makeErr("probe refused", request.callId));
+        }
+        return morph::wire::encode(morph::wire::makeOk(request.callId, "token " + request.session.token));
+    }
+};
+
+/// A server whose envelope services include the probe.
+struct ProbeServer {
+    ProbeServer() {
+        morph::backend::ServerConfig config;
+        config.services.push_back(std::make_shared<ProbeService>());
+        server = std::make_shared<morph::backend::RemoteServer>(pool, config);
+        wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
+        if (!wsServer->listen()) {
+            throw std::runtime_error{"ProbeServer: listen failed"};
+        }
+    }
+
+    [[nodiscard]] QUrl url() const { return QUrl{QString("ws://127.0.0.1:%1").arg(wsServer->port())}; }
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    std::unique_ptr<morph::qt::QtWebSocketServer> wsServer;
+};
+
+morph::wire::Envelope probeRequest(std::string kind, std::string token) {
+    morph::wire::Envelope env;
+    env.kind = std::move(kind);
+    env.session.token = std::move(token);
+    return env;
+}
+
+}  // namespace
+
+// Mutation: stamp the backend's session over the request's — the reply reads `token backend`.
+TEST_CASE("morph::qt::QtWebSocketBackend: request settles with the reply, ok or err, and keeps its own session",
+          "[qt][ws][request]") {
+    ensureApp();
+    ProbeServer const probe;
+    morph::qt::QtWebSocketBackend backend{probe.url()};
+    REQUIRE(backend.waitForConnected());
+    morph::session::Context backendSession;
+    backendSession.token = "backend";
+    backend.setSession(backendSession);
+    morph::exec::MainThreadExecutor cbExec;
+
+    auto const answered = awaitOn(cbExec, backend.request(probeRequest("probe-ok", "caller"), cbExec));
+    CHECK(answered.kind == "ok");
+    CHECK(answered.body == "token caller");
+
+    // An `err` is the peer's answer, so it resolves: only a transport failure rejects.
+    auto const refused = awaitOn(cbExec, backend.request(probeRequest("probe-err", "caller"), cbExec));
+    CHECK(refused.kind == "err");
+    CHECK(refused.message == "probe refused");
+}
+
+// Mutation: reject a request made while not connected, instead of holding it — it settles with DisconnectedError.
+TEST_CASE("morph::qt::QtWebSocketBackend: a request made before the first connect is held and sent once connected",
+          "[qt][ws][request]") {
+    ensureApp();
+    ProbeServer const probe;
+    morph::qt::QtWebSocketBackend backend{probe.url()};
+    morph::exec::MainThreadExecutor cbExec;
+    // Nothing has pumped the Qt loop since the constructor opened the socket, so it is not connected yet.
+    auto held = backend.request(probeRequest("probe-ok", "early"), cbExec);
+    auto const answered = awaitOn(cbExec, std::move(held));
+    CHECK(answered.kind == "ok");
+    CHECK(answered.body == "token early");
+}
+
+// Mutation: leave the held requests out of cancelPending — the request never settles.
+TEST_CASE("morph::qt::QtWebSocketBackend: cancelPending rejects a request still held for the first connect",
+          "[qt][ws][request]") {
+    ensureApp();
+    ProbeServer const probe;
+    morph::qt::QtWebSocketBackend backend{probe.url()};
+    morph::exec::MainThreadExecutor cbExec;
+    auto held = backend.request(probeRequest("probe-ok", "early"), cbExec);
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled before connect"}));
+    CHECK_THROWS_WITH(awaitOn(cbExec, std::move(held)), "cancelled before connect");
 }

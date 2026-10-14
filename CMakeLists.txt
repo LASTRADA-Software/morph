@@ -449,6 +449,7 @@ target_sources(morph
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
         include/morph/core/backend.hpp
+        include/morph/core/envelope_transport.hpp
         include/morph/core/remote.hpp
         include/morph/core/bridge.hpp
         include/morph/core/wire.hpp
@@ -1193,6 +1194,20 @@ endif()
 # and Catch2 is only found/fetched in the "Tests" section just above.
 if(MORPH_BUILD_OFFLINE_SQLITE AND MORPH_BUILD_TESTS)
     add_subdirectory(tests/offline_sqlite)
+endif()
+
+# ── Examples on server-defined screens (spec 4) ─────────────────────────────
+# examples/common/app (morph_examples_common), the gallery and the generic
+# client. Here, after every optional component and the Tests section: the
+# common target links the transports that were built (morph::qt, morph::net),
+# and its tests and the gallery's use Catch2 and morph_test_main. The client is
+# built when a frontend is (Qt Quick or the terminal).
+if(MORPH_BUILD_EXAMPLES AND NOT EMSCRIPTEN)
+    add_subdirectory(examples/common/app)
+    add_subdirectory(examples/gallery)
+    if(MORPH_BUILD_QT_QUICK OR MORPH_BUILD_TUI)
+        add_subdirectory(examples/client)
+    endif()
 endif()
 
 # ── Documentation ───────────────────────────────────────────────────────────

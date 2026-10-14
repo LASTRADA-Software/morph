@@ -194,7 +194,9 @@ void QtWebSocketBackend::sendControl(::morph::wire::Envelope env, PendingControl
     // RemoteServer authenticates and authorizes from env.session; this is the
     // only place a request other than execute is sent from, so stamping it
     // here covers every one of them.
-    env.session = _session;
+    if (!pending.keepSession) {
+        env.session = _session;
+    }
     QString encoded;
     try {
         // Encoded before filing: a throw after filing would leave the entry
@@ -217,6 +219,27 @@ void QtWebSocketBackend::flushQueuedRegistrations() {
         sendControl(::morph::wire::makeRegister(entry.typeId, entry.contextKey),
                     modelIdReply(std::move(entry.promise)));
     }
+    auto requests = std::exchange(_queuedRequests, {});
+    for (auto& entry : requests) {
+        sendControl(std::move(entry.envelope), std::move(entry.pending));
+    }
+}
+
+::morph::async::Completion<::morph::wire::Envelope> QtWebSocketBackend::request(::morph::wire::Envelope envelope,
+                                                                                ::morph::exec::IExecutor& cbExec) {
+    checkThread("QtWebSocketBackend::request");
+    auto [completion, promise] = ::morph::async::Completion<::morph::wire::Envelope>::makeSettleable(&cbExec);
+    auto shared = std::make_shared<::morph::async::Completion<::morph::wire::Envelope>::Promise>(std::move(promise));
+    // An `err` reply is an answer the caller reads, not a transport failure.
+    PendingControl pending{.reply = [shared](const ::morph::wire::Envelope& env) { shared->resolve(env); },
+                           .fail = [shared](const std::exception_ptr& exc) { shared->reject(exc); },
+                           .keepSession = true};
+    if (!_connected) {
+        _queuedRequests.push_back(QueuedRequest{.envelope = std::move(envelope), .pending = std::move(pending)});
+        return std::move(completion);
+    }
+    sendControl(std::move(envelope), std::move(pending));
+    return std::move(completion);
 }
 
 ::morph::async::Completion<::morph::wire::ProtocolNegotiationResult> QtWebSocketBackend::negotiateProtocolVersion(
@@ -419,6 +442,7 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     auto drainedExecutes = std::exchange(_pending, {});
     auto drainedControl = std::exchange(_pendingControl, {});
     auto drainedQueue = std::exchange(_queuedRegistrations, {});
+    auto drainedRequests = std::exchange(_queuedRequests, {});
     // Each abandoned execute is cancelled on the server while the socket is
     // up. Not from the destructor: its socket is already aborted.
     if (_connected && _cancelAdvertised && !_shuttingDown) {
@@ -449,6 +473,9 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     // leaving the caller waiting forever.
     for (auto& entry : drainedQueue) {
         entry.promise.reject(exc);
+    }
+    for (auto& entry : drainedRequests) {
+        entry.pending.fail(exc);
     }
 }
 

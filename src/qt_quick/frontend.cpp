@@ -106,10 +106,14 @@ int Frontend::run(ui::AppSource& source) {
         }
         application.emplace(*_argc, _argv);
     }
-    if (QGuiApplication::platformName() == QStringLiteral("offscreen") &&
+    // Only the first run in a process chooses. After a QGuiApplication is destroyed and another made, graphicsApi() no
+    // longer reports the API the scene graph was initialised with, and Qt refuses a second choice with a warning.
+    static bool graphicsApiFixed = false;
+    if (!graphicsApiFixed && QGuiApplication::platformName() == QStringLiteral("offscreen") &&
         QQuickWindow::graphicsApi() != QSGRendererInterface::Software) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     }
+    graphicsApiFixed = true;
     QObject anchor;
     qt::QtExecutor executor{&anchor};
     reactive::Runtime runtime{executor};

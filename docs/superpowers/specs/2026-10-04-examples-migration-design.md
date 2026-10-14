@@ -92,7 +92,15 @@ int main(int argc, char** argv) {
   remotely.
 - **The transport binds early.** A handler is bound as soon as a screen declares its model, which may
   be before the socket has connected. Both transports queue a bind made before the first connect and
-  send it once connected; `SocketBackend` gains this queue, which `QtWebSocketBackend` already has.
+  send it once connected.
+- **The UI service travels on the same connection.** `ui-hello`, `ui-catalog`, `ui-fetch` and
+  `ui-evaluate` are sent through the transport's `IEnvelopeTransport::request`, which both wire
+  transports implement, through `ui::exchangeOver`; a request made before the socket connects is
+  held, as a bind is. Local mode answers the same exchange in process with `UiService::handle`, so
+  both modes open and verify the bundle with the same `UiClient`.
+- **What the client mounts.** Until the app root and the workspace shell of spec 6 §5 and §7 exist,
+  the client mounts one screen at a time through `DocumentScreenHost` (`examples::ClientShell`): the
+  start screen (`--screen`, else the catalog's first), replaced on `navigate`.
 
 ## 4. examples/common
 
@@ -101,10 +109,13 @@ Qt-free, target `morph_examples_common`:
 - `app/app_source.hpp` — the argument reader and the remote and local sources of §3;
   `app/transport.hpp` — transport selection by frontend.
 - `testkit/screen_harness.hpp` — loads a registered screen, binds it to a multi-mode rig backend
-  (Local, Simulated, Socket), mounts it on `RecordingBackend`, and drives it: edit, choose, click,
-  wait. Every app's screen tests use it, so no app hand-writes a client rig.
+  (Local, Simulated; Socket joins with the first app that needs it), mounts it on
+  `RecordingBackend`, and drives it: edit, choose, click, wait. Every app's screen tests use it, so
+  no app hand-writes a client rig.
 - `testkit/wait.hpp` — `pumpUntil` over a `MainThreadExecutor` or `StepExecutor` with the
   `deadline.hpp` budget.
+- `app/client_shell.hpp` — what the client mounts once the source is open (§3).
+- `testkit/fake_app_context.hpp` — a headless `ui::AppContext` for tests that open a source.
 - `testkit/render_smoke.hpp` — opens an application's every screen in the Qt Quick renderer
   offscreen and asserts each mounts without a refused document, a failed component or a QML warning.
 

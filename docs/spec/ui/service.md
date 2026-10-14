@@ -171,7 +171,12 @@ neither registry depends on the other.
 
 `UiClient(exchange, hello, store)` opens a bundle over a transport the caller supplies. `Exchange` is a function
 that sends one `wire::Envelope` and calls back once with the reply, or with why the transport could not deliver
-it; it assigns the request's `callId` and matches the reply, as every morph transport does.
+it; it assigns the request's `callId` and matches the reply. `exchangeOver(transport, cbExec)` is the exchange over
+a wire transport's `IEnvelopeTransport::request` (`SocketBackend`, `QtWebSocketBackend`;
+[`../core/backend.md`](../core/backend.md#envelope-requests--ienvelopetransport)): the reply, `ok` or `err`, is the
+exchange's reply, delivered on `cbExec`, and a failure to deliver is the error, as its message. The transport is
+borrowed, so a caller that may destroy it while a reply is still queued guards the exchange itself. A local client
+can answer the exchange in process with `UiService::handle`, which runs the same verification.
 
 `open(session, done)`:
 

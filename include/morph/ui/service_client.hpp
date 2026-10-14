@@ -3,6 +3,7 @@
 #pragma once
 #include <algorithm>
 #include <cstddef>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <map>
@@ -15,7 +16,9 @@
 #include <utility>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../core/completion.hpp"
+#include "../core/envelope_transport.hpp"
 #include "../core/executor.hpp"
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
@@ -204,6 +207,35 @@ using ExchangeReply = std::expected<::morph::wire::Envelope, std::string>;
 /// @brief Sends one request and calls its callback once with the reply. The transport assigns the request's `callId`
 ///        and matches the reply to it; a failure to deliver either is the error.
 using Exchange = std::function<void(::morph::wire::Envelope request, std::function<void(ExchangeReply reply)> done)>;
+
+/// @brief An `Exchange` over a transport: each request is one `IEnvelopeTransport::request`, and its reply, `ok` or
+///        `err`, is the exchange's reply; a failure to deliver either is the error, as its message.
+///
+/// Call it on @p cbExec's thread, where its replies arrive: `UiClient` sends each request from the reply before it,
+/// so a client opened there stays there.
+/// @param backend The transport: `SocketBackend` or `QtWebSocketBackend`. Borrowed: it must outlive every request
+///                sent through the exchange, so a caller that may destroy it first guards the exchange itself.
+/// @param cbExec  The executor replies are delivered on: the interpreter runtime's owner. Borrowed.
+/// @return The exchange.
+[[nodiscard]] inline Exchange exchangeOver(::morph::backend::IEnvelopeTransport& backend MORPH_LIFETIMEBOUND,
+                                           ::morph::exec::IExecutor& cbExec MORPH_LIFETIMEBOUND) {
+    return [transport = &backend, owner = &cbExec](::morph::wire::Envelope request,
+                                                   std::function<void(ExchangeReply reply)> done) {
+        auto const answer = std::make_shared<std::function<void(ExchangeReply reply)>>(std::move(done));
+        transport->request(std::move(request), *owner)
+            .thenDetached([answer](::morph::wire::Envelope const& reply) { (*answer)(reply); })
+            .onErrorDetached([answer](std::exception_ptr const& failure) {
+                std::string message = "the request was not delivered";
+                try {
+                    std::rethrow_exception(failure);
+                } catch (std::exception const& error) {
+                    message = error.what();
+                } catch (...) {  // NOLINT(bugprone-empty-catch): the default message stands for a non-std failure
+                }
+                (*answer)(std::unexpected(std::move(message)));
+            });
+    };
+}
 
 /// @brief Opens an application's bundle through the UI service, verifying everything it fetches.
 ///
