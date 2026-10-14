@@ -11,6 +11,7 @@
 #
 # Directory -> target convention:
 #   src/models/*.cpp, src/db/*.cpp, src/app/*.cpp  -> ladder_<rung>_lib       STATIC (morph + Lightweight)
+#   screens/*.cpp                                  -> ladder_<rung>_screens   STATIC (morph + the rung's models; toolkit-free)
 #   gui_lib/*.cpp                                  -> ladder_<rung>_gui_lib   STATIC (Qt6::Core only, no Catch2)
 #   gui/qml/*.qml                                  -> ladder_<rung>_qml       STATIC (QML module, URI = capitalised rung name; needs MORPH_BUILD_FORMS_QML)
 #   gui/*.cpp                                      -> ladder_<rung>_gui      EXE    (desktop client; skipped under Emscripten)
@@ -167,6 +168,39 @@ function(morph_add_rung)
             if(DEFINED AF_SANITIZER)
                 apply_sanitizers(ladder_${_rung}_lib ${AF_SANITIZER})
             endif()
+        endif()
+    endif()
+
+    # ── ladder_<rung>_screens: the rung's UI documents (spec 4 §6) ──────
+    # Toolkit-free by its link set: morph and the rung's own models, nothing
+    # else, so the server, the generic client's local mode and the screen tests
+    # all link the same screens.
+    file(GLOB _screen_sources CONFIGURE_DEPENDS "${_dir}/screens/*.cpp")
+    if(_screen_sources)
+        add_library(ladder_${_rung}_screens STATIC ${_screen_sources})
+        add_library(morph::ladder_${_rung}_screens ALIAS ladder_${_rung}_screens)
+        target_include_directories(ladder_${_rung}_screens PUBLIC "${_dir}/screens")
+        target_link_libraries(ladder_${_rung}_screens PUBLIC morph::morph)
+        if(TARGET ladder_${_rung}_lib)
+            target_link_libraries(ladder_${_rung}_screens PUBLIC morph::ladder_${_rung}_lib)
+        endif()
+        target_compile_features(ladder_${_rung}_screens PUBLIC cxx_std_23)
+        apply_warnings(ladder_${_rung}_screens)
+        apply_bigobj(ladder_${_rung}_screens)
+        if(AF_COVERAGE)
+            apply_coverage(ladder_${_rung}_screens)
+        endif()
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(ladder_${_rung}_screens ${AF_SANITIZER})
+        endif()
+        # The screen tests need examples/common's harness, which the top level
+        # adds after the ladder: decide once every directory is configured.
+        # A deferred call's arguments are evaluated when it runs, when this
+        # function's variables are gone, so EVAL bakes their values in now.
+        if(NOT EMSCRIPTEN)
+            cmake_language(EVAL CODE "
+                cmake_language(DEFER DIRECTORY [[${PROJECT_SOURCE_DIR}]]
+                    CALL _morph_rung_screen_tests [[${_rung}]] [[${_dir}]])")
         endif()
     endif()
 
@@ -677,4 +711,50 @@ endforeach()
     endif()
 
     message(STATUS "morph_add_rung: registered rung '${_rung}'")
+endfunction()
+
+# ── ladder_<rung>_screen_tests: screens/tests/*.cpp on the screen harness ────
+# Deferred to the end of the top-level directory by the screens block above:
+# morph::examples_common, whose ScreenHarness the tests drive, is added after
+# the ladder, and exists only when MORPH_BUILD_EXAMPLES is on. Without it the
+# rung's screens still build; only these tests are skipped.
+function(_morph_rung_screen_tests _rung _dir)
+    if(NOT MORPH_BUILD_TESTS OR NOT TARGET morph::examples_common OR NOT TARGET ladder_${_rung}_screens)
+        return()
+    endif()
+    file(GLOB _sources CONFIGURE_DEPENDS "${_dir}/screens/tests/*.cpp")
+    if(NOT _sources)
+        return()
+    endif()
+    add_executable(ladder_${_rung}_screen_tests ${_sources}
+        "${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp")
+    target_link_libraries(ladder_${_rung}_screen_tests PRIVATE
+        morph::ladder_${_rung}_screens morph::examples_common morph::ladder_testkit)
+    target_include_directories(ladder_${_rung}_screen_tests PRIVATE "${_dir}/tests")
+    if(TARGET ladder_${_rung}_lib)
+        # As for ladder_<rung>_tests: the schema TU registers its migrations
+        # from a static initializer that nothing else references.
+        target_link_libraries(ladder_${_rung}_screen_tests PRIVATE
+            "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>")
+        # Lightweight's headers do not meet this project's warnings: system headers here, as for the rung's tests.
+        get_target_property(_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
+        if(_lightweight_includes)
+            target_include_directories(ladder_${_rung}_screen_tests SYSTEM PRIVATE ${_lightweight_includes})
+        endif()
+    endif()
+    target_compile_features(ladder_${_rung}_screen_tests PRIVATE cxx_std_23)
+    set_target_properties(ladder_${_rung}_screen_tests PROPERTIES AUTOMOC ON)
+    apply_warnings(ladder_${_rung}_screen_tests)
+    apply_bigobj(ladder_${_rung}_screen_tests)
+    if(AF_COVERAGE)
+        apply_coverage(ladder_${_rung}_screen_tests)
+    endif()
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(ladder_${_rung}_screen_tests ${AF_SANITIZER})
+    endif()
+    include(Catch)
+    catch_discover_tests(ladder_${_rung}_screen_tests
+        DISCOVERY_MODE PRE_TEST
+        TEST_PREFIX "${_rung}.screens."
+        PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
