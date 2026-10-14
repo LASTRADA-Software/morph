@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -20,6 +21,7 @@
 #include "document.hpp"
 #include "expression.hpp"
 #include "interpreter.hpp"
+#include "route.hpp"
 #include "value.hpp"
 
 /// @file
@@ -110,6 +112,35 @@ public:
     /// @param screenId The screen id.
     /// @param params   Its params.
     virtual void onNavigate(std::string_view screenId, ParamMap const& params) = 0;
+};
+
+/// @brief Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with
+///        @p params. It returns the screen's handle, whose `title`, `dirty`, `identity` and close protocol the shell
+///        reads as it does a document screen's, or why it could not be mounted.
+using HostScreenFactory = std::function<std::expected<std::unique_ptr<ScreenHandle>, MountError>(
+    ParamMap const& params, ContainerWidget& page)>;
+
+/// @brief The host screens an application registers by name: what a catalog entry's `host` names instead of a
+///        document.
+class ScreenHostRegistry {
+public:
+    /// @brief Registers a host screen, replacing one of the same name.
+    /// @param name    The name a catalog entry's `host` gives.
+    /// @param factory What mounts it.
+    void add(std::string name, HostScreenFactory factory) {
+        _factories.insert_or_assign(std::move(name), std::move(factory));
+    }
+
+    /// @brief The factory registered under @p name.
+    /// @param name The name.
+    /// @return It, or null when none is registered.
+    [[nodiscard]] HostScreenFactory const* find(std::string_view name) const {
+        auto const found = _factories.find(name);
+        return found == _factories.end() ? nullptr : &found->second;
+    }
+
+private:
+    std::map<std::string, HostScreenFactory, std::less<>> _factories;
 };
 
 /// @brief What decides a close the document does not decide itself: a dirty screen that declares no `onClose`. It
@@ -231,6 +262,8 @@ public:
     DocumentScreenHost(Session& session MORPH_LIFETIMEBOUND, Dispatcher& dispatcher MORPH_LIFETIMEBOUND,
                        DocumentScreenHostOptions options)
         : _options{std::move(options)},
+          _session{&session},
+          _dispatcher{&dispatcher},
           _interpreter{
               session, dispatcher,
               InterpreterOptions{.host = static_cast<InterpreterHost*>(this), .diagnostics = _options.diagnostics}} {
@@ -277,6 +310,65 @@ public:
         return detail::canonicalJson(identity);
     }
 
+    /// @brief Starts the requests of a screen's `prefetch` queries before it mounts (spec 5 §5), so the screen mounts
+    ///        on a warm cache: what a shell does when the pointer rests on an entry for a screen that is not open.
+    ///
+    /// Each named query's body is evaluated over @p params alone and its entry warmed through the session's cache,
+    /// under the token the mounted screen's alias will have. A keyed alias's token follows from its key, and a
+    /// stateless model's is shared. A private alias gets a fresh token when the screen mounts, so nothing could read
+    /// what a prefetch warmed: its queries are skipped, as are evaluations, a key or body that reads more than the
+    /// params, and an entry that is already fresh or in flight.
+    /// @param screenId The screen id; an unknown one does nothing.
+    /// @param params   The params it would mount with.
+    void prefetch(std::string_view screenId, ParamMap const& params) {
+        std::shared_ptr<Document const> const document = _options.documents(screenId);
+        if (!document) {
+            return;
+        }
+        for (std::string const& name : document->prefetch) {
+            auto const query = std::ranges::find(document->scope.queries, name, &QueryDecl::name);
+            if (query == document->scope.queries.end() || query->evaluate) {
+                continue;
+            }
+            auto const model = std::ranges::find(document->scope.models, query->model, &ModelDecl::name);
+            if (model == document->scope.models.end()) {
+                continue;
+            }
+            std::optional<Binding> const binding = bindingOf(*model, params);
+            if (!binding) {
+                continue;
+            }
+            detail::host::ParamsEnv const env{params};
+            Value const body = query->body ? evaluate(*query->body, env) : Value{ValueRecord{}};
+            if (env.unknown()) {
+                continue;
+            }
+            std::shared_ptr<ModelChannel> const channel =
+                _dispatcher->bind(model->type, binding->sharing, binding->instanceKey);
+            _session->prefetch(channel, binding->token, model->type, query->action, body);
+        }
+    }
+
+    /// @brief The route of a screen instance (spec 6 §20): `routeOf` over the screen's declared params.
+    /// @param screenId The screen id.
+    /// @param params   Its params.
+    /// @return The route, or why it has none: an unknown screen, or a param with no route form.
+    [[nodiscard]] std::expected<std::string, std::string> routeOf(std::string_view screenId,
+                                                                  ParamMap const& params) const {
+        std::shared_ptr<Document const> const document = _options.documents(screenId);
+        if (!document) {
+            return std::unexpected("unknown screen `" + std::string{screenId} + "`");
+        }
+        return ::morph::ui::routeOf(*document, params);
+    }
+
+    /// @brief Reads a route back against the screen it names (`parseRoute` over this host's documents).
+    /// @param route The route.
+    /// @return The screen and its params, or why the route is refused.
+    [[nodiscard]] std::expected<Route, std::string> parseRoute(std::string_view route) const {
+        return ::morph::ui::parseRoute(route, _options.documents);
+    }
+
     /// @brief A document asked to open another screen, with how (`as`). The default hands the screen and its params
     ///        to `onNavigate(screenId, params)`; a host that shows dialogs, drawers or windows overrides this one.
     /// @param request The request: screen, params, `as`.
@@ -301,6 +393,35 @@ public:
     }
 
 private:
+    // How a prefetch reaches the instance the mounted screen's alias will bind.
+    struct Binding {
+        std::string token;
+        bridge::BindSharing sharing = bridge::BindSharing::Private;
+        std::string instanceKey;
+    };
+
+    // The binding of @p model over @p params, or nothing for an instance the mounted screen will not share.
+    [[nodiscard]] std::optional<Binding> bindingOf(ModelDecl const& model, ParamMap const& params) const {
+        InstanceMode mode = model.instance;
+        if (mode == InstanceMode::Default) {
+            Catalog const& catalog = _session->options().catalog;
+            std::optional<ModelInfo> const info = catalog.model ? catalog.model(model.type) : std::nullopt;
+            mode = info && info->stateless ? InstanceMode::Shared : InstanceMode::Private;
+        }
+        if (mode == InstanceMode::Shared) {
+            return Binding{.token = "shared", .sharing = bridge::BindSharing::Private, .instanceKey = {}};
+        }
+        if (mode != InstanceMode::Keyed || !model.key) {
+            return std::nullopt;
+        }
+        detail::host::ParamsEnv const env{params};
+        std::string const key = detail::instanceKeyText(evaluate(*model.key, env));
+        if (env.unknown() || key.empty()) {
+            return std::nullopt;
+        }
+        return Binding{.token = "shared:" + key, .sharing = bridge::BindSharing::Shared, .instanceKey = key};
+    }
+
     // The mount itself, under @p parent or as a backend root.
     std::expected<std::unique_ptr<ScreenHandle>, MountError> mountAt(std::string_view screenId, ParamMap const& params,
                                                                      ContainerWidget* parent) {
@@ -648,6 +769,8 @@ private:
     };
 
     DocumentScreenHostOptions _options;
+    Session* _session;
+    Dispatcher* _dispatcher;
     std::vector<std::shared_ptr<Call>> _unclaimed;
     std::vector<OpenCall> _open;
     Interpreter _interpreter;
