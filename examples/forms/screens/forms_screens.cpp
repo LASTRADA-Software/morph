@@ -32,14 +32,13 @@ ui::Screen densityScreen() {
         screen.title("Dry density");
         auto const lab = labModel(screen);
         auto const density = screen.state<ui::Any>("density");
-        return ui::column(
-            {ui::form<ComputeDryDensity>(lab, {.onSuccess = {ui::set(density, ui::ref("event"))}})
-                 .id(ui::element("densityForm"))
-                 .testId("densityForm"),
-             ui::text({.text = ui::format("Dry density: {0}", {density})})
-                 .testId("density")
-                 .visible(ui::engaged(density))},
-            {.gap = 8});
+        return ui::column({ui::form<ComputeDryDensity>(lab, {.onSuccess = {ui::set(density, ui::ref("event"))}})
+                               .id(ui::element("densityForm"))
+                               .testId("densityForm"),
+                           ui::text({.text = ui::format("Dry density: {0}", {density})})
+                               .testId("density")
+                               .visible(ui::engaged(density))},
+                          {.gap = 8});
     });
 }
 
