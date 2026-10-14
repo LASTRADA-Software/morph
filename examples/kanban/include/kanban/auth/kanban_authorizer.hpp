@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <memory>
 #include <morph/session/session_auth.hpp>
+#include <morph/ui/service.hpp>
 #include <string_view>
 
 /// @file
@@ -126,9 +127,9 @@ public:
         if (modelType == kAnonymousModelType && actionType == kAnonymousActionType) {
             return true;
         }
-        // kanban serves its sign-in screen, so a client with no token yet may greet the UI service and read its
-        // catalog and screens. Each screen is still listed only to whoever may run its queries.
-        if (modelType == "ui" && (actionType == "hello" || actionType == "catalog" || actionType == "fetch")) {
+        // This application serves its sign-in screen, so a client with no token yet may greet the UI service, read
+        // its catalog and fetch that screen; every other screen stays behind its own queries' authorisation.
+        if (::morph::ui::isUiServiceRead(modelType, actionType)) {
             return true;
         }
         return SigningAuthorizer::authorize(ctx, modelType, actionType);

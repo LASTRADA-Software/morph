@@ -45,7 +45,8 @@ TEST_CASE("ledger render smoke: local mode, every screen, offscreen", "[ledger][
                                    .setUp = [](LocalSetup const&) { ledger::screens::prepareLocal(); }},
                           LocalSetup{.db = {}, .user = "alice"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
-    CHECK(report.mounted == std::vector<std::string>{std::string{ledger::screens::kLedger}});
+    CHECK(report.mounted ==
+          std::vector<std::string>{std::string{ledger::screens::kLogin}, std::string{ledger::screens::kLedger}});
     // Just before the verdict: unscoped messages attach to the next assertion.
     for (std::string const& failure : report.failures) {
         UNSCOPED_INFO(failure);

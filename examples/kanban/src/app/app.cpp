@@ -38,9 +38,13 @@ constexpr std::size_t kMaxLiveModels = 256;
 /// @brief The server's configuration: the live-model cap above, and a log
 ///        provider that hands every keyed instance @p log.
 /// @param log The one action log `BoardModel` instances write and read back.
+/// @param services The envelope services the server answers besides the models.
 /// @return The `ServerConfig` this App constructs its server with.
-::morph::backend::ServerConfig serverConfig(std::shared_ptr<::morph::journal::IActionLog> log) {
+::morph::backend::ServerConfig serverConfig(
+    std::shared_ptr<::morph::journal::IActionLog> log,
+    std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
     ::morph::backend::ServerConfig config;
+    config.services = std::move(services);
     config.limits.maxLiveModels = kMaxLiveModels;
     // See the constructor's comment for why every model type gets this one log.
     config.logProvider = [log = std::move(log)](std::string_view /*modelType*/, std::string_view /*contextKey*/)
@@ -50,7 +54,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 
 }  // namespace
 
-App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size_t workers)
+App::App(std::filesystem::path actionLogPath, std::string const& tokenSecret, std::size_t workers,
+         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
     : _pool{workers},
       _actionLog{std::make_shared<::morph::journal::FileActionLog>(_journalOwner, std::move(actionLogPath))},
       // hmacSha256 named explicitly -- same reason as bookmarks::App's own
@@ -61,7 +66,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size
       // MAC it always used.
       _server{std::make_shared<::morph::backend::RemoteServer>(
           _pool, std::make_shared<auth::KanbanAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
-          serverConfig(_actionLog))} {
+          serverConfig(_actionLog, std::move(services)))} {
     // Installed process-wide so any *default-constructed* (non-keyed,
     // unshared) model -- ProjectAdminModel, AuthModel, and a BoardModel
     // registered via the plain (non-shared) path -- auto-attaches via

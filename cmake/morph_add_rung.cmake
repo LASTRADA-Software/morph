@@ -431,6 +431,10 @@ function(morph_add_rung)
             add_executable(ladder_${_rung}_server ${_server_sources})
             target_link_libraries(ladder_${_rung}_server PRIVATE
                 morph::ladder_${_rung}_lib morph::qt morph_qt_impl Qt6::Core)
+            # The server serves the rung's screens beside its models (spec 4 §1), so a generic client opens them.
+            if(TARGET ladder_${_rung}_screens)
+                target_link_libraries(ladder_${_rung}_server PRIVATE morph::ladder_${_rung}_screens)
+            endif()
             target_compile_features(ladder_${_rung}_server PRIVATE cxx_std_23)
             apply_bigobj(ladder_${_rung}_server)
             if(AF_COVERAGE)

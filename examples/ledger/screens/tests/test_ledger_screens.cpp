@@ -42,7 +42,7 @@ LocalApp ledgerApp() {
 
 ScreenHarness open() {
     return ScreenHarness{
-        ledgerApp(), std::string{ledger::screens::kLedger}, RigMode::Local, {}, LocalSetup{.db = {}, .user = {}}};
+        ledgerApp(), std::string{ledger::screens::kLogin}, RigMode::Local, {}, LocalSetup{.db = {}, .user = {}}};
 }
 
 void reportProblems(ScreenHarness const& harness) {
@@ -71,10 +71,8 @@ std::int64_t createLedger(ScreenHarness& harness, std::string const& name) {
     if (harness.find("TextInput", "username")) {
         harness.edit("username", "alice");
         harness.click("signIn");
-        // Typing into the ledger form before the sign-in lands would be lost with it.
-        REQUIRE(harness.waitFor([&harness] {
-            return harness.backend().prop(harness.find("Row", "signInRow").value(), "visible") == "false";
-        }));
+        // The sign-in opens the ledger screen once the catalog for the new session lists it.
+        REQUIRE(harness.waitFor([&harness] { return harness.find("Column", "ledgerForm").has_value(); }));
     }
     std::string const before = harness.text("ledger").value_or("");
     harness.editField("ledgerForm", "name", name);

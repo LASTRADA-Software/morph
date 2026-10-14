@@ -7,8 +7,8 @@
 #include <string_view>
 
 /// @file
-/// bookmarks' screen as a UI document (spec 4 §5): sign-in, the bookmark forms over three models, the bookmark list
-/// with a bulk archive, and the tags. Served by the bookmarks server and linked in process by the generic client's
+/// bookmarks' screens as UI documents (spec 4 §5): a public sign-in screen, then the bookmark forms over two models,
+/// the bookmark list with a bulk archive, and the tags. Served by the bookmarks server and linked in process by the generic client's
 /// local mode. Toolkit-free: this target links morph and the rung's models only.
 
 namespace bookmarks::screens {
@@ -16,8 +16,11 @@ namespace bookmarks::screens {
 /// @brief The application's id, as `ui-hello` names it.
 inline constexpr std::string_view kApplicationId = "bookmarks";
 
-/// @brief Everything in one screen: sign-in, the forms, the list and the tags.
+/// @brief Everything once signed in, in one screen: the forms, the list and the tags.
 inline constexpr std::string_view kBookmarks = "bookmarks.main";
+
+/// @brief Sign-in, the one screen served before it: a successful login opens the bookmarks.
+inline constexpr std::string_view kLogin = "bookmarks.login";
 
 /// @brief Prepares bookmarks to run in process: installs a token issuer with a development secret, which `Login`
 ///        mints its tokens with and a server installs at start-up.

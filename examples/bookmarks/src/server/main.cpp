@@ -37,14 +37,18 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QTimer>
+#include <bookmarks_screens.hpp>
 #include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <expected>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -116,6 +120,21 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 
 }  // namespace
 
+namespace {
+
+/// @brief The UI service over bookmarks's screens, served beside its models so a generic client opens them (spec 4
+/// §1).
+/// @return The service, or why the screens do not build.
+std::expected<std::shared_ptr<::morph::backend::IEnvelopeService>, std::string> screensService() {
+    auto bundle = bookmarks::screens::bundle();
+    if (!bundle) {
+        return std::unexpected(bundle.error().message());
+    }
+    return std::make_shared<::morph::ui::UiService>(std::move(*bundle));
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
@@ -174,7 +193,19 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
-        bookmarks::app::App app{std::filesystem::current_path() / "bookmarks_actions.jsonl", tokenSecret};
+        auto screens = screensService();
+        if (!screens) {
+            std::cerr << "bookmarks-server: the screens do not build: " << screens.error() << '\n';
+            return 1;
+        }
+        bookmarks::app::App app{std::filesystem::current_path() / "bookmarks_actions.jsonl",
+                                tokenSecret,
+                                std::make_shared<bookmarks::app::NullMetadataFetcher>(),
+                                std::chrono::seconds{5},
+                                std::chrono::seconds{2},
+                                4,
+                                nullptr,
+                                {std::move(*screens)}};
 
         ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};
         if (!wsServer.listen()) {

@@ -31,11 +31,8 @@ LocalApp bookmarksApp() {
 }
 
 ScreenHarness open() {
-    return ScreenHarness{bookmarksApp(),
-                         std::string{bookmarks::screens::kBookmarks},
-                         RigMode::Local,
-                         {},
-                         LocalSetup{.db = {}, .user = {}}};
+    return ScreenHarness{
+        bookmarksApp(), std::string{bookmarks::screens::kLogin}, RigMode::Local, {}, LocalSetup{.db = {}, .user = {}}};
 }
 
 void reportProblems(ScreenHarness const& harness) {

@@ -63,10 +63,12 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 /// this is ~42 concurrent clients, not a limit a real session will meet.
 constexpr std::size_t kMaxLiveModels = 256;
 
-/// @brief The server's configuration: the live-model cap above.
+/// @brief The server's configuration: the live-model cap above, and @p services.
+/// @param services The envelope services the server answers besides the models.
 /// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
-::morph::backend::ServerConfig serverConfig() {
+::morph::backend::ServerConfig serverConfig(std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
     ::morph::backend::ServerConfig config;
+    config.services = std::move(services);
     config.limits.maxLiveModels = kMaxLiveModels;
     return config;
 }
@@ -75,7 +77,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 
 App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
          std::shared_ptr<IBookmarkMetadataFetcher> fetcher, std::chrono::milliseconds fetchInterval,
-         std::chrono::milliseconds relayInterval, std::size_t workers, QObject* parent)
+         std::chrono::milliseconds relayInterval, std::size_t workers, QObject* parent,
+         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety — see that header's comment.
     : QObject{parent},
@@ -90,7 +93,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
           _pool, std::make_shared<auth::BookmarksAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
-          serverConfig())},
+          serverConfig(std::move(services)))},
       _fetchBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _fetchExecutor},
       _fetcher{std::move(fetcher)} {
     ::morph::journal::setActionLog(_actionLog);

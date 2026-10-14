@@ -307,12 +307,15 @@ private:
                     mount(pending->first, pending->second);
                     return;
                 }
-                // A screen that signed in in place, and is still listed, stays as it is; a login screen, which is
-                // public, gives way to the start screen of the new session.
-                if (_current && _documents.contains(_currentId) && !_source->isPublic(_currentId)) {
+                // A screen that signed in in place, and is still listed, stays as it is, unless it is a public login
+                // screen and the new session has a screen of its own to start on.
+                std::string const start = firstScreen(signingIn);
+                bool const keep = _current && _documents.contains(_currentId) &&
+                                  (!_source->isPublic(_currentId) || start.empty() || _source->isPublic(start));
+                if (keep) {
                     return;
                 }
-                mount(firstScreen(signingIn), {});
+                mount(start, {});
             });
         });
     }

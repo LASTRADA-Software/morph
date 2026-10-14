@@ -101,8 +101,11 @@ public:
     ///        determinism.
     /// @param workers Size of the model worker pool.
     /// @param parent Optional `QObject` parent.
-    explicit App(std::string tokenSecret, std::chrono::milliseconds runInterval = std::chrono::seconds{1},
-                 std::size_t workers = 4, QObject* parent = nullptr);
+    /// @param services      Envelope services the server answers besides the models, such as the UI service that
+    ///        serves this application's screens; none by default.
+    explicit App(std::string const& tokenSecret, std::chrono::milliseconds runInterval = std::chrono::seconds{1},
+                 std::size_t workers = 4, QObject* parent = nullptr,
+                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Stops the report-runner timer.
     ~App() override;
