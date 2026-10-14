@@ -104,6 +104,9 @@ argv=(
     # second time with a token that is certain to be stale by then.
     -e "RUNNER_SELF_DEREGISTER=0"
     -e "FASTCACHE_ADDR=${FASTCACHE_ADDR:-}"
+    # The compile fleet's scheduler on this host (fastcache-fleet), when it runs one: a miss is
+    # offered to a worker first. Empty leaves every miss compiling in the container, as before.
+    -e "FASTCACHE_SCHEDULER=${FASTCACHE_SCHEDULER:-}"
     -e "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
     "${RUNNER_IMAGE}"
 )

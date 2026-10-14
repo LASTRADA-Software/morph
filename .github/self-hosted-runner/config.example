@@ -23,4 +23,7 @@ RUNNER_IMAGE=lastrada-runner:latest
 # fastcached runs on the host (bound to the Docker bridge), not in a
 # container; host.docker.internal is how a container reaches it.
 FASTCACHE_ADDR=host.docker.internal:6674
+# Where this host's compile-fleet scheduler listens, if it runs one (fastcache-fleet);
+# leave unset to compile every miss in the runner container.
+#FASTCACHE_SCHEDULER=host.docker.internal:6675
 CMAKE_BUILD_PARALLEL_LEVEL=2
