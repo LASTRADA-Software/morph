@@ -160,9 +160,13 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000009, "Create lims_operators table") {
         .RequiredColumn("granted_at", Bigint());
 }
 
+// The macro names a struct and a static object whose constructor registers the migration, so neither can be const,
+// local to an anonymous namespace, or free of a throwing initializer.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)
 LIGHTWEIGHT_SQL_MIGRATION(20261014000001, "Create lims_sample_entries table") {
     plan.CreateTableIfNotExists("lims_sample_entries")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("sample_id", Bigint(), limsSamplesRef())
         .RequiredColumn("payload", Text(4096));
 }
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

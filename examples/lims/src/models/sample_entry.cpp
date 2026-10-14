@@ -37,12 +37,12 @@ namespace {
     return rows;
 }
 
-/// @brief The project with @p id, or `nullptr`.
-/// @param id The project's id.
+/// @brief The project with @p projectId, or `nullptr`.
+/// @param projectId The project's id.
 /// @return The project.
-[[nodiscard]] ProjectRow const* findProject(std::int64_t id) {
+[[nodiscard]] ProjectRow const* findProject(std::int64_t projectId) {
     auto const& rows = projects();
-    auto const found = std::ranges::find(rows, id, &ProjectRow::id);
+    auto const found = std::ranges::find(rows, projectId, &ProjectRow::id);
     return found == rows.end() ? nullptr : &*found;
 }
 
@@ -287,13 +287,15 @@ DilutionSeries SampleModel::execute(const SamplingSection& action) {
 }
 
 MeasurementsView SampleModel::execute(const TurbiditySection& action) {
-    draft().ntu = action.ntu;
-    return measurementsOf(*_draft);
+    SampleDraft& copy = draft();
+    copy.ntu = action.ntu;
+    return measurementsOf(copy);
 }
 
 MeasurementsView SampleModel::execute(const NitrateSection& action) {
-    draft().nitrate = action.nitrate;
-    return measurementsOf(*_draft);
+    SampleDraft& copy = draft();
+    copy.nitrate = action.nitrate;
+    return measurementsOf(copy);
 }
 
 MeasurementsView SampleModel::execute(const ClearOptionalMeasurement& action) {
@@ -325,6 +327,8 @@ DilutionSeries SampleModel::execute(const GetDilutionSeries& action) {
     return seriesOf(draft().sampling);
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ::morph::table::Page<ProjectRow> SampleModel::execute(const ListProjects& action) {
     auto page = ::morph::table::apply<ProjectRow>(
         projects(), [](ProjectRow const& row) { return ::morph::table::RowId{row.id}; }, action.query);
