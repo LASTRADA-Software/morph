@@ -208,6 +208,7 @@ add_executable(morph_tests
     test_remote_envelope_service.cpp
     test_ui_bundle.cpp
     test_ui_service.cpp
+    test_ui_queueing_dispatcher.cpp
     test_ui_service_client.cpp
     test_ui_app_root.cpp
     test_ui_backend_switch.cpp
