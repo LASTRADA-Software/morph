@@ -197,6 +197,11 @@ private:
             if (top) {
                 _top.push_back(ref);
             }
+            // The actions a query refreshes on are its model type's, named by the document like any other: the
+            // client's load-time validation needs their facts.
+            for (std::string const& action : query.refreshOn) {
+                _all.insert(ActionRef{.modelType = ref.modelType, .action = action});
+            }
             _all.insert(std::move(ref));
         }
         for (MutationDecl const& mutation : scope.mutations) {
