@@ -113,6 +113,7 @@ std::vector<LocalApp> localApps() {
     apps.push_back(LocalApp{.name = "lims", .bundle = &lims::screens::bundle, .setUp = [](LocalSetup const& setup) {
                                 std::string const file = setup.db.empty() ? std::string{"lims.db"} : setup.db;
                                 lims::db::setup("DRIVER=SQLite3;Database=" + file);
+                                lims::screens::prepareLocal();
                             }});
 #endif
     return apps;

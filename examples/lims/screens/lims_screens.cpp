@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <morph/session/session_auth.hpp>
 #include <morph/table/query.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/service.hpp>
@@ -14,12 +15,14 @@
 #include <vector>
 
 #include "lims/dto/analysis_dto.hpp"
+#include "lims/dto/auth_dto.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 #include "lims/dto/sample_entry_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
+#include "lims/models/auth_model.hpp"
 #include "lims/models/sample_model.hpp"
 
 namespace lims::screens {
@@ -361,7 +364,33 @@ ui::Screen sampleScreen() {
     });
 }
 
+// Sign-in: the only screen served before it, so it holds no query. A successful login installs the principal it
+// answered and opens sample registration.
+ui::Screen loginScreen() {
+    return ui::screen(std::string{kLogin}, [](ui::Scope& screen) {
+        screen.title("Sign in");
+        auto const auth = screen.model<LimsAuthModel>("auth", {.instance = ui::Instance::Private});
+        auto const username = ui::element("username");
+        auto const login = screen.mutation<LimsLogin>(
+            "login", auth,
+            {.body = {{&LimsLogin::username, username.value()}},
+             .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::navigate(std::string{kRegister})}});
+        return ui::column(
+            {ui::row({ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
+                      ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")},
+                     {.gap = 8}),
+             ui::text({.text = login.error()}).testId("error")},
+            {.gap = 8});
+    });
+}
+
 }  // namespace
+
+void prepareLocal() {
+    // A development secret: local mode signs nothing that leaves the process.
+    auth::setTokenIssuer(
+        std::make_shared<morph::session::TokenIssuer>("lims-local-development", morph::session::hmacSha256));
+}
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
     ui::ScreenRegistry screens;
@@ -377,6 +406,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         {.id = std::string{kLifecycle}, .title = "Lifecycle", .registered = screens.add(lifecycleScreen())});
     listed.push_back({.id = std::string{kResults}, .title = "Results", .registered = screens.add(resultsScreen())});
     listed.push_back({.id = std::string{kSample}, .title = "Sample", .registered = screens.add(sampleScreen())});
+    listed.push_back({.id = std::string{kLogin}, .title = "Sign in", .registered = screens.add(loginScreen())});
     for (Listed const& screen : listed) {
         if (!screen.registered) {
             return std::unexpected(screen.registered.error());
@@ -388,6 +418,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         morph::ui::CatalogEntry entry;
         entry.id = screen.id;
         entry.title = screen.title;
+        entry.isPublic = screen.id == kLogin;
         if (auto added = served.addScreen(std::move(entry), (*screen.registered)->text); !added) {
             return std::unexpected(std::move(added.error()));
         }
