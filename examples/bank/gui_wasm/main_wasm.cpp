@@ -16,6 +16,7 @@
 #include "BankClient.hpp"
 #include "bank/core/demo_hash.hpp"
 #include "bank/core/types.hpp"
+#include "bank/wasm/demo_seed.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 #include "controllers/AccountController.hpp"
@@ -53,41 +54,6 @@ QVariantMap makeTheme() {
     };
 }
 
-/// Seeds a demo user (password "demo1234"), two accounts, and an opening
-/// balance directly in the in-memory store so the hosted demo has data.
-void seedDemo() {
-    using namespace bank;
-    auto& db = wasm::sharedDb();
-    if (!db.users.all().empty()) {
-        return;  // already seeded
-    }
-    wasm::UserRow user;
-    user.username = "demo";
-    user.displayName = "Demo User";
-    user.passwordHash = demoHash(std::string{"demo"} + ":" + "demo1234" + ":morph-bank");
-    const auto uid = db.users.insert(user);
-
-    wasm::AccountRow checking;
-    checking.userId = uid;
-    checking.number = "DE00500700100200300400";
-    checking.kind = static_cast<int>(AccountKind::Checking);
-    checking.currency = static_cast<int>(Currency::EUR);
-    checking.status = static_cast<int>(AccountStatus::Open);
-    checking.overdraftMinor = 50000;
-    const auto chkId = db.accounts.insert(checking);
-    auto chkRow = *db.accounts.find(chkId);
-    wasm::applyCredit(db, chkRow, 480000, TxnKind::Deposit, 0, "opening deposit");
-
-    wasm::AccountRow savings;
-    savings.userId = uid;
-    savings.number = "DE00500700100900800700";
-    savings.kind = static_cast<int>(AccountKind::Savings);
-    savings.currency = static_cast<int>(Currency::EUR);
-    savings.status = static_cast<int>(AccountStatus::Open);
-    savings.interestBps = 150;
-    db.accounts.insert(savings);
-}
-
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -95,7 +61,7 @@ int main(int argc, char* argv[]) {
     app.setApplicationName(QStringLiteral("Morph Bank"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    seedDemo();
+    bank::wasm::seedDemo();
 
     // Connection string is ignored by the WASM BankClient (no ODBC).
     bankgui::BankClient client{std::string{}};

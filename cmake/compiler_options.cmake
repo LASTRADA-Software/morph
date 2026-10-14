@@ -244,6 +244,13 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
     _morph_clang_suppression_if_supported(-Wno-lifetime-safety)
     _morph_clang_suppression_if_supported(-Wno-lifetime-safety-suggestions)
     _morph_clang_suppression_if_supported(-Wno-lifetime-safety-lifetimebound-violation)
+    #     A WebAssembly build links statically, so an object a hidden-visibility
+    #     target (Qt builds its QML modules that way) shares with the rest of
+    #     the program cannot be duplicated across shared libraries, which is all
+    #     -Wunique-object-duplication guards against.
+    if(EMSCRIPTEN)
+        _morph_clang_suppression_if_supported(-Wno-unique-object-duplication)
+    endif()
 
     # (g) AppleClang only, deliberately: the one place where the macOS
     #     toolchain's -Weverything set diverges from the Clang the CI legs use,

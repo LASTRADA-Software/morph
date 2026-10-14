@@ -12,11 +12,40 @@ if(TARGET morph_tui)
     set(_morph_client_tui 1)
 endif()
 
-foreach(_morph_client IN ITEMS morph_client morph_examples_client)
+# In a WebAssembly build only the example client is built, as a Qt executable so it gets its HTML loader, and it opens
+# bank in local mode: a browser has no command line to name an application.
+set(_morph_clients morph_client morph_examples_client)
+if(EMSCRIPTEN)
+    set(_morph_clients morph_examples_client)
+endif()
+foreach(_morph_client IN LISTS _morph_clients)
     if(_morph_client STREQUAL "morph_client")
         add_executable(${_morph_client} main.cpp local_apps.hpp no_local_apps.cpp)
     else()
-        add_executable(${_morph_client} main.cpp local_apps.hpp example_apps.cpp)
+        if(EMSCRIPTEN)
+            qt_add_executable(${_morph_client} main.cpp local_apps.hpp example_apps.cpp)
+            target_compile_definitions(${_morph_client} PRIVATE MORPH_CLIENT_DEFAULT_APP="bank")
+            # The Qt Quick frontend runs its own QEventLoop inside runApp, and a browser's main thread can only wait
+            # for events under Asyncify. QCoreApplication::exec's unwind is no substitute: with exceptions enabled,
+            # every frame it unwinds through restores the stack pointer, freeing what runApp built.
+            target_link_options(${_morph_client} PRIVATE -sASYNCIFY)
+            # Qt for WebAssembly is static: the QML plugins of the modules the renderer's QML imports (QtQuick,
+            # Controls in the Basic style, Layouts, Dialogs) are linked in, each with its static initializer.
+            # Named rather than scanned, since the client owns no QML module for qmlimportscanner to read.
+            foreach(_plugin IN ITEMS qmlplugin qtquick2plugin qquicklayoutsplugin qtquicktemplates2plugin
+                                     qtquickcontrols2plugin qtquickcontrols2implplugin qtquickcontrols2basicstyleplugin
+                                     qtquickcontrols2basicstyleimplplugin qtquickdialogsplugin
+                                     qtquickdialogs2quickimplplugin)
+                if(TARGET Qt6::${_plugin})
+                    target_link_libraries(${_morph_client} PRIVATE Qt6::${_plugin})
+                endif()
+                if(TARGET Qt6::${_plugin}_init)
+                    target_link_libraries(${_morph_client} PRIVATE Qt6::${_plugin}_init)
+                endif()
+            endforeach()
+        else()
+            add_executable(${_morph_client} main.cpp local_apps.hpp example_apps.cpp)
+        endif()
         target_link_libraries(${_morph_client} PRIVATE gallery_screens)
         # Each ladder rung with screens runs in local mode too, when the ladder builds it.
         set(_morph_client_lims 0)

@@ -53,8 +53,9 @@ enum class Currency : std::uint8_t {
             return "CHF";
         case Currency::JPY:
             return "JPY";
+        default:
+            return "???";
     }
-    return "???";
 }
 
 /// @brief Kind of account a customer can hold.

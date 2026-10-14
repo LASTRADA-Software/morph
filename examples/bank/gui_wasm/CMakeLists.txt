@@ -23,17 +23,7 @@ qt_add_executable(bank_gui_wasm
     ${GUI}/controllers/CardController.cpp
     ${GUI}/controllers/PayeeController.cpp
     ${GUI}/controllers/LoanController.cpp
-    # In-memory model implementations (persistence-free):
-    src/models/auth_model_wasm.cpp
-    src/models/account_model_wasm.cpp
-    src/models/customer_model_wasm.cpp
-    src/models/transaction_model_wasm.cpp
-    src/models/card_model_wasm.cpp
-    src/models/payee_model_wasm.cpp
-    src/models/payment_model_wasm.cpp
-    src/models/loan_model_wasm.cpp
-    # Pure core helpers (no Lightweight):
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/core/money.cpp
+    # The in-memory models and the core helpers come from bank_memory_lib.
 )
 
 # The QML lives in the sibling native gui/ dir, so it is referenced by absolute
@@ -68,6 +58,7 @@ target_include_directories(bank_gui_wasm BEFORE PRIVATE
 # morph is header-only (INTERFACE); it brings glaze and the include dir. No
 # Lightweight anywhere in this target.
 target_link_libraries(bank_gui_wasm PRIVATE
+    bank_memory_lib
     morph::morph
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
