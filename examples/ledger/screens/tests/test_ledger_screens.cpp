@@ -161,7 +161,11 @@ void editAmount(ScreenHarness& harness, std::string const& formTestId, std::stri
 /// selection has settled: @p testId names a widget of kind @p kind on that page.
 void showTab(ScreenHarness& harness, std::size_t index, std::string const& kind, std::string const& testId) {
     harness.selectTab("sections", index);
-    REQUIRE(harness.waitFor([&harness, &kind, &testId] { return harness.find(kind, testId).has_value(); }));
+    int const bar = harness.find("Tabs", "sections").value();
+    REQUIRE(harness.waitFor([&harness, &kind, &testId, bar] {
+        auto const widget = harness.find(kind, testId);
+        return widget && harness.shownUnder(bar, *widget);
+    }));
 }
 
 /// Fills the transaction form with two legs, @p fromAmount on @p fromAccount and @p toAmount on @p toAccount, dated

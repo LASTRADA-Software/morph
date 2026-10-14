@@ -45,8 +45,9 @@ TEST_CASE("kanban render smoke: local mode, every screen, offscreen", "[kanban][
                                    .setUp = [](LocalSetup const&) { kanban::screens::prepareLocal(); }},
                           LocalSetup{.db = {}, .user = "alice"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
-    CHECK(report.mounted ==
-          std::vector<std::string>{std::string{kanban::screens::kProjects}, std::string{kanban::screens::kBoard}});
+    CHECK(report.mounted == std::vector<std::string>{std::string{kanban::screens::kLogin},
+                                                     std::string{kanban::screens::kProjects},
+                                                     std::string{kanban::screens::kBoard}});
     // Just before the verdict: unscoped messages attach to the next assertion.
     for (std::string const& failure : report.failures) {
         UNSCOPED_INFO(failure);

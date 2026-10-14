@@ -166,6 +166,8 @@ struct TaskView {
 };
 
 struct CommentView {
+    /// @brief The comment's own id.
+    std::int64_t id = 0;
     TaskId taskId;
     std::string principal;
     std::string body;
