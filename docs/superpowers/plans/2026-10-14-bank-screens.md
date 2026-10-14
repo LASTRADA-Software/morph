@@ -47,7 +47,17 @@
   - the A/B selection: choose B, deposit, and B is still chosen and holds the money;
   - transfer, payees, cards, a loan and its schedule.
 - A render smoke over every screen.
-- The desktop GUI (`gui/`) and its tests are retired. `gui_wasm/` stays until slice (b) replaces it.
+- The desktop GUI (`gui/`) stays for now: `gui_wasm/` compiles its controllers and QML verbatim, so both retire
+  together in slice (b).
+
+What building slice (a) found:
+
+- **A mutation's `result` is read through a `let`.** A field cannot be read below a mutation's result directly, so
+  the login screen names each reply.
+- **`blankAs` does not make a field optional.** Each transaction DTO declares its description optional
+  (`optionalFields`), which is what its validator already allowed.
+- **CI ran none of the non-rung screen tests.** Their labels did not match `ctest -L ladder`, and the ladder job
+  built no Qt Quick, so no render smoke ran. Both are fixed on #949's branch, which this stacks on.
 
 ## Verification
 

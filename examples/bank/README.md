@@ -347,6 +347,27 @@ and publishes it to `…github.io/<repo>/demo/`, coexisting with the Doxygen doc
 site root. The native (non-Emscripten) build is unaffected — the whole native stack is
 gated `if(NOT EMSCRIPTEN)` in `CMakeLists.txt`.
 
+## Server-defined screens
+
+[`screens/bank_screens.cpp`](screens/bank_screens.cpp) declares bank's screens as UI documents (spec 4) with the
+C++ builders:
+- **`bank.login`** signs in, or registers and signs in. A successful reply's `principal` is installed with
+  `signIn`, and the accounts open.
+- **`bank.accounts`**: the customer's accounts, as the `AccountCards` component and as a table with Close; an
+  open-account form; and the history of the account chosen.
+- **`bank.move`**: deposit, withdraw and transfer forms over the account chosen in a picker. The choice survives the
+  refetch each of them causes, so the next deposit lands in the account the picker names. `TransferFlow` shows the
+  transfer's two accounts.
+- **`bank.cards`**, **`bank.payees`** and **`bank.loans`**: lists with their actions and forms. A loan's schedule is
+  the model's `LoanScheduleRequest`, shown through the `LoanSchedule` component.
+
+Each signed-in screen has the sidebar, which also signs out. `AccountCards`, `TransferFlow` and `LoanSchedule` are
+host components; their built-in fallbacks are what a client without them shows. Amounts are entered in cents: bank's
+actions take minor units.
+
+`morph_examples_client --app bank` runs them in process over a SQLite file (`--db`, default `bank.db`). The screen
+tests (`screens/tests/`) and the render smoke run on the screen harness and on Qt Quick offscreen.
+
 ## Tests
 
 Each model has a `tests/test_*.cpp` (Catch2). `tests/bank_test_support.hpp` provides
