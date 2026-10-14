@@ -4,8 +4,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Rows of cells under column headers. Each column's width comes from its sizing: fixed units, its header's width
-// for content, or a share of what is left for stretch; every row places its cells at those widths.
+// Rows of cells under column headers. Each column's width comes from its sizing: fixed units, the widest of its
+// header and its shown cells for content, or a share of what is left for stretch; every row places its cells at
+// those widths.
 MorphWidget {
     id: root
 
@@ -24,7 +25,8 @@ MorphWidget {
             if (column.kind === 1)
                 w = column.amount * Theme.unitWidth
             else if (column.kind === 0)
-                w = Math.max(headerMetrics.advanceWidth(column.label) + 2 * Theme.unitWidth, 8 * Theme.unitWidth)
+                w = Math.max(Math.max(headerMetrics.advanceWidth(column.label), root.widestCell(i)) + 2 * Theme.unitWidth,
+                             8 * Theme.unitWidth)
             else
                 weights += Math.max(1, column.amount)
             out.push(w)
@@ -36,6 +38,21 @@ MorphWidget {
                 out[i] = weights > 0 ? left * Math.max(1, root.columns[i].amount) / weights : 0
         }
         return out
+    }
+
+    // The widest shown cell in column `index`. Reading each cell's implicitWidth here makes the widths binding
+    // follow it, so a cell that grows widens its column.
+    function widestCell(index: int): real {
+        let widest = 0
+        for (let r = 0; r < body.children.length; ++r) {
+            const row = body.children[r]
+            if (!row.visible || !row.content || index >= row.content.children.length)
+                continue
+            const cell = row.content.children[index]
+            if (cell.visible)
+                widest = Math.max(widest, cell.implicitWidth)
+        }
+        return widest
     }
 
     implicitWidth: Math.max(header.implicitWidth, body.implicitWidth)

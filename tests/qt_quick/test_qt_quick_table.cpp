@@ -107,6 +107,29 @@ TEST_CASE("qt_quick table: cells sit under their headers, and a hidden cell keep
     CHECK(second.mapToScene(QPointF{0, 0}).x() == secondX);
 }
 
+// Mutation: size a content column from its header alone (the long cell then overlaps the next column).
+TEST_CASE("qt_quick table: a content column is as wide as its widest cell, and widens with it", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}, {.label = "B"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto first = scene.backend().createText(row.get());
+    auto second = scene.backend().createText(row.get());
+    first->setText("DE00500700100900800700");
+    second->setText("0.01");
+    scene.settle();
+    QQuickItem const& firstItem = Scene::itemOf(*first);
+    QQuickItem const& secondItem = Scene::itemOf(*second);
+    auto const endOfFirst = [&firstItem] {
+        return firstItem.mapToScene(QPointF{0, 0}).x() + firstItem.implicitWidth();
+    };
+    CHECK(secondItem.mapToScene(QPointF{0, 0}).x() >= endOfFirst());
+    first->setText("DE00500700100900800700 and a good deal longer");
+    scene.settle();
+    CHECK(secondItem.mapToScene(QPointF{0, 0}).x() >= endOfFirst());
+}
+
 TEST_CASE("qt_quick table: Enter on a focused row activates it", "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{4}}}, ui::SelectionMode::Single);
