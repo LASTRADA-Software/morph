@@ -81,6 +81,21 @@ struct Catalog {
     std::function<std::optional<std::string>(std::string_view actionId)> wizard;
 };
 
+/// @brief A `Catalog::view` or `Catalog::wizard` lookup over documents by action id.
+/// @param documents The documents by action id; the lookup keeps its own copy.
+/// @return The lookup.
+[[nodiscard]] inline std::function<std::optional<std::string>(std::string_view)> documentLookup(
+    std::map<std::string, std::string, std::less<>> documents) {
+    return [known = std::make_shared<std::map<std::string, std::string, std::less<>> const>(std::move(documents))](
+               std::string_view actionId) -> std::optional<std::string> {
+        auto const found = known->find(actionId);
+        if (found == known->end()) {
+            return std::nullopt;
+        }
+        return found->second;
+    };
+}
+
 /// @brief Options of `loadDocument`.
 struct LoadOptions {
     /// @brief The catalog facts.

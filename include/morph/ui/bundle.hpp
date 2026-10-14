@@ -277,6 +277,12 @@ struct CatalogReply {
     std::optional<std::map<std::string, ModelInfo, std::less<>>> models;
     /// @brief The action facts by action id; absent when the server has none to give.
     std::optional<std::map<std::string, ActionInfo, std::less<>>> actions;
+    /// @brief The `v-*` view documents a `collection` node builds from, by the action of their `v-query`; absent
+    ///        when the server has none to give.
+    std::optional<std::map<std::string, std::string, std::less<>>> views;
+    /// @brief The `w-*` wizard documents a `wizard` node builds from, by the action of their first step; absent when
+    ///        the server has none to give.
+    std::optional<std::map<std::string, std::string, std::less<>>> wizards;
 
     /// @brief The facts as the lookups load-time validation takes. A lookup the reply carried no facts for is left
     ///        empty, so its rules are skipped.
@@ -302,6 +308,12 @@ struct CatalogReply {
                 }
                 return found->second;
             };
+        }
+        if (views) {
+            catalog.view = documentLookup(*views);
+        }
+        if (wizards) {
+            catalog.wizard = documentLookup(*wizards);
         }
         return catalog;
     }
@@ -660,7 +672,8 @@ template <typename T>
 /// @param text The reply body.
 /// @return The reply, or why it was refused.
 [[nodiscard]] inline std::expected<CatalogReply, std::string> parseCatalogReply(std::string_view text) {
-    auto reply = detail::readMessage<CatalogReply>(text, "the catalog", {"entries"}, {"models", "actions"});
+    auto reply = detail::readMessage<CatalogReply>(text, "the catalog", {"entries"},
+                                                   {"models", "actions", "views", "wizards"});
     if (!reply) {
         return std::unexpected(std::move(reply.error()));
     }
@@ -669,7 +682,9 @@ template <typename T>
     }
     std::size_t const models = reply->models ? reply->models->size() : 0;
     std::size_t const actions = reply->actions ? reply->actions->size() : 0;
-    if (std::ranges::max({reply->permitted.size(), models, actions}) > kMaxCatalogFacts) {
+    std::size_t const views = reply->views ? reply->views->size() : 0;
+    std::size_t const wizards = reply->wizards ? reply->wizards->size() : 0;
+    if (std::ranges::max({reply->permitted.size(), models, actions, views, wizards}) > kMaxCatalogFacts) {
         return std::unexpected("the catalog carries more than " + std::to_string(kMaxCatalogFacts) +
                                " facts of a kind");
     }
