@@ -549,7 +549,8 @@ private:
             _sorted = true;
         } else {
             _base.resize(rows);
-            std::ranges::iota(_base, 0U);
+            // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
+            std::iota(_base.begin(), _base.end(), 0U);
             _sorted = _in.sort.empty();
             if (!_sorted && !filtering) {
                 _sort.emplace(std::move(_base), rowOrder());
@@ -863,7 +864,8 @@ private:
 
     [[nodiscard]] static std::vector<std::uint32_t> identity(std::size_t rows) {
         std::vector<std::uint32_t> out(rows);
-        std::ranges::iota(out, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
+        std::iota(out.begin(), out.end(), 0U);
         return out;
     }
 

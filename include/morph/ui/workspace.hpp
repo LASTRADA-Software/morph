@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -14,9 +15,11 @@
 #include <vector>
 
 #include "../reactive/runtime.hpp"
+#include "../reactive/scheduler.hpp"
 #include "../reactive/scope.hpp"
 #include "backend.hpp"
 #include "host.hpp"
+#include "route.hpp"
 #include "value.hpp"
 
 /// @file
@@ -33,12 +36,35 @@ struct WorkspaceScreen {
     /// @brief A tab of the screen with no identity and no unsaved changes is replaced, not stacked, when the screen
     ///        is opened with an identity.
     bool reuseEmpty = false;
+    /// @brief The host screen the catalog entry names instead of a document; empty for a document screen.
+    std::string host;
+    /// @brief Whether the entry can be opened now; `resume` skips a recorded screen that cannot.
+    bool available = true;
+};
+
+/// @brief How a workspace starts (spec 6 §7, `app-start`).
+struct WorkspaceStart {
+    /// @brief `resume` reopens the recorded tabs; anything else is the screen id to open.
+    std::string start = "resume";
+    /// @brief The screen opened when `resume` opens nothing; empty opens nothing.
+    std::string fallback;
+    /// @brief The record `resume` reads: the routes of the person's tabs when they were last written, in order.
+    std::vector<std::string> recorded;
 };
 
 /// @brief How a `Workspace` treats screens.
 struct WorkspaceOptions {
     /// @brief The catalog facts of a screen id; empty treats every screen as plain.
     std::function<WorkspaceScreen(std::string_view)> screens;
+    /// @brief The host screens a catalog entry's `host` names. Borrowed; null mounts none.
+    ScreenHostRegistry const* hosts = nullptr;
+    /// @brief Receives the record: the routes of the open tabs, in order, each time the tabs change. A tab with no
+    ///        route (a param with no route form) is left out. Empty writes no record.
+    std::function<void(std::vector<std::string> const&)> onRecord;
+    /// @brief When given, a burst of changes writes the record once, `recordDelay` after the last of them. Borrowed.
+    reactive::Scheduler* scheduler = nullptr;
+    /// @brief The quiet period before the record is written, with a scheduler.
+    std::chrono::milliseconds recordDelay{500};
 };
 
 /// @brief One open tab, as an application's tab menu or a test reads it.
@@ -153,6 +179,63 @@ public:
         return indexOf(tabId);
     }
 
+    /// @brief Opens the start screens: with `resume`, every recorded route whose screen is known and available, in
+    ///        order, and the fallback when none of them opened; otherwise the `start` screen. The first tab opened is
+    ///        the active one.
+    /// @param how The start screen, the fallback and the record.
+    /// @return The number of tabs opened.
+    std::size_t start(WorkspaceStart const& how) {
+        std::size_t opened = 0;
+        std::optional<std::size_t> first;
+        auto const openOne = [&](std::string_view screenId, ParamMap const& params) {
+            if (auto const index = open(screenId, params)) {
+                ++opened;
+                if (!first) {
+                    first = *index;
+                }
+            }
+        };
+        if (how.start == "resume") {
+            for (std::string const& route : how.recorded) {
+                std::optional<Route> const read = readRoute(route);
+                if (read && factsOf(read->screen).available) {
+                    openOne(read->screen, read->params);
+                }
+            }
+            if (opened == 0 && !how.fallback.empty()) {
+                openOne(how.fallback, {});
+            }
+        } else {
+            openOne(how.start, {});
+        }
+        if (first) {
+            activate(*first);
+        }
+        return opened;
+    }
+
+    /// @brief Writes the record now, cancelling a pending debounced write: what sign-out does before the session is
+    ///        cleared.
+    void flushRecord() {
+        _recordTimer.cancel();
+        if (_options.onRecord) {
+            _options.onRecord(record());
+        }
+    }
+
+    /// @brief The record as it would be written now: the routes of the open tabs, in order.
+    /// @return The routes.
+    [[nodiscard]] std::vector<std::string> record() const {
+        std::vector<std::string> routes;
+        routes.reserve(_tabs.size());
+        for (auto const& tab : _tabs) {
+            if (!tab->route.empty()) {
+                routes.push_back(tab->route);
+            }
+        }
+        return routes;
+    }
+
     /// @brief Shows a tab and makes it the most recently used.
     /// @param index The tab; past the last one does nothing.
     void activate(std::size_t index) {
@@ -247,6 +330,8 @@ private:
     struct Tab {
         std::uint64_t id = 0;
         std::string screenId;
+        // The route the record lists; empty for an instance with none.
+        std::string route;
         std::unique_ptr<SlotWidget> page;
         std::unique_ptr<ScreenHandle> handle;
         std::unique_ptr<reactive::Scope> scope;
@@ -281,14 +366,47 @@ private:
         return found == _tabs.end() ? kNone : static_cast<std::size_t>(found - _tabs.begin());
     }
 
-    // Mounts a screen into a new page at the end; the page goes with a refused mount.
+    [[nodiscard]] WorkspaceScreen factsOf(std::string_view screenId) const {
+        return _options.screens ? _options.screens(screenId) : WorkspaceScreen{};
+    }
+
+    // A recorded route read back: a host screen's route is its id, a document screen's is read against its params.
+    [[nodiscard]] std::optional<Route> readRoute(std::string const& route) const {
+        if (!factsOf(route).host.empty()) {
+            return Route{.screen = route, .params = {}};
+        }
+        auto read = _host->parseRoute(route);
+        if (!read) {
+            return std::nullopt;
+        }
+        return std::move(*read);
+    }
+
+    // Mounts a screen into a new page at the end; the page goes with a refused mount. A host screen comes from the
+    // registry, a document screen from the document host.
     std::expected<std::uint64_t, MountError> mountTab(std::string_view screenId, ParamMap const& params) {
+        WorkspaceScreen const facts = factsOf(screenId);
         auto tab = std::make_unique<Tab>();
         tab->id = ++_lastId;
         tab->screenId = std::string{screenId};
         tab->page = _backend->createSlot(_bar.get());
         tab->page->setVisible(false);
-        auto handle = _host->mountInto(screenId, params, *tab->page);
+        std::expected<std::unique_ptr<ScreenHandle>, MountError> handle;
+        if (facts.host.empty()) {
+            handle = _host->mountInto(screenId, params, *tab->page);
+            if (auto route = _host->routeOf(screenId, params)) {
+                tab->route = std::move(*route);
+            }
+        } else {
+            HostScreenFactory const* const factory =
+                _options.hosts == nullptr ? nullptr : _options.hosts->find(facts.host);
+            if (factory == nullptr) {
+                return std::unexpected(MountError{.screenId = std::string{screenId},
+                                                  .reason = "no host screen `" + facts.host + "` is registered"});
+            }
+            handle = (*factory)(params, *tab->page);
+            tab->route = std::string{screenId};
+        }
         if (!handle) {
             return std::unexpected(std::move(handle.error()));
         }
@@ -303,7 +421,25 @@ private:
         std::uint64_t const tabId = tab->id;
         _tabs.push_back(std::move(tab));
         showCaptions();
+        recordChanged();
         return tabId;
+    }
+
+    // The open tabs changed: the record is written now, or once the burst is over.
+    void recordChanged() {
+        if (!_options.onRecord) {
+            return;
+        }
+        if (_options.scheduler == nullptr) {
+            _options.onRecord(record());
+            return;
+        }
+        std::weak_ptr<bool> const alive = _alive;
+        _recordTimer = _options.scheduler->after(_options.recordDelay, [this, alive] {
+            if (!alive.expired()) {
+                flushRecord();
+            }
+        });
     }
 
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a tab id, then the index it moves to.
@@ -330,6 +466,7 @@ private:
         _tabs.erase(_tabs.begin() + static_cast<std::ptrdiff_t>(where));
         std::erase(_recent, tabId);
         _walk.reset();
+        recordChanged();
         if (_active == tabId) {
             _active.reset();
             if (!_recent.empty()) {
@@ -429,6 +566,7 @@ private:
     std::optional<std::uint64_t> _active;
     std::optional<Walk> _walk;
     std::uint64_t _lastId = 0;
+    reactive::TimerHandle _recordTimer;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 };
 

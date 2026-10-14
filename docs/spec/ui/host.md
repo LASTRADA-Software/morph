@@ -60,6 +60,15 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,
   the session), and one whose identity is `null` answer `std::nullopt`: their identity is known only once mounted,
   through the handle.
+- **`prefetch(screenId, params)`** starts the screen's `prefetch` queries before it mounts (spec 5 §5).
+  - Each named query's body is evaluated over the params alone, and its cache entry is warmed under the token the
+    mounted screen's alias will have: `shared:<key>` for a keyed alias, `shared` for a stateless model's.
+  - A private alias's token is made fresh at mount, so nothing could read what a prefetch warmed: its queries are
+    skipped.
+  - Also skipped: evaluations, a key or body that reads more than the params, and an entry already fresh or in
+    flight.
+- **`routeOf(screenId, params)` and `parseRoute(route)`** are `routeOf` and `parseRoute` of [Routes](#routes) over
+  this host's documents.
 - **`navigate`.** A document's `navigate` to a screen reaches `onNavigate(NavigateRequest)`, which by default
   calls `onNavigate(screenId, params)`; a host that shows dialogs, drawers or windows overrides the first to read
   `as`. A `navigate` that names no screen (a route) goes to the application's host.
@@ -128,7 +137,20 @@ declaration order.
 | Who decides a dirty screen without `onClose` | The host, through `CloseGuard` | The choice (save, discard, cancel) is the shell's UI (spec 6 §15), not the document's. |
 | `identityOf` | Evaluated over params only | Opening a second instance must be decided before mounting one; an identity that reads more cannot be. |
 
+## Host screens
+
+A catalog entry may name a `host` screen instead of a document (spec 6 §15).
+- The application registers a `HostScreenFactory` under that name in a `ScreenHostRegistry` (`add(name, factory)`,
+  `find(name)`).
+- A factory takes the params and the shell's page container, mounts the native screen into the page, and returns
+  its `ScreenHandle`, or a `MountError`. The shell reads that handle's `title`, `dirty`, `identity` and close
+  protocol as it reads a document screen's.
+- A host screen has no `identity` before it mounts, so opening one is never matched to an open tab by identity.
+  Its route is its catalog id.
+- Spec 6 §15 has the factory return a `QQuickItem`. A factory here mounts into a backend container instead, so one
+  registry serves every backend, the recording backend's tests included.
+
 ## Not yet
 
-- **The workspace shell** (§7, §15): tabs, re-keying, the guard's three-choice dialog, MRU, `reuseEmpty`.
+- **The guard's three-choice dialog** (§15) is the host's drawing: the shell decides through the `CloseGuard`.
 - **The Qt Quick renderer as a `ScreenHost`** (§4), exposing each screen's root item.

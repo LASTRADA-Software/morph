@@ -18,6 +18,8 @@ Item {
     property int heightAmount: 0
     property int columnSpan: 1
     property string tooltip: ""
+    // Whether C++ listens for the pointer coming to rest here.
+    property bool hoverWatched: false
     property string a11yName: ""
     property int a11yRole: 0
     property string surface: ""
@@ -65,6 +67,10 @@ Item {
 
     HoverHandler {
         id: hover
+        onHoveredChanged: {
+            if (hovered && root.hoverWatched)
+                root.question("hover", [])
+        }
     }
 
     DragHandler {

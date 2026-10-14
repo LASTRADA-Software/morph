@@ -18,6 +18,20 @@ API surface).
   most recently used first, and Ctrl+W closes the active one. A tab's caption is its title, with ` •` while it has
   unsaved changes.
 
+- **The workspace starts, records and lists screens** (spec 6 §7, §15).
+  - `Workspace::start` reopens the person's recorded tabs with `resume`, skipping a route that no longer reads back
+    or names an unavailable screen, and opens the fallback when none opened.
+  - `WorkspaceOptions::onRecord` receives the open tabs' routes as tabs open and close. It is debounced with a
+    scheduler, and `flushRecord()` writes it at once for sign-out.
+  - A catalog entry that names a `host` screen mounts from a `ScreenHostRegistry` factory into its tab.
+  - `ui::Navigator` (`morph/ui/navigator.hpp`) lists the catalog by module and group, disables an unavailable entry
+    with its reason, searches every locale's title, and keeps the person's pins, ordered and capped.
+  - Hovering an entry or a pin calls `onPrefetch`, which `DocumentScreenHost::prefetch` answers by starting the
+    screen's `prefetch` queries, so the screen mounts on requests already in flight. `DocumentScreenHost::routeOf`
+    and `parseRoute` give a screen instance's route.
+  - The view backend gains `Widget::setOnHover`, whose default does nothing. The recording backend's `hover(id)` and
+    Qt Quick's `HoverHandler` report it.
+
 - **`DocumentScreenHost::mountInto(screenId, params, parent)`** mounts a screen with its root widget appended to the
   host's own container, such as a tab's page, instead of as a backend root. On Qt Quick a host places a screen
   through `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which a test now drives end to end.

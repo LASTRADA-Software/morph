@@ -7,6 +7,7 @@
 
 #include <QQuickItem>
 #include <QStringList>
+#include <QTest>
 #include <QVariantList>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -59,6 +60,31 @@ TEST_CASE("qt_quick widgets: a text shows its text in its role, and a button's c
     button->focus();
     scene.key(Qt::Key_Return);
     CHECK(clicks == 2);
+}
+
+// Mutation: never ask C++ from the HoverHandler (hovers stays 0).
+TEST_CASE("qt_quick widgets: the pointer coming to rest over a watched widget reaches its hover handler",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto watched = scene.backend().createButton(column.get());
+    watched->setLabel("Watched");
+    auto other = scene.backend().createButton(column.get());
+    other->setLabel("Other");
+    int hovers = 0;
+    watched->setOnHover([&hovers] { ++hovers; });
+    scene.settle();
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*other)));
+    scene.settle();
+    CHECK(hovers == 0);
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*watched)));
+    scene.settle();
+    CHECK(hovers == 1);
+    watched->setOnHover({});
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*other)));
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*watched)));
+    scene.settle();
+    CHECK(hovers == 1);
 }
 
 TEST_CASE("qt_quick widgets: typing into a text input reports each edit, Enter commits then submits", "[qt_quick]") {

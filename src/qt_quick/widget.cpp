@@ -216,6 +216,17 @@ void ItemBase::takeChords(std::vector<std::string> const& chords, std::function<
     });
 }
 
+void ItemBase::takeHover(std::function<void()> onHover) const {
+    write("hoverWatched", static_cast<bool>(onHover));
+    _relay->answer(QStringLiteral("hover"), [this, onHover = std::move(onHover)](QVariant const&) {
+        if (!onHover || !reachable()) {
+            return false;
+        }
+        onHover();
+        return true;
+    });
+}
+
 QQuickItem* ItemBase::focusTarget() const {
     auto* const target = qobject_cast<QQuickItem*>(part("focusTarget"));
     return target != nullptr ? target : _item.data();

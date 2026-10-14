@@ -90,6 +90,13 @@ public:
 
     /// @brief Moves keyboard focus to the widget.
     virtual void focus() = 0;
+
+    /// @brief Calls @p onHover each time the pointer comes to rest over the widget. A backend without a pointer, or
+    ///        one that does not report hovering, keeps the default, which never calls it: hovering is a hint, such as
+    ///        a prefetch, never something a widget relies on.
+    /// @param onHover The handler; empty stops calling one.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from; the default drops it.
+    virtual void setOnHover(std::function<void()> onHover) { static_cast<void>(onHover); }
 };
 
 /// @brief A widget with children. A factory given this container appends the new widget as its last child.
