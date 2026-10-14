@@ -6,6 +6,7 @@
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/frontend.hpp>
+#include <morph/ui/host.hpp>
 #include <string>
 
 #include "app/app_source.hpp"
@@ -21,6 +22,8 @@ namespace morph::examples {
 struct ClientShellOptions {
     /// @brief The screen mounted first; empty for the first the source lists.
     std::string startScreen;
+    /// @brief The start screen's params.
+    ui::ParamMap startParams;
     /// @brief Called with each problem: why the source did not open, a document that did not load, a refused mount,
     ///        an interpreter diagnostic. Empty ignores them; the shell shows the first three either way.
     std::function<void(std::string const& problem)> onProblem;

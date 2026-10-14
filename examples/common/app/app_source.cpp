@@ -8,16 +8,20 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <map>
 #include <memory>
+#include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/document.hpp>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "app/transport.hpp"
@@ -104,7 +108,40 @@ ui::Dispatcher& ClientSource::dispatcher() {
     return *_dispatcher;
 }
 
-ui::Catalog ClientSource::catalog() const { return _loaded ? _loaded->catalog.facts() : ui::Catalog{}; }
+ui::Catalog ClientSource::catalog() const {
+    if (!_loaded) {
+        return ui::Catalog{};
+    }
+    ui::Catalog catalog = _loaded->catalog.facts();
+    catalog.schema = [schemas = std::make_shared<std::map<std::string, std::string, std::less<>> const>(_schemas)](
+                         std::string_view actionId) -> std::optional<std::string> {
+        auto const found = schemas->find(actionId);
+        if (found == schemas->end()) {
+            return std::nullopt;
+        }
+        return found->second;
+    };
+    return catalog;
+}
+
+void ClientSource::fetchSchemas(std::string const& modelType,
+                                std::function<void(std::expected<std::string, std::string>)> done) {
+    if (!_exchange) {
+        done(std::unexpected(std::string{"the source is not open"}));
+        return;
+    }
+    wire::Envelope request = wire::makeSchemas(modelType);
+    request.session = _session;
+    _exchange(std::move(request), [done = std::move(done)](ui::ExchangeReply reply) {
+        if (!reply) {
+            done(std::unexpected(std::move(reply.error())));
+        } else if (reply->kind != "ok") {
+            done(std::unexpected(std::move(reply->message)));
+        } else {
+            done(std::move(reply->body));
+        }
+    });
+}
 
 std::vector<std::string> ClientSource::screens() const {
     std::vector<std::string> ids;
@@ -117,6 +154,43 @@ std::vector<std::string> ClientSource::screens() const {
         }
     }
     return ids;
+}
+
+void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
+    _schemas.clear();
+    std::vector<std::string> types;
+    if (_loaded->catalog.models) {
+        for (auto const& [type, info] : *_loaded->catalog.models) {
+            static_cast<void>(info);
+            types.push_back(type);
+        }
+    }
+    if (types.empty()) {
+        done();
+        return;
+    }
+    // A type whose schemas do not arrive leaves its actions without one: their forms report it when they mount.
+    auto pending = std::make_shared<std::size_t>(types.size());
+    auto finished = std::make_shared<std::function<void()>>(std::move(done));
+    for (std::string const& type : types) {
+        fetchSchemas(type, [this, alive, pending, finished](std::expected<std::string, std::string> document) {
+            if (!*alive) {
+                return;
+            }
+            if (document) {
+                if (auto parsed = ui::parseJson(*document)) {
+                    if (auto const* const actions = std::get_if<ui::Json::object_t>(&parsed->data)) {
+                        for (auto const& [action, schema] : *actions) {
+                            _schemas.insert_or_assign(action, glz::write_json(schema).value_or(std::string{}));
+                        }
+                    }
+                }
+            }
+            if (--*pending == 0) {
+                (*finished)();
+            }
+        });
+    }
 }
 
 void ClientSource::open(ui::AppContext& context,
@@ -144,6 +218,7 @@ void ClientSource::open(ui::AppContext& context,
     };
     _dispatcher =
         std::make_unique<ui::BridgeDispatcher>(*_bridge, &owner, ui::evaluatorOver(guarded, _session, &owner));
+    _exchange = guarded;
 
     // Shared by the client's answer and the timeout: whichever comes first is delivered, once.
     auto const deliver = std::make_shared<std::function<void(std::expected<ui::LoadedBundle, ui::ConnectError>)>>(
@@ -158,7 +233,11 @@ void ClientSource::open(ui::AppContext& context,
                 return;
             }
             _loaded = std::move(*opened);
-            ready(_loaded->bundle);
+            loadSchemas(alive, [this, alive, ready = std::move(ready)]() {
+                if (*alive) {
+                    ready(_loaded->bundle);
+                }
+            });
         });
     if (std::chrono::milliseconds const bound = openTimeout(); bound.count() > 0) {
         _timeout = context.scheduler().after(bound, [deliver, bound] {
@@ -216,6 +295,12 @@ LocalAppSource::LocalAppSource(LocalApp app, LocalSetup setup) : _app{std::move(
 LocalAppSource::~LocalAppSource() {
     // Here, not in the base: the bridge's LocalBackend runs on this class's workers, which go first otherwise.
     close();
+}
+
+void LocalAppSource::fetchSchemas(std::string const& modelType,
+                                  std::function<void(std::expected<std::string, std::string>)> done) {
+    // In process, the registry the local backend dispatches through answers directly, as a server's does.
+    done(model::detail::defaultDispatcher().schemasJson(modelType));
 }
 
 std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect(ui::AppContext& /*context*/) {

@@ -109,10 +109,13 @@ public:
     /// @param app      The application.
     /// @param screenId The screen; empty for the first the catalog lists.
     /// @param mode     The backend the models run behind.
+    /// @param params   The screen's params.
+    /// @param setup    Local mode's options, such as the user its calls run as; simulated mode ignores them.
     /// @throws std::runtime_error when the application does not open or the screen does not mount.
-    ScreenHarness(LocalApp const& app, std::string screenId, RigMode mode) {
+    ScreenHarness(LocalApp const& app, std::string screenId, RigMode mode, ui::ParamMap params = {},
+                  LocalSetup setup = {}) {
         if (mode == RigMode::Local) {
-            _source = std::make_unique<LocalAppSource>(app, LocalSetup{});
+            _source = std::make_unique<LocalAppSource>(app, std::move(setup));
         } else {
             _source = std::make_unique<SimulatedAppSource>(app);
         }
@@ -129,6 +132,7 @@ public:
         _shell = mountClientShell(
             _context, _backend, std::move(bundle), *_source,
             ClientShellOptions{.startScreen = std::move(screenId),
+                               .startParams = std::move(params),
                                .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
                                .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); }});
         if (_mounted.empty()) {
