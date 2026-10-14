@@ -2596,6 +2596,9 @@ private:
         } else if (node.kind == "dialog" || node.kind == "drawer" || node.kind == "form") {
             static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
             checkChoice(node, "showErrors", kPolicies);
+            // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
+            static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
+            checkChoice(node, "submit", kSubmitModes);
         }
         std::string_view const model = node.name("model");
         if (!model.empty()) {

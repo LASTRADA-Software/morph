@@ -420,6 +420,7 @@
     { "name": "an unknown commitOn", "doc": { "view": { "kind": "textInput", "commitOn": "never" } }, "at": "/view/commitOn", "reason": "not one of the values of `commitOn`" },
     { "name": "an unknown onStale", "doc": { "view": { "kind": "select", "onStale": "drop" } }, "at": "/view/onStale", "reason": "not one of the values of `onStale`" },
     { "name": "an unknown dialog showErrors", "doc": { "view": { "kind": "dialog", "showErrors": "never" } }, "at": "/view/showErrors", "reason": "not one of the values of `showErrors`" },
+    { "name": "an unknown form submit mode", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "submit": "Apply" } }, "at": "/view/submit", "reason": "not one of the values of `submit`" },
     { "name": "a table with neither rows nor a model", "doc": { "view": { "kind": "table" } }, "at": "/view", "reason": "a table takes `rows`" },
     { "name": "a table with a model and no action", "doc": { "models": { "m": { "type": "T" } }, "view": { "kind": "table", "model": "m" } }, "at": "/view", "reason": "names its `action`" },
     { "name": "a form without a model", "doc": { "view": { "kind": "form", "action": "A" } }, "at": "/view", "reason": "`model` is required on `form`" },
