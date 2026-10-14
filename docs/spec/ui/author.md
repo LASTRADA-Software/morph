@@ -148,6 +148,13 @@ input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)`
   `Client`).
 - **`form<A>(model, {.prefill, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError})`**:
   the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit, ...}}`.
+- **`collection<View>(model)` and `wizard<Wizard>(model)`** (`ui/author_forms.hpp`) take a view
+  descriptor or a `flows::Wizard` instead of an action. The node names the view's `v-query` or the
+  wizard's first step, and the node's facts carry `views::viewSchemaJson<View>()` or
+  `flows::wizardSchemaJson<Wizard>()` under that action. The bundle serves the document with the
+  `ui-catalog` reply, so a client builds the node without knowing the types. The header is separate
+  so the other builders do not pull in the forms headers. `collection<A>` and `wizard<A>` over an
+  action carry no document, and the client's catalog must supply one.
 - **`custom(component, {.props = {{"name", e}}, .on = {{"event", commands}}})`** names a declared
   component; props and events are keyed by name, since a component's props are declared as data.
 

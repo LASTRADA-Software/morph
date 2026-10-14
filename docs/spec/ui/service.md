@@ -34,7 +34,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 | Kind | Request `body` | `ok` reply `body` |
 |---|---|---|
 | `ui-hello` | `HelloRequest`: `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `HelloReply`: `{application, version, vocabularies, digest}` |
-| `ui-catalog` | empty | `CatalogReply`: `{entries, permitted, models?, actions?}` |
+| `ui-catalog` | empty | `CatalogReply`: `{entries, permitted, models?, actions?, views?, wizards?}` |
 | `ui-fetch` | `FetchRequest`: `{hash}` | the file's exact bytes |
 | `ui-evaluate` | the action's JSON body; `modelType` and `actionType` name it | `EvaluateReply`: `{body, errors, ready}` |
 | `ui-file` | `FileRequest`: `{op, …}`, one step of an upload or a download | `FileReply`: the members its `op` answers |
@@ -107,6 +107,11 @@ For each registered entry, in registration order:
   for the documents the principal may fetch: the app document, and every listed screen that is available or
   public. They are absent when the registry had no lookup, which leaves the client's lookup empty and skips its
   rules, as on the server. `CatalogReply::facts()` turns them into the lookups `loadDocument` takes.
+- `views` and `wizards` carry the forms documents a `collection` or `wizard` node builds from, keyed by
+  the action the node names, for the same documents. The registry takes them from its catalog's `view`
+  and `wizard` lookups, for every action a document names. The author builders put them there
+  (`collection<View>`, `wizard<Wizard>`). `facts()` turns them into `Catalog::view` and
+  `Catalog::wizard`.
 - A query's model type is its alias's, resolved through the enclosing scopes. Load-time validation has already
   resolved every alias and requires each to name a type, so the walk cannot miss.
 - **The app shell.** The app document is one file for every user, cached and verified by one hash (§12b); the
@@ -119,7 +124,7 @@ For each registered entry, in registration order:
 | A request body (`ui-hello`, `ui-fetch`) | 64 KiB (`kMaxRequestBytes`) | the server, before parsing |
 | A file | 4 MiB (`kMaxFileBytes`), and its escaped `ok` reply within `wire::kMaxEnvelopeBytes` | the registry; the client, before hashing |
 | Files in a manifest, entries in a catalog | 4096 (`kMaxBundleFiles`) | the registry; the client's parser |
-| `permitted`, model facts, action facts | 16384 each (`kMaxCatalogFacts`) | the client's parser |
+| `permitted`, model, action, view and wizard facts | 16384 each (`kMaxCatalogFacts`) | the client's parser |
 | Vocabularies; host components, commands, values | 256 each (`kMaxListItems`) | both parsers; the registry |
 | A name: id, kind, vocabulary, host name, application id or version | 256 bytes (`kMaxNameBytes`) | both parsers; the registry |
 | JSON depth | 64 (`kMaxJsonDepth`) | every parse, before the parser runs |

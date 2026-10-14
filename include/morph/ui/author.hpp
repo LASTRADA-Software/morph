@@ -92,6 +92,10 @@ struct CatalogFacts {
     std::map<std::string, ModelInfo, std::less<>> models;
     /// @brief Action facts by action id.
     std::map<std::string, ActionInfo, std::less<>> actions;
+    /// @brief The `v-*` view documents `collection` nodes build from, by the action of their `v-query`.
+    std::map<std::string, std::string, std::less<>> views;
+    /// @brief The `w-*` wizard documents `wizard` nodes build from, by the action of their first step.
+    std::map<std::string, std::string, std::less<>> wizards;
 
     /// @brief Adds another set of facts; a fact already present is kept.
     /// @param other The facts to add.
@@ -102,6 +106,8 @@ struct CatalogFacts {
         for (auto const& [action, info] : other.actions) {
             actions.emplace(action, info);
         }
+        views.insert(other.views.begin(), other.views.end());
+        wizards.insert(other.wizards.begin(), other.wizards.end());
     }
 
     /// @brief Records a model type.
@@ -146,6 +152,13 @@ struct CatalogFacts {
             }
             return found->second;
         };
+        // Left empty without documents, so a bundle that has none serves none.
+        if (!views.empty()) {
+            out.view = documentLookup(views);
+        }
+        if (!wizards.empty()) {
+            out.wizard = documentLookup(wizards);
+        }
         return out;
     }
 };

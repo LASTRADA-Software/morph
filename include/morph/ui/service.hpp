@@ -116,6 +116,12 @@ struct ServedBundle {
     /// @brief The action facts the registry's catalog gave, for every action a document names; absent when it has
     ///        no action lookup.
     std::optional<std::map<std::string, ActionInfo, std::less<>>> actions;
+    /// @brief The view documents the registry's catalog gave, by the action of their `v-query`, for every action a
+    ///        document names; absent when it has no view lookup.
+    std::optional<std::map<std::string, std::string, std::less<>>> views;
+    /// @brief The wizard documents the registry's catalog gave, by the action of their first step, for every action
+    ///        a document names; absent when it has no wizard lookup.
+    std::optional<std::map<std::string, std::string, std::less<>>> wizards;
 };
 
 namespace detail {
@@ -617,6 +623,19 @@ private:
                 known.emplace(ref.action, _catalog.action(ref.action).value_or(ActionInfo{}));
             }
         }
+        auto const documents = [&all](auto const& lookup, auto& out) {
+            if (!lookup) {
+                return;
+            }
+            auto& known = out.emplace();
+            for (ActionRef const& ref : all) {
+                if (std::optional<std::string> document = lookup(ref.action)) {
+                    known.emplace(ref.action, std::move(*document));
+                }
+            }
+        };
+        documents(_catalog.view, bundle.views);
+        documents(_catalog.wizard, bundle.wizards);
     }
 
     ApplicationInfo _application;
@@ -851,6 +870,20 @@ private:
                 }
             }
         }
+        // A collection's or wizard's document goes with the action that names it, to whoever may fetch that action.
+        auto const documents = [&fetchable](auto const& served, auto& out) {
+            if (!served) {
+                return;
+            }
+            auto& known = out.emplace();
+            for (auto const& [action, document] : *served) {
+                if (fetchable.actions.contains(action)) {
+                    known.emplace(action, document);
+                }
+            }
+        };
+        documents(_bundle->views, reply.views);
+        documents(_bundle->wizards, reply.wizards);
         return ok(request, detail::writeMessage(reply));
     }
 
