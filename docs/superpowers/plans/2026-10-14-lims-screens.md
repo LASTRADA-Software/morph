@@ -86,6 +86,22 @@ As spec 4 §5 lists it:
 
 `SampleModel` gains the section, snapshot and working-copy actions of spec 6 §11.
 
+What building slice (b) found:
+
+- **A form's submit does not trigger `refreshOn`.** Only a mutation tells the session, so the worked
+  example's queries, which refresh on section actions only forms run, never refetched. Each section form
+  refetches what it changed from its `onSuccess`; which of spec 6 §11 and the interpreter spec is right
+  is filed separately.
+- **A form's `submit` is a mode, not a label.** The document validator accepted any text there, and an
+  unknown mode quietly kept the schema's. It now refuses anything but `explicit` and `auto`; the
+  results screen had passed a button label.
+- **A model-backed `table` is not lowered yet.** The project lookup is a `table` over the rows of a
+  `ListProjects` query, which the table engine pages on the server with its default query.
+- **`t` names its key as a literal**, so the typed save errors are an `if` over the reply's enum.
+- **A prefill that arrives after the user typed replaces the typing.** That is the interpreter spec's
+  rule (each non-null prefill loads the form); whether it should spare touched fields is filed
+  separately. The tests wait for the header to load before editing it.
+
 ## Slice (c): the forms demo
 
 `LabApp` as the app shell (forms, the intake wizard, `SamplesView` as a `collection`), `--typed` through

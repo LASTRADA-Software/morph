@@ -25,6 +25,9 @@ inline constexpr std::string_view kLifecycle = "lims.lifecycle";
 /// @brief Result entry for one sample: capture, the results, verification and the offline conflicts.
 inline constexpr std::string_view kResults = "lims.results";
 
+/// @brief Sample entry: a private working copy of one sample (or a new one), edited section by section and saved.
+inline constexpr std::string_view kSample = "lims.sample";
+
 /// @brief The application's bundle: every lims screen, registered and validated.
 /// @return The bundle, or the refusal.
 [[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();
