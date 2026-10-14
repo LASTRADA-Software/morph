@@ -29,17 +29,21 @@ using ui::testing::RecordingBackend;
 using Owner = morph::testing::StepExecutor;
 
 /// A chart node with a text prop, a bound bool prop and a number prop, whose events land in @p events.
+///
+/// The props are appended one at a time rather than listed in a braced initializer: copying a `CustomProp` out of
+/// an initializer list makes GCC 15 at -O2 report the `std::function` inside a bound `Prop` as maybe uninitialized.
 ui::Node chart(Signal<bool>& live, std::vector<std::pair<std::string, std::string>>& events) {
-    return ui::custom(
-        ui::Custom{.name = "Chart",
-                   .fallback = ui::text({.text = "no chart", .common = {.testId = "fallback"}}),
-                   .props = {ui::CustomProp{.name = "title", .value = ui::Prop<std::string>{"Trend"}},
-                             ui::CustomProp{.name = "live", .value = ui::Prop<bool>{[&live] { return live.get(); }}},
-                             ui::CustomProp{.name = "zoom", .value = ui::Prop<double>{2.5}}},
-                   .minVersion = 0,
-                   .onEvent = [&events](std::string const& event, std::string const& payload) {
-                       events.emplace_back(event, payload);
-                   }});
+    ui::Custom custom{.name = "Chart",
+                      .fallback = ui::text({.text = "no chart", .common = {.testId = "fallback"}}),
+                      .props = {},
+                      .minVersion = 0,
+                      .onEvent = [&events](std::string const& event, std::string const& payload) {
+                          events.emplace_back(event, payload);
+                      }};
+    custom.props.push_back(ui::CustomProp{.name = "title", .value = ui::Prop<std::string>{"Trend"}});
+    custom.props.push_back(ui::CustomProp{.name = "live", .value = ui::Prop<bool>{[&live] { return live.get(); }}});
+    custom.props.push_back(ui::CustomProp{.name = "zoom", .value = ui::Prop<double>{2.5}});
+    return ui::custom(std::move(custom));
 }
 
 }  // namespace

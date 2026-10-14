@@ -246,18 +246,21 @@ TEST_CASE(
     components.addBundle("Chart", kChart, digestOf(kChart));
     Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
     std::vector<std::pair<std::string, std::string>> events;
+    // The props are appended one at a time: copying a `CustomProp` out of a braced initializer list makes GCC 15 at
+    // -O2 report the `std::function` inside a `Prop` as maybe uninitialized.
     auto node = [&events](std::string name) {
-        return ui::custom(
-            ui::Custom{.name = std::move(name),
-                       .fallback = ui::text({.text = "fallback", .common = {.testId = "fallback"}}),
-                       .props = {ui::CustomProp{.name = "title", .value = ui::Prop<std::string>{"Trend"}},
-                                 ui::CustomProp{.name = "limit", .value = ui::Prop<std::string>{"12.50"}},
-                                 ui::CustomProp{.name = "live", .value = ui::Prop<bool>{true}},
-                                 ui::CustomProp{.name = "zoom", .value = ui::Prop<double>{2.5}}},
-                       .minVersion = 0,
-                       .onEvent = [&events](std::string const& event, std::string const& payload) {
-                           events.emplace_back(event, payload);
-                       }});
+        ui::Custom custom{.name = std::move(name),
+                          .fallback = ui::text({.text = "fallback", .common = {.testId = "fallback"}}),
+                          .props = {},
+                          .minVersion = 0,
+                          .onEvent = [&events](std::string const& event, std::string const& payload) {
+                              events.emplace_back(event, payload);
+                          }};
+        custom.props.push_back(ui::CustomProp{.name = "title", .value = ui::Prop<std::string>{"Trend"}});
+        custom.props.push_back(ui::CustomProp{.name = "limit", .value = ui::Prop<std::string>{"12.50"}});
+        custom.props.push_back(ui::CustomProp{.name = "live", .value = ui::Prop<bool>{true}});
+        custom.props.push_back(ui::CustomProp{.name = "zoom", .value = ui::Prop<double>{2.5}});
+        return ui::custom(std::move(custom));
     };
     {
         ui::Mounted const mounted{scene.runtime(), scene.backend(), node("Chart")};
