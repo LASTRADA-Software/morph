@@ -349,8 +349,7 @@ TEST_CASE("mountInto puts the screen's root in the shell's container, and rootOf
     harness.settle();
     morph::ui::Widget const* const root = DocumentScreenHost::rootOf(**mounted);
     REQUIRE(root != nullptr);
-    CHECK(harness.backend.children(harness.backend.idOf(*page)) ==
-          std::vector<int>{harness.backend.idOf(*root)});
+    CHECK(harness.backend.children(harness.backend.idOf(*page)) == std::vector<int>{harness.backend.idOf(*root)});
     CHECK((*mounted)->title().get() == "Draft");
 
     // A refused mount leaves the container as it was.

@@ -4111,7 +4111,8 @@ namespace detail {
 /// @param type   The prop type the component declares.
 /// @param format The formatting facts, for `string`.
 /// @return The text.
-[[nodiscard]] inline std::string componentText(Value const& value, std::string_view type, FormatContext const& format) {
+[[nodiscard]] inline std::string componentText(Value const& value, std::string_view type,
+                                               FormatContext const& format) {
     if (type == "json") {
         return canonicalJson(value);
     }
@@ -5465,7 +5466,8 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     Custom spec{.name = name,
                 .fallback = std::move(lowered),
                 .props = {},
-                .minVersion = static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+                .minVersion =
+                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
                 .onEvent = {}};
     // Every declared prop is given, a missing one as its type's empty value: a component lacking one is refused.
     for (auto const& [prop, type] : component.props) {
@@ -5480,19 +5482,19 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
         } else if (type == "number") {
             spec.props.push_back(CustomProp{
                 .name = prop, .value = bindProp<double>(ctx, expr, 0.0, [](Value const& value, FormatContext const&) {
-                    return componentNumber(value);
-                })});
+                                  return componentNumber(value);
+                              })});
         } else {
-            spec.props.push_back(CustomProp{
-                .name = prop,
-                .value = bindProp<std::string>(ctx, expr, std::string{},
-                                               [type](Value const& value, FormatContext const& format) {
-                                                   return componentText(value, type, format);
-                                               })});
+            spec.props.push_back(
+                CustomProp{.name = prop,
+                           .value = bindProp<std::string>(ctx, expr, std::string{},
+                                                          [type](Value const& value, FormatContext const& format) {
+                                                              return componentText(value, type, format);
+                                                          })});
         }
     }
     spec.onEvent = [this, ctx, site = &node, declared = &component](std::string const& event,
-                                                                   std::string const& payload) {
+                                                                    std::string const& payload) {
         Commands const* const commands = site->event("on." + event);
         if (commands == nullptr) {
             return;
