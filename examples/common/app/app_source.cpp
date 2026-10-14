@@ -15,6 +15,9 @@
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/file_store.hpp>
+#include <morph/ui/service.hpp>
+#include <morph/ui/service_client.hpp>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -282,6 +285,13 @@ void ClientSource::close() {
     disconnect();
 }
 
+std::optional<ui::FileTransfer> ClientSource::files() const {
+    if (!_exchange) {
+        return std::nullopt;
+    }
+    return ui::FileTransfer{_exchange, _session};
+}
+
 bool ClientSource::adoptPrincipal(std::string principal) {
     _session.principal = std::move(principal);
     if (_bridge) {
@@ -341,7 +351,9 @@ std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect
         return std::unexpected(ui::ConnectError{.kind = ui::ConnectError::Kind::Unsupported,
                                                 .message = _app.name + ": " + bundle.error().message()});
     }
-    _service = std::make_shared<ui::UiService>(std::move(*bundle));
+    // In process, the files a screen uploads are kept in memory for the run, as a server's store keeps them.
+    _service = std::make_shared<ui::UiService>(std::move(*bundle), model::detail::defaultDispatcher(),
+                                               std::make_shared<ui::MemoryFileStore>());
     // The UI service answers in process, synchronously, exactly as the server's strand would.
     ui::Exchange exchange = [service = _service, authorizer = session::allowAllAuthorizer()](
                                 wire::Envelope const& request, std::function<void(ui::ExchangeReply)> const& done) {

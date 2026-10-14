@@ -2,14 +2,20 @@
 
 #include "app/client_shell.hpp"
 
+#include <cmath>
+#include <cstdint>
 #include <expected>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <morph/ui/document.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/service_client.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
@@ -37,11 +43,86 @@ private:
     std::function<void(std::string, ui::ParamMap)> _navigate;
 };
 
+/// The path a picked file is: the path itself, or the first of a pick of several.
+std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
+    ui::ValueList const* const list = file.asList();
+    ui::Value const& first = list != nullptr && !list->empty() ? list->front() : file;
+    if (std::string const* const path = first.asString(); path != nullptr && !path->empty()) {
+        return std::filesystem::path{*path};
+    }
+    return std::nullopt;
+}
+
 /// The application's side of the commands the library's host does not answer itself: sign-in and sign-out, which
-/// install the principal a sign-in mutation answered into the source.
+/// install the principal a sign-in mutation answered into the source; and the file commands, which read a picked file
+/// from disk to upload it and save a downloaded one, moving the bytes over the source's file side channel.
 class Application final : public ui::InterpreterHost {
 public:
-    explicit Application(ClientSource& source) : _source{&source} {}
+    Application(ClientSource& source, std::filesystem::path downloads)
+        : _source{&source}, _downloads{std::move(downloads)} {}
+
+    bool uploadFor(ui::UploadRequest const& request, std::function<void(ui::Value)> progress,
+                   std::function<void(std::expected<ui::Value, std::string>)> done) override {
+        auto const files = _source->files();
+        auto const path = pickedPath(request.file);
+        if (!files || !path) {
+            return false;
+        }
+        std::ifstream input{*path, std::ios::binary};
+        if (!input) {
+            done(std::unexpected("cannot read " + path->string()));
+            return true;
+        }
+        std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+        files->upload(
+            ui::FileInfo{.name = path->filename().string(), .type = "application/octet-stream", .size = 0},
+            std::move(bytes), request.modelType, request.action,
+            [progress = std::move(progress)](double fraction) {
+                if (progress) {
+                    // An exact fraction at two places: a document's values are never floating point.
+                    auto const percent = static_cast<std::int64_t>(std::llround(fraction * 100.0));
+                    progress(ui::Value{ui::Decimal{
+                        math::Rational{math::Numerator{percent}, math::Denominator{100}, math::DecimalPlaces{2}}}});
+                }
+            },
+            [done = std::move(done)](std::expected<std::string, std::string> ref) {
+                done(ref ? std::expected<ui::Value, std::string>{ui::Value{*ref}}
+                         : std::expected<ui::Value, std::string>{std::unexpected(ref.error())});
+            });
+        return true;
+    }
+
+    // Saves the file under the name the screen suggested, else its own, in the downloads directory, and answers the
+    // saved path. Only saving is supported: a preview needs a viewer the shell does not have.
+    bool download(ui::Value const& file, std::string const& option, ui::Value const& name,
+                  std::function<void(std::expected<ui::Value, std::string>)> done) override {
+        auto const files = _source->files();
+        std::string const* const ref = file.asString();
+        if (!files || ref == nullptr || option == "preview") {
+            return false;
+        }
+        std::string const* const suggested = name.asString();
+        files->download(*ref, {},
+                        [directory = _downloads, suggested = suggested == nullptr ? std::string{} : *suggested,
+                         done = std::move(done)](std::expected<ui::DownloadedFile, std::string> got) {
+                            if (!got) {
+                                done(std::unexpected(got.error()));
+                                return;
+                            }
+                            // Only the name's last component: a file never lands outside the downloads directory.
+                            auto const leaf =
+                                std::filesystem::path{suggested.empty() ? got->name : suggested}.filename();
+                            auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);
+                            std::ofstream out{target, std::ios::binary};
+                            out.write(got->bytes.data(), static_cast<std::streamsize>(got->bytes.size()));
+                            if (!out) {
+                                done(std::unexpected("cannot write " + target.string()));
+                                return;
+                            }
+                            done(ui::Value{target.string()});
+                        });
+        return true;
+    }
 
     // The reply's `principal`, when it names one and does not say `ok: false`.
     bool signIn(ui::Value const& reply) override {
@@ -62,6 +143,7 @@ public:
 
 private:
     ClientSource* _source;
+    std::filesystem::path _downloads;
 };
 
 class Shell final : public ui::MountedShell {
@@ -114,7 +196,7 @@ public:
             return found == _documents.end() ? nullptr : found->second;
         };
         hostOptions.backend = _backend;
-        _application = std::make_unique<Application>(source);
+        _application = std::make_unique<Application>(source, _options.downloads);
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(

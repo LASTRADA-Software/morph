@@ -9,12 +9,14 @@
 
 #include <app/app_source.hpp>
 #include <app/client_shell.hpp>
+#include <atomic>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
@@ -27,9 +29,11 @@
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -136,7 +140,8 @@ public:
             ClientShellOptions{.startScreen = std::move(screenId),
                                .startParams = std::move(params),
                                .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
-                               .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); }});
+                               .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); },
+                               .downloads = _downloads});
         if (_mounted.empty()) {
             throw std::runtime_error{"ScreenHarness: no screen mounted" +
                                      (_problems.empty() ? std::string{} : ": " + _problems.front())};
@@ -146,6 +151,8 @@ public:
     ~ScreenHarness() {
         _shell.reset();
         _source->close();
+        std::error_code ignored;
+        std::filesystem::remove_all(_downloads, ignored);
     }
     ScreenHarness(ScreenHarness const&) = delete;
     ScreenHarness& operator=(ScreenHarness const&) = delete;
@@ -155,6 +162,10 @@ public:
     /// @brief The widgets.
     /// @return The backend.
     [[nodiscard]] ui::testing::RecordingBackend& backend() noexcept { return _backend; }
+
+    /// @brief Where a screen's downloads are saved: a directory of this harness's own, removed with it.
+    /// @return It.
+    [[nodiscard]] std::filesystem::path const& downloads() const noexcept { return _downloads; }
 
     /// @brief Every problem reported so far: a document that did not load, a refused mount, a diagnostic.
     /// @return The problems, in order.
@@ -198,11 +209,33 @@ public:
     /// @param testId The test id.
     void toggle(std::string_view testId) { _backend.toggle(require("Checkbox", testId)); }
 
-    /// @brief Selects tab @p index of the tab bar with @p testId, which mounts its page the first time.
+    /// @brief Selects tab @p index of the tab bar with @p testId. The bar marks the pick at once; the page is mounted,
+    ///        the first time, and shown when the screen next settles, which `shownUnder` tells.
     /// @param testId The tab bar's test id.
     /// @param index  The tab, from 0.
     void selectTab(std::string_view testId, std::size_t index) {
         _backend.chooseIndex(require("Tabs", testId), index);
+    }
+
+    /// @brief Whether @p widget is under @p root with nothing hidden between them, itself included: what a user sees.
+    /// @param root   The container to look from.
+    /// @param widget The widget.
+    /// @return Whether it is there and shown.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the container, then the widget inside it.
+    [[nodiscard]] bool shownUnder(int root, int widget) const {
+        std::vector<std::pair<int, bool>> pending{{root, true}};
+        while (!pending.empty()) {
+            auto const [current, shownSoFar] = pending.back();
+            pending.pop_back();
+            bool const shown = shownSoFar && _backend.prop(current, "visible") != "false";
+            if (current == widget) {
+                return shown;
+            }
+            for (int const child : _backend.children(current)) {
+                pending.emplace_back(child, shown);
+            }
+        }
+        return false;
     }
 
     /// @brief Chooses the option @p key in the select with @p testId.
@@ -348,6 +381,16 @@ private:
     ui::testing::RecordingBackend _backend;
     std::unique_ptr<ClientSource> _source;
     std::unique_ptr<ui::MountedShell> _shell;
+    // One directory per harness, so two tests never read each other's downloads.
+    std::filesystem::path _downloads = [] {
+        static std::atomic<int> made{0};
+        // Unique across processes too: ctest runs several test binaries at once.
+        static unsigned const run = std::random_device{}();
+        auto directory = std::filesystem::temp_directory_path() /
+                         ("morph-harness-downloads-" + std::to_string(run) + "-" + std::to_string(made++));
+        std::filesystem::create_directories(directory);
+        return directory;
+    }();
     std::vector<std::string> _problems;
     std::vector<std::string> _mounted;
 };

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <expected>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <morph/ui/backend.hpp>
@@ -29,6 +30,9 @@ struct ClientShellOptions {
     std::function<void(std::string const& problem)> onProblem;
     /// @brief Called with the id of each screen once it is mounted.
     std::function<void(std::string const& screenId)> onMounted;
+    /// @brief Where a screen's `download` saves a file, under the name the screen suggests; the working directory
+    ///        when empty.
+    std::filesystem::path downloads;
 };
 
 /// @brief Mounts the client's shell for what @p source delivered.

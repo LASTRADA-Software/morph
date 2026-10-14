@@ -112,6 +112,11 @@ public:
     ///         cannot adopt a bare principal.
     virtual bool adoptPrincipal(std::string principal);
 
+    /// @brief The file side channel (`files/1`) over the source's exchange, carrying its session: what a screen's
+    ///        `upload` and `download` move bytes through.
+    /// @return It, or nothing before the source is open.
+    [[nodiscard]] std::optional<ui::FileTransfer> files() const;
+
     /// @brief The principal before any sign-in, which `signOut` returns to.
     /// @return It; empty for none.
     [[nodiscard]] virtual std::string signedOutPrincipal() const { return {}; }
