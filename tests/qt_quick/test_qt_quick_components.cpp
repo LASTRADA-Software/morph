@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
@@ -78,6 +79,23 @@ Shown show(Scene& scene, CustomRequest const& request) {
     }
     scene.settle();
     return shown;
+}
+
+// The first item under @p root, depth first, that @p matches; null when none does.
+// NOLINTNEXTLINE(misc-no-recursion): one level per nesting of the scene's items.
+QQuickItem* findItem(QQuickItem* root, std::function<bool(QQuickItem const&)> const& matches) {
+    if (root == nullptr) {
+        return nullptr;
+    }
+    if (matches(*root)) {
+        return root;
+    }
+    for (QQuickItem* const child : root->childItems()) {
+        if (QQuickItem* const found = findItem(child, matches)) {
+            return found;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -216,4 +234,54 @@ TEST_CASE("qt_quick components: a restyle maps a kind to a component that declar
     // A kind without a restyle keeps its MorphUi component.
     auto text = scene.backend().createText(nullptr);
     CHECK_FALSE(Scene::itemOf(*text).property("brand").isValid());
+}
+
+// Mutation: mount the fallback without asking the backend (the bundle component is never shown).
+TEST_CASE(
+    "qt_quick components: a custom node mounted through the view tree shows its component, with its props "
+    "bound and its events handed back",
+    "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    components.addBundle("Chart", kChart, digestOf(kChart));
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    std::vector<std::pair<std::string, std::string>> events;
+    // The props are appended one at a time: copying a `CustomProp` out of a braced initializer list makes GCC 15 at
+    // -O2 report the `std::function` inside a `Prop` as maybe uninitialized.
+    auto node = [&events](std::string name) {
+        ui::Custom custom{.name = std::move(name),
+                          .fallback = ui::text({.text = "fallback", .common = {.testId = "fallback"}}),
+                          .props = {},
+                          .minVersion = 0,
+                          .onEvent = [&events](std::string const& event, std::string const& payload) {
+                              events.emplace_back(event, payload);
+                          }};
+        custom.props.push_back(ui::CustomProp{.name = "title", .value = ui::Prop<std::string>{"Trend"}});
+        custom.props.push_back(ui::CustomProp{.name = "limit", .value = ui::Prop<std::string>{"12.50"}});
+        custom.props.push_back(ui::CustomProp{.name = "live", .value = ui::Prop<bool>{true}});
+        custom.props.push_back(ui::CustomProp{.name = "zoom", .value = ui::Prop<double>{2.5}});
+        return ui::custom(std::move(custom));
+    };
+    {
+        ui::Mounted const mounted{scene.runtime(), scene.backend(), node("Chart")};
+        scene.settle();
+        CHECK(reported.empty());
+        QQuickItem* const root = scene.window().contentItem();
+        CHECK(findItem(root, [](QQuickItem const& candidate) { return candidate.objectName() == "fallback"; }) ==
+              nullptr);
+        QQuickItem* const item = findItem(
+            root, [](QQuickItem const& candidate) { return candidate.property("title").toString() == "Trend"; });
+        REQUIRE(item != nullptr);
+        CHECK(item->property("limit").toString() == QStringLiteral("12.50"));
+        CHECK(item->property("live").toBool());
+        CHECK(item->property("zoom").toDouble() == 2.5);
+        QMetaObject::invokeMethod(item, "pick", Q_ARG(QVariant, QStringLiteral("i:7")));
+        CHECK(events == std::vector<std::pair<std::string, std::string>>{{"pointSelected", "i:7"}});
+    }
+    {
+        ui::Mounted const mounted{scene.runtime(), scene.backend(), node("Missing")};
+        scene.settle();
+        CHECK(findItem(scene.window().contentItem(),
+                       [](QQuickItem const& candidate) { return candidate.objectName() == "fallback"; }) != nullptr);
+    }
 }

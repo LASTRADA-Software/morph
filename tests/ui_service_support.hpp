@@ -53,7 +53,7 @@ inline constexpr std::string_view kApp = R"({"vocab":"ui/1","id":"app","models":
 inline constexpr std::string_view kChart = "Rectangle { color: \"teal\" }";
 
 /// A theme.
-inline constexpr std::string_view kTheme = R"({"vocab":"ui-theme/1","accent":"#0a6"})";
+inline constexpr std::string_view kTheme = R"({"color":{"accent":{"$type":"color","$value":"#00aa66"}}})";
 
 /// Refuses, per principal, the (model type, action) pairs a test names; allows everything else.
 struct RuleAuthorizer final : morph::session::IAuthorizer {

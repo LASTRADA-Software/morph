@@ -20,8 +20,10 @@
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
 #include "bundle.hpp"
+#include "catalogue.hpp"
 #include "document.hpp"
 #include "file_store.hpp"
+#include "theme.hpp"
 #include "value.hpp"
 
 /// @file
@@ -354,7 +356,9 @@ public:
     ///        message catalogue (`messages`) or a delivered component (`component`).
     ///
     /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
-    /// and an app document that load-time validation refuses or whose id is not `app`.
+    /// an app document that load-time validation refuses or whose id is not `app`, a message catalogue whose id is
+    /// not `i18n/LOCALE.json`, that `parseCatalogue` refuses, or that has a pattern outside the `ui/1` subset, and a
+    /// theme file that is neither a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes.
     /// @param file The file.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> addFile(BundleFile file) {
@@ -376,17 +380,8 @@ public:
         if (auto reason = detail::checkServable(file.bytes)) {
             return refuse(file.id, std::move(*reason));
         }
-        if (file.kind == kAppFile) {
-            auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
-            if (!loaded) {
-                return std::unexpected(std::move(loaded.error()));
-            }
-            if (loaded->id != kAppFile) {
-                return refuse(file.id, "the app document's id is `app`");
-            }
-            detail::DocumentActions const named{*loaded};
-            _appActions = named.actions();
-            _appModelTypes = named.modelTypes();
+        if (auto added = addKind(file); !added) {
+            return added;
         }
         _files.push_back(std::move(file));
         return {};
@@ -418,6 +413,22 @@ public:
     }
 
 private:
+    /// @brief Checks every theme index: each combination of its variants, densities and surfaces over `base`
+    ///        resolves from the bundle's token files (`checkTheme`).
+    /// @return The refusal, naming the index and the combination, or nothing.
+    [[nodiscard]] std::optional<Refusal> checkThemes() const {
+        TokenFileLookup const lookup = [this](std::string_view fileId) -> TokenSet const* {
+            auto const found = _tokenFiles.find(fileId);
+            return found == _tokenFiles.end() ? nullptr : &found->second;
+        };
+        for (auto const& [indexId, index] : _themeIndexes) {
+            if (auto reason = checkTheme(index, lookup)) {
+                return Refusal{.document = indexId, .path = {}, .reason = "the theme: " + std::move(*reason)};
+            }
+        }
+        return std::nullopt;
+    }
+
     /// @brief A registered screen and what `build` needs of its document.
     struct Screen {
         /// @brief What the bundle serves.
@@ -427,6 +438,65 @@ private:
         /// @brief The delivered components the document names: their `qml` pointer and hash.
         std::vector<std::pair<std::string, std::string>> components;
     };
+
+    // The checks and the indexing one kind of file adds to addFile's common ones.
+    std::expected<void, Refusal> addKind(BundleFile const& file) {
+        if (file.kind == kMessagesFile) {
+            return checkCatalogue(file);
+        }
+        if (file.kind == kThemeFile) {
+            return addTheme(file);
+        }
+        if (file.kind == kAppFile) {
+            return addApp(file);
+        }
+        return {};
+    }
+
+    [[nodiscard]] static std::expected<void, Refusal> checkCatalogue(BundleFile const& file) {
+        if (!catalogueLocale(file.id)) {
+            return refuse(file.id, "a message catalogue's id is i18n/<locale>.json");
+        }
+        auto catalogue = parseCatalogue(file.bytes);
+        if (!catalogue) {
+            return refuse(file.id, std::move(catalogue.error()));
+        }
+        if (!catalogue->dropped.empty()) {
+            return refuse(file.id, "a message is outside the ui/1 subset: " + catalogue->dropped.front());
+        }
+        return {};
+    }
+
+    std::expected<void, Refusal> addTheme(BundleFile const& file) {
+        if (isThemeIndex(file.bytes)) {
+            auto index = parseThemeIndex(file.bytes);
+            if (!index) {
+                return refuse(file.id, "the theme index: " + index.error());
+            }
+            _themeIndexes.emplace_back(file.id, std::move(*index));
+            return {};
+        }
+        auto tokens = parseTokens(file.bytes);
+        if (!tokens) {
+            return refuse(file.id, "the token file: " + tokens.error());
+        }
+        _tokenFiles.emplace(file.id, std::move(*tokens));
+        return {};
+    }
+
+    std::expected<void, Refusal> addApp(BundleFile const& file) {
+        auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
+        if (!loaded) {
+            return std::unexpected(std::move(loaded.error()));
+        }
+        if (loaded->id != kAppFile) {
+            return refuse(file.id, "the app document's id is `app`");
+        }
+        detail::DocumentActions const named{*loaded};
+        _appActions = named.actions();
+        _appModelTypes = named.modelTypes();
+        return {};
+    }
 
     /// @brief A refusal of the registration of @p document.
     /// @param document The screen or file id.
@@ -450,9 +520,13 @@ private:
         return std::nullopt;
     }
 
-    /// @brief What `build` refuses: a delivered component missing from the bundle, and the bounds.
+    /// @brief What `build` refuses: a delivered component missing from the bundle, a theme some combination of which
+    ///        does not resolve, and the bounds.
     /// @return The refusal, or nothing.
     [[nodiscard]] std::optional<Refusal> checkBuildable() const {
+        if (auto refusal = checkThemes()) {
+            return refusal;
+        }
         std::set<std::string, std::less<>> componentHashes;
         for (BundleFile const& file : _files) {
             if (file.kind == kComponentFile) {
@@ -549,6 +623,10 @@ private:
     Catalog _catalog;
     std::vector<Screen> _screens;
     std::vector<BundleFile> _files;
+    /// @brief The theme indexes added, by file id, as `addFile` parsed them.
+    std::vector<std::pair<std::string, ThemeIndex>> _themeIndexes;
+    /// @brief The theme token files added, by file id, as `addFile` parsed them.
+    std::map<std::string, TokenSet, std::less<>> _tokenFiles;
     std::vector<ActionRef> _appActions;
     std::vector<std::string> _appModelTypes;
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};

@@ -138,6 +138,9 @@ public:
 }
 ```
 
+- On Qt Quick, `DocumentScreenHost` over a `qt_quick::Backend` is the renderer as a `ScreenHost`: a mounted
+  screen's root item is `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which the host reparents into its
+  own layout, and `mountInto` mounts a screen into a container the host made with the backend.
 - `qt_quick::Renderer` (spec 3 §1) implements `ScreenHost` over a connected source and exposes each
   mounted screen's root `QQuickItem` beside its handle. The host places the item wherever its shell
   wants it. `onNavigate` is called by the renderer and implemented by the host.
@@ -154,7 +157,9 @@ The bundle may carry one **app document** (id `app`) with `state`, `let`, `queri
 `{"ref": "app.name"}` and may write its `state` with `{"set": "app.name", ...}`.
 
 Its use is what no single screen owns: lookup lists loaded once per session (analysis
-methods, clients, units), the current tenant, a connection banner.
+methods, clients, units), the current tenant, a connection banner. It is mounted with
+`Interpreter::mountApp` as an `AppRoot`, and a host destroys its screens before the root
+(`docs/spec/ui/interpreter.md`, "The app root scope").
 
 Two expression forms read the client and the session:
 
@@ -195,7 +200,8 @@ The look of an application is data first.
 application ships its own. A token file is a **Design Tokens Community Group format** document
 (version 2025.10): each token is an object with `$value` and `$type`, groups nest, and a value may
 alias another token as `"{color.accent}"`. A design tool's export is therefore a theme without a
-converter. The bundle lists the files that make up each variant:
+converter. The bundle's theme index, a `theme` file of its own told apart from a token file by its string
+`vocab`, lists the files that make up each variant (`docs/spec/ui/theme.md`):
 
 ```json
 "theme": { "vocab": "ui-theme/1",
@@ -218,8 +224,10 @@ converter. The bundle lists the files that make up each variant:
   aliases; an alias cycle or an alias to a missing token refuses the theme when the bundle is
   registered. Composite DTCG types (`shadow`, `typography`, `border`) are accepted; a `$type` the
   client does not know is ignored with the token.
-- The token paths are the closed set `ui-theme/1` defines (`color.surface`, `space.2`,
-  `control.height`, …); an unknown path is ignored, a missing one takes the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
+- The token paths are the closed set `ui-theme/1` defines: the colour roles the components read
+  (`color.surface`, `color.text`, `color.accent`, `color.focus`, …), the semantic sets below and
+  `opacity.stale`; the scale tokens (`space.2`, `control.height`, …) join it with the components that
+  read them. An unknown path is ignored, a missing one takes the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
   `Theme` singleton, so every generated screen and every host component sees the same values.
 - `{"pref": "density"}` (spec 5 §12b) selects a `density` variant at runtime.
 - The terminal renderer maps colour roles to its palette and ignores the scale.
@@ -323,9 +331,11 @@ are the catalog entry's (§8).
 - **Window chrome** (title bar, window controls, user menu) is the host's: the shell is an item the
   host places in its own window. The generic client supplies a plain default.
 
-The shell is a document-free framework component, in `include/morph/forms/engine/workspace.hpp`
-beside `app_shell.hpp`: its state is reactive nodes (spec 1), its view is a view tree (spec 1 §5),
-and it mounts screens through the same `ScreenHost` an embedding host uses.
+The shell is a document-free framework component, `ui::Workspace` in `include/morph/ui/workspace.hpp`
+(`docs/spec/ui/workspace.md`): it needs only the host contract, the view backend and the catalog's
+facts, none of the forms engine. Its state is reactive nodes (spec 1); it drives a `TabsWidget` itself,
+one page slot per tab, because the view tree's `Tabs` fixes its pages at mount; and it mounts screens
+into those pages through `DocumentScreenHost::mountInto`.
 
 ## 8. Preferences and catalog
 
@@ -341,6 +351,12 @@ as well as on a screen. Two point kinds are added:
 the ids. It orders and hides what the document declares and never positions or sizes anything, so
 free layout editing stays out of scope (spec 5 §15).
 
+**Open: where `arrange` is declared.** The app document has no view, so an app-scope `arrange`
+point's `of` names a node of no document, while the container it orders is the overview screen's.
+Either `arrange` is a screen-scope kind, declared by the overview screen and checked like `columns`,
+or its `of` names the screen as well as the node. Until that is decided, `arrange` is parsed and
+stored like any point and not applied.
+
 **Storage seam.**
 
 ```cpp
@@ -348,11 +364,15 @@ struct PrefKey { std::string person, app, scope /* screen id or "app" */, point;
 class IPreferencesStore {
 public:
     virtual async::Completion<std::optional<std::string>> get(PrefKey const&) = 0;   // JSON text
-    virtual async::Completion<void> set(PrefKey const&, std::string json) = 0;
-    virtual async::Completion<void> remove(PrefKey const&) = 0;                      // reset to the defaults
+    virtual async::Completion<bool> set(PrefKey const&, std::string json) = 0;       // stored
+    virtual async::Completion<bool> remove(PrefKey const&) = 0;                      // an entry was there
     virtual ~IPreferencesStore() = default;
 };
 ```
+
+- A store owns the executor its completions are delivered on. The framework's store is in memory, on its own
+  strand; the preferences model (`morph.preferences`, actions `load`, `set`, `remove`) is registered explicitly
+  with the store it uses (`docs/spec/ui/preferences.md`).
 
 - `person` is derived on the server from the verified principal. The request carries no person: the
   authoriser sees only the model and the action, never the body, so the preferences model itself
@@ -364,6 +384,7 @@ public:
 - A stored value has a size bound, applied before it is written.
 - An absent entry is the document's default, never an error. A stored entry that no longer fits its
   point is ignored (spec 5 §12b).
+- Without a verified principal there is no person: nothing is read, and a write is refused.
 
 **Catalog entries** (spec 5 §12) carry what a navigator needs:
 
@@ -402,9 +423,12 @@ document side:
   `backendSwitchFailed` to the `onError` path of the command that asked for it.
 - A call in flight on the old backend is rejected with `BackendChangedError`, which has the error
   kind `backendChanged` (§10).
-- Order in the interpreter: the switch commits; the queries on private aliases are held idle; each
-  mounted screen's `onBackendChange` runs; then the held queries run their fetch and the others
-  refetch, in one batch; `{"env": "backend"}` and `{"env": "online"}` publish with it. A query on a
+- Order in the interpreter: the switch commits (`InterpreterHost::switchBackend` calls its `done`);
+  each mounted screen's and the app root's `onBackendChange` runs; then every query refetches, in
+  the same batch; `{"env": "backend"}` publishes with it, and `{"env": "online"}` stays the host's
+  to publish. Running every `onBackendChange` before any refetch in one batch is what holds the
+  queries on private aliases: none fetches against the empty new instance before its screen has
+  recovered. A query on a
   private alias therefore never fetches against the empty new instance.
 - A private model instance does not survive a switch. A screen holding an open record reloads it in
   `onBackendChange`, from state it keeps, and decides what the user is told about edits the old
@@ -668,25 +692,32 @@ framework's claims in this spec are tested against it, not against a description
 An application has commands and values no document can define: restart the process, open a path in
 the operating system, a count the application's own sync engine keeps. They are registered by the
 application executable, named and typed, and declared to the server in the handshake exactly as host
-components are (§6):
+components are (§6). The registry is `morph::ui::HostVocabulary`, with no toolkit, so the terminal client has it
+too (`docs/spec/ui/host_vocabulary.md`):
 
 ```cpp
-qt_quick::HostCommands::add({ .name = "restartApp", .version = 1, .args = {}, .safeForUntrusted = false });
-qt_quick::HostCommands::add({ .name = "openPath", .version = 1, .args = { {"path", "string"} },
-                              .safeForUntrusted = false });
-qt_quick::HostValues::add({ .name = "sync.needsYouCount", .version = 1, .type = "int", .signal = &syncNeedsYou });
+morph::ui::HostVocabulary host;
+host.add(HostCommand{ .name = "restartApp", .version = 1, .args = {}, .safeForUntrusted = false, .run = restart });
+host.add(HostCommand{ .name = "openPath", .version = 1, .args = { {"path", "string"} },
+                      .safeForUntrusted = false, .run = openPath });
+host.add(HostValue{ .name = "sync.needsYouCount", .version = 1, .type = "int", .initial = Value{std::int64_t{0}} });
+host.connect(session);                 // values, `can` names and the runner
+host.set("sync.needsYouCount", n);     // a binding on the value updates
 ```
 
-- **Use in a document.** The command `{"host": "openPath", "args": {"path": e}}` runs the registered
-  command; the expression `{"host": "sync.needsYouCount"}` reads the registered value, which is a
-  `reactive::Signal`, so a binding on it updates. `{"can": "host:openPath"}` is true when the client
+- **Use in a document.** The command `{"host": "openPath", "args": {"obj": {"path": e}}}` runs the
+  registered command (`args` is an expression, so a record literal is written with `obj`); the expression
+  `{"host": "sync.needsYouCount"}` reads the registered value, which the session holds in a reactive signal,
+  so a binding on it updates. `{"can": "host:openPath"}` is true when the client
   has the command, so a document shows a control only where it works.
 - **Arguments are validated** against the declared types before the command runs; a mismatch is a
   reported error, not a call.
 - **Absent is safe.** A command the client lacks is skipped and reported once; a value it lacks reads
   as `null`. A document guards with `can` or with `coalesce`.
 - **Trust.** A command marked `safeForUntrusted: false` runs only from a document that came over a
-  verified connection (spec 5 §13); otherwise it is skipped and reported. A value is read-only and
+  verified connection (spec 5 §13); otherwise it is skipped and reported, and `can` is false for it. The
+  application says the connection is verified (`HostVocabulary::setConnectionVerified`), since nothing in
+  `morph::ui` observes the transport; until then unsafe commands are refused. A value is read-only and
   needs no gate.
 - **`switchBackend`** is not a host command. `{"switchBackend": "local"}` is a `ui/1` command that
   calls `AppSource::switchBackend` (§9) for a backend name the application's `AppSource` lists in
@@ -797,12 +828,17 @@ default. An application section (a logging panel) is a host component, or host v
 
 **Messages.**
 
-- The bundle manifest lists a catalogue per locale, `i18n/<locale>.json`, a flat map of key to a
-  MessageFormat 2 pattern in the subset spec 5 §4 defines, fetched by hash (spec 5 §12) and cached.
+- The bundle manifest lists a catalogue per locale, a `messages` file whose id is `i18n/<locale>.json`, a
+  flat map of key to a MessageFormat 2 pattern in the subset spec 5 §4 defines, fetched by hash (spec 5 §12)
+  and cached. The server refuses a catalogue whose shape or patterns are wrong at registration; the client
+  reads every catalogue once the bundle is verified, leaves out one it cannot use and drops a pattern
+  outside the subset, so a missing message shows its fallback and nothing is parsed first at a `t`
+  (`docs/spec/ui/catalogue.md`).
   Plural and select forms live in the pattern, so a locale with more plural categories adds variants
   in its own catalogue without changing the document. The client's `TranslationProvider` resolves
-  `(key, locale)` from them; `{"env": "locale"}` is the active locale and `{"setLocale": "de"}`
-  changes it, which re-resolves every `t`, and is stored as a preference.
+  `(key, locale)` from them, trying the exact locale and then its language (`de-AT`, then `de`);
+  `{"env": "locale"}` is the active locale and `{"setLocale": "de"}` changes it, which re-resolves
+  every `t`, and is stored as a preference through `InterpreterHost::setLocale`.
 - Keys are authored, `<screen>.<name>`; there are no keys derived from text. Porting a screen keeps
   its source text as the `fallback` and gives it an authored key, so a missing catalogue shows the
   source text.

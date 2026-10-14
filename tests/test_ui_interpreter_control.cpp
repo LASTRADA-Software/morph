@@ -455,7 +455,7 @@ TEST_CASE("interpreter control: a boundary shows loading, then its children, or 
     CHECK(h.text("count") == "2");
     // A refetch of a query that has a value keeps the children.
     h.backend.clearLog();
-    h.session.backendChanged();
+    h.session.backendChanged("primary");
     h.settle();
     CHECK(h.dispatcher.calls.size() == 3);
     CHECK(h.text("count") == "2");

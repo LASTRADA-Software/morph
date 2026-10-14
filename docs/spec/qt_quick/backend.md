@@ -157,7 +157,9 @@ A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size
 `n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
 horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`). A stale field is dimmed; a
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour
-roles every component reads. The style is Qt Quick Controls' `Basic`.
+roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
+tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
+The style is Qt Quick Controls' `Basic`.
 
 ## Components
 
@@ -182,9 +184,8 @@ roles every component reads. The style is Qt Quick Controls' `Basic`.
   version asked for, or lacks a declared prop makes `createCustom` return null, and the caller shows the fallback.
   Each failure is reported once per component and reason, through the callback and `failures()`.
 
-The view tree has no seam yet that would let `Mounted` ask the backend for a custom component instead of its
-fallback, nor a way for the interpreter to pass a `custom` node's props and events: `Backend::createCustom` is ready
-for it, and nothing above calls it yet.
+`createCustom` is `ui::IViewBackend::createCustom`, and `CustomWidget` and `CustomRequest` are the view tree's own
+types: `Mounted` asks for a document's `custom` node here first, binds its props, and shows the fallback only on null.
 
 ## Tests
 
@@ -222,7 +223,7 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- Theme tokens from the bundle (`ui-theme/1`): the `Theme` singleton has fixed colours.
-- Loading a custom component from a document: the view tree's seam (`ui::Custom` carries no props or events).
+- Per-subtree surfaces and a runtime density from theme tokens; the units come from the default font, not the
+  scale tokens.
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

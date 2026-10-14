@@ -41,7 +41,9 @@ TEST_CASE("interpreter permissions: `can` follows the principal's permitted acti
     CHECK(h.text("list") == "false");
     CHECK(h.text("open") == "false");
 
-    h.session.setPermitted({"Lims_Verify", "Lims_ListResults", "host:openPath"});
+    h.session.setPermitted({"Lims_Verify", "Lims_ListResults"});
+    // `host:` names come from the client's own commands, not from the server's permitted set.
+    h.session.setHostCommands(ui::HostCommands{.available = {"openPath"}, .run = {}});
     h.settle();
     CHECK(h.backend.prop(verify, "visible") == "true");
     CHECK(h.backend.prop(capture, "enabled") == "false");

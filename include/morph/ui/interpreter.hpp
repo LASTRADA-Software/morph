@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -236,16 +238,6 @@ public:
         return false;
     }
 
-    /// @brief Moves keyboard focus to an element.
-    /// @param screen  The screen's id.
-    /// @param element The element id.
-    /// @return Whether focus moved.
-    virtual bool focus(std::string const& screen, std::string const& element) {
-        static_cast<void>(screen);
-        static_cast<void>(element);
-        return false;
-    }
-
     /// @brief Runs a command the application registered (`host/1`).
     /// @param name The command.
     /// @param args Its arguments; `null` when none.
@@ -256,11 +248,17 @@ public:
         return false;
     }
 
-    /// @brief Switches to a backend the application's source lists.
+    /// @brief Switches to a backend the application's source lists (`AppSource::switchBackend`, spec 6 §9).
+    ///
+    /// The switch is asynchronous: the host calls @p done once, on the runtime's owner, when it committed or failed.
+    /// A failed switch leaves the old backend in place.
     /// @param name The backend.
+    /// @param done Called once with nothing when the switch committed, or with why it failed. Not called when the
+    ///        backend is not listed.
     /// @return Whether it is listed.
-    virtual bool switchBackend(std::string const& name) {
+    virtual bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) {
         static_cast<void>(name);
+        static_cast<void>(done);
         return false;
     }
 
@@ -577,8 +575,32 @@ struct CacheEntry {
 };
 
 class QueryRuntime;
+class RtScope;
+class ScreenCore;
 
 }  // namespace detail
+
+/// @brief What running a host command (`host/1`) did.
+struct HostCommandResult {
+    /// @brief The outcome.
+    enum class Kind : std::uint8_t {
+        Ran,      ///< The command ran.
+        Missing,  ///< The client has no such command; nothing ran.
+        Refused,  ///< The command exists and did not run: its arguments, or a connection that is not verified.
+    };
+    /// @brief The outcome.
+    Kind kind = Kind::Ran;
+    /// @brief Why it was refused; empty otherwise.
+    std::string reason;
+};
+
+/// @brief The client's host commands, as a session runs them (spec 6 §14).
+struct HostCommands {
+    /// @brief The commands the client can run now; `{"can": "host:name"}` is true for these.
+    std::set<std::string, std::less<>> available;
+    /// @brief Runs a command with its evaluated `args` (`null` when the document gives none).
+    std::function<HostCommandResult(std::string const& name, Value const& args)> run;
+};
 
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, `refreshOn` bookkeeping, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
@@ -597,7 +619,8 @@ public:
           _format{runtime, std::make_shared<FormatContext const>()},
           _env{runtime},
           _sessionValues{runtime},
-          _hostValues{runtime} {}
+          _hostValues{runtime},
+          _hostCommandNames{runtime} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
@@ -613,15 +636,23 @@ public:
     /// @return They.
     [[nodiscard]] SessionOptions const& options() const noexcept { return _options; }
 
-    /// @brief Sets the action ids the principal may run, and the `host:<command>` names the client has, as the
-    ///        catalog reply lists them; `{"can": ...}` follows them.
+    /// @brief Sets the action ids the principal may run, as the catalog reply lists them; `{"can": ...}` follows them.
     /// @param permitted The ids.
     void setPermitted(std::set<std::string, std::less<>> permitted) { _permitted.set(std::move(permitted)); }
 
-    /// @brief Whether the principal may run an action, or the client has a host command. A tracked read.
+    /// @brief Whether the principal may run an action, or the client can run a host command now. A tracked read.
+    ///
+    /// A `host:` name is answered from the client's own commands (`setHostCommands`), never from the server's
+    /// permitted set: the two have different owners, and a catalog refresh must not drop the client's commands.
     /// @param action The action id, or `host:<command>`.
     /// @return Whether it is permitted.
-    [[nodiscard]] bool can(std::string_view action) const { return _permitted.get().contains(action); }
+    [[nodiscard]] bool can(std::string_view action) const {
+        static constexpr std::string_view kHostPrefix = "host:";
+        if (action.starts_with(kHostPrefix)) {
+            return _hostCommandNames.get().contains(action.substr(kHostPrefix.size()));
+        }
+        return _permitted.get().contains(action);
+    }
 
     /// @brief Replaces the formatting facts; every `t` and display function re-evaluates.
     /// @param format The facts.
@@ -639,6 +670,14 @@ public:
         setFormatting(std::move(next));
     }
 
+    /// @brief Replaces the message catalogue, keeping the other formatting facts; every `t` re-resolves.
+    /// @param translations The provider, such as `MessageCatalogues::provider()`; empty shows every fallback.
+    void setTranslations(render::TranslationProvider translations) {
+        FormatContext next = *_format.peek();
+        next.translations = std::move(translations);
+        setFormatting(std::move(next));
+    }
+
     /// @brief Sets the `env` values (`widthClass`, `locale`, `platform`, `online`, `backend`).
     /// @param values The values.
     void setEnvironment(ValueRecord values) { _env.set(std::move(values)); }
@@ -650,6 +689,21 @@ public:
     /// @brief Sets the `host` values the application registered.
     /// @param values The values.
     void setHostValues(ValueRecord values) { _hostValues.set(std::move(values)); }
+
+    /// @brief Sets the client's host commands: the names `{"can": "host:name"}` answers for, and what runs them. A
+    ///        session without a runner asks `InterpreterHost::hostCommand`.
+    /// @param commands The names and the runner.
+    void setHostCommands(HostCommands commands) {
+        _hostCommandRunner = std::move(commands.run);
+        _hostCommandNames.set(std::move(commands.available));
+    }
+
+    /// @brief What runs host commands.
+    /// @return It; empty when the application set none.
+    [[nodiscard]] std::function<HostCommandResult(std::string const&, Value const&)> const& hostCommandRunner()
+        const noexcept {
+        return _hostCommandRunner;
+    }
 
     /// @brief Reads `env`, `session` or `host`. A tracked read.
     /// @param form `Env`, `Session` or `Host`.
@@ -666,6 +720,15 @@ public:
         return found == values.end() ? Value{} : found->second;
     }
 
+    /// @brief The app document's scope, which `{"ref": "app.name"}` reads and `{"set": "app.name"}` writes; set by
+    ///        `Interpreter::mountApp` for as long as the `AppRoot` lives.
+    /// @return It, or `nullptr` when no app document is mounted.
+    [[nodiscard]] detail::RtScope const* appScope() const noexcept { return _appScope; }
+
+    /// @brief Installs or clears the app document's scope. Called by `AppRoot`, nothing else.
+    /// @param scope The scope, or `nullptr`.
+    void setAppScope(detail::RtScope const* scope) noexcept { _appScope = scope; }
+
     /// @brief Drops every cache entry: `signOut` and a principal change (spec 5 §5, "Isolation").
     void clear() {
         _runtime->batch([this] {
@@ -681,8 +744,20 @@ public:
         });
     }
 
-    /// @brief Marks every entry stale and refetches those a mounted query uses: a backend switch (spec 6 §9).
-    void backendChanged();
+    /// @brief Carries out a committed backend switch (spec 6 §9), in one batch: every mounted screen's
+    ///        `onBackendChange` runs first, then every entry is marked stale and the mounted queries refetch, and
+    ///        `{"env": "backend"}` becomes @p backend. A query on a private alias therefore never fetches before its
+    ///        screen has recovered from the switch.
+    /// @param backend The backend now in use.
+    void backendChanged(std::string const& backend);
+
+    /// @brief Registers a mounted screen or app document, whose `onBackendChange` a backend switch runs.
+    /// @param screen It. Borrowed until `detachScreen`.
+    void attachScreen(detail::ScreenCore& screen) { _screens.push_back(&screen); }
+
+    /// @brief Forgets a screen or app document.
+    /// @param screen It.
+    void detachScreen(detail::ScreenCore& screen) { std::erase(_screens, &screen); }
 
     /// @brief Starts a query's request before its screen mounts, so the screen mounts on a warm cache.
     /// @param channel The alias's channel.
@@ -906,6 +981,10 @@ private:
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
     reactive::Signal<ValueRecord> _hostValues;
+    detail::RtScope const* _appScope = nullptr;
+    std::vector<detail::ScreenCore*> _screens;
+    reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
+    std::function<HostCommandResult(std::string const&, Value const&)> _hostCommandRunner;
     std::map<std::string, std::shared_ptr<detail::CacheEntry>, std::less<>> _entries;
     std::vector<detail::QueryRuntime*> _mounted;
     int _userDepth = 0;
@@ -1419,6 +1498,12 @@ public:
     /// @brief Refetches the current key now, ending a debounce wait.
     void refetch();
 
+    /// @brief Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry
+    ///        when it differs from the current one, and fetches the current one otherwise. A backend switch uses it,
+    ///        so a body `onBackendChange` changed is fetched once, with what the recovery set, and the old key is
+    ///        not fetched first.
+    void refetchCurrent();
+
     /// @brief Marks its entry stale and refetches it.
     void invalidate() {
         if (auto const& current = _entry.peek()) {
@@ -1473,6 +1558,8 @@ private:
     reactive::Signal<bool> _waiting;
     Target _target;
     Target _pendingTarget;
+    // The query's key, owned by its scope's nodes; set once `start` made it.
+    reactive::Computed<Target> const* _key = nullptr;
     reactive::TimerHandle _debounce;
     reactive::TimerHandle _refresh;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
@@ -1660,13 +1747,30 @@ public:
         }
         prefDefaults = defaults;
         prefs.set(std::move(defaults));
+        session.attachScreen(*this);
     }
 
     ScreenCore(ScreenCore const&) = delete;
     ScreenCore& operator=(ScreenCore const&) = delete;
     ScreenCore(ScreenCore&&) = delete;
     ScreenCore& operator=(ScreenCore&&) = delete;
-    ~ScreenCore() = default;
+    /// @brief Takes the screen off the session, so a later backend switch does not run its `onBackendChange`.
+    ~ScreenCore() { session.detachScreen(*this); }
+
+    /// @brief Runs a lifecycle list in the document's own scope, as a screen's or app document's own command list.
+    /// @param key The lifecycle key, such as `onBackendChange`.
+    void runLifecycleOf(std::string_view key) {
+        auto const found = _doc->lifecycle.find(key);
+        auto const scope = rootScope.lock();
+        if (found == _doc->lifecycle.end() || !scope) {
+            return;
+        }
+        CommandCtx const ctx{.scope = scope,
+                             .bindings = std::make_shared<Bindings>(),
+                             .cancelClose = std::make_shared<bool>(false),
+                             .boundary = nullptr};
+        runList(found->second, ctx, {});
+    }
 
     /// @brief The document.
     /// @return It.
@@ -1794,6 +1898,9 @@ public:
     InterpreterHost* host;
     /// @brief The diagnostic callback.
     std::function<void(Refusal const&)> onDiagnostic;
+    /// @brief Moves focus to a mounted element by its id; empty until the screen is mounted, and again once it is
+    ///        unmounting.
+    std::function<bool(std::string_view)> focusElement;
     /// @brief The models the opener lends.
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The screen scope's reactive depth.
@@ -1815,6 +1922,8 @@ public:
     /// @brief Counts pending work in or out.
     /// @param delta What started (positive) or ended (negative).
     void addPending(int delta) { pendingWork.set(pendingWork.peek() + delta); }
+    /// @brief The document's own scope, once mounted.
+    std::weak_ptr<RtScope> rootScope;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
@@ -1845,6 +1954,9 @@ private:
                       std::set<std::string, std::less<>>& seen);
     void runMutation(Command const& command, CommandCtx const& ctx, Done done) const;
     void runSet(Command const& command, CommandCtx const& ctx, Done const& done);
+    void runSetApp(Command const& command, std::span<std::string const> rest, Value value, Done const& done);
+    void writeSlot(StateSlot& slot, std::span<std::string const> within, Value value, Command const& command,
+                   Done const& done);
     void runReset(Command const& command, CommandCtx const& ctx, Done const& done);
     void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
@@ -1904,6 +2016,7 @@ public:
             }
         } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
         }
+        _core->focusElement = {};
         _mounted.reset();
         _scope.reset();
     }
@@ -2011,6 +2124,10 @@ public:
         return true;
     }
 
+    /// @brief The screen's document, whose `customize` block names the points a preferences store loads.
+    /// @return It.
+    [[nodiscard]] Document const& document() const noexcept { return _core->doc(); }
+
     /// @brief What an alias of this screen lends to a screen it opens that borrows it.
     /// @param alias The alias.
     /// @return Its channel and token; an empty channel when it has none.
@@ -2059,6 +2176,63 @@ private:
     std::optional<Mounted> _mounted;
 };
 
+/// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
+///
+/// Its state, lets, queries and mutations live once for the session. A screen reads them as `{"ref": "app.name"}`,
+/// a binding on one updates, and `{"set": "app.name", …}` writes the app document's state. A query of the app
+/// document runs once however many screens read it. Destroying the root runs its `onUnmount`, takes its scope off the
+/// session and releases its model instances; a host does that before it clears the session on sign-out.
+class AppRoot {
+public:
+    AppRoot(AppRoot const&) = delete;
+    AppRoot& operator=(AppRoot const&) = delete;
+    AppRoot(AppRoot&&) = delete;
+    AppRoot& operator=(AppRoot&&) = delete;
+
+    /// @brief Runs `onUnmount`, takes the scope off the session, and releases everything.
+    ~AppRoot() {
+        try {
+            if (auto const found = _core->doc().lifecycle.find("onUnmount"); found != _core->doc().lifecycle.end()) {
+                runCommands(found->second);
+            }
+        } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
+        }
+        _core->session.setAppScope(nullptr);
+        _scope.reset();
+    }
+
+    /// @brief Evaluates an expression in the app document's scope.
+    /// @param expression The expression's JSON.
+    /// @return Its value; `null` for an expression that does not parse.
+    [[nodiscard]] Value read(Json const& expression) const {
+        auto parsed = parseExpression(expression);
+        if (!parsed) {
+            return Value{};
+        }
+        return detail::evalIn(*_scope, nullptr, *parsed);
+    }
+
+    /// @brief The diagnostics reported so far.
+    /// @return They.
+    [[nodiscard]] std::vector<Refusal> const& diagnostics() const noexcept { return _core->diagnostics; }
+
+private:
+    friend class Interpreter;
+
+    AppRoot() = default;
+
+    void runCommands(Commands const& commands) {
+        detail::CommandCtx const ctx{.scope = _scope,
+                                     .bindings = std::make_shared<detail::Bindings>(),
+                                     .cancelClose = std::make_shared<bool>(false),
+                                     .boundary = nullptr};
+        _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
+    }
+
+    std::unique_ptr<detail::ScreenCore> _core;
+    std::shared_ptr<detail::RtScope> _scope;
+};
+
 /// @brief Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.
 class Interpreter {
 public:
@@ -2085,6 +2259,13 @@ public:
                                                                         IViewBackend& backend,
                                                                         MountOptions const& options = {});
 
+    /// @brief Mounts the app document as the session's root scope (spec 6 §5).
+    ///
+    /// Refused: a document whose id is not `app`, and a second app document while one is mounted on the session.
+    /// @param doc The app document, loaded.
+    /// @return The root, or the refusal. Keep it as long as the session's screens may read `app.*`.
+    [[nodiscard]] std::expected<std::unique_ptr<AppRoot>, Refusal> mountApp(std::shared_ptr<Document const> doc);
+
 private:
     Session* _session;
     Dispatcher* _dispatcher;
@@ -2095,15 +2276,24 @@ private:
 // Implementation
 // ---------------------------------------------------------------------------------------------------------------
 
-inline void Session::backendChanged() {
-    _runtime->batch([this] {
+inline void Session::backendChanged(std::string const& backend) {
+    _runtime->batch([this, &backend] {
+        std::vector<detail::ScreenCore*> const screens = _screens;
+        for (detail::ScreenCore* const screen : screens) {
+            if (std::ranges::find(_screens, screen) != _screens.end()) {
+                screen->runLifecycleOf("onBackendChange");
+            }
+        }
+        ValueRecord env = _env.peek();
+        env.insert_or_assign("backend", Value{backend});
+        _env.set(std::move(env));
         for (auto const& [key, entry] : _entries) {
             static_cast<void>(key);
             entry->stale = true;
         }
         std::vector<detail::QueryRuntime*> const mounted = _mounted;
         for (detail::QueryRuntime* const query : mounted) {
-            query->invalidate();
+            query->refetchCurrent();
         }
     });
 }
@@ -2206,7 +2396,15 @@ inline bool RtScope::ready() const {
     return true;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): an `app.` name is read in the root scope with its head consumed, once per segment.
 inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> path) const {
+    if (head == "app") {
+        RtScope const* const app = _scope->core.session.appScope();
+        if (app == nullptr || path.empty()) {
+            return Value{};
+        }
+        return ScopeEnv{*app, nullptr}.ref(path.front(), path.subspan(1));
+    }
     if (_bindings != nullptr) {
         for (Binding const& bound : std::views::reverse(*_bindings)) {
             if (bound.name == head) {
@@ -2364,6 +2562,7 @@ inline void QueryRuntime::start() {
         target.body = std::move(body);
         return target;
     });
+    _key = &key;
     reactive::Scheduler* const scheduler = scope.core.session.options().scheduler;
     std::weak_ptr<bool> const alive = _alive;
     scope.nodes.effect([this, &key, scheduler, alive, first = true]() mutable {
@@ -2443,6 +2642,25 @@ inline void QueryRuntime::refetch() {
         }
         auto const current = _entry.peek();
         if (current && !(switched && current->pending.peek())) {
+            _scope->core.session.fetch(current, channel());
+        }
+    });
+}
+
+inline void QueryRuntime::refetchCurrent() {
+    if (_key == nullptr) {
+        refetch();
+        return;
+    }
+    _scope->core.runtime().batch([this] {
+        _debounce.cancel();
+        _waiting.set(false);
+        Target const target = _key->peek();
+        if (!(_entry.peek() && target == _target)) {
+            switchTo(target);
+            return;
+        }
+        if (auto const current = _entry.peek(); current && !current->pending.peek()) {
             _scope->core.session.fetch(current, channel());
         }
     });
@@ -3410,20 +3628,38 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                        : unsupported(command, "`return`"));
             return;
         case CommandKind::Focus:
-            finish(host != nullptr && host->focus(_doc->id, command.target) ? true : unsupported(command, "`focus`"));
+            if (focusElement && focusElement(command.target)) {
+                finish(true);
+                return;
+            }
+            report(command.path, "`" + command.target + "` is not mounted");
+            finish(false);
             return;
         case CommandKind::Host:
             runHostCommand(command, ctx, done);
             return;
-        case CommandKind::SwitchBackend:
-            if (host != nullptr && host->switchBackend(command.target)) {
-                session.backendChanged();
-                finish(true);
+        case CommandKind::SwitchBackend: {
+            std::weak_ptr<RtScope> const weak = ctx.scope;
+            auto committed = [this, weak, target = command.target, path = command.path,
+                              done](std::expected<void, std::string> const& outcome) {
+                if (!weak.lock()) {
+                    return;
+                }
+                if (!outcome) {
+                    report(path, "backendSwitchFailed: " + outcome.error());
+                    done(false);
+                    return;
+                }
+                session.backendChanged(target);
+                done(true);
+            };
+            if (host != nullptr && host->switchBackend(command.target, std::move(committed))) {
                 return;
             }
             report(command.path, "backend `" + command.target + "` is not listed");
             finish(false);
             return;
+        }
         case CommandKind::ResetPrefs: {
             ValueRecord prefsNow = prefs.peek();
             if (command.target == "all") {
@@ -3630,39 +3866,57 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
 }
 
 // NOLINTEND(misc-no-recursion)
+inline void ScreenCore::writeSlot(StateSlot& slot, std::span<std::string const> within, Value value,
+                                  Command const& command, Done const& done) {
+    slot.scope->core.initState(*slot.scope, slot);
+    Type const& type = slot.decl->type;
+    if (within.empty() && !type.isAny() && !type.admits(value)) {
+        report(command.path, "`set` writes a value that is not a " + type.name());
+        done(false);
+        return;
+    }
+    Value next = withPath(slot.value->peek(), within, std::move(value));
+    session.noteWrite();
+    slot.value->set(std::move(next));
+    done(true);
+}
+
+inline void ScreenCore::runSetApp(Command const& command, std::span<std::string const> rest, Value value,
+                                  Done const& done) {
+    if (RtScope const* const app = session.appScope(); app != nullptr && !rest.empty()) {
+        NameRef const* const named = app->find(rest.front());
+        if (named != nullptr && named->category == NameCategory::State) {
+            writeSlot(*named->state, rest.subspan(1), std::move(value), command, done);
+            return;
+        }
+        report(command.path, "`app." + rest.front() + "` is not state of the app document");
+        done(false);
+        return;
+    }
+    std::string name;
+    for (std::string const& segment : rest) {
+        name += name.empty() ? segment : "." + segment;
+    }
+    done(host != nullptr && host->setAppValue(name, value) ? true : unsupported(command, "`set` of `app`"));
+}
+
 inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Done const& done) {
     RtScope const& scope = *ctx.scope;
-    auto finish = [&done](bool succeeded) { done(succeeded); };
     auto path = splitPath(command.target);
     if (!path || path->empty()) {
-        finish(false);
+        done(false);
         return;
     }
     std::string const head = path->front();
     std::span<std::string const> const rest = std::span<std::string const>{*path}.subspan(1);
     Value value = evalIn(scope, ctx.bindings.get(), command.value);
     if (head == "app") {
-        std::string name;
-        for (std::string const& segment : rest) {
-            name += name.empty() ? segment : "." + segment;
-        }
-        finish(host != nullptr && host->setAppValue(name, value) ? true : unsupported(command, "`set` of `app`"));
+        runSetApp(command, rest, std::move(value), done);
         return;
     }
     NameRef const* const found = scope.find(head);
     if (found != nullptr && found->category == NameCategory::State) {
-        StateSlot& slot = *found->state;
-        initState(*slot.scope, slot);
-        Type const& type = slot.decl->type;
-        if (rest.empty() && !type.isAny() && !type.admits(value)) {
-            report(command.path, "`set` writes a value that is not a " + type.name());
-            finish(false);
-            return;
-        }
-        Value next = withPath(slot.value->peek(), rest, std::move(value));
-        session.noteWrite();
-        slot.value->set(std::move(next));
-        finish(true);
+        writeSlot(*found->state, rest, std::move(value), command, done);
         return;
     }
     if (found != nullptr && found->category == NameCategory::Element) {
@@ -3672,11 +3926,11 @@ inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Do
         if (element.bound == nullptr) {
             element.committed.set(std::move(value));
         }
-        finish(true);
+        done(true);
         return;
     }
     report(command.path, "`set` names nothing writable here");
-    finish(false);
+    done(false);
 }
 
 inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, Done const& done) {
@@ -3718,6 +3972,16 @@ inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, 
 
 inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done) {
     Value const args = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
+    if (auto const& run = session.hostCommandRunner()) {
+        HostCommandResult const result = run(command.target, args);
+        if (result.kind == HostCommandResult::Kind::Missing) {
+            report(command.path, "host command `" + command.target + "` is missing");
+        } else if (result.kind == HostCommandResult::Kind::Refused) {
+            report(command.path, result.reason);
+        }
+        done(result.kind == HostCommandResult::Kind::Ran);
+        return;
+    }
     bool const known = host != nullptr && host->hostCommand(command.target, args);
     if (!known) {
         report(command.path, "host command `" + command.target + "` is missing");
@@ -3839,6 +4103,76 @@ namespace detail {
 /// @return Its text.
 [[nodiscard]] inline std::string stringOf(Value const& value, FormatContext const& format) {
     return textOf(value, format);
+}
+
+/// @brief A value as a custom component's text prop (spec 5 §10): an `int` or `exact` as plain decimal text, so no
+///        id or amount loses precision; `json` as its JSON text; `string` as the formatted text.
+/// @param value  The value.
+/// @param type   The prop type the component declares.
+/// @param format The formatting facts, for `string`.
+/// @return The text.
+[[nodiscard]] inline std::string componentText(Value const& value, std::string_view type,
+                                               FormatContext const& format) {
+    if (type == "json") {
+        return canonicalJson(value);
+    }
+    if (type == "int" || type == "exact") {
+        if (std::int64_t const* const whole = value.asInt()) {
+            return std::to_string(*whole);
+        }
+        if (Decimal const* const number = value.asDecimal()) {
+            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value));
+        }
+        if (Quantity const* const quantity = value.asQuantity()) {
+            return detail::decimalText(quantity->value,
+                                       static_cast<std::uint32_t>(quantity->value.decimalPlaces.value)) +
+                   " " + quantity->unit;
+        }
+    }
+    return textOf(value, format);
+}
+
+/// @brief A value as a custom component's `number` prop: the one kind that crosses as a double.
+/// @param value The value.
+/// @return It; zero for anything that is not a number.
+[[nodiscard]] inline double componentNumber(Value const& value) {
+    if (std::int64_t const* const whole = value.asInt()) {
+        return static_cast<double>(*whole);
+    }
+    if (Decimal const* const number = value.asDecimal()) {
+        return number->value.toDouble();
+    }
+    if (Quantity const* const quantity = value.asQuantity()) {
+        return quantity->value.toDouble();
+    }
+    return 0.0;
+}
+
+/// @brief A custom component's event payload as a value: `i:<int64>` an `int`, `s:<text>` a `string`, anything else
+///        JSON text read as the event's declared type, and text that is none of those a `string`.
+/// @param payload The payload, as the backend reports it.
+/// @param type    The payload type the component declares; null for an undeclared event.
+/// @return The value.
+[[nodiscard]] inline Value componentPayload(std::string const& payload, Type const* type) {
+    std::string_view const text{payload};
+    if (text.starts_with("i:")) {
+        std::int64_t whole = 0;
+        std::string_view const digits = text.substr(2);
+        char const* const last = std::to_address(digits.end());
+        auto const [end, error] = std::from_chars(std::to_address(digits.begin()), last, whole);
+        if (error == std::errc{} && end == last) {
+            return Value{whole};
+        }
+    }
+    if (text.starts_with("s:")) {
+        return Value{std::string{text.substr(2)}};
+    }
+    if (auto json = parseJson(text); json && type != nullptr) {
+        if (auto value = valueFromJson(*json, *type)) {
+            return std::move(*value);
+        }
+    }
+    return Value{payload};
 }
 
 /// @brief A value as an integer: an `int`, or a decimal truncated toward zero.
@@ -3984,6 +4318,7 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
         common.layout.width = sizingOf(once(ctx, sizing));
     }
     common.testId = std::string{node.name("testId")};
+    common.focusId = node.id;
     common.surface = std::string{node.name("surface")};
     if (ExprPtr const autofocus = node.prop("autofocus")) {
         common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
@@ -5128,7 +5463,46 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});
-    return ui::custom(Custom{.name = name, .fallback = std::move(lowered)});
+    Custom spec{.name = name,
+                .fallback = std::move(lowered),
+                .props = {},
+                .minVersion =
+                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+                .onEvent = {}};
+    // Every declared prop is given, a missing one as its type's empty value: a component lacking one is refused.
+    for (auto const& [prop, type] : component.props) {
+        ExprPtr expr;
+        for (DocNodePtr const& record : node.partList("props")) {
+            if (ExprPtr const given = record->prop(prop)) {
+                expr = given;
+            }
+        }
+        if (type == "bool") {
+            spec.props.push_back(CustomProp{.name = prop, .value = bindProp<bool>(ctx, expr, false, boolOf)});
+        } else if (type == "number") {
+            spec.props.push_back(CustomProp{
+                .name = prop, .value = bindProp<double>(ctx, expr, 0.0, [](Value const& value, FormatContext const&) {
+                                  return componentNumber(value);
+                              })});
+        } else {
+            spec.props.push_back(
+                CustomProp{.name = prop,
+                           .value = bindProp<std::string>(ctx, expr, std::string{},
+                                                          [type](Value const& value, FormatContext const& format) {
+                                                              return componentText(value, type, format);
+                                                          })});
+        }
+    }
+    spec.onEvent = [this, ctx, site = &node, declared = &component](std::string const& event,
+                                                                    std::string const& payload) {
+        Commands const* const commands = site->event("on." + event);
+        if (commands == nullptr) {
+            return;
+        }
+        auto const type = declared->events.find(event);
+        runEvent(commands, ctx, componentPayload(payload, type == declared->events.end() ? nullptr : &type->second));
+    };
+    return ui::custom(std::move(spec));
 }
 
 inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
@@ -5218,6 +5592,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
     screen->_core = std::make_unique<detail::ScreenCore>(doc, *_session, *_dispatcher, _options, options);
     detail::ScreenCore& core = *screen->_core;
     screen->_scope = std::make_shared<detail::RtScope>(core, nullptr, nullptr, options.depth);
+    core.rootScope = screen->_scope;
     detail::RtScope& scope = *screen->_scope;
     scope.submitted = &core.submitted;
     scope.showErrors = doc->showErrors;
@@ -5254,8 +5629,38 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         return lowered;
     });
     screen->_mounted.emplace(runtime, backend, std::move(root), options.parent, options.depth + 1);
+    screen->_core->focusElement = [mounted = &*screen->_mounted](std::string_view element) {
+        return mounted->focus(element);
+    };
     screen->runLifecycle("onMount");
     return screen;
+}
+
+inline std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shared_ptr<Document const> doc) {
+    if (doc->id != "app") {
+        return std::unexpected(
+            Refusal{.document = doc->id, .path = "/id", .reason = "the app document's id is `app`"});
+    }
+    if (_session->appScope() != nullptr) {
+        return std::unexpected(
+            Refusal{.document = doc->id, .path = {}, .reason = "an app document is already mounted on the session"});
+    }
+    std::unique_ptr<AppRoot> root{new AppRoot{}};
+    root->_core = std::make_unique<detail::ScreenCore>(doc, *_session, *_dispatcher, _options, MountOptions{});
+    detail::ScreenCore& core = *root->_core;
+    root->_scope = std::make_shared<detail::RtScope>(core, nullptr, nullptr, 0);
+    core.rootScope = root->_scope;
+    std::vector<Commands const*> lists;
+    for (auto const& [key, commands] : doc->lifecycle) {
+        static_cast<void>(key);
+        lists.push_back(&commands);
+    }
+    _session->runtime().untracked([&] { core.declare(*root->_scope, &doc->scope, {}, lists); });
+    _session->setAppScope(root->_scope.get());
+    if (auto const found = doc->lifecycle.find("onMount"); found != doc->lifecycle.end()) {
+        root->runCommands(found->second);
+    }
+    return root;
 }
 
 }  // namespace morph::ui

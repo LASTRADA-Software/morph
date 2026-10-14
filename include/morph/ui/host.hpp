@@ -245,21 +245,18 @@ public:
     /// @return Its handle, or why it could not be mounted: an unknown screen, or the interpreter's refusal.
     [[nodiscard]] std::expected<std::unique_ptr<ScreenHandle>, MountError> mount(std::string_view screenId,
                                                                                  ParamMap params) override {
-        std::shared_ptr<Document const> document = _options.documents(screenId);
-        if (!document) {
-            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = "unknown screen"});
-        }
-        auto screen = _interpreter.mount(std::move(document), params, *_options.backend);
-        if (!screen) {
-            std::string reason = screen.error().reason;
-            if (!screen.error().path.empty()) {
-                reason = screen.error().path + ": " + reason;
-            }
-            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = std::move(reason)});
-        }
-        auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard);
-        adoptCall(*handle, screenId, params);
-        return handle;
+        return mountAt(screenId, params, nullptr);
+    }
+
+    /// @brief Mounts a screen as `mount` does, with its root widget appended to @p parent instead of made a backend
+    ///        root: how a shell puts a screen in its own container, such as a tab's page.
+    /// @param screenId The screen id.
+    /// @param params   Its params.
+    /// @param parent   The container; it outlives the handle.
+    /// @return Its handle, or why it could not be mounted.
+    [[nodiscard]] std::expected<std::unique_ptr<ScreenHandle>, MountError> mountInto(
+        std::string_view screenId, ParamMap const& params, ContainerWidget& parent MORPH_LIFETIMEBOUND) {
+        return mountAt(screenId, params, &parent);
     }
 
     /// @brief The identity a document screen would have with @p params: its `identity` evaluated over the params.
@@ -304,6 +301,27 @@ public:
     }
 
 private:
+    // The mount itself, under @p parent or as a backend root.
+    std::expected<std::unique_ptr<ScreenHandle>, MountError> mountAt(std::string_view screenId, ParamMap const& params,
+                                                                     ContainerWidget* parent) {
+        std::shared_ptr<Document const> document = _options.documents(screenId);
+        if (!document) {
+            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = "unknown screen"});
+        }
+        auto screen =
+            _interpreter.mount(std::move(document), params, *_options.backend, MountOptions{.parent = parent});
+        if (!screen) {
+            std::string reason = screen.error().reason;
+            if (!screen.error().path.empty()) {
+                reason = screen.error().path + ": " + reason;
+            }
+            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = std::move(reason)});
+        }
+        auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard);
+        adoptCall(*handle, screenId, params);
+        return handle;
+    }
+
     /// A screen opened to answer its opener (spec 6 §16): answered exactly once, by `return`, by `close: self`, or by
     /// the screen closing any other way, which is a cancel.
     struct Call {
@@ -568,14 +586,11 @@ private:
         handle.answers(call);
         _open.push_back(OpenCall{.call = call, .handle = &handle});
     }
-    bool focus(std::string const& screen, std::string const& element) override {
-        return _options.application != nullptr && _options.application->focus(screen, element);
-    }
     bool hostCommand(std::string const& name, Value const& args) override {
         return _options.application != nullptr && _options.application->hostCommand(name, args);
     }
-    bool switchBackend(std::string const& name) override {
-        return _options.application != nullptr && _options.application->switchBackend(name);
+    bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->switchBackend(name, std::move(done));
     }
     void resetPrefs(std::string const& screen, std::string const& point) override {
         if (_options.application != nullptr) {

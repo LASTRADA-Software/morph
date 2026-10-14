@@ -183,6 +183,8 @@ add_executable(morph_tests
     test_ui_frontend.cpp
     test_ui_conformance.cpp
     test_ui_common.cpp
+    test_ui_custom.cpp
+    test_ui_workspace.cpp
     test_ui_field.cpp
     test_ui_kinds.cpp
     test_ui_value.cpp
@@ -205,11 +207,18 @@ add_executable(morph_tests
     test_ui_bundle.cpp
     test_ui_service.cpp
     test_ui_service_client.cpp
+    test_ui_app_root.cpp
+    test_ui_backend_switch.cpp
+    test_ui_theme.cpp
     test_ui_evaluate.cpp
     test_ui_file_store.cpp
     test_ui_file.cpp
     test_ui_route.cpp
     test_ui_host.cpp
+    test_ui_preferences.cpp
+    test_ui_preference_sync.cpp
+    test_ui_host_vocabulary.cpp
+    test_ui_catalogue.cpp
 )
 
 target_link_libraries(morph_tests

@@ -125,7 +125,7 @@ lowers them to the kinds below.
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
-| `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`). `Mounted` loads no components and mounts the fallback in the node's place; `Custom` has no `Common` of its own |
+| `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:
 
@@ -140,6 +140,7 @@ Every node but `Custom` also carries `Common`:
 | `surface` | The named token set of the theme that styles the node and everything inside it, set once |
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
+| `focusId` | The name `Mounted::focus` finds the widget by after mount, such as a document element's id; set once ([below](#focus)) |
 
 Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
 `field`, a `FieldState`:
@@ -250,7 +251,10 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
      panes;
    - a Collapsible mounts its `header` first, as its first child, and names it with `setHeader`;
      then its `child`;
-   - a Custom node mounts its fallback under its parent and returns the fallback's widget;
+   - a Custom node asks `createCustom(parent, {name, props, minVersion})` first. A loaded component
+     has each prop bound to `setTextProp`, `setBoolProp` or `setNumberProp` and gets `onEvent`
+     through `setOnEvent`; when the backend loads nothing, the fallback is mounted under the parent
+     and its widget returned;
    - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values; when any entry at
      any depth has a bound `label`, `checked` or `enabled`, one binding over all of them sends the
      tree again whenever one changes. The backend reports a choice as the entry's path, its index
@@ -285,6 +289,12 @@ the rest of the root. Content mounted later — a new case, a dialog opened, a r
 mount of its own, and its first `autofocus` widget takes focus. Content that fails to mount gives
 up its candidate together with its widgets, and the mount around it finds the next one. A backend
 that cannot move focus leaves it where it was.
+
+**After mount**, `Mounted::focus(name)` moves focus to the widget whose `Common::focusId` is `name`,
+at any depth: the content of a Switch case, a Tabs page or a Dialog, and every row mounted now. Of
+several widgets with one name (rows), the one mounted first is taken. Each name is held by the
+widget's own scope, after the widget, so content that unmounts is no longer found. It answers whether
+a mounted widget had the name; the move itself is `Widget::focus()`, a request a backend may decline.
 
 ### Callbacks
 

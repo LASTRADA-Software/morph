@@ -338,3 +338,23 @@ TEST_CASE("A document's upload reaches the application with the mutation it is f
     harness.settle();
     CHECK(count(harness.host.log, "uploadFor Lims_SampleModel Lims_Attach") == 1);
 }
+
+// Mutation: mount every screen as a backend root (the root is not the page's child).
+TEST_CASE("mountInto puts the screen's root in the shell's container, and rootOf finds it", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    std::unique_ptr<morph::ui::SlotWidget> const page = harness.backend.createSlot(nullptr);
+    auto mounted = shell.mountInto("note", ParamMap{{"noteId", Value{std::int64_t{3}}}}, *page);
+    REQUIRE(mounted.has_value());
+    harness.settle();
+    morph::ui::Widget const* const root = DocumentScreenHost::rootOf(**mounted);
+    REQUIRE(root != nullptr);
+    CHECK(harness.backend.children(harness.backend.idOf(*page)) == std::vector<int>{harness.backend.idOf(*root)});
+    CHECK((*mounted)->title().get() == "Draft");
+
+    // A refused mount leaves the container as it was.
+    auto refused = shell.mountInto("nothing", ParamMap{}, *page);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason == "unknown screen");
+    CHECK(harness.backend.children(harness.backend.idOf(*page)).size() == 1);
+}

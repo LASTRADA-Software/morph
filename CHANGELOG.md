@@ -11,6 +11,36 @@ API surface).
 
 ### Changed
 
+- **`ui::Workspace`, the workspace shell** (spec 6 §7, §15): tabs over screens mounted through
+  `DocumentScreenHost::mountInto`. Opening an identity that is open focuses its tab, a singleton screen has one tab,
+  and a `reuseEmpty` placeholder is replaced in place. `close`, `closeOthers`, `closeAll` and `closeSaved` run each
+  screen's close protocol one tab at a time and stop at the first veto. Ctrl+Tab and Ctrl+Shift+Tab walk the tabs
+  most recently used first, and Ctrl+W closes the active one. A tab's caption is its title, with ` •` while it has
+  unsaved changes.
+
+- **`DocumentScreenHost::mountInto(screenId, params, parent)`** mounts a screen with its root widget appended to the
+  host's own container, such as a tab's page, instead of as a backend root. On Qt Quick a host places a screen
+  through `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which a test now drives end to end.
+
+- **A document's `custom` node shows its component when the backend can load it.** `ui::Custom` carries the props
+  its component declares (`CustomProp`, a `Prop` of text, `bool` or `double`), the host component's `minVersion` and
+  an `onEvent` handler. `IViewBackend::createCustom` is a non-pure factory that returns null for "not loaded", so
+  `Mounted` shows the fallback only then; `qt_quick::Backend` implements it, and `RecordingBackend` loads the
+  components `loadsComponents` names. The interpreter binds every declared prop in its type's form (`int` and
+  `exact` as plain decimal text) and runs the node's `on` commands with each event's typed payload.
+  `qt_quick::CustomWidget` and `qt_quick::CustomRequest` are now aliases of `ui::CustomWidget` and
+  `ui::CustomRequest`.
+
+- **`InterpreterHost::switchBackend` is asynchronous** (`switchBackend(name, done)`): it answers whether the
+  backend is listed and calls `done` when the switch committed or failed. On commit, `Session::backendChanged(name)`
+  runs every mounted screen's `onBackendChange` before the queries refetch, in one batch, and sets
+  `{"env": "backend"}`; a failure is reported as `backendSwitchFailed` and fails the command.
+- **`InterpreterHost::focus` is gone**: the interpreter carries out `{"focus": id}` itself, through the mounted
+  tree.
+
+- **`{"can": "host:name"}` answers from the client's host commands**, set with `Session::setHostCommands`, and no
+  longer from the server's permitted set: a `host:` name passed to `setPermitted` no longer counts.
+
 - **`morph::net::SocketBackend` queues a private bind made before its socket
   connects**, as `QtWebSocketBackend` does, and sends the queued binds in order
   once it connects. A single-threaded client can bind right after constructing
@@ -185,6 +215,41 @@ API surface).
   socket connects is held until it does. `ui::exchangeOver(transport, cbExec)`
   turns it into the `ui::Exchange` a `UiClient` opens a bundle through, so a
   client can fetch an application's screens over a real connection.
+- **Focus after mount**: `ui::Common::focusId` and `ui::Mounted::focus(name)` move
+  keyboard focus to a mounted widget by name; the interpreter names each element by its `id`, so a document's
+  `{"focus": id}` moves focus in the view tree.
+- **The app root scope**: `ui::Interpreter::mountApp` mounts the app document once per session as an
+  `ui::AppRoot`; screens read its names as `app.name` and write its state with `set`.
+
+- **Theme tokens (`ui-theme/1`).** Header-only in the base `morph` target (`ui/theme.hpp`), and
+  `qt_quick::applyTheme` in `morph::qt_quick`.
+  - DTCG 2025.10 token files are parsed (`parseTokens`), layered and alias-resolved (`resolveTokens`,
+    `resolveTheme`), refusing a cycle, a missing reference and a chain longer than 64.
+  - A theme index (`{"vocab": "ui-theme/1", "base": …}`) lists the files of each variant, density and surface;
+    `UiRegistry` refuses a theme file that does not parse, and a bundle any combination of whose theme does not
+    resolve.
+  - `themeValues` fills the closed `ui-theme/1` set, a missing token taking its `MorphUi` default; `applyTheme`
+    sets it on the `Theme` singleton, whose colour properties are now writable, and adds `accent` and `focus`.
+
+- **Message catalogues from the bundle.** Header-only, in the base `morph` target (`ui/catalogue.hpp`).
+  - A `messages` file is `i18n/<locale>.json`, a flat map of key to a MessageFormat 2 pattern.
+    `UiRegistry::addFile` refuses one with another id, a refused shape or a pattern outside the `ui/1` subset.
+  - `ui::loadCatalogues` reads a verified bundle's catalogues into `ui::MessageCatalogues`, leaving out and
+    noting what it cannot use; its `provider()` tries the exact locale, then the language.
+    `ui::Session::setTranslations` installs it, and `{"setLocale": …}` re-resolves every `t` through it.
+  - `ui::textInEveryLocale` and `ui::matchesInAnyLocale` find a title in every locale the bundle has.
+
+- **Preferences: customization choices stored per person on the server.** Header-only, in the base `morph`
+  target (`ui/preferences.hpp`, `ui/preference_sync.hpp`).
+  - `ui::IPreferencesStore` keeps a choice's JSON text by `PrefKey{person, app, scope, point}`;
+    `ui::MemoryPreferencesStore` is the framework's store, on its own strand.
+  - `ui::registerPreferences(store, dispatcher, registry)` registers the preferences model
+    (`morph.preferences`, actions `load`, `set`, `remove`) with a factory that injects the store. The model
+    keys every entry by the verified session's principal, never by the request; without a verified principal
+    it reads nothing and refuses writes. A value is at most 16 KiB of JSON by default.
+  - `ui::PreferenceSync` loads a mounted screen's stored choices in one call, ignoring any that no longer fit
+    the point, and writes what `preferenceChanged` and `resetPrefs` report. `ui::Screen::document()` returns
+    the mounted document.
 
 - **`ui-file`, the file side channel (spec 6 §18).** `ui/file_store.hpp`:
   `IFileStore` and `MemoryFileStore`, chunked uploads, and files read by a
@@ -201,6 +266,15 @@ API surface).
   `ui-evaluate` with it, authorised as the action itself.
   `ui::evaluatorOver` sends one from the client, and `BridgeDispatcher` takes it
   for a document's `evaluate` queries.
+- **The host vocabulary (`host/1`): commands and values a client application registers.** Header-only, in the
+  base `morph` target (`ui/host_vocabulary.hpp`).
+  - `ui::HostVocabulary` registers commands (name, version, typed arguments, `safeForUntrusted`, `run`) and values
+    (name, version, type), checks a command's arguments against their types before it runs, refuses an unsafe
+    command until `setConnectionVerified(true)`, pushes values into the session reactively, and fills
+    `HelloRequest::hostCommands`/`hostValues` with `describe`.
+  - `ui::Session::setHostCommands` installs the client's runnable command names and the runner; a missing or
+    refused command is reported and does not run.
+
 - **The host contract (spec 6 §3, §4, §20).** `ui/host.hpp`: `ScreenHandle`
   (`title`, `dirty`, `identity`, `requestClose`, `forceClose`) and `ScreenHost`
   (`mount`, `identityOf`, `onNavigate`). `DocumentScreenHost`, the framework's
