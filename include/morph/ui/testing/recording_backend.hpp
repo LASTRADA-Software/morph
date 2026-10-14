@@ -399,6 +399,8 @@ struct Callbacks {
     std::function<void(std::string, std::string)> component;
     /// @brief The chord handler, from `Widget::setKeys`.
     std::function<void(std::string)> chord;
+    /// @brief From `Widget::setOnHover`.
+    std::function<void()> hover;
     /// @brief A menu's activation handler, from `MenuWidget::setOnActivate`.
     std::function<void(std::vector<std::size_t>)> path;
     /// @brief An action button's handler, from `BannerWidget::setOnAction` or `EmptyStateWidget::setOnAction`.
@@ -722,6 +724,10 @@ public:
 
     /// @brief Moves the backend's recorded focus here, and logs `focus`.
     void focus() override { _store->focus(_id); }
+
+    /// @brief Keeps the handler for `RecordingBackend::hover`.
+    /// @param onHover The handler.
+    void setOnHover(std::function<void()> onHover) override { _store->at(_id).callbacks.hover = std::move(onHover); }
 
 protected:
     /// @brief Records a property set through a setter.
@@ -1600,6 +1606,15 @@ public:
             candidate = record.parent;
         }
         return false;
+    }
+
+    /// @brief Rests the pointer over a widget: calls its `setOnHover` handler, if it has one and can be reached.
+    /// @param widgetId The widget.
+    void hover(int widgetId) {
+        detail::Record const& record = _store->at(widgetId);
+        if (reachable(record)) {
+            invoke(record.callbacks.hover);
+        }
     }
 
     /// @brief Activates a button, or the action button of a banner or an empty state.

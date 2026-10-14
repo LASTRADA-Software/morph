@@ -42,6 +42,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   calls a dialog's `setOpen` at mount whatever the value, `false` included.
 - **Focus.** `focus()` moves keyboard focus to the widget. The mount calls it on the first
   `autofocus` widget in document order once a mount completes ([view tree](view_tree.md#focus)).
+- **Hover.** `setOnHover(onHover)` calls `onHover` each time the pointer comes to rest over the widget. The
+  default does nothing, so a backend without a pointer conforms. Hovering is a hint, such as a prefetch, never
+  something a widget relies on. Qt Quick reports it through `MorphWidget`'s `HoverHandler` when a handler is set.
 - **Chords.** `setKeys(chords, onChord)` declares the chords a widget handles while focus is inside
   it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
   widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
@@ -200,7 +203,7 @@ The headless reference backend and the test double for everything above the cont
   `move Kind#id to n`, `destroy Kind#id`. Factory parameters are recorded as properties without a
   log line. Handlers are stored without a log line, except that `setDropHandler` records the
   property `drop=handler` and `setKeys` the property `keys`, the chords joined by commas. `focus()`
-  logs `focus Kind#id`, and `focused()` returns the id of the widget that last took focus, or 0. What a widget changes by itself — an interaction helper's effect, a
+  logs `focus Kind#id`, `setOnHover` keeps its handler for `hover(id)` without a log line, and `focused()` returns the id of the widget that last took focus, or 0. What a widget changes by itself — an interaction helper's effect, a
   Select or Table re-marking its selection — changes a property without a log line.
 - **Golden dump** (`dump()`): one line per live widget, `Kind#id name=value …`, properties in name
   order, children indented two spaces per depth, every line ending in a newline. A child whose

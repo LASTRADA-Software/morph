@@ -86,6 +86,7 @@ public:
     void showTooltip(std::string_view text) const;
     void showSurface(std::string_view surface) const;
     void takeChords(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) const;
+    void takeHover(std::function<void()> onHover) const;
     void takeFocus() const;
 
     /// The widget's own visibility flag, as its last `setVisible` left it.
@@ -191,6 +192,7 @@ public:
         takeChords(chords, std::move(onChord));
     }
     void focus() override { takeFocus(); }
+    void setOnHover(std::function<void()> onHover) override { takeHover(std::move(onHover)); }
 };
 
 /// `ui::FieldWidget`'s setters, over the `MorphField` properties.
