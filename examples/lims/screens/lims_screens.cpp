@@ -7,6 +7,7 @@
 #include <memory>
 #include <morph/ui/author.hpp>
 #include <morph/ui/service.hpp>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -72,7 +73,7 @@ ui::Screen registerScreen() {
 // its instance; opening attaches it, and every transition answers the sample as it now is.
 ui::Screen lifecycleScreen() {
     return ui::screen(std::string{kLifecycle}, [](ui::Scope& screen) {
-        auto sampleId = screen.param<std::int64_t>("sampleId");
+        auto sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
         auto sample = screen.model<SampleModel>("sample", {.instance = sampleId});
         auto opened = screen.state("opened", false);
         auto open = screen.mutation<OpenSample>(
@@ -93,7 +94,8 @@ ui::Screen lifecycleScreen() {
 
         screen.title(ui::format("Sample {0}", {sampleId}));
         screen.identity(sampleId);
-        screen.onMount(ui::run(open));
+        // Without a sample there is nothing to attach: the screen waits to be opened on one.
+        screen.onMount(ui::ifThen(ui::engaged(sampleId), ui::run(open)));
 
         auto state = view.at(&SampleView::state);
         auto failure = ui::coalesce(
@@ -130,7 +132,7 @@ ui::Screen lifecycleScreen() {
 // per result, and what an offline replay could not apply.
 ui::Screen resultsScreen() {
     return ui::screen(std::string{kResults}, [](ui::Scope& screen) {
-        auto sampleId = screen.param<std::int64_t>("sampleId");
+        auto sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
         auto sample = screen.model<SampleModel>("sample", {.instance = sampleId});
         auto catalog = screen.model<AnalysisCatalogModel>("catalog");
         auto opened = screen.state("opened", false);
@@ -145,7 +147,8 @@ ui::Screen resultsScreen() {
 
         screen.title(ui::format("Results {0}", {sampleId}));
         screen.identity(sampleId);
-        screen.onMount(ui::run(open));
+        // Without a sample there is nothing to attach: the screen waits to be opened on one.
+        screen.onMount(ui::ifThen(ui::engaged(sampleId), ui::run(open)));
 
         return ui::column(
             {ui::text(
