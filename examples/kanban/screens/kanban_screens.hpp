@@ -16,7 +16,10 @@ namespace kanban::screens {
 /// @brief The application's id, as `ui-hello` names it.
 inline constexpr std::string_view kApplicationId = "kanban";
 
-/// @brief Sign-in, the person's projects, and creating one.
+/// @brief Sign-in, the one screen served before it: a successful login opens the projects.
+inline constexpr std::string_view kLogin = "kanban.login";
+
+/// @brief The signed-in person's projects, and creating one.
 inline constexpr std::string_view kProjects = "kanban.projects";
 
 /// @brief One project's board (`projectId`).

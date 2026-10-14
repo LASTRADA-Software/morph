@@ -235,7 +235,8 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
                             .WhereIn(::Lightweight::FieldNameOf<&db::CommentRecord::task>, taskIds)
                             .All();
         for (const auto& c : comments) {
-            result.comments.push_back({.taskId = TaskId{static_cast<std::int64_t>(c.task.Value())},
+            result.comments.push_back({.id = static_cast<std::int64_t>(c.id.Value()),
+                                       .taskId = TaskId{static_cast<std::int64_t>(c.task.Value())},
                                        .principal = std::string{c.principal.Value()},
                                        .body = std::string{c.body.Value()}});
         }
@@ -1397,7 +1398,8 @@ core::async::Task<GetActivityResult> BoardModel::execute(GetActivity /*action*/)
     auto* const owner = _log->owner();
     auto entries = owner != nullptr ? co_await _log->entries(*owner, key) : _log->entries(key);
     for (const auto& entry : entries) {
-        result.events.push_back({.actionType = entry.actionType,
+        result.events.push_back({.sequence = static_cast<std::int64_t>(result.events.size()),
+                                 .actionType = entry.actionType,
                                  .principal = entry.principal,
                                  .timestampMs = entry.timestampMs,
                                  .summary = entry.actionType + " by " + entry.principal});
