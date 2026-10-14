@@ -8,8 +8,8 @@
 
 /// @file
 /// bookmarks' screens as UI documents (spec 4 §5): a public sign-in screen, then the bookmark forms over two models,
-/// the bookmark list with a bulk archive, and the tags. Served by the bookmarks server and linked in process by the generic client's
-/// local mode. Toolkit-free: this target links morph and the rung's models only.
+/// the bookmark list with a bulk archive, and the tags. Served by the bookmarks server and linked in process by the
+/// generic client's local mode. Toolkit-free: this target links morph and the rung's models only.
 
 namespace bookmarks::screens {
 
