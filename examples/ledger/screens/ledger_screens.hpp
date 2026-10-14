@@ -8,9 +8,9 @@
 
 /// @file
 /// ledger's screens as UI documents (spec 4 §5): a public sign-in screen, and a ledger with tabs for its accounts and
-/// entries (store a transaction, list a month, undo one), its budgets, its rules, and the monthly statement job, polled
-/// until it finishes or fails. Served by the ledger server and linked in process by the generic client's local mode.
-/// Toolkit-free: this target links morph and the rung's models only.
+/// entries (store a transaction, list a month, undo one), its budgets, its rules, and the monthly statement job,
+/// polled until it finishes or fails. Served by the ledger server and linked in process by the generic client's local
+/// mode. Toolkit-free: this target links morph and the rung's models only.
 
 namespace ledger::screens {
 

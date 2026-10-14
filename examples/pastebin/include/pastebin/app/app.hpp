@@ -47,7 +47,8 @@ public:
     ///        serves this application's screens; none by default.
     explicit App(std::filesystem::path actionLogPath,
                  std::chrono::milliseconds sweepInterval = std::chrono::seconds{5}, std::size_t workers = 4,
-                 QObject* parent = nullptr, std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
+                 QObject* parent = nullptr,
+                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
 
     /// @brief Detaches the process-wide default action log.
     ~App() override;
