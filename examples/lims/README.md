@@ -2,8 +2,8 @@
 
 **Status: built** — the rung named a design annex under the [round-7
 program decision](../LADDER.md) has since been constructed: §1–§7 below are
-all implemented, with 139 `TEST_CASE`s across [`tests/`](tests) and a full
-QML GUI under [`gui/qml/`](gui/qml); see [Definition of
+all implemented, with model tests under [`tests/`](tests) and its screens
+under [`screens/`](screens); see [Definition of
 done](#definition-of-done) for what that does and does not mean. A
 lightweight Laboratory Information Management System:
 register samples, assign analyses, capture results with real units and
@@ -189,8 +189,8 @@ transitions; journal as regulatory audit.
 ## Resolved design decisions
 
 Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
-rule. §1–§7 are all built, with 139 `TEST_CASE`s across
-[`tests/`](tests) and a full QML GUI under [`gui/qml/`](gui/qml).
+rule. §1–§7 are all built, with model tests under [`tests/`](tests) and
+UI documents under [`screens/`](screens).
 
 ### 1. Analysis identity and analysis version are separate tables (§1)
 
@@ -570,137 +570,26 @@ revisited then rather than treated as settled.
 
 ## The client
 
-Two surfaces, one shell (`gui/qml/Main.qml`): the sample lifecycle and result
-entry, side by side as tabs rather than stacked, because both act on the
-*same* attached sample at once — a bench operator captures a reading while the
-office watches the state move. Attaching the lifecycle surface points the
-result surface at the same sample, and both handlers are `AllowShared` over a
-keyed model, so they land on one instance. That is the shared-instance design
-made visible rather than asserted.
+lims' screens are UI documents served by the framework (spec 4), authored with the C++ builders in
+[`screens/lims_screens.cpp`](screens/lims_screens.cpp):
 
-`gui_lib/` holds two presenter/QML-bridge pairs (`SamplePresenter`/
-`SampleBridge`, `ResultPresenter`/`ResultBridge`) plus one shared conversion
-header. Presenters link `Qt6::Core` only and instantiate under a plain
-`QCoreApplication` (presenter rule 1); they track completions through the
-common `Presenter` base so tests wait on `busy()` rather than sleeping (rule
-3); QML is bindings-only (rule 6); and the offscreen engine-load smoke test
-is registered in ctest.
+- **`lims.register`** registers a client, then a sample for it, through mutations over a private
+  instance of `SampleModel`, and opens the new sample's lifecycle.
+- **`lims.lifecycle`** (`sampleId`) attaches the keyed `SampleModel` instance with `OpenSample` and
+  shows the sample from a `GetSample` query that refetches after each transition. Each of the four
+  transitions is a serial mutation enabled only in the state that allows it.
+- **`lims.results`** (`sampleId`) captures a concentration through a `form` node over
+  `CaptureConcentration`, built from the schema the registry serves, lists the results with their
+  exact decimals, verifies a result, and counts the offline conflicts.
 
-### Every typed field is schema-driven; nothing is hand-built
+A model's refusal reaches the screen as the mutation's own error. Every typed field is schema-driven:
+the `x-rules` of `CaptureConcentration` run in the forms engine, not in hand-written UI code.
 
-`examples/IMPLEMENTATION.md` rule 2 permits no hand-built input widgets, and
-this rung has none. The rule that decides which actions get a form:
+The screens target links morph and the rung's models only. Its tests run on the screen harness
+([`screens/tests/`](screens/tests)), and the render smoke ([`screens/render_smoke/`](screens/render_smoke))
+mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` runs the rung in
+process over a local database (`--db`, default `lims.db`).
 
-> **A field a person types is rendered from the served schema. A value the
-> model already supplied is a typed call.**
-
-So `RegisterClient`, `RegisterSample`, `RejectSample`, `ReturnForRework`,
-`CaptureConcentration` and `ResolveConflict` are all rendered through the
-shipped `DynamicForm` from `gui_lib/lims_schemas.hpp`'s document. The
-zero-field transitions (`ReceiveSample`, `StartWork`,
-`SubmitForVerification`, `PublishSample`) are plain buttons, because an
-action with no fields has no form to generate. `VerifyResult` and
-`OpenSample` are typed calls: their one field is an id the table or spinbox
-already holds, and asking somebody to retype an id they are looking at would
-be worse, not more conformant.
-
-The capture form is the one that earns its keep. Rendering
-`schemaJson<CaptureConcentration>()` through the shipped renderer is what puts
-this rung's own cross-field rules in front of the **framework's** evaluator
-rather than only the one `test_conditional_logic.cpp` writes:
-`exactlyOneOf(value, qualifier)` becomes the submit gate that makes "a number
-*and* a below-LOD flag" unsubmittable; the `requiredWhen`/`visibleWhen` pair
-makes the dilution factor appear and become required exactly when the
-preparation says diluted; and `x-decimalPlaces`/`x-unitAlternatives` drive the
-entry-unit machinery. None of that is written in QML.
-
-Every `DynamicForm` here is left **unbound** (`controller: null`) and
-submitted by an explicit button, following bookmarks' and pastebin's
-precedent: a bound form auto-submits the moment its required fields are
-engaged, which for a lab reading would file a result mid-keystroke.
-
-### Two channels carry a refusal, and both are bound
-
-A refusal is this rung's product, not its exception path — an over-precise
-reading (decision 7), an `exactlyOneOf` violation (decision 6), a four-eyes
-refusal (decision 16), an unknown qualifier or dilution code (decision 18) and
-a rejected conflict resolution are each a statement about the measurement that
-the analyst has to read. So both surfaces bind both channels the bridges have:
-
-- **`failed` / `lastError`** carries the *typed* invokables' errors —
-  `openSample`, `refresh`, the zero-field transitions, `verifyResult`. It is
-  bound as the red label in `Main.qml` and at the foot of `ResultEntryView.qml`.
-- **`replyReceived(actionType, ok, payload)`** carries every *schema-driven*
-  form's outcome, both ways, with the model's own `what()` as the payload when
-  `ok` is false. `submitIfValid` is the only path those six forms have and it
-  never routes through `failed`, so each view handles `replyReceived` in a
-  `Connections` block — the same shape bookmarks, pastebin and polls use — and
-  clears a form only once the submission was actually accepted.
-
-`test_lims_qml_surface.cpp` asserts the second half rather than assuming it:
-one case runs the QML-surface audit unexempted and requires that no finding
-names `replyReceived`, so deleting either `Connections` block fails the build's
-tests instead of quietly emptying the screen.
-
-### Two handlers on the lifecycle surface, and why
-
-`SampleModel` is keyed, so the handler every attached action runs on is
-`AllowShared`. But an `AllowShared` handler is **not bound until it attaches
-to a key**, and `RegisterClient` carries none — dispatching it there fails
-with "handler not bound" (confirmed empirically here; `polls::gui::
-PollPresenter` reached the same conclusion for `CreatePoll`). So `submitIfValid`
-routes that one action to a second, plain `NoSharing` handler, which registers
-a fresh instance on construction and is bound immediately. `RegisterSample`
-needs no such help even though it too arrives before any key exists: it is
-result-keyed, so `BridgeHandler::execute`'s `ResultKeyed` branch runs it on an
-anonymous instance and promotes that instance to the id the result names
-before the completion resolves — one dispatch, on the *shared* handler, and
-that handler is attached when it returns.
-
-`RegisterClient`'s reply is decoded (the same glaze reflection the wire used)
-to emit `clientRegistered`, since the form path yields raw JSON rather than a
-typed result — `clientRegistered` is what sets the `clientId` property
-`SampleView.qml`'s "Latest client id" label binds. With both
-effects on the `submitIfValid` path itself, typed `registerClient`/
-`registerSample` invokables would be genuinely redundant — which is why they do
-not exist, and why the surface audit in `test_lims_qml_surface.cpp` carries no
-exemption for either.
-
-### One dispatch path per action
-
-Neither bridge publishes a typed invokable *and* a schema-driven form for the
-same action. The pairs that would otherwise exist are
-`rejectSample`/`returnForRework` beside
-`submitIfValid("RejectSample")` and its sibling, and `captureReading`/
-`captureQualifier`/`resolveConflict` beside
-`submitIfValid("CaptureConcentration")` and `submitIfValid("ResolveConflict")`.
-No QML called the typed half. Two paths to one action is two places for the
-behaviour to differ, and here they already did: `captureReading` took the
-reading as a `double` and converted it with `Concentration::fromDouble` at the
-field's declared precision, so it *rounded* an over-precise reading that the
-form path submits exactly and the model refuses (decision 7) — and it was the
-only `double` on this rung's QML surface, against the convention
-`gui_lib/lims_qml_conversions.hpp` states for a `Quantity`.
-
-So the redundant half is deleted, together with the outcome signals only it
-emitted (`resultCaptured`, `conflictResolved`), the `sampleAttached` signal
-whose state `Main.qml` re-reads through `refreshResults()` instead, and the
-`bound` relay neither view handles. `rejectSample`, `returnForRework`,
-`registerClient` and `registerSample` are gone from `SamplePresenter` too,
-since nothing else called them once `submitIfValid` carried their whole
-effect. What survives is one path per action, and a QML-surface exemption list
-with nothing on it.
-
-### What the smoke test does not prove, and what covers it instead
-
-The offscreen engine-load test proves every QML file parses and every type it
-names resolves. It cannot prove a `Connections` handler is bound to a signal
-that exists, or that a delegate reads a key the model supplies — both are
-resolved dynamically against objects that test never supplies.
-`test_lims_qml_bridges.cpp` covers that from the other side: it asserts
-against the real bridges' metaobjects that every signal the QML connects to
-exists, and against their real property bags that every key a delegate reads
-is present.
 
 ### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
 
