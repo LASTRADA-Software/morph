@@ -34,8 +34,8 @@ namespace {
 // currency's places, with its code.
 ui::Handle<std::string> money(ui::AnyHandle const& minor, ui::AnyHandle const& currency) {
     auto const wholeUnits = ui::eq(currency, "JPY") || ui::eq(currency, "KRW");
-    auto const perUnit = ui::cond(wholeUnits, ui::Handle<std::int64_t>{std::int64_t{1}},
-                                  ui::Handle<std::int64_t>{std::int64_t{100}});
+    auto const perUnit =
+        ui::cond(wholeUnits, ui::Handle<std::int64_t>{std::int64_t{1}}, ui::Handle<std::int64_t>{std::int64_t{100}});
     return ui::call<std::string>("money", {minor / perUnit, currency});
 }
 
@@ -56,13 +56,15 @@ ui::Nodes ledgerTab(ui::Scope& screen, ui::ModelHandle<LedgerModel> const& books
                                       .onSuccess = {ui::refetch(accounts)}})
             .id(ui::element("accountForm"))
             .testId("accountForm"),
-        ui::table(accounts.value().at(&GetLedgerResult::accounts),
-                  {.key = ui::row("id"),
-                   .columns = {{.name = "id", .label = "Id", .cell = ui::text({.text = ui::row("id")}).testId("accountId")},
-                               {.name = "name", .label = "Account", .cell = ui::text({.text = ui::row("name")})},
-                               {.name = "balance",
-                                .label = "Balance",
-                                .cell = ui::text({.text = money(ui::row("balance"), ui::row("currency"))}).testId("balance")}}})
+        ui::table(
+            accounts.value().at(&GetLedgerResult::accounts),
+            {.key = ui::row("id"),
+             .columns = {{.name = "id", .label = "Id", .cell = ui::text({.text = ui::row("id")}).testId("accountId")},
+                         {.name = "name", .label = "Account", .cell = ui::text({.text = ui::row("name")})},
+                         {.name = "balance",
+                          .label = "Balance",
+                          .cell =
+                              ui::text({.text = money(ui::row("balance"), ui::row("currency"))}).testId("balance")}}})
             .a11y("Accounts")
             .testId("accounts"),
         ui::form<StoreTransaction>(books, {.prefill = ui::obj({{"ledgerId", ledgerId}}),
@@ -82,10 +84,10 @@ ui::Nodes ledgerTab(ui::Scope& screen, ui::ModelHandle<LedgerModel> const& books
                                 .cell = ui::text({.text = ui::row("description")}).testId("entry")},
                                {.name = "undo",
                                 .label = "",
-                                .cell = ui::button({.label = "Undo",
-                                                    .onClick = ui::run(undo, {{&UndoTransaction::ledgerId, ledgerId},
-                                                                              {&UndoTransaction::journalId,
-                                                                               ui::row("id")}})})
+                                .cell = ui::button(
+                                            {.label = "Undo",
+                                             .onClick = ui::run(undo, {{&UndoTransaction::ledgerId, ledgerId},
+                                                                       {&UndoTransaction::journalId, ui::row("id")}})})
                                             .testId("undo")}}})
             .a11y("Entries")
             .testId("entries"),
@@ -109,10 +111,9 @@ ui::Nodes budgetsTab(ui::Scope& screen, ui::AnyHandle const& ledgerId) {
                                            .onSuccess = {ui::set(categoryId, ui::ref("event"))}})
             .id(ui::element("categoryForm"))
             .testId("categoryForm"),
-        ui::form<LinkAccountToCategory>(
-            budgets, {.prefill = ui::obj({{"categoryId", categoryId}}),
-                      .submit = "explicit",
-                      .fields = {{&LinkAccountToCategory::categoryId, {.hidden = true}}}})
+        ui::form<LinkAccountToCategory>(budgets, {.prefill = ui::obj({{"categoryId", categoryId}}),
+                                                  .submit = "explicit",
+                                                  .fields = {{&LinkAccountToCategory::categoryId, {.hidden = true}}}})
             .id(ui::element("linkForm"))
             .testId("linkForm")
             .visible(ui::engaged(categoryId)),
@@ -135,11 +136,11 @@ ui::Nodes budgetsTab(ui::Scope& screen, ui::AnyHandle const& ledgerId) {
             .id(month)
             .testId("budgetMonth")
             .visible(ui::engaged(budgetId)),
-        ui::text({.text = ui::format("Limit {0}, spent {1}",
-                                     {money(report.value().at(&GetBudgetReportResult::limit),
-                                            report.value().at(&GetBudgetReportResult::currency)),
-                                      money(report.value().at(&GetBudgetReportResult::spent),
-                                            report.value().at(&GetBudgetReportResult::currency))})})
+        ui::text(
+            {.text = ui::format("Limit {0}, spent {1}", {money(report.value().at(&GetBudgetReportResult::limit),
+                                                               report.value().at(&GetBudgetReportResult::currency)),
+                                                         money(report.value().at(&GetBudgetReportResult::spent),
+                                                               report.value().at(&GetBudgetReportResult::currency))})})
             .testId("budgetReport")
             .visible(ui::engaged(report.value())),
         ui::text({.text = report.error()}).testId("budgetError")};
@@ -176,22 +177,22 @@ ui::Nodes rulesTab(ui::Scope& screen, ui::AnyHandle const& ledgerId) {
 ui::Nodes statementTab(ui::Scope& screen, ui::ModelHandle<LedgerModel> const& books, ui::AnyHandle const& ledgerId) {
     auto const finished = screen.state("finished", false);
     auto const state = screen.state<std::string>("jobState");
-    auto const submit = screen.mutation<SubmitReport>(
-        "submit", books,
-        {.body = {{&SubmitReport::ledgerId, ledgerId},
-                  {&SubmitReport::kind, ui::AnyHandle{std::string{"MonthlyStatement"}}},
-                  {&SubmitReport::params, std::string{"{}"}}},
-         .onSuccess = {ui::set(finished, false), ui::reset(state)}});
+    auto const submit =
+        screen.mutation<SubmitReport>("submit", books,
+                                      {.body = {{&SubmitReport::ledgerId, ledgerId},
+                                                {&SubmitReport::kind, ui::AnyHandle{std::string{"MonthlyStatement"}}},
+                                                {&SubmitReport::params, std::string{"{}"}}},
+                                       .onSuccess = {ui::set(finished, false), ui::reset(state)}});
     auto const jobId = screen.let("jobId", submit.result());
     auto const status = screen.query<GetReportStatus>(
         "status", books, {{&GetReportStatus::jobId, jobId}},
         {.when = ui::engaged(jobId) && !finished, .refreshEvery = std::chrono::milliseconds{200}});
     // The poll's value goes when its gate closes, so the last status is kept in a state of its own.
     auto const polled = screen.let("polled", status.value().at(&GetReportStatusResult::status));
-    screen.watch(polled,
-                 ui::ifThen(ui::engaged(polled),
-                            {ui::set(state, polled), ui::ifThen(ui::eq(polled, "Done") || ui::eq(polled, "Failed"),
-                                                                ui::set(finished, true))}));
+    screen.watch(
+        polled, ui::ifThen(ui::engaged(polled),
+                           {ui::set(state, polled),
+                            ui::ifThen(ui::eq(polled, "Done") || ui::eq(polled, "Failed"), ui::set(finished, true))}));
     return {ui::button({.label = "Request statement", .onClick = ui::run(submit)}).testId("requestStatement"),
             ui::text({.text = "Checking the statement…"}).testId("polling").visible(ui::engaged(jobId) && !finished),
             ui::text({.text = ui::format("Statement {0}: {1}", {jobId, state})})
