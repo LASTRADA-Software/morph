@@ -41,42 +41,9 @@ struct BackendOptions {
     std::function<void(std::string const& widthClass)> onWidthClass;
 };
 
-/// @brief A widget the application's bundle or the client provides by name (spec 5 §10), in place of the built-in
-///        fallback a renderer without it shows.
-class CustomWidget : public ui::Widget {
-public:
-    /// @brief Sets a text prop: `string`, and `int`, `exact` and `json`, which cross as text so that no value loses
-    ///        precision.
-    /// @param name  The prop.
-    /// @param value Its text.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its value, as every setter takes them.
-    virtual void setTextProp(std::string_view name, std::string_view value) = 0;
-
-    /// @brief Sets a `bool` prop.
-    /// @param name  The prop.
-    /// @param value Its value.
-    virtual void setBoolProp(std::string_view name, bool value) = 0;
-
-    /// @brief Sets a `number` prop: the one kind of value that crosses as a double.
-    /// @param name  The prop.
-    /// @param value Its value.
-    virtual void setNumberProp(std::string_view name, double value) = 0;
-
-    /// @brief Hands over the handler of the component's events.
-    /// @param onEvent Called with the event's name and its payload as text (a key as `i:<int64>` or `s:<text>`,
-    ///                anything else as the component wrote it); empty does nothing.
-    virtual void setOnEvent(std::function<void(std::string event, std::string payload)> onEvent) = 0;
-};
-
-/// @brief What a `Backend::createCustom` call asks for.
-struct CustomRequest {
-    /// @brief The component's name, as the document's `components` declares it.
-    std::string name;
-    /// @brief The props the document declares for it; a component that does not declare each one is refused.
-    std::vector<std::string> props;
-    /// @brief The lowest version of a host component that will do; a bundle component ignores it.
-    int minVersion = 0;
-};
+// The view tree's custom component and request, which `Backend::createCustom` makes and takes.
+using ui::CustomRequest;
+using ui::CustomWidget;
 
 /// @brief `ui::IViewBackend` over Qt Quick: each widget is a Qt Quick item made from its kind's `MorphUi`
 ///        component, or from the component the restyle map names for that kind.
@@ -113,7 +80,7 @@ public:
     /// @param request The component and the props the document declares.
     /// @return The widget, or null when the fallback is shown instead.
     [[nodiscard]] std::unique_ptr<CustomWidget> createCustom(ui::ContainerWidget* parent,
-                                                             CustomRequest const& request);
+                                                             CustomRequest const& request) override;
 
     /// @copydoc ui::IViewBackend::createText
     [[nodiscard]] std::unique_ptr<ui::TextWidget> createText(ui::ContainerWidget* parent) override;

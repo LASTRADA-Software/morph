@@ -1181,8 +1181,33 @@ private:
         return widget;
     }
 
-    // The fallback in the custom node's place: this mount loads no components.
+    // One prop of a loaded component, bound to the setter its kind crosses by.
+    void bindCustomProp(reactive::Scope& scope, CustomWidget& widget, CustomProp const& prop) {
+        std::string const& name = prop.name;
+        if (auto const* const text = std::get_if<Prop<std::string>>(&prop.value)) {
+            bind(scope, *text, [&widget, name](std::string const& value) { widget.setTextProp(name, value); });
+        } else if (auto const* const flag = std::get_if<Prop<bool>>(&prop.value)) {
+            bind(scope, *flag, [&widget, name](bool value) { widget.setBoolProp(name, value); });
+        } else if (auto const* const number = std::get_if<Prop<double>>(&prop.value)) {
+            bind(scope, *number, [&widget, name](double value) { widget.setNumberProp(name, value); });
+        }
+    }
+
+    // The component the backend loads in the custom node's place, or the fallback when it loads none.
     Widget& mountKind(reactive::Scope& scope, Custom const& spec, ContainerWidget* parent) {
+        CustomRequest request{.name = spec.name, .props = {}, .minVersion = spec.minVersion};
+        request.props.reserve(spec.props.size());
+        for (CustomProp const& prop : spec.props) {
+            request.props.push_back(prop.name);
+        }
+        if (std::unique_ptr<CustomWidget> loaded = _backend->createCustom(parent, request)) {
+            CustomWidget& widget = scope.adopt(std::move(loaded));
+            for (CustomProp const& prop : spec.props) {
+                bindCustomProp(scope, widget, prop);
+            }
+            widget.setOnEvent(spec.onEvent);
+            return widget;
+        }
         Widget* const fallback = mount(scope, spec.fallback, parent);
         if (fallback == nullptr) {
             throw std::invalid_argument{"morph::ui::Mounted: the custom node " + spec.name + " has no fallback"};

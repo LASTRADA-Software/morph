@@ -11,6 +11,15 @@ API surface).
 
 ### Changed
 
+- **A document's `custom` node shows its component when the backend can load it.** `ui::Custom` carries the props
+  its component declares (`CustomProp`, a `Prop` of text, `bool` or `double`), the host component's `minVersion` and
+  an `onEvent` handler. `IViewBackend::createCustom` is a non-pure factory that returns null for "not loaded", so
+  `Mounted` shows the fallback only then; `qt_quick::Backend` implements it, and `RecordingBackend` loads the
+  components `loadsComponents` names. The interpreter binds every declared prop in its type's form (`int` and
+  `exact` as plain decimal text) and runs the node's `on` commands with each event's typed payload.
+  `qt_quick::CustomWidget` and `qt_quick::CustomRequest` are now aliases of `ui::CustomWidget` and
+  `ui::CustomRequest`.
+
 - **`InterpreterHost::switchBackend` is asynchronous** (`switchBackend(name, done)`): it answers whether the
   backend is listed and calls `done` when the switch committed or failed. On commit, `Session::backendChanged(name)`
   runs every mounted screen's `onBackendChange` before the queries refetch, in one batch, and sets

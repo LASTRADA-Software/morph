@@ -611,8 +611,45 @@ public:
     virtual void setOnDrop(std::function<void(std::vector<std::string>)> onDrop) = 0;
 };
 
+/// @brief A component a renderer loaded in a `custom` node's place (spec 5 §10): a bundle's verified QML or a host
+///        component, given the props the document binds and handing back the events it raises.
+class CustomWidget : public Widget {
+public:
+    /// @brief Sets a text prop: `string`, and `int`, `exact` and `json`, which cross as text so that no value loses
+    ///        precision.
+    /// @param name  The prop.
+    /// @param value Its text.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its value, as every setter takes them.
+    virtual void setTextProp(std::string_view name, std::string_view value) = 0;
+
+    /// @brief Sets a `bool` prop.
+    /// @param name  The prop.
+    /// @param value Its value.
+    virtual void setBoolProp(std::string_view name, bool value) = 0;
+
+    /// @brief Sets a `number` prop: the one kind of value that crosses as a double.
+    /// @param name  The prop.
+    /// @param value Its value.
+    virtual void setNumberProp(std::string_view name, double value) = 0;
+
+    /// @brief Hands over the handler of the component's events.
+    /// @param onEvent Called with the event's name and its payload as text (a key as `i:<int64>` or `s:<text>`,
+    ///                anything else as the component wrote it); empty does nothing.
+    virtual void setOnEvent(std::function<void(std::string event, std::string payload)> onEvent) = 0;
+};
+
+/// @brief What `IViewBackend::createCustom` asks for.
+struct CustomRequest {
+    /// @brief The component's name, as the document's `components` declares it.
+    std::string name;
+    /// @brief The props the document declares for it; a component that does not declare each one is refused.
+    std::vector<std::string> props;
+    /// @brief The lowest version of a host component that will do; a bundle component ignores it.
+    int minVersion = 0;
+};
+
 /// @brief Makes widgets. Each factory appends the new widget to @p parent, or makes a root when it is null, and never
-///        returns null.
+///        returns null, except `createCustom`, whose null shows a custom node's fallback.
 class IViewBackend {
 public:
     IViewBackend() = default;
@@ -779,6 +816,19 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) = 0;
+
+    /// @brief Loads the component a `custom` node names, if this backend can. The only factory that may return null:
+    ///        null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no
+    ///        components keeps this default.
+    /// @param parent  The container to append it to; null makes a root.
+    /// @param request The component, the props the document declares and the host component's lowest version.
+    /// @return The component, or null to show the fallback.
+    [[nodiscard]] virtual std::unique_ptr<CustomWidget> createCustom(ContainerWidget* parent,
+                                                                     CustomRequest const& request) {
+        static_cast<void>(parent);
+        static_cast<void>(request);
+        return nullptr;
+    }
 };
 
 }  // namespace morph::ui

@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -4103,6 +4105,75 @@ namespace detail {
     return textOf(value, format);
 }
 
+/// @brief A value as a custom component's text prop (spec 5 §10): an `int` or `exact` as plain decimal text, so no
+///        id or amount loses precision; `json` as its JSON text; `string` as the formatted text.
+/// @param value  The value.
+/// @param type   The prop type the component declares.
+/// @param format The formatting facts, for `string`.
+/// @return The text.
+[[nodiscard]] inline std::string componentText(Value const& value, std::string_view type, FormatContext const& format) {
+    if (type == "json") {
+        return canonicalJson(value);
+    }
+    if (type == "int" || type == "exact") {
+        if (std::int64_t const* const whole = value.asInt()) {
+            return std::to_string(*whole);
+        }
+        if (Decimal const* const number = value.asDecimal()) {
+            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value));
+        }
+        if (Quantity const* const quantity = value.asQuantity()) {
+            return detail::decimalText(quantity->value,
+                                       static_cast<std::uint32_t>(quantity->value.decimalPlaces.value)) +
+                   " " + quantity->unit;
+        }
+    }
+    return textOf(value, format);
+}
+
+/// @brief A value as a custom component's `number` prop: the one kind that crosses as a double.
+/// @param value The value.
+/// @return It; zero for anything that is not a number.
+[[nodiscard]] inline double componentNumber(Value const& value) {
+    if (std::int64_t const* const whole = value.asInt()) {
+        return static_cast<double>(*whole);
+    }
+    if (Decimal const* const number = value.asDecimal()) {
+        return number->value.toDouble();
+    }
+    if (Quantity const* const quantity = value.asQuantity()) {
+        return quantity->value.toDouble();
+    }
+    return 0.0;
+}
+
+/// @brief A custom component's event payload as a value: `i:<int64>` an `int`, `s:<text>` a `string`, anything else
+///        JSON text read as the event's declared type, and text that is none of those a `string`.
+/// @param payload The payload, as the backend reports it.
+/// @param type    The payload type the component declares; null for an undeclared event.
+/// @return The value.
+[[nodiscard]] inline Value componentPayload(std::string const& payload, Type const* type) {
+    std::string_view const text{payload};
+    if (text.starts_with("i:")) {
+        std::int64_t whole = 0;
+        std::string_view const digits = text.substr(2);
+        char const* const last = std::to_address(digits.end());
+        auto const [end, error] = std::from_chars(std::to_address(digits.begin()), last, whole);
+        if (error == std::errc{} && end == last) {
+            return Value{whole};
+        }
+    }
+    if (text.starts_with("s:")) {
+        return Value{std::string{text.substr(2)}};
+    }
+    if (auto json = parseJson(text); json && type != nullptr) {
+        if (auto value = valueFromJson(*json, *type)) {
+            return std::move(*value);
+        }
+    }
+    return Value{payload};
+}
+
 /// @brief A value as an integer: an `int`, or a decimal truncated toward zero.
 /// @param value    The value.
 /// @param fallback What anything else gives.
@@ -5391,7 +5462,45 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});
-    return ui::custom(Custom{.name = name, .fallback = std::move(lowered)});
+    Custom spec{.name = name,
+                .fallback = std::move(lowered),
+                .props = {},
+                .minVersion = static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+                .onEvent = {}};
+    // Every declared prop is given, a missing one as its type's empty value: a component lacking one is refused.
+    for (auto const& [prop, type] : component.props) {
+        ExprPtr expr;
+        for (DocNodePtr const& record : node.partList("props")) {
+            if (ExprPtr const given = record->prop(prop)) {
+                expr = given;
+            }
+        }
+        if (type == "bool") {
+            spec.props.push_back(CustomProp{.name = prop, .value = bindProp<bool>(ctx, expr, false, boolOf)});
+        } else if (type == "number") {
+            spec.props.push_back(CustomProp{
+                .name = prop, .value = bindProp<double>(ctx, expr, 0.0, [](Value const& value, FormatContext const&) {
+                    return componentNumber(value);
+                })});
+        } else {
+            spec.props.push_back(CustomProp{
+                .name = prop,
+                .value = bindProp<std::string>(ctx, expr, std::string{},
+                                               [type](Value const& value, FormatContext const& format) {
+                                                   return componentText(value, type, format);
+                                               })});
+        }
+    }
+    spec.onEvent = [this, ctx, site = &node, declared = &component](std::string const& event,
+                                                                   std::string const& payload) {
+        Commands const* const commands = site->event("on." + event);
+        if (commands == nullptr) {
+            return;
+        }
+        auto const type = declared->events.find(event);
+        runEvent(commands, ctx, componentPayload(payload, type == declared->events.end() ? nullptr : &type->second));
+    };
+    return ui::custom(std::move(spec));
 }
 
 inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {

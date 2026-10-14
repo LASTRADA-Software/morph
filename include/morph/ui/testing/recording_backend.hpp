@@ -395,6 +395,8 @@ struct Callbacks {
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
     std::function<void(Key)> drop;
+    /// @brief From `CustomWidget::setOnEvent`: the event's name and its payload.
+    std::function<void(std::string, std::string)> component;
     /// @brief The chord handler, from `Widget::setKeys`.
     std::function<void(std::string)> chord;
     /// @brief A menu's activation handler, from `MenuWidget::setOnActivate`.
@@ -1185,6 +1187,24 @@ private:
     bool _multiple = false;
 };
 
+/// @brief A fake loaded `CustomWidget`: property `component`, and each prop as `prop.<name>`.
+class FakeCustom final : public FakeLeaf<CustomWidget> {
+public:
+    using FakeLeaf<CustomWidget>::FakeLeaf;
+    void setTextProp(std::string_view name, std::string_view value) override {
+        set("prop." + std::string{name}, formatText(value));
+    }
+    void setBoolProp(std::string_view name, bool value) override {
+        set("prop." + std::string{name}, formatBool(value));
+    }
+    void setNumberProp(std::string_view name, double value) override {
+        set("prop." + std::string{name}, std::format("{}", value));
+    }
+    void setOnEvent(std::function<void(std::string event, std::string payload)> onEvent) override {
+        callbacks().component = std::move(onEvent);
+    }
+};
+
 /// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, and `rowKey` on a row.
 ///
 /// `selection` shows the rows the widget marks: the requested keys, in the order requested, that one of its current
@@ -1423,6 +1443,43 @@ public:
     }
     [[nodiscard]] std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeDropZone>(_store, "DropZone", parent);
+    }
+
+    /// @brief Loads a component `loadsComponents` named, as a `Custom` widget with properties `component` and
+    ///        `minVersion`; any other is not loaded, and the mount shows its fallback.
+    /// @param parent  The container to append it to; null makes a root.
+    /// @param request The component and its props.
+    /// @return The widget, or null.
+    [[nodiscard]] std::unique_ptr<CustomWidget> createCustom(ContainerWidget* parent,
+                                                             CustomRequest const& request) override {
+        if (!_components.contains(request.name)) {
+            return nullptr;
+        }
+        return std::make_unique<detail::FakeCustom>(
+            _store, "Custom", parent,
+            detail::PropList{{"component", detail::formatText(request.name)},
+                             {"minVersion", std::to_string(request.minVersion)}});
+    }
+
+    /// @brief Names the components `createCustom` loads; none until called, so a custom node shows its fallback.
+    /// @param names The components.
+    void loadsComponents(std::vector<std::string> names) {
+        _components.clear();
+        for (std::string& name : names) {
+            _components.insert(std::move(name));
+        }
+    }
+
+    /// @brief Raises an event of a loaded component, as the component would.
+    /// @param widgetId The component.
+    /// @param event    The event's name.
+    /// @param payload  Its payload, as the backend reports it (`i:<int64>`, `s:<text>`, or the component's text).
+    /// @throws std::logic_error when the widget is not a loaded component.
+    void raiseEvent(int widgetId, std::string event, std::string payload) {
+        detail::Record const& record = expectKind(widgetId, "raiseEvent", {"Custom"});
+        if (reachable(record)) {
+            invoke(record.callbacks.component, std::move(event), std::move(payload));
+        }
     }
 
     /// @brief The golden tree of the live widgets.
@@ -1954,6 +2011,7 @@ private:
     }
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::unordered_set<std::string> _components;
 };
 
 }  // namespace morph::ui::testing

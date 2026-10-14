@@ -1022,14 +1022,30 @@ struct DropZone {
     Common common{};
 };
 
-/// @brief A component the toolkit's own renderer loads by name, as built-in nodes for `Mounted`.
+/// @brief One prop a loaded custom component is given.
+struct CustomProp {
+    /// @brief The prop's name, as the component declares it.
+    std::string name;
+    /// @brief Its value: text for `string`, `int`, `exact` and `json`, which cross as text so that no value loses
+    ///        precision; a `bool`; or a `number`.
+    std::variant<Prop<std::string>, Prop<bool>, Prop<double>> value;
+};
+
+/// @brief A component the backend may load (spec 5 §10), with the built-in nodes shown when it does not.
 ///
-/// `Mounted` mounts the fallback: it loads no components. The fallback carries its own `Common`.
+/// `Mounted` asks `IViewBackend::createCustom` first and mounts the fallback only when the backend loads nothing.
+/// The fallback carries its own `Common`.
 struct Custom {
     /// @brief The component's name, as the document's `components` declares it.
     std::string name;
     /// @brief The built-in nodes shown in its place; never null.
     Node fallback;
+    /// @brief The props a loaded component is given, bound as any other property is.
+    std::vector<CustomProp> props;
+    /// @brief The lowest version of a host component that will do.
+    int minVersion = 0;
+    /// @brief Called with an event a loaded component raises: its name and its payload as the backend reports it.
+    std::function<void(std::string event, std::string payload)> onEvent;
 };
 
 /// @brief What a `Node` points at: exactly one node kind.

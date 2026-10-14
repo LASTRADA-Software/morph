@@ -184,9 +184,8 @@ The style is Qt Quick Controls' `Basic`.
   version asked for, or lacks a declared prop makes `createCustom` return null, and the caller shows the fallback.
   Each failure is reported once per component and reason, through the callback and `failures()`.
 
-The view tree has no seam yet that would let `Mounted` ask the backend for a custom component instead of its
-fallback, nor a way for the interpreter to pass a `custom` node's props and events: `Backend::createCustom` is ready
-for it, and nothing above calls it yet.
+`createCustom` is `ui::IViewBackend::createCustom`, and `CustomWidget` and `CustomRequest` are the view tree's own
+types: `Mounted` asks for a document's `custom` node here first, binds its props, and shows the fallback only on null.
 
 ## Tests
 
@@ -226,6 +225,5 @@ software scene graph:
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
 - Per-subtree surfaces and a runtime density from theme tokens; the units come from the default font, not the
   scale tokens.
-- Loading a custom component from a document: the view tree's seam (`ui::Custom` carries no props or events).
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

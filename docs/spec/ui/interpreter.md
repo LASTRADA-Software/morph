@@ -217,7 +217,12 @@ applies to the width.
   writing the screen's preference and calling `preferenceChanged`; other points show the point's name.
   Storing the choices, and loading them back on mount, is `PreferenceSync`'s
   ([`preferences.md`](preferences.md)).
-- **`custom`** lowers its component's fallback with `props` bound, inside `ui::custom`.
+- **`custom`** lowers to `ui::custom` with every prop its component declares, a missing one as its type's empty
+  value, and the component's host `version` as `minVersion`. `string` crosses as its formatted text, `int` and `exact` as
+  plain decimal text (an exact value with its declared places, a quantity with its unit), `json` as its JSON text,
+  `bool` as a bool and `number` as a double. An event runs the node's `on.<event>` commands with its payload read as
+  the declared type: `i:<int>`, `s:<text>`, or JSON text. The fallback is lowered too, with `props` bound, for a
+  backend that loads nothing.
 - **`form`** is the forms engine's (`docs/spec/forms/engine.md`). Its element is declared like an
   input's, with or without an `id`, and builds a `forms::FormSession` when the scope is declared, so
   its values can be read before it is drawn: the schema comes from `Catalog::schema(action)`; the
@@ -281,6 +286,5 @@ Reported when met, and shown as a muted text naming the kind:
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
   encode.
 - A `table` declared from a model's list action: the table engine (spec 7).
-- Component loading: every `custom` node renders its fallback, as `Mounted` does.
 - Prefetching on hover: the host starts a screen's `prefetch` queries through `Session::prefetch`.
 - The offline queue itself: a dispatcher that has one honours `CallOptions::queueOffline`.

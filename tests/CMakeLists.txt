@@ -183,6 +183,7 @@ add_executable(morph_tests
     test_ui_frontend.cpp
     test_ui_conformance.cpp
     test_ui_common.cpp
+    test_ui_custom.cpp
     test_ui_field.cpp
     test_ui_kinds.cpp
     test_ui_value.cpp

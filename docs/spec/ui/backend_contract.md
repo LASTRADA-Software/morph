@@ -27,6 +27,11 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   parameters (a TextInput's mode, a stack's, scroll area's or splitter's axis, a DateTimeInput's
   mode and display zone, a Select's style, a FilePicker's mode, a Drawer's side) are factory
   arguments.
+- `createCustom(parent, {name, props, minVersion})` is the one factory that may return null, and is
+  not pure: null means the backend did not load the component, and the mount shows the node's
+  fallback instead. A backend that loads no components keeps the default, which returns null; one
+  that loads a component returns a `CustomWidget`, whose props are set by name (`setTextProp`,
+  `setBoolProp`, `setNumberProp`) and whose events go to the handler given to `setOnEvent`.
 - **A new widget is visible, enabled, content-sized, not draggable and not a drop target, and has
   no accessible name or role of its own, no test id, no tooltip, the theme's default surface and no
   chords. A new field (text and the six inputs) is editable, not required, without errors and not
@@ -153,6 +158,7 @@ reorders children, and only through this.
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
+| `CustomWidget` | `setTextProp(name, text)`, `setBoolProp(name, bool)`, `setNumberProp(name, double)` | `setOnEvent(event, payload)` |
 
 ## Selection by key
 
@@ -212,7 +218,10 @@ The headless reference backend and the test double for everything above the cont
   `tone`, `text`, `icon` (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
-  `accept`, `multiple` (DropZone).
+  `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom).
+- **Components.** `createCustom` loads only the components named by `loadsComponents(names)`, none
+  until it is called, so a custom node shows its fallback by default. A loaded one is a `Custom`
+  widget, and `raiseEvent(id, event, payload)` raises its event as the component would.
 - **Values.** `true`/`false`; an enumerator by its name; a key as a decimal integer or a
   double-quoted string (`7` and `"7"` differ); `none` for an absent key or date; a date as an
   ISO-8601 UTC instant with milliseconds, `empty` for an empty `Timestamp`; sizing as `content`,
