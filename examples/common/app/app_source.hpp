@@ -14,6 +14,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/queueing_dispatcher.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <optional>
@@ -178,6 +179,10 @@ private:
     std::shared_ptr<bool> _alive;
     std::unique_ptr<bridge::Bridge> _bridge;
     std::unique_ptr<ui::BridgeDispatcher> _dispatcher;
+    // The offline queue in front of the dispatcher: what a screen's calls go through.
+    std::unique_ptr<ui::QueueingDispatcher> _queue;
+    // Retries the queue while it holds anything: the transports reconnect on their own and tell no one.
+    std::optional<reactive::TimerHandle> _replay;
     ui::Exchange _exchange;
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);

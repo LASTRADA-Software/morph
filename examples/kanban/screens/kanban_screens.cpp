@@ -241,7 +241,10 @@ ui::Screen boardScreen() {
             "state", board, {},
             {.when = opened,
              .refreshOn = board.actions<CreateColumn, CreateSwimlane, CreateTask, MoveTaskPosition, AddComment>()});
-        auto const move = screen.mutation<MoveTaskPosition>("move", board, {.concurrency = ui::Mode::Serial});
+        // A move made while the server cannot be reached waits in the client's offline queue and is replayed on
+        // reconnect, in order with the moves after it.
+        auto const move =
+            screen.mutation<MoveTaskPosition>("move", board, {.concurrency = ui::Mode::Serial, .offlineQueue = true});
         auto const selectedTask = screen.state<std::int64_t>("selectedTask");
         auto const view = state.value();
         auto const columns = view.at(&GetBoardResult::columns);
