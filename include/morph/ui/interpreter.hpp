@@ -115,7 +115,8 @@ using Evaluator = std::function<async::Completion<std::string>(std::string const
 ///        `attach`, through `RawHandler`.
 ///
 /// An evaluation goes through the `Evaluator` it was given, since that envelope belongs to the UI service, not the
-/// bridge; without one it is refused with a `std::runtime_error`. It has no offline queue: `queueOffline` is ignored.
+/// bridge; without one it is refused with a `std::runtime_error`. It has no offline queue of its own: `queueOffline` is
+/// ignored unless a `QueueingDispatcher` wraps it.
 /// A shared binding without a key is bound unattached, which the bridge refuses at the first call; the interpreter
 /// never binds one, since a `"shared"` alias is a stateless model's and binds privately.
 class BridgeDispatcher final : public Dispatcher {
