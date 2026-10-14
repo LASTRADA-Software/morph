@@ -4680,7 +4680,11 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             spec.tabs.push_back(Tab{.label = label ? textOf(once(ctx, label), format) : std::string{},
                                     .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
         }
-        spec.selected = std::size_t{0};
+        // A document names no index, so the node keeps the user's pick itself: a bound index is the controlled one,
+        // whose page follows the pick, where a constant would move only the bar's highlight.
+        auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
+        spec.selected = [picked] { return picked->get(); };
+        spec.onSelect = [picked](std::size_t index) { picked->set(index); };
         commonOf(node, ctx, element, spec.common);
         return ui::tabs(std::move(spec));
     }

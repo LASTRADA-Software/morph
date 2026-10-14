@@ -550,3 +550,26 @@ TEST_CASE(
     h.reply(1, R"({"id":1})");
     CHECK(readJson(*screen, R"({"result": "m"})") == R"({"id":1})");
 }
+
+// Mutation: lower the index as the constant 0 (picking tab 1 then moves only the highlight).
+TEST_CASE("interpreter control: picking a tab shows its page, mounted once and kept", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "pages",
+      "view": { "kind": "tabs", "testId": "bar", "tabs": [
+        { "label": "One", "children": [ { "kind": "text", "testId": "first", "text": "1" } ] },
+        { "label": "Two", "children": [ { "kind": "text", "testId": "second", "text": "2" } ] } ] } })");
+    int const bar = h.backend.find("Tabs", "testId", "bar").value();
+    CHECK(h.text("first") == "1");
+    CHECK(h.backend.find("Text", "testId", "second") == std::nullopt);
+    h.backend.chooseIndex(bar, 1);
+    h.settle();
+    REQUIRE(h.backend.find("Text", "testId", "second").has_value());
+    CHECK(h.text("second") == "2");
+    CHECK(h.backend.prop(bar, "selected") == "1");
+    h.backend.chooseIndex(bar, 0);
+    h.settle();
+    // The second page is hidden, not destroyed.
+    CHECK(h.backend.find("Text", "testId", "second").has_value());
+    CHECK(h.text("first") == "1");
+}
