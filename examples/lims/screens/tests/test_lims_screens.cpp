@@ -9,11 +9,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <morph/ui/value.hpp>
+#include <morph/util/rational.hpp>
+#include <optional>
 #include <string>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
 
+#include "lims/dto/analysis_dto.hpp"
+#include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
+#include "lims/models/analysis_catalog_model.hpp"
 #include "lims/models/sample_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
@@ -89,4 +94,76 @@ TEST_CASE("lims screens: the results screen opens on its sample", "[lims-screens
     }
     CHECK(harness.problems().empty());
     CHECK(harness.waitForText("conflicts", "0 conflicts"));
+}
+
+// Mutation: navigate nowhere after a sample registers (the lifecycle screen never mounts).
+TEST_CASE("lims screens: registration registers a client and a sample, then opens the sample's lifecycle",
+          "[lims-screens]") {
+    DbFixture fixture;
+    ScreenHarness harness{
+        limsApp(), std::string{lims::screens::kRegister}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
+    harness.edit("clientName", "Waterworks Ltd");
+    harness.click("registerClient");
+    REQUIRE(harness.waitFor([&harness] {
+        auto const text = harness.text("clientId");
+        return text && text->starts_with("Client ");
+    }));
+    harness.edit("reference", "WW-7");
+    harness.click("registerSample");
+    REQUIRE(harness.waitFor([&harness] { return harness.mounted().size() == 2; }));
+    CHECK(harness.mounted().back() == lims::screens::kLifecycle);
+    REQUIRE(harness.waitFor([&harness] {
+        auto const header = harness.text("header");
+        return header && header->ends_with("Registered (v1)");
+    }));
+}
+
+// Mutation: show nothing for a refused open (the error text stays empty).
+TEST_CASE("lims screens: a model's refusal reaches the screen as its own message", "[lims-screens]") {
+    DbFixture fixture;
+    ScreenHarness harness{limsApp(), std::string{lims::screens::kLifecycle}, RigMode::Local, sampleParams(424242),
+                          LocalSetup{.db = {}, .user = "tech"}};
+    REQUIRE(harness.waitFor([&harness] {
+        auto const error = harness.text("error");
+        return error && !error->empty();
+    }));
+    CHECK(harness.text("error")->find("424242") != std::string::npos);
+}
+
+// Mutation: list a result's value as a double (12.5, not 12.500).
+TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[lims-screens]") {
+    DbFixture fixture;
+    std::int64_t sampleId = 0;
+    {
+        lims::test::ScopedPrincipal const principal{"tech"};
+        lims::AnalysisCatalogModel catalog;
+        auto const nitrate =
+            catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+        lims::SampleModel model;
+        auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"});
+        model.execute(lims::ReceiveSample{});
+        model.execute(lims::StartWork{});
+        model.execute(lims::CaptureConcentration{
+            .analysisVersionId = nitrate.versionId,
+            .value = lims::Concentration{morph::math::Rational{morph::math::Numerator{25}, morph::math::Denominator{2},
+                                                               morph::math::DecimalPlaces{3}}}});
+        sampleId = *sample.id;
+    }
+    ScreenHarness harness{limsApp(), std::string{lims::screens::kResults}, RigMode::Local, sampleParams(sampleId),
+                          LocalSetup{.db = {}, .user = "tech"}};
+    bool const listed = harness.waitFor([&harness] {
+        for (int const widget : harness.backend().all("Text")) {
+            if (harness.backend().prop(widget, "text").starts_with("12.500")) {
+                return true;
+            }
+        }
+        return false;
+    });
+    if (!listed) {
+        for (int const widget : harness.backend().all("Text")) {
+            UNSCOPED_INFO("text: " << harness.backend().prop(widget, "text"));
+        }
+    }
+    CHECK(listed);
 }
