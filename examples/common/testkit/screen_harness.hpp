@@ -257,6 +257,11 @@ public:
         return true;
     }
 
+    /// @brief Advances the scheduler's clock by @p delta, firing the timers then due, such as a query's
+    ///        `refreshEvery`. The harness's scheduler is manual: no timer fires unless a test advances it.
+    /// @param delta How far.
+    void advance(std::chrono::milliseconds delta) { _context.clock().advance(delta); }
+
     /// @brief Pumps the owner until @p pred holds.
     /// @param pred   The condition.
     /// @param budget The unscaled budget.
