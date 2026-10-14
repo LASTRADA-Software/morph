@@ -73,7 +73,7 @@ TEST_CASE("bookmarks screens: signing in starts the queries, and a created bookm
     signIn(harness);
     createBookmark(harness, "https://example.org/a", 1);
     reportProblems(harness);
-    CHECK(harness.text("error").value_or("") == "");
+    CHECK(harness.text("error").value_or("").empty());
     CHECK(harness.problems().empty());
 }
 
