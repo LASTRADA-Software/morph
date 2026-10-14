@@ -161,7 +161,7 @@ TEST_CASE("bank screens: registering signs the customer in and opens their accou
     REQUIRE(harness.waitFor([&harness] { return harness.find("Column", "openForm").has_value(); }));
     openAccount(harness, 1);
     reportProblems(harness);
-    CHECK(harness.text("error").value_or("") == "");
+    CHECK(harness.text("error").value_or("").empty());
     CHECK(harness.problems().empty());
 
     // Signing out returns to the login.
