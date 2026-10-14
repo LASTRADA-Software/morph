@@ -1828,11 +1828,15 @@ jobs:
       # examples/common) and libgl1-mesa-dev, and the server itself links only
       # Qt6::Core and Qt6::WebSockets -- the aqtinstall step already asks for
       # qtwebsockets.
-      - name: Configure (gcc-debug, ladder + Qt + bank on)
+      # Qt Quick on too: the screens' render smoke tests (spec 4 §7) mount every
+      # screen on it offscreen, and they are labelled ladder-<app> like the
+      # rungs' tests, so `ctest -L ladder` below runs them.
+      - name: Configure (gcc-debug, ladder + Qt + Qt Quick + bank on)
         if: steps.filter.outputs.run == 'true'
         run: |
           cmake --preset gcc-debug \
             -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_QT_QUICK=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
