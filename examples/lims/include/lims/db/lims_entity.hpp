@@ -73,6 +73,15 @@ struct SampleRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"registered_at"}> registeredAt{0};  // 5
 };
 
+/// @brief A sample's entry data: the header, sampling, optional measurements and project the sample-entry screen
+///        edits, stored as the working copy's JSON when it is saved. One row per sample.
+struct SampleEntryRecord {
+    static constexpr std::string_view TableName = "lims_sample_entries";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"sample_id"}> sampleId{0};                               // 1
+    Light::Field<Light::SqlDynamicAnsiString<4096>, Light::SqlRealName{"payload"}> payload;                // 2
+};
+
 /// @brief An analysis assigned to a sample, and the result captured for it.
 struct ResultRecord {
     static constexpr std::string_view TableName = "lims_results";
