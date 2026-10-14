@@ -282,6 +282,14 @@ void ClientSource::close() {
     disconnect();
 }
 
+bool ClientSource::adoptPrincipal(std::string principal) {
+    _session.principal = std::move(principal);
+    if (_bridge) {
+        _bridge->setDefaultSession(_session);
+    }
+    return true;
+}
+
 // ── RemoteAppSource ─────────────────────────────────────────────────────────
 
 RemoteAppSource::RemoteAppSource(std::string url, std::chrono::milliseconds timeout)
