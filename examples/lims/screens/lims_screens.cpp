@@ -30,18 +30,18 @@ namespace {
 ui::Screen registerScreen() {
     return ui::screen(std::string{kRegister}, [](ui::Scope& screen) {
         screen.title("Register a sample");
-        auto lab = screen.model<SampleModel>("lab", {.instance = ui::Instance::Private});
-        auto registerClient = screen.mutation<RegisterClient>("registerClient", lab);
-        auto registerSample = screen.mutation<RegisterSample>("registerSample", lab);
-        auto client = screen.let("client", registerClient.result());
-        auto registered = screen.let("registered", registerSample.result());
+        auto const lab = screen.model<SampleModel>("lab", {.instance = ui::Instance::Private});
+        auto const registerClient = screen.mutation<RegisterClient>("registerClient", lab);
+        auto const registerSample = screen.mutation<RegisterSample>("registerSample", lab);
+        auto const client = screen.let("client", registerClient.result());
+        auto const registered = screen.let("registered", registerSample.result());
         // A registered sample opens in its own lifecycle screen.
         screen.watch(registered,
                      ui::ifThen(ui::engaged(registered),
                                 ui::navigate(std::string{kLifecycle},
                                              {.params = ui::obj({{"sampleId", registered.at(&SampleView::id)}})})));
-        auto clientName = ui::element("clientName");
-        auto reference = ui::element("reference");
+        auto const clientName = ui::element("clientName");
+        auto const reference = ui::element("reference");
         return ui::column(
             {ui::panel(
                  {ui::textInput({.label = "Client name", .placeholder = "Client"}).id(clientName).testId("clientName"),
@@ -73,32 +73,32 @@ ui::Screen registerScreen() {
 // its instance; opening attaches it, and every transition answers the sample as it now is.
 ui::Screen lifecycleScreen() {
     return ui::screen(std::string{kLifecycle}, [](ui::Scope& screen) {
-        auto sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
-        auto sample = screen.model<SampleModel>("sample", {.instance = sampleId});
-        auto opened = screen.state("opened", false);
-        auto open = screen.mutation<OpenSample>(
+        auto const sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
+        auto const sample = screen.model<SampleModel>("sample", {.instance = sampleId});
+        auto const opened = screen.state("opened", false);
+        auto const open = screen.mutation<OpenSample>(
             "open", sample, {.body = {{&OpenSample::sampleId, sampleId}}, .onSuccess = {ui::set(opened, true)}});
-        auto transition = [&](auto action, std::string const& name) {
+        auto const transition = [&](auto action, std::string const& name) {
             return screen.mutation<decltype(action)>(name, sample, {.concurrency = ui::Mode::Serial});
         };
-        auto receive = transition(ReceiveSample{}, "receive");
-        auto start = transition(StartWork{}, "start");
-        auto submit = transition(SubmitForVerification{}, "submit");
-        auto publish = transition(PublishSample{}, "publish");
+        auto const receive = transition(ReceiveSample{}, "receive");
+        auto const start = transition(StartWork{}, "start");
+        auto const submit = transition(SubmitForVerification{}, "submit");
+        auto const publish = transition(PublishSample{}, "publish");
         // The sample as it is now: fetched once the screen attached it, and again after every transition.
-        auto current = screen.query<GetSample>(
+        auto const current = screen.query<GetSample>(
             "current", sample, {},
             {.when = opened,
              .refreshOn = sample.actions<ReceiveSample, StartWork, SubmitForVerification, PublishSample>()});
-        auto view = current.value();
+        auto const view = current.value();
 
         screen.title(ui::format("Sample {0}", {sampleId}));
         screen.identity(sampleId);
         // Without a sample there is nothing to attach: the screen waits to be opened on one.
         screen.onMount(ui::ifThen(ui::engaged(sampleId), ui::run(open)));
 
-        auto state = view.at(&SampleView::state);
-        auto failure = ui::coalesce(
+        auto const state = view.at(&SampleView::state);
+        auto const failure = ui::coalesce(
             {receive.error(), start.error(), submit.error(), publish.error(), open.error(), current.error()});
         return ui::column(
             {ui::text({.text = ui::format("sample {0} — {1} (v{2})",
@@ -132,18 +132,18 @@ ui::Screen lifecycleScreen() {
 // per result, and what an offline replay could not apply.
 ui::Screen resultsScreen() {
     return ui::screen(std::string{kResults}, [](ui::Scope& screen) {
-        auto sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
-        auto sample = screen.model<SampleModel>("sample", {.instance = sampleId});
-        auto catalog = screen.model<AnalysisCatalogModel>("catalog");
-        auto opened = screen.state("opened", false);
-        auto open = screen.mutation<OpenSample>(
+        auto const sampleId = screen.param<std::optional<std::int64_t>>("sampleId");
+        auto const sample = screen.model<SampleModel>("sample", {.instance = sampleId});
+        auto const catalog = screen.model<AnalysisCatalogModel>("catalog");
+        auto const opened = screen.state("opened", false);
+        auto const open = screen.mutation<OpenSample>(
             "open", sample, {.body = {{&OpenSample::sampleId, sampleId}}, .onSuccess = {ui::set(opened, true)}});
-        auto verify = screen.mutation<VerifyResult>("verify", sample, {.concurrency = ui::Mode::Serial});
-        auto results = screen.query<ListResults>(
+        auto const verify = screen.mutation<VerifyResult>("verify", sample, {.concurrency = ui::Mode::Serial});
+        auto const results = screen.query<ListResults>(
             "results", sample, {},
             {.when = opened, .refreshOn = sample.actions<CaptureConcentration, VerifyResult>()});
-        auto conflicts = screen.query<ListConflicts>("conflicts", sample, {}, {.when = opened});
-        auto analyses = screen.query<ListAnalyses>("analyses", catalog);
+        auto const conflicts = screen.query<ListConflicts>("conflicts", sample, {}, {.when = opened});
+        auto const analyses = screen.query<ListAnalyses>("analyses", catalog);
 
         screen.title(ui::format("Results {0}", {sampleId}));
         screen.identity(sampleId);
@@ -191,9 +191,11 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         decltype(screens.add(registerScreen())) registered;
     };
     std::vector<Listed> listed;
-    listed.push_back({std::string{kRegister}, "Register a sample", screens.add(registerScreen())});
-    listed.push_back({std::string{kLifecycle}, "Lifecycle", screens.add(lifecycleScreen())});
-    listed.push_back({std::string{kResults}, "Results", screens.add(resultsScreen())});
+    listed.push_back(
+        {.id = std::string{kRegister}, .title = "Register a sample", .registered = screens.add(registerScreen())});
+    listed.push_back(
+        {.id = std::string{kLifecycle}, .title = "Lifecycle", .registered = screens.add(lifecycleScreen())});
+    listed.push_back({.id = std::string{kResults}, .title = "Results", .registered = screens.add(resultsScreen())});
     for (Listed const& screen : listed) {
         if (!screen.registered) {
             return std::unexpected(screen.registered.error());
