@@ -17,7 +17,7 @@ lab_schemas.hpp   {actionType: schema}, {wizardId: schema}, the app-* document,
                   and SamplesView (a list/master-detail view over ListSamples)
                   -- every client-facing schema the demo serves, in one place
 main.cpp          console demo: --schemas | --emit-html | REPL
-gui_qml/          Qt Quick renderer of the same schemas (MORPH_BUILD_FORMS_QML=ON)
+screens/          the same actions, wizard and view as server-defined screens
 ```
 
 Suggested reading order: `lab_units.hpp` → `lab_model.hpp` → `lab_wizard.hpp` →
@@ -26,8 +26,8 @@ Suggested reading order: `lab_units.hpp` → `lab_model.hpp` → `lab_wizard.hpp
 ## Build
 
 ```sh
-cmake -B build -G Ninja -DMORPH_BUILD_FORMS_QML=ON   # omit the flag to skip the QML app
-ninja -C build morph_forms_demo morph_forms_qml
+cmake -B build -G Ninja -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON
+ninja -C build morph_forms_demo morph_examples_client
 ```
 
 ## 1. Look at the schemas
@@ -67,7 +67,7 @@ actions — a vanilla-JS renderer builds each form from the embedded schema:
 field order, labels, unit suffixes, decimal steps, min/max, required markers,
 a date-time input for the `format: "date-time"` field, a combo box for the
 `x-optionsAction` field (its options were resolved at emit time by executing
-`ListSamples`; the QML client fetches them live instead), and a submit gate.
+`ListSamples`; the screens fetch them live instead), and a submit gate.
 Filling a form produces a line like
 
 ```
@@ -87,51 +87,7 @@ Error paths are part of the demo: submit `RecordMeasurement {"sampleId":7}`
 `validate()` predicate the GUI gates on — the dispatcher itself does not run
 validators, so models guard their own preconditions.
 
-## 3. QML renderer
-
-```sh
-./build/examples/forms/gui_qml/morph_forms_qml
-```
-
-`qml/DynamicForm.qml` renders any action schema at runtime (same rules as the
-HTML renderer). The Qt Quick renderer dispatches actions through `morph::bridge::Bridge` +
-`BridgeHandler<LabModel>` — the same client API `examples/bank`'s GUI uses — via a generic,
-JSON-in/JSON-out `executeJson` path (see `BridgeHandler::executeJson` in `morph/core/bridge.hpp`).
-Forms have no submit button: each form fires automatically the moment its assembled body
-passes client-side validation, and re-fires on every subsequent edit. Because each keystroke
-can trigger a fresh dispatch with no coalescing, rapid edits may produce out-of-order replies
-for the same action (last-arrival wins on the displayed result) — acceptable for this demo's
-read-mostly compute actions, but worth knowing before reusing this pattern for actions with
-side effects.
-
-The window that opens (`AppShell.qml`) is a small app shell: a sidebar built
-from `morph::app::appSchemaJson<lab::LabApp>()`'s `app-menu` routes to either
-a plain action form (`ComputeDryDensity`, `RecordMeasurement`) or the
-"Intake" wizard — `morph::flows::wizardSchemaJson<lab::IntakeWizard>()` — a
-two-step flow (`RegisterSample` then `RecordMeasurement`) where step two's
-`sampleId` is prefilled from step one's returned id. `qml/Main.qml` (the
-flat "every schema on one scroll" renderer) still exists unchanged and is
-still buildable/importable; `AppShell.qml` is the new default entry point.
-See `docs/spec/forms/workflows_navigation.md` for the full `w-*`/`app-*`
-schema contract and the reference renderer's documented limitations
-(prefill does not visually resync a widget's displayed text; navigating
-away from a wizard screen and back resets its step).
-
-## 4. Views: the SamplesView list/master-detail screen
-
-`AppShell.qml` (above) doesn't route to it, so it's easy to miss:
-`lab_schemas.hpp`'s `SamplesView` — a `morph::views::CollectionView` over
-`ListSamples`, with row-open-to-edit (`EditSample`), a confirm-guarded row
-delete (`DeleteSample`), and a "New" collection action (`CreateSample`) — is
-rendered by `qml/Main.qml` (still buildable/importable, just no longer the
-default entry point), via `CollectionView.qml` (the shipped `MorphForms`
-reference renderer for the `v-*` view-schema layer). To see it, change
-`main.cpp`'s `engine.loadFromModule("LabFormsDemo", "AppShell")` to
-`"Main"` and rebuild `morph_forms_qml`.
-
-See `docs/spec/forms/views.md` for the full `v-*` schema contract.
-
-## 5. Server-defined screens
+## 3. Server-defined screens
 
 [`screens/forms_screens.cpp`](screens/forms_screens.cpp) declares the demo's screens as UI documents
 (spec 4) with the C++ builders:
@@ -157,10 +113,8 @@ The demo ships with its own test vectors (they run as part of `ctest`):
 - `forms_repl_roundtrip` (Unix) — pipes canonical and converted-unit
   submits, a tab-separated line, a malformed datetime, and a missing
   required field through the real REPL and checks every reply.
-- `forms_qml_logic` (with `MORPH_BUILD_FORMS_QML=ON`) — Qt Quick Test suite
-  against the real `DynamicForm`: schema-to-descriptor mapping, the
-  digit-string long arithmetic, unit conversion, payload composition, the
-  readiness gate, and option-row extraction.
+- The screens' tests and render smoke (`screens/`) — every screen on the
+  screen harness, and mounted on Qt Quick offscreen.
 
 ## Notes
 
@@ -176,7 +130,7 @@ The demo ships with its own test vectors (they run as part of `ctest`):
   on the wire, `format: "date-time"` in the schema, and a malformed string is
   rejected as a wire error (try it in the REPL). Both clients provide a
   picker: the browser's native datetime-local control (with a *now* button)
-  and a QML calendar/time popup.
+  and the forms engine's date-time control.
 - Mass and volume fields carry `x-unitAlternatives` (g/t for kg, L for m³
   with exact ratios): pick a different unit and the entered value
   recalculates exactly; the submitted payload is always in the canonical

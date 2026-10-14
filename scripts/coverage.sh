@@ -216,18 +216,14 @@ if coverage_object_built ladder_common_tests; then
     SOURCES+=(examples/common)
 fi
 # include/ + src/ are each rung's DTOs and models (rule 5's own 100% bar);
-# gui_lib/ is its hand-written presenter/adapter code, held to the same bar
-# for the same reason examples/common/gui is — it is real coverage of
-# morph's own client stack, not app-specific domain logic. gui/ and
-# gui_wasm/ are deliberately absent: those are `main()` shells (engine
-# setup, argv parsing, setInitialProperties) with no unit-testable seam,
-# exercised only by the offscreen QML smoke test and by hand.
+# screens/ is its screen documents, which the rung's screen tests mount.
+# src/server/ is a `main()` shell with no unit-testable seam and stays out.
 #
 # Only rungs whose test binary was actually built (RUNG_TEST_EXES, above)
 # contribute sources, so a partial `-DMORPH_LADDER_RUNGS=` configure still
 # produces a coherent report rather than naming paths with no profile data.
 for _rung in "${RUNG_TEST_EXES[@]}"; do
-    for _sub in include src gui_lib; do
+    for _sub in include src screens; do
         if [ -d "examples/${_rung}/${_sub}" ]; then
             SOURCES+=("examples/${_rung}/${_sub}")
         fi

@@ -782,6 +782,19 @@ API surface).
 
 ### Removed
 
+- **The Qt/QML forms renderer and the Qt client stack.** The `MorphForms` QML
+  module (`src/qt/forms`: `DynamicForm`, `SlotRegistry`, `CollectionView`,
+  `WizardView`, `I18nCatalog`), the `morph::qt_forms` component
+  (`include/morph/qt/forms`, `FormsControllerCore`,
+  `MultiModelFormsControllerCore`) with the bridge cores it shipped
+  (`include/morph/qt/bridge`), the `forms_qml`/`forms_qmlplugin` install
+  components and `morph_QML_IMPORT_PATH`, the `MORPH_BUILD_FORMS_QML` and
+  `MORPH_BUILD_BANK_GUI` options, and `scripts/check_forms_qml_install.sh`.
+  Their replacement is the forms engine (`morph/forms/engine/`) rendered by the
+  Qt Quick and terminal frontends from server-defined screens; every example
+  now serves its screens to the generic client (`examples/client`) instead of
+  shipping a QML client of its own. Pre-1.0, per `docs/spec/VERSIONING.md`.
+
 - **`morph/net/detail/base64.hpp`.** The WebSocket handshake uses core-cpp's
   `core::base64::encode` (`<core/Base64.hpp>`), and `SocketServer`'s accept loop
   waits on `core::platform::Wakeup` instead of a self-pipe of its own.
@@ -791,8 +804,8 @@ API surface).
   Its job is done better by a stateful model holding the draft itself, and
   `subscribe` now means instance subscriptions (above). `morph::flows::FlowSession`
   already owned its own draft tuple and now gates on `ActionValidator` and
-  dispatches directly; its public API, the `w-*`/`app-*` schema and
-  `WizardView.qml` are unchanged. `ActionValidator` keeps its server-side
+  dispatches directly; its public API and the `w-*`/`app-*` schema are
+  unchanged. `ActionValidator` keeps its server-side
   validation role and loses only its draft-readiness one. Pre-1.0, per
   `docs/spec/VERSIONING.md`.
 

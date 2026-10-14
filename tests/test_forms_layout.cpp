@@ -265,15 +265,10 @@ TEST_CASE("Forms::SchemaJson::NoFieldSpansEmitsNoColspan", "[forms][layout]") {
 // ---------------------------------------------------------------------------
 // x-submitMode — the emitter half of explicit submit mode
 //
-// The renderer has consumed `x-submitMode` since it shipped, but nothing in
-// C++ emitted it, so no *generated* schema could carry it and ten call sites
-// hand-wrote `DynamicForm { controller: null }` plus an external Button
-// instead.
-//
 // These fixtures are deliberately driven through `schemaJson<A>()` rather than
-// a hand-written schema literal. `tst_DynamicFormSubmitMode.qml` already covers
-// the renderer against a literal, and would keep passing with the emitter
-// removed entirely — only a generated fixture can fail for that reason.
+// a hand-written schema literal: a test against a literal would keep passing
+// with the emitter removed entirely — only a generated fixture can fail for
+// that reason.
 // ---------------------------------------------------------------------------
 
 // NOLINTBEGIN(misc-use-internal-linkage) -- see below: an anonymous namespace

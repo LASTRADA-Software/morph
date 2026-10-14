@@ -23,7 +23,7 @@ an edit, a delete — and how to choreograph their already-generated forms.
 - [The JSON key vocabulary](#the-json-key-vocabulary)
 - [`ViewTraits<V>` / `BRIDGE_REGISTER_VIEW` / `ViewRegistry`](#viewtraitsv--bridge_register_view--viewregistry)
 - [Dispatch: the screen is still just action calls](#dispatch-the-screen-is-still-just-action-calls)
-- [The Qt/QML reference renderer](#the-qtqml-reference-renderer)
+- [Rendering](#rendering)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Failure modes](#failure-modes)
@@ -93,8 +93,8 @@ maps one target-action wire field to one row wire field; `bind` is a pure
 client-side prefill — the wire payload the action eventually fires is the
 ordinary action body. `bind` *can* name more than one field, but see
 "Limitations" below before binding every required field of a row-opener
-action: combined with a no-submit-button/auto-fire-on-ready renderer (the
-Qt/QML reference renderer), that fires the action the instant the row opens.
+action: combined with an auto-fire-on-ready form, that fires the action the
+instant the row opens.
 
 ## Declaring a view in C++
 
@@ -271,70 +271,18 @@ elsewhere:
 After an edit/delete/create resolves, the renderer re-runs step 1 to refresh
 — there is no push channel for collection changes (see Non-goals).
 
-## The Qt/QML reference renderer
+## Rendering
 
-`src/qt/forms/qml/CollectionView.qml` is the reference implementation,
-shipped as part of the `MorphForms` QML module (alongside `DynamicForm.qml`,
-which it reuses **unmodified** as the row editor — see
-[forms.md](forms.md), "Shipped Qt/QML reference renderer", for why the
-renderer lives there and not in `examples/forms/gui_qml`, the demo
-*consumer*). It parses `FormsController::viewsJson` (a `{viewType:
-viewSchema}` object, mirroring `schemasJson`), renders `v-columns` as a
-table, and instantiates `DynamicForm` as a modal `Dialog` for `v-kind:
-"collection"` or a live side pane for `"master-detail"`. Populate/edit/
-delete/create are issued purely through the existing
-`controller.submitIfValid(actionType, bodyJson)` / `replyReceived` surface —
-no new controller method was needed.
+The forms engine renders a view: `CollectionModel::fromSchema` reads this
+document, `CollectionSession` runs its query, actions, confirmation and editor,
+and `collectionView` draws it — the table, the row and collection actions, the
+confirm and editor dialogs, and for `master-detail` the selected row's detail
+([engine.md](engine.md), "Collections" and "Rendering collections and
+wizards"). A document's `collection` node reaches it through the interpreter.
 
-Row-open prefill first calls `DynamicForm.resetFields()`, then locates the
-actual `field_<name>` `TextField` instance DynamicForm.qml draws for each bound
-plain scalar field and sets its `text` — the same path a user's own typing
-takes (via that control's own `onTextChanged`), rather than reaching into
-`DynamicForm`'s internal `fieldValues` state directly, since `DynamicForm.qml`
-has no external "set a field's displayed value" API (every other control
-already owns writing its own text/selection from the user's input). See
-"Limitations" for what this does not reach.
-
-**The reset is not optional.** `modalForm`/`detailForm` are single instances
-created once inside their `Dialog` and reused for every row, and prefill only
-writes the fields `v-rowAction` names in `bind`. Without clearing first,
-everything else kept whatever the user left there while editing the *previous*
-row — and because the renderer auto-fires as soon as the form is `ready` (see
-Limitations), merely *opening* the next row fired the row action with that
-row's key and the previous row's field values: a silent write of data the user
-neither entered nor saw. `resetFields()` runs with auto-submit suppressed (see
-`DynamicForm`'s `programmaticEdit` counter), so repopulating a form never fires
-an action by itself.
-
-`examples/forms/lab_schemas.hpp`'s `SamplesView` (composed from
-`ListSamples`/`EditSample`/`DeleteSample`/`CreateSample` in
-`examples/forms/lab_model.hpp`) is the worked example.
-`examples/forms/gui_qml/qml/Main.qml` renders every registered view alongside
-the per-action forms, excluding from the standalone-forms list any action a
-view already owns (its query, row-opener, or a `v-actions` target), so
-nothing renders twice.
-
-### Chrome slots and the embedded editors
-
-`CollectionView.slotRegistry` (null by default) is handed to both editor
-`DynamicForm`s, so field slots and form chrome registered once apply inside
-the editor too. The view's own chrome goes through the same
-`SlotRegistry.byChrome` registry ([forms.md, "Chrome slots"](forms.md#chrome-slots)),
-each role replacing the built-in, which is then not drawn; members are
-assigned only where the chrome declares them:
-
-| Role | Replaces | Members |
-|---|---|---|
-| `collectionHeader` | the title and the column-header row with its collection actions | `title`, `columns` (visible `v-columns`), `actions` (collection scope), `fire(action)` |
-| `collectionRow` | one row's cells, Open button and row actions | `row`, `columns`, `cells` (formatted texts), `rowKey`, `actions` (row scope), `canOpen`, `open()`, `fire(action)` |
-| `confirmDialog` | the "Are you sure?" dialog | `message`, `action`, `row`, `accept()`, `reject()` — loaded only while an action waits |
-| `editorDialog` | the collection kind's modal editor | `title`, `open`, `close()`; **must declare `contentItem`**, into which the view reparents the editor form |
-
-`fire()` and `accept()` make exactly the controller calls the built-in buttons
-make (confirmation included), and `open()` runs the same prefill. The root is
-a `Frame`, whose `background`/`padding` a host sets on the instance.
-`src/qt/forms/tests/tst_ViewChrome.qml` pins every role and a fully chromed
-screen, editor open, with no visible built-in `Label` or `Button`.
+Row-open prefill replaces every field of the editor from the row's bound
+values, so nothing typed for another row carries over, and it submits nothing:
+a prefill is not a user's request to submit.
 
 ## API reference
 
@@ -393,13 +341,12 @@ for a malformed reference within an otherwise-valid one.
 
 A row id is carried exactly, whatever its magnitude — in the rendered cell, in
 the `objectName` that identifies a row, and in the body of any action bound to
-that row. `CollectionView` parses its query reply with `JsonExact.parse`
-(`src/qt/forms/qml/JsonExact.js`), which keeps an integer literal a double
-cannot represent as its exact digits, and `bindBodyJson` emits those digits
-verbatim rather than re-serialising a rounded double.
+that row. `CollectionSession` parses its query reply keeping every digit of an
+integer literal, the table source holds row keys as `int64`, and a row action's
+body carries the row's exact JSON values rather than a re-serialised double.
 
-The failure this prevents is silent and destructive. JavaScript numbers are
-IEEE-754 doubles and round to even above 2^53, so neighbouring ids collapse onto
+The failure this prevents is silent and destructive. IEEE-754 doubles round to
+even above 2^53, so neighbouring ids collapse onto
 one value: two rows become indistinguishable, and a confirmed `Delete` on one
 builds a body naming the other. Nothing downstream can notice — the server side
 is exact throughout, so such an action decodes cleanly, validates, and deletes
@@ -427,15 +374,14 @@ pattern:
   constraint [forms.md](forms.md) already places on every action type for
   `mergeSchemaExtras`.
 - **No i18n.** Like every other cached-per-type schema in this layer, labels
-  (`title`, column labels, action labels) are fixed at first call. The Qt/QML
-  reference renderer's `CollectionView.qml` does not (yet) accept an
-  `I18nCatalog`/`displayLocale` the way `DynamicForm.qml` does.
+  (`title`, column labels, action labels) are fixed at first call; a renderer
+  translates them client-side.
 - **Binding every required field of a row-opener, on a no-submit-button
   renderer, fires the action the instant the row opens.** A view schema
   itself has no notion of "submit" — a row-opener form fires exactly when
-  the renderer decides it is ready, and the Qt/QML reference renderer
-  (`DynamicForm.qml`) decides that the moment every required field is
-  engaged, with no submit button to hold it back. If `bind` prefills *every*
+  the renderer decides it is ready, and a form in automatic submit mode
+  decides that the moment every required field is engaged, with no submit
+  button to hold it back. If `bind` prefills *every*
   required field (not just the row key), the freshly-opened editor is
   already "ready" and auto-fires before the user reviews or changes
   anything. `examples/forms/lab_schemas.hpp`'s `SamplesView` avoids this by
@@ -443,20 +389,6 @@ pattern:
   user actually types a new name. A renderer with an explicit submit step
   would not have this hazard; a no-submit-button renderer's authors must bind
   deliberately.
-- **`CollectionView.qml`'s row-open prefill only reaches a plain scalar
-  field.** It locates the bound field by DynamicForm's `objectName: "field_"
-  + name` convention (the default `TextField` a plain integer/string
-  property renders as) and sets its `text`. A `bind` entry targeting a field
-  DynamicForm renders as a `Choice` combo box, a `Timestamp`/date-time
-  picker, a slider, a multiline text area or a radio group is not currently
-  prefilled — the control is simply left at its own default, exactly as an
-  unbound field would be (no crash, no partial state). A
-  `SlotRegistry`-overridden scalar field is prefilled only when its slot
-  declares the optional `fieldText` member ([forms.md](forms.md#theming--component-override-registry)):
-  the hidden default `TextField` still takes the text, and `fieldText` carries
-  the resulting value to the slot. Every worked example (`SamplesView`) only
-  ever binds the integer row key, which always renders as a plain
-  `TextField`, so this gap does not affect the shipped demo.
 
 ## Non-goals
 
@@ -482,9 +414,9 @@ pattern:
 ## Cross-references
 
 - [forms.md](forms.md) — `schemaJson<A>()`, the `x-order`/`ExtUnits`/
-  `x-decimalPlaces` reused verbatim for derived columns, the shipped Qt/QML
-  renderer toolkit `CollectionView.qml` ships alongside, and the
-  flat-actions-only scope inherited here.
+  `x-decimalPlaces` reused verbatim for derived columns.
+- [engine.md](engine.md) — the collection session and view that render this
+  document.
 - [choice.md](choice.md) — the "a query action serves rows" pattern
   generalised from a combo box to a table, including the empty-body query
   contract and the stale-value caveat.

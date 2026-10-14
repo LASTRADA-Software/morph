@@ -10,8 +10,9 @@ A feature-rich demo banking application built on two libraries:
   ODBC layer. Each model persists to **SQLite** through a typed `DataMapper`; the
   schema is owned by Lightweight migrations.
 
-It ships the models, a full test suite, a scripted CLI driver, and a **Qt 6
-desktop GUI** — which also builds to **WebAssembly** and runs entirely in the browser.
+It ships the models, a full test suite, a scripted CLI driver, a server, and
+**server-defined screens** the generic client draws — which also builds to
+**WebAssembly** and runs entirely in the browser.
 
 > **▶ Try the live demo:** **https://lastrada-software.github.io/morph/demo/**
 > Sign in as the seeded demo user (`demo` / `demo1234`), who has two accounts.
@@ -27,23 +28,20 @@ numbers in `LADDER.md`'s table are load-bearing for the rungs that consume each
 other's answers, and bank has nothing to take but a renumbering. Concretely,
 bank is absent from [`examples/rungs.txt`](../rungs.txt) and never calls
 `morph_add_rung()`, which is what keeps it out of `ci.yml`'s `ladder-tests`
-and `ladder-sanitizers`, `wasm-ladder.yml`'s build loop, `coverage.sh` and
-`codecov.yml`'s per-rung components — the only workflow that builds bank at all
-is `wasm-demo.yml`, and only for the browser demo. `ladder_bank_server` below is a local `add_executable` for the same
-reason; the `ladder_` prefix is the scenario tooling's naming convention, not a
+and `ladder-sanitizers`, `coverage.sh` and `codecov.yml`'s per-rung
+components; `ci.yml`'s `bank-sanitizers` and all-features jobs build it with
+`-DMORPH_BUILD_BANK_EXAMPLE=ON`, and `wasm-demo.yml` builds the browser demo.
+`ladder_bank_server` below is a local `add_executable` for the same reason; the `ladder_` prefix is the scenario tooling's naming convention, not a
 rung claim.
 
 Conventions bank **shares** with the rungs: persistence exclusively through the
 Lightweight ORM, with the schema owned by `LIGHTWEIGHT_SQL_MIGRATION`
 definitions — [`LADDER.md`](../LADDER.md) calls that "bank's pattern" and binds
 every rung to it — models as the application, plain aggregates on the wire, and
-the shared testkit's `QmlSurfaceAudit`. Conventions it does **not** follow: no
-schema-driven forms (its GUI hand-rolls one QObject controller per domain
-rather than using `morph::qt::forms::FormsControllerCore`), no
-`examples/common/gui` presenter architecture, and no
-[`TESTING.md`](../TESTING.md) dual-deployment-mode rig — its remote coverage is
+[server-defined screens](#server-defined-screens). The convention it does
+**not** follow is the [`TESTING.md`](../TESTING.md) dual-deployment-mode rig — its remote coverage is
 `SimulatedRemoteBackend` in `test_remote.cpp` plus the scenario corpus below.
-Bringing those conventions into line is open work; the numbering question is
+Bringing that into line is open work; the numbering question is
 the part that is settled.
 
 ## Architecture: two type layers
@@ -269,46 +267,6 @@ an endorsement; when one is fixed, the file that pins it is meant to fail.
   statement over a past window still moves when the account does. The debit and
   credit totals beside it are windowed correctly.
 
-### Qt 6 QML GUI
-
-A **QML (Qt Quick)** desktop GUI (`gui/`) is built when `-DMORPH_BUILD_BANK_GUI=ON`
-is also passed (requires Qt 6 Quick + Quick Controls 2):
-
-```sh
-cmake -G Ninja -B build -S . -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON
-cmake --build build --target bank_gui
-./build/examples/bank/gui/bank_gui
-```
-
-Structure:
-
-- **`gui/bank_gui_lib`** — a static library holding `BankClient` and every
-  controller, linking `Qt6::Core` only (no Quick, no Qml). `bank_gui` is
-  `main.cpp` plus the QML module on top of it; `bank_gui_tests` and
-  `bank_gui_qml_tests` (see [Tests](#tests)) are the other consumers.
-- **`gui/BankClient`** — owns the worker pool, a `morph::qt::QtExecutor`, the
-  `Bridge` (local backend), DB setup, and the session. UI-toolkit-agnostic.
-- **`gui/controllers/`** — one QObject controller per domain (`AppController`,
-  `AccountController`, …), exposed to QML as context properties (`app`,
-  `accounts`, `txns`, `cards`, `payees`, `loans`). Each calls
-  `BridgeHandler<Model>.execute(...).then(...)` — callbacks land on the Qt GUI
-  thread via `QtExecutor` — and publishes display-ready data as `Q_PROPERTY`
-  `QVariantList`s (money pre-formatted), plus an `error(QString)` signal. The
-  heavy morph/Lightweight includes are hidden from `moc` behind `#ifndef
-  Q_MOC_RUN` (moc follows includes and its parser trips on them).
-- **`gui/qml/`** — the front-end: `Main` (login ⇄ shell + a toast that carries
-  both the controllers' `error` signals and the `posted`/`paid` confirmations),
-  `AppShell` (sidebar + stacked pages), the five pages, and reusable components
-  (`Panel`, `AppButton`, `Field`, `Pill`, `Picker`). Bundled via
-  `qt_add_qml_module` (URI `BankGui`). The warm, "Claude-inspired" palette comes
-  from `gui/Theme.hpp` and is installed as the `theme` context property — in
-  `bank_gui_lib` rather than `main.cpp` so the QML tests instantiate the shipped
-  `.qml` with the shipped palette.
-
-A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set (with
-`QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`): it seeds data, signs in,
-and grabs a PNG of each page.
-
 ### WebAssembly demo (self-contained, GitHub Pages)
 
 **Open it in a browser — nothing to install:** **https://lastrada-software.github.io/morph/demo/**
@@ -323,8 +281,8 @@ The page is the generic client ([`examples/client`](../client)) built for
 **single-threaded WebAssembly**, running bank's [server-defined screens](#server-defined-screens)
 in process on the Qt Quick renderer — the same screens the native client and bank's server
 serve. Since Lightweight (ODBC/SQLite) can't run in a browser, bank's models link against
-an **in-memory store** (`bank_memory_lib`: `gui_wasm/src/models/*_wasm.cpp` behind the
-shadow model headers in `gui_wasm/include/bank/wasm/`, which come ahead of the native ones
+an **in-memory store** (`bank_memory_lib`: `memory/src/models/*_wasm.cpp` behind the
+shadow model headers in `memory/include/bank/`, which come ahead of the native ones
 on the include path), seeded by `bank::wasm::seedDemo()`. The models run on the Qt event
 loop. Single-threaded ⇒ no SharedArrayBuffer ⇒ **no COOP/COEP headers**, so plain GitHub
 Pages hosts it. The client links with Asyncify, because the Qt Quick frontend waits for
@@ -336,7 +294,7 @@ Build locally (needs Qt 6.10 for WASM and its emsdk, 4.0.7):
 source /path/to/qt6-wasm/emsdk/emsdk_env.sh
 export EM_CACHE="$PWD/.emcache"
 /path/to/qt6-wasm/bin/qt-cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
-  -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON \
+  -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
   -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON -DMORPH_BUILD_TESTS=OFF
 cmake --build build-wasm --target morph_examples_client
 python3 -m http.server -d build-wasm/examples/client 8000   # open morph_examples_client.html
@@ -378,43 +336,10 @@ shared on-disk test database. Notable cross-cutting tests:
 - `test_offline.cpp` — parks deposits in an `InMemoryOfflineQueue` while "offline" and
   replays them via `SyncWorker` on "reconnect".
 
-`tests/gui/` is a second binary, `bank_gui_tests`, built only when
-`-DMORPH_BUILD_BANK_GUI=ON` is also set — `bank_tests` links no Qt at all and
-is built in configures that have none. It holds `test_bank_qml_surface.cpp`,
-which points the ladder testkit's `QmlSurfaceAudit`
-(`examples/common/testkit/qml_surface.hpp`, `examples/TESTING.md`) at the six
-controllers and the thirteen `.qml` files, and fails on any name that exists on
-one side only: a renamed `Q_INVOKABLE`, a `Connections` handler for a signal
-that is gone, a property read that would resolve to `undefined`. None of those
-is a compile error or a QML warning; the pane just stays empty.
-
-```sh
-cmake --build build --target bank_gui_tests
-./build/examples/bank/bank_gui_tests
-```
-
-A third binary, `bank_gui_qml_tests`, holds the cases that need a live QML
-engine — behaviour that lives in the `.qml` and is invisible from C++. It loads
-the shipped files out of the source tree by URL (the `BankGui` module is inside
-the `bank_gui` executable and cannot be linked; QML's implicit directory import
-resolves `Panel`/`Picker`/… with no `qmldir`), wires the real controllers as
-context properties, and reads values back off the items the engine created.
-`MoveMoneyPage`'s account picker is the worked example: `TransactionController`
-is self-consistent under any C++ drive, and the bug was a `ComboBox` whose
-`currentIndex` nothing restored after `refresh()` replaced its model. It is
-kept out of `bank_gui_tests` so that binary stays `Qt6::Core`-only and needs no
-platform plugin.
-
-```sh
-cmake --build build --target bank_gui_qml_tests
-QT_QPA_PLATFORM=offscreen ./build/examples/bank/bank_gui_qml_tests
-```
-
 ## Status
 
-Models, tests, CLI, the Qt 6 GUI, and a self-contained WebAssembly build (hosted
-on GitHub Pages) are complete. Possible extensions: durable in-browser
-persistence (IDBFS/OPFS) for the WASM build, switching its in-browser backend to
-`RemoteServer` + `SimulatedRemoteBackend` to surface the JSON wire protocol, and
-wiring the desktop GUI over `morph::qt::QtWebSocketBackend` for a true networked
-client/server split.
+Models, tests, CLI, the server, its screens, and a self-contained WebAssembly
+build (hosted on GitHub Pages) are complete. Possible extensions: durable
+in-browser persistence (IDBFS/OPFS) for the WASM build, and switching its
+in-browser backend to `RemoteServer` + `SimulatedRemoteBackend` to surface the
+JSON wire protocol.

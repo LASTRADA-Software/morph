@@ -14,9 +14,6 @@
 // pin that the bound is per **field** -- the sibling of the same `Quantity`
 // type is left unconstrained -- and that one declaration drives both the
 // emitted schema and the C++ predicate a `validate()` calls.
-//
-// src/qt/forms/tests/tst_DynamicFormFieldBounds.qml pins the renderer half
-// against the same key names.
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>

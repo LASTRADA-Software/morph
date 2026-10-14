@@ -89,7 +89,7 @@ struct Login {
     /// @brief Renders with the schema renderer's own Submit button rather than
     ///        auto-submitting on the last keystroke.
     ///
-    /// A login is a deliberate act, and `DynamicForm`'s default (submit as soon
+    /// A login is a deliberate act, and a form's default (submit as soon
     /// as every required field is `ready`) would fire it mid-typing on the first
     /// username prefix that happens to be a valid principal. Emits
     /// `"x-submitMode": "explicit"` into `schemaJson<Login>()`; same declaration,

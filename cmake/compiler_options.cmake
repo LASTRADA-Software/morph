@@ -45,7 +45,7 @@ set(MORPH_WARNING_SENTINEL "")       # the one flag morph_verify_warning_flags()
 # with "unknown warning option", turning a *suppression* flag into the very
 # error it exists to silence: Emscripten's bundled clang (pinned to an older
 # release than the Linux/Windows Clang this project otherwise builds with --
-# see .github/workflows/wasm-ladder.yml's EMSDK_VERSION) for most of them, and
+# see .github/workflows/wasm-demo.yml's EMSDK_VERSION) for most of them, and
 # Apple clang 17 (the stock macOS toolchain, LLVM 19-era) for -Wno-nrvo. A
 # version-number cutoff would be equally correct but more fragile (would need
 # updating every time any of those toolchains moves); probing the actual
@@ -182,7 +182,7 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
     # clang has no finer flag, so the alternatives are all-or-nothing plus
     # per-site suppressions. Dropping it entirely is a real cleanup, not a
     # one-line diff: measured on this tree with every optional feature
-    # configured (clang 22.1.8, clang-debug + NET/QT/FORMS_QML/OFFLINE_SQLITE/
+    # configured (clang 22.1.8, clang-debug + NET/QT/OFFLINE_SQLITE/
     # LOAD_TESTS/HMAC_EXAMPLES/LADDER/BANK_EXAMPLE, -Werror off), removing this
     # line yields **4856 diagnostics over 41 distinct sites in 16 first-party
     # files** — the emission count is that much larger than the site count
@@ -442,7 +442,7 @@ endif()
 # relative to the generated file, climbing back out of the build tree with a
 # run of "..":
 #
-#     #include "../../../../../../examples/ledger/gui_lib/budget_presenter.hpp"
+#     #include "../../../../../../examples/<rung>/<dir>/<class>.hpp"
 #
 # A quoted include is resolved against the including file's directory *and*
 # against every -I entry, so that climb is attempted from each of the target's
@@ -452,17 +452,16 @@ endif()
 # repository it checks out (.claude/worktrees/<name>/, which is where the agent
 # harness puts them), it does: six levels up from
 # <worktree>/examples/<rung>/include lands back in the outer checkout, where
-# examples/<rung>/gui_lib/<same name>.hpp really exists. Clang then reports
+# examples/<rung>/<dir>/<same name>.hpp really exists. Clang then reports
 #
 #     error: multiple candidates for header '...' found; ... ignoring others
 #     including '<worktree>/examples/<rung>/include' [-Werror,-Wshadow-header]
 #
 # once per moc'd class, and -Werror (above) turns every AUTOMOC target in the
-# project into a build failure -- ladder_<rung>_gui_lib, and with it every
-# ladder_<rung>_tests binary that links one.
+# project into a build failure.
 #
 # AUTOMOC_PATH_PREFIX makes moc emit the header path relative to the include
-# directory it was found under instead ("budget_presenter.hpp",
+# directory it was found under instead ("<class>.hpp",
 # "ledger/app/app.hpp"), so the generated include resolves through the target's
 # own -I set and never ascends out of the build tree. That removes the
 # ambiguity rather than the diagnostic: -Wno-shadow-header would silence this
@@ -616,7 +615,7 @@ endfunction()
 # so codecov.yml's entire crm src component was missing from the report while
 # its tests ran and passed. llvm-cov additionally discards function records it
 # cannot reconcile, because the same header arriving under two roots hashes two
-# ways -- worth 33 points on examples/common/gui/event_poller.hpp.
+# ways.
 #
 # The alternative fix, rejected with reasons. Adding -fcoverage-prefix-map so
 # the recorded paths are worktree-independent does produce correct paths

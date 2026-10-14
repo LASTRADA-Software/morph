@@ -22,7 +22,7 @@
 # up from the file it is analysing and offers no finer granularity than a
 # directory -- there is no way to say "inside a Catch2 macro expansion" -- so
 # this file sits in the test directory rather than at `examples/`, where it
-# would also cover every example's src/, include/ and gui_lib/. A hand-written
+# would also cover every example's src/, include/ and screens/. A hand-written
 # `a < b < c` in the code under test is still reported, and InheritParentConfig
 # keeps every other check the repository-root .clang-tidy enables: exactly one
 # entry is subtracted, and only here.

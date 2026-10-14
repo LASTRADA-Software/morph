@@ -22,10 +22,9 @@
 //   4. journal — does a recorded entry replay the custom field's value back?
 //
 // Result headline (full writeup: examples/crm/EXTENSION-BAG-SPIKE.md): the
-// journal and the QML renderer need no framework change at all — the journal is
-// payload-shape-agnostic, and DynamicForm.qml already renders any schema property
-// generically. Schema growth and decode preservation are both reachable using
-// primitives the framework already ships but morph itself never plumbs together:
+// journal and the renderers need no framework change at all — the journal is
+// payload-shape-agnostic, and a form renders any schema property generically. Schema growth and decode preservation
+// are both reachable using primitives the framework already ships but morph itself never plumbs together:
 // glz::generic_u64 (already used internally for schema-DOM manipulation, see
 // forms.hpp's mergeSchemaExtras/InstanceConstraints::decorate) as the bag's Value
 // type, and glaze's own glz::meta<T>::unknown_read/unknown_write hook (used

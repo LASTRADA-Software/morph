@@ -16,40 +16,26 @@ complete morph application — one entity, one model, SQLite, Qt WASM client.
 ## Running it
 
 ```bash
-# One-time configure (Qt 6.5+, an ODBC SQLite3 driver, MORPH_BUILD_FORMS_QML
-# for the schema-driven create form):
+# One-time configure (Qt 6.5+, an ODBC SQLite3 driver):
 cmake -S . -B build -G Ninja \
-    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_FORMS_QML=ON \
+    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON \
     -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=pastebin
 
-# Server (owns the database, the action journal and the expiry sweep):
+# Server (owns the database, the action journal and the expiry sweep, and
+# serves the screen):
 PASTEBIN_DB="DRIVER=SQLite3;Database=pastebin.db;Timeout=5000" \
 PASTEBIN_PORT=8765 ./build/examples/pastebin/ladder_pastebin_server
 
-# Desktop client, either deployment mode:
-./build/examples/pastebin/ladder_pastebin_gui                          # in-process
-./build/examples/pastebin/ladder_pastebin_gui --server ws://127.0.0.1:8765
+# The generic client, either deployment mode:
+./build/examples/client/morph_examples_client --server ws://127.0.0.1:8765
+./build/examples/client/morph_examples_client --app pastebin   # in-process
 ```
-
-The browser client is the same program with a different `main()`
-(`gui_wasm/main_wasm.cpp`), built only in an Emscripten configure — which
-additionally needs `-DMORPH_CLIENT_ONLY=ON`, since a WASM client names its
-model type but must not link the model's ODBC-backed bodies
-(`docs/spec/core/registry.md`; `morph_add_rung()` fails the configure with that
-explanation if the option is missing). Its server url is baked in at build time
-via `-DMORPH_LADDER_PASTEBIN_WASM_SERVER_URL=ws://host:port`. The exact
-configure line CI uses is `.github/workflows/wasm-ladder.yml`.
 
 **Scope note (delivery + verification reviews):** review rounds had piled
 ladder-wide infrastructure onto this rung until it stopped being small. That
 infrastructure is now **rung 0**, delivered *before* the pastebin app: the
 testkit subset (`pump.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, Qt-owning
-test main), `examples/common/gui` (AppContext + Presenter base), the
-`ladder-tests` CI job, and the **WASM-remote spike** — the first-ever
-WASM + `QtWebSocketBackend` run, which requires registration that never
-blocks and the `setConnectHandler` pattern instead
-of `waitForConnected()` (which hangs the page on WASM), with a written
-fallback plan if it bounces off framework work. Rung 1 proper is the app
+test main) and the `ladder-tests` CI job. Rung 1 proper is the app
 below plus its design records. Deferred from rung 1: the convergence
 assertion (its `poll()`/`lastEventId()` hooks exist only from rung 3) and
 the full hostile-content corpus suite (start with a representative subset).
@@ -98,9 +84,8 @@ DTO fields follow the strong-type rule: `PasteId`, `Timestamp`, `enum
 class` visibility, a reads `Quantity` — `std::string` only for content and
 extension.
 
-Clients: Qt Widgets desktop client and the same code compiled to WASM
-(follow [`../bank/gui_wasm`](../bank/gui_wasm)). Local and remote backends
-must both work unchanged.
+Client: the server-defined screen above, drawn by the generic client. Local
+and remote backends must both work unchanged.
 
 ## morph subsystems exercised
 
@@ -219,34 +204,6 @@ must both work unchanged.
 - **Lightweight behind a model** at the smallest possible scale — the
   DTO ⇄ entity ⇄ `DataMapper` loop of [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md)
   proven on a one-entity schema before the bigger rungs depend on it.
-- **`morph::async::CallbackScope`** — this rung is the ladder's first
-  consumer, in `gui_lib/paste_qml_bridges.hpp`'s `FormsBridge`. Its
-  `submitIfValid` hands the forms controller two callbacks that capture
-  `this` and emit `replyReceived`; a `Completion` always resolves through the
-  executor, and both shells own their bridges by `unique_ptr` in `main()`, so
-  a reply can land after the bridge is gone. The rung's two neighbours are
-  covered by mechanisms that do not reach here — `PastePresenter` through
-  `Presenter::track()`'s `QPointer` re-check, `PasteBridge` through Qt's
-  signal/slot auto-disconnect — so `FormsBridge` takes the framework's
-  general answer: a **last-declared** `CallbackScope` member, with both arms
-  wrapped in `_callbacks.guard(...)`
-  ([`docs/spec/core/callback_scope.md`](../../docs/spec/core/callback_scope.md)).
-  `tests/test_paste_qml_bridges.cpp` drives the window (destroy a bridge
-  mid-submit, then let the reply land) and asserts the observable half — the
-  dispatch completed after the bridge was gone. The suppression itself has no
-  observable signature outside a sanitized build, which is stated there
-  rather than dressed up: this was closed by construction, not after a
-  measured crash.
-
-Pastebin's GUI renders exclusively from `morph::forms::schemaJson<A>()`
-through the real `MorphForms` QML module (justification (b): pure glue, no
-domain logic, no hand-rolled widget). `gui_lib/paste_qml_bridges.hpp`'s
-`FormsBridge` composes `morph::qt::forms::FormsControllerCore<PasteModel>`
-directly, over the `Bridge&`/`IExecutor*` `AppContext::onReady()` hands it —
-no rung-owned controller sits between them; the shipped core's
-`(Bridge&, IExecutor*, schemasJson)` constructor is exactly the composition
-[`../TESTING.md`](../TESTING.md)'s "never construct executors or backends
-themselves" presenter rule requires.
 
 ## Required tests (from review)
 
@@ -316,31 +273,12 @@ themselves" presenter rule requires.
 
 ## Definition of done
 
-- [x] **Desktop client against local and remote backends.**
-  `ladder_pastebin_gui` in both modes, driven manually against a real
-  `ladder_pastebin_server` (create → list → open → burn → delete) and by the
-  offscreen QML engine-load smoke test in the suite.
-- [~] **WASM client, same client code.** `gui_wasm/main_wasm.cpp` is the only
-  file that differs from the desktop client: the presenters, the forms
-  controller, the QML adapters (`gui_lib/paste_qml_bridges.hpp`), the schema
-  document and `gui/qml/Main.qml` are all shared verbatim — no shadow headers,
-  no WASM variant of any model/DTO/QML file
-  ([`../TESTING.md`](../TESTING.md)'s hard requirement). **It has never been
-  compiled.** No Emscripten toolchain existed in the environment it was
-  authored in (`emcmake: command not found`), exactly as rung 0's own
-  [`../common/wasm_spike`](../common/wasm_spike) records for the spike it rides
-  on. What *was* verified locally: every shared translation unit plus
-  `main_wasm.cpp` compiles with `__EMSCRIPTEN__` and `MORPH_CLIENT_ONLY`
-  defined and the Lightweight/ODBC include paths removed — the client's include
-  graph is genuinely persistence-free. What was not: the Qt for WebAssembly
-  toolchain, the link, and the browser.
-  `.github/workflows/wasm-ladder.yml` is the compile gate that will settle it.
+- [x] **The client against local and remote backends.** The screen in both
+  modes — the screen tests on the harness, the render smoke on Qt Quick
+  offscreen, and the generic client against a real `ladder_pastebin_server`.
 - [x] **`examples/common/testkit` used throughout.** `BackendRig`'s
   Local/Simulated/Socket matrix, `pump`/`pumpUntil` discipline, `DbFixture`
   per test case, `DbBusyFixture` for the `SQLITE_BUSY` branches.
-- [x] **Presenter-shaped GUI.** `ladder_pastebin_gui_lib` links `Qt6::Core`
-  only (presenter rule 1); `PastePresenter` is tested in all three backend
-  modes.
 - [x] **Burn-after-read and expiry work**, with the atomicity mechanism, its
   `RETURNING` limitation and the ladder-wide journal position documented above.
 - [x] **Model unit tests**, following [`../bank/tests`](../bank/tests)
@@ -362,20 +300,12 @@ themselves" presenter rule requires.
   upstream.
   Three framework/testkit bugs found on the way were *fixed*, not merely
   filed: JSON control-byte escaping in the action/result codecs, an
-  executor-lifetime bug in the shared testkit, and — found by this rung's own
-  QML-adapter suite — `QtDrivenMainThreadExecutor::post()`'s zero-delay drain
+  executor-lifetime bug in the shared testkit, and
+  `QtDrivenMainThreadExecutor::post()`'s zero-delay drain
   timer capturing a bare `this`, which fired into freed storage one
   `GENERATE` iteration later and aborted the process
   (`examples/common/testkit/backend_rig.hpp`, with a regression case in
-  `test_backend_rig.cpp`). A fourth bug — `Completion::onError`'s single-slot
-  overwrite — was *worked around* at the time rather than fixed:
-  `gui/presenter.hpp`'s `track()` folded a subclass's error-display callback
-  and the busy-counter decrement into the one `.onError()` slot `Completion`
-  then kept, instead of composing two separate calls. `Completion`'s
-  `onOk`/`onErr` are now vectors of handlers (multiple `.then()`/`.onError()`
-  attaches fan out instead of overwriting), so `track()`'s fold is no longer
-  load-bearing — kept as-is since it still works and nothing forces the
-  change.
+  `test_backend_rig.cpp`).
   The sibling-writer half of the first bug above is also fixed: the same
   missing control-byte escaping in `journal/action_log.hpp`,
   `offline/file_offline_queue.hpp` and `session/session_auth.hpp` was closed
@@ -406,16 +336,8 @@ themselves" presenter rule requires.
   [`Lightweight`](https://github.com/LASTRADA-Software/Lightweight/issues/545)
   and tracked morph-side — a genuine third-party ODBC driver limitation, not
   fixable in morph source.
-- The WASM client's verification status, above.
-- **`ladder-tests` still builds no GUI.** That job's distro Qt is 6.4.2, below
-  the 6.5 floor `MORPH_BUILD_FORMS_QML` requires, so it configures without the
-  QML module, the desktop client or the smoke test — `morph_add_rung()`
-  announces each skip rather than letting them vanish silently. The
-  `linux-all-features` job now enables `MORPH_BUILD_LADDER` alongside
-  `MORPH_BUILD_FORMS_QML` (it already installs Qt 6.8), so that is where those
-  targets are built and that test runs.
-- **Registration timing.** Both clients' `Main.qml` request the first
-  listing on `Component.onCompleted`. A call made before the handler's
+- **Registration timing.** The screen requests the first listing as it
+  mounts. A call made before the handler's
   registration round trip lands waits for it and is dispatched once it does,
   or is rejected if registration fails. `Remote` mode still has no connect
   timeout, so a server that never answers leaves that first call pending and

@@ -105,7 +105,7 @@ and is absent from [`examples/rungs.txt`](../../examples/rungs.txt) — the
 ladder's authoritative rung list — because those lists answer different
 questions. `rungs.txt` decides what the ladder *builds and gates on*: every
 entry is pulled into `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
-`wasm-ladder.yml`'s build loop, `coverage.sh` and `codecov.yml`'s per-rung
+`coverage.sh` and `codecov.yml`'s per-rung
 components. The two tuples here decide only
 what a scenario can *reach*, and have always selected on "ships a
 `src/server/main.cpp`". Bank ships one — built by a local `add_executable`, not

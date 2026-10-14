@@ -522,8 +522,8 @@ numbers), `quantity.hpp` (unit-tagged, optionally-empty values) and
 `forms.hpp` (JSON Schema generation). Nothing else in the framework includes
 them — they are an opt-in layer that composes with registration, validators,
 and the wire. `examples/forms` demonstrates the whole loop with two
-renderers: a self-contained HTML page and a Qt Quick client
-(`MORPH_BUILD_FORMS_QML=ON`), both driven purely by the generated schemas.
+renderers: a self-contained HTML page and the forms engine's screens in the
+generic client, both driven purely by the generated schemas.
 
 ### `morph::math::Rational` — exact numbers on the wire
 

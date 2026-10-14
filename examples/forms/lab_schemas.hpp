@@ -71,8 +71,7 @@ namespace lab {
 /// `kEditBind` binds only `id`, matching docs/spec/forms/views.md's own
 /// `v-rowAction` example (`"bind": { "id": "id" }`) — deliberately, not just
 /// for parity: binding *every* required field of `EditSample` (id **and**
-/// name) would make the Qt/QML reference renderer (`DynamicForm`'s
-/// auto-fire-on-ready, no submit button) fire `EditSample` the instant the
+/// name) would make a form (auto-fire-on-ready, no submit button) fire `EditSample` the instant the
 /// row opens, before the user changes anything, since both required fields
 /// would already be engaged. Binding only the row key leaves `name` blank
 /// for the user to (re)type, so the edit fires only once they actually enter

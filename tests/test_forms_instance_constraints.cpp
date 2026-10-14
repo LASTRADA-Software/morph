@@ -437,11 +437,9 @@ TEST_CASE("checkValue with no declared decimalPlaces never reports PrecisionExce
 // renderer read -- the two-values-for-one-concept outcome the seam exists to
 // remove, reintroduced inside the fix for it.
 //
-// `tests/data/instance_bounds.json` is one file with several readers:
-// this suite (`checkValue`, and every row through the forms engine), and
-// `src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml`, which drives every
-// row through a real `DynamicForm`. The declaration itself lives
-// in the file, so the schema the renderer is fed and the bound checked here are
+// `tests/data/instance_bounds.json` is read by this suite (`checkValue`, and
+// every row through the forms engine). The declaration itself lives
+// in the file, so the schema the engine is fed and the bound checked here are
 // provably the same declaration rather than two hand-synced copies.
 // ---------------------------------------------------------------------------
 

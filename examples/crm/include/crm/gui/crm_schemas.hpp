@@ -15,13 +15,7 @@
 
 /// @file
 /// The `{actionType: schemaJson<A>()}` document every client renders forms
-/// from — mirrors `lims::gui::limsSchemasJson()`'s exact shape
-/// (`examples/lims/gui_lib/lims_schemas.hpp`). Lives under `include/crm/gui`
-/// rather than `gui_lib/` (unlike lims's copy): it has no Qt dependency of
-/// its own — just `morph::forms::schemaJson` — so it needs no
-/// `ladder_crm_gui_lib` target to exist yet; a later step's real Qt
-/// presenters move it there (or link against it) once `gui_lib/*.cpp` files
-/// exist to host them.
+/// from. It has no Qt dependency: just `morph::forms::schemaJson`.
 ///
 /// Selection rule (from lims's file, reused here): a field a person types is
 /// rendered from the schema; a value the model already supplied is a typed

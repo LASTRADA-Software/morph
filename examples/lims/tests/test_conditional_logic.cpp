@@ -9,9 +9,8 @@
 // for the same field values.
 //
 // Nothing shipped lets a C++ client check that. `morph::forms` gives the
-// server `allRulesSatisfied<A>(action)` over compiled nodes; the reference
-// renderer's evaluator is JavaScript inside `src/qt/forms/qml/DynamicForm.qml`
-// (and is properly tested, by `tst_DynamicFormRules.qml`). A non-QML client —
+// server `allRulesSatisfied<A>(action)` over compiled nodes; the forms engine's
+// `FormSession` evaluates them on a morph client. A client outside morph —
 // which is what this rung's field devices are — has to write its own, and
 // nothing cross-checks the two implementations against each other.
 //
@@ -95,8 +94,8 @@ using Draft = std::map<std::string, DraftField>;
 /// through `and`/`or`/`not`; this evaluator is two-valued, so `notOf(unknown)`
 /// would come out `true` here rather than unevaluable. No schema this rung
 /// serves nests an unknown kind under a `not`, so nothing in this file
-/// reaches it — the shipped renderer (`DynamicForm.qml`) implements the
-/// three-valued form, and a client promoted out of this file would have to.
+/// reaches it — the forms engine implements the three-valued form, and a client promoted out of this file would have
+/// to.
 /// @param node The condition node.
 /// @param draft The current draft.
 /// @return `true` when the condition holds; `false` when it does not, or when

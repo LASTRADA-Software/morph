@@ -27,9 +27,9 @@
 # PUBLIC. scripts/check_coverage_roots.sh then fails, correctly: three files in
 # the mapping resolve outside the checkout.
 #
-# morph's three existing SYSTEM demotions (cmake/morph_add_rung.cmake for
-# ladder_<rung>_gui_lib and ladder_<rung>_tests, examples/common/CMakeLists.txt
-# for ladder_common_tests) all read INTERFACE_INCLUDE_DIRECTORIES and so cannot
+# morph's existing SYSTEM demotions (cmake/morph_add_rung.cmake for
+# ladder_<rung>_tests, examples/common/CMakeLists.txt for ladder_common_tests)
+# all read INTERFACE_INCLUDE_DIRECTORIES and so cannot
 # reach this flag; and ladder_<rung>_lib, the target that actually compiles the
 # instrumented model code, has no demotion at all. Fixing it per-consumer would
 # mean four more copies of the same block, so it is fixed once, on the

@@ -56,9 +56,9 @@ The user-code contract is: **you implement Models; morph exposes them.**
     stays in the model, which replay re-dispatches through as usual. The
     sanctioned home is a dedicated app-layer write-path class
     (`examples/lims/include/lims/offline/field_outbox.hpp` is the reference),
-    **not** a presenter: kanban's copy in a QML bridge
-    (`examples/kanban/gui_lib/board_qml_bridge.cpp`) stands only because it
-    is transport-shaped glue under rule 2's glue justification.
+    **not** a screen or a client; the transport-shaped half (queue a
+    mutation while offline, replay it in order) is the framework's
+    `morph::ui::QueueingDispatcher`.
 - Follow [`bank`](bank/README.md)'s established shape: `BRIDGE_REGISTER_*`
   macros in the model header so every call site sees the `ActionTraits`
   specialisation; stateful models keyed with `BRIDGE_KEY_FROM`/
@@ -80,9 +80,9 @@ The GUI is deliberately the *least* interesting part of every rung. We are
 not building UIs; we are proving morph can drive them.
 
 - **Schema-driven first, always.** Every form is rendered from
-  `morph::forms::schemaJson<A>()` through the shipped renderer
-  (`MorphForms` QML / `FormsControllerCore`); every list/table goes through
-  `morph::forms` views; navigation uses the workflows/app-shell machinery.
+  `morph::forms::schemaJson<A>()` through the forms engine (a screen's
+  `form` node); every list/table goes through `morph::forms` views or a
+  screen's `table`; navigation is between screens.
   Hand-built input widgets, hand-built tables, and hand-rolled layouts are
   **forbidden by default**.
 - **A custom GUI element requires a written justification** in the rung
@@ -92,10 +92,9 @@ not building UIs; we are proving morph can drive them.
   missing explicit-submit mode, the child-table renderer gap, and the
   sum-type gap — see [`LADDER.md`](LADDER.md)); or (b) pure glue with no
   domain logic (an app shell frame, a connection-status indicator).
-- Presenters follow [`TESTING.md`](TESTING.md) exactly: Qt-Core-only
-  `gui_lib`, thin QObject presenters over `BridgeHandler`s, QML
-  bindings-only, timers in the view layer. Presenters translate and route;
-  they never decide.
+- Screens follow [`TESTING.md`](TESTING.md) exactly: toolkit-free, served by
+  the rung's server, drawn by the generic client. A screen names models,
+  queries and mutations; it never decides.
 - **Zero styling effort.** Default Qt Quick controls, default fonts, no
   theming, no animations, no custom drawing. A rung that looks pretty has
   spent effort in the wrong place.

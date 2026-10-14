@@ -46,9 +46,9 @@ view/wizard/app document, ignores it harmlessly. Renaming, retyping, or
 changing the meaning of an existing key is the only kind of change reserved for
 a major release.
 
-The **Qt/QML client** (`src/qt/forms`) is the reference renderer these specs
-write concrete examples against, because it already consumes the schema
-contract; the **schema contract itself stays renderer-agnostic** — every
+The **forms engine** ([engine.md](engine.md)) is the renderer these specs
+write concrete examples against; the **schema contract itself stays
+renderer-agnostic** — every
 `x-*` key and view/wizard/app-schema document is specified in platform-neutral
 terms so a web, ImGui, or other renderer can implement the same contract.
 
@@ -63,9 +63,7 @@ terms so a web, ImGui, or other renderer can implement the same contract.
 - [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
 - [Layout & grouping — sections, tabs, spans](#layout--grouping--sections-tabs-spans)
 - [Renderer contract: the schema key vocabulary](#renderer-contract-the-schema-key-vocabulary)
-- [Shipped Qt/QML reference renderer](#shipped-qtqml-reference-renderer)
-- [Renderer conformance kit](#renderer-conformance-kit)
-- [Theming / component-override registry](#theming--component-override-registry)
+- [Renderers](#renderers)
 - [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Cross-field rules — the `x-rules` vocabulary](#cross-field-rules--the-x-rules-vocabulary)
@@ -530,15 +528,14 @@ touches `schemaJson<A>()`.
 **Where the keys land, and why it matters.** On the **property node**, beside
 the `$ref` — never in the `$def` the `$ref` points at. Two members of the same
 `Quantity` type share one `$def`, so a bound written there would leak onto both
-and reintroduce exactly the per-unit behaviour above. The shipped renderer's
-`resolveRef` merges the property node **over** the resolved definition, so it
-reads a per-field bound with no special case (see
+and reintroduce exactly the per-unit behaviour above. The forms engine merges
+the property node **over** the resolved definition, so it reads a per-field bound with no special case (see
 [Where the keys physically land](#where-the-keys-physically-land--ref-resolution-is-mandatory)).
 
 For a `Quantity` member the bound is on **the scalar value the field denotes,
 in the canonical unit** — not on the `{num,den,dp}` object the member
-serialises as. That is the reading both the shipped renderer (which compares
-the entered value only while the canonical unit is selected) and
+serialises as. That is the reading both the forms engine (which checks the
+entered value exactly in the canonical unit) and
 `allFieldBoundsSatisfied` (which compares the engaged `math::Rational`) apply.
 
 **What the C++ predicate checks.** `allFieldBoundsSatisfied` reads bounds from
@@ -590,7 +587,7 @@ struct RecordDensity {
 - **`unit` is emitted as `ExtUnits`**, the key a `Quantity`'s unit already
   travels in, with the one string in both `unitAscii` and `unitUnicode`. Every
   reader of a unit therefore finds a plain member's where it finds a
-  `Quantity`'s: the shipped renderer's unit suffix, `SlotRegistry.byUnit`, and
+  `Quantity`'s: the forms engine's unit suffix, an override chosen by unit, and
   a view's `v-columns` entry (`views.hpp` copies `ExtUnits` off the property
   node). It is presentation only: nothing converts through it, and it never
   reaches the payload.
@@ -637,19 +634,16 @@ That rule has two consequences. A stored `""` round-trips: prefill → submit se
 A create form in which the user types and then clears a field sends `""` as well.
 
 - **String members only.** The C++ side emits the key only on a
-  `std::string` / `std::optional<std::string>` member. `DynamicForm` reads it only
-  for a field of kind `string`, so a number, a closed set, a `Choice` or a
+  `std::string` / `std::optional<std::string>` member. The forms engine reads it
+  only for a field of kind `string`, so a number, a closed set, a `Choice` or a
   `Timestamp` ignores it. None of those has a `""` spelling.
 - **`required` is unchanged.** A required field left blank is still unfilled,
   and the form is not ready.
 - **Presentation only.** Nothing changes on the wire or in the model. The key
   only decides what a renderer assembles.
 
-`tests/test_forms_blank_as.cpp` pins the emission.
-`src/qt/forms/tests/tst_DynamicFormBlankAs.qml` (12 cases) pins the renderer
-against submitted bodies. Making a cleared field never submit `""` reddens 4 of
-those cases. Dropping the engagement rule, so an untouched field also submits
-`""`, reddens 6.
+`tests/test_forms_blank_as.cpp` pins the emission; the body corpus
+([engine.md](engine.md), "Corpora") pins the bodies the forms engine submits.
 
 ### Field metadata is not a security control
 
@@ -761,45 +755,27 @@ group naming a field the action does not have is silently ignored (schema
 generation never throws); a field claimed by two groups keeps the **first**
 one that names it.
 
-The reference QML renderer (`examples/forms/gui_qml/qml/DynamicForm.qml`)
-buckets its flat `fields` array into `sections` keyed on each field's
-`x-section`, merges consecutive `"tab"`-kind sections into one shared tab
-bar (`renderRuns`), and lays each section's fields out in a 2-column grid
-honoring `x-colspan` — falling back to a single implicit flat section
-(one column, no chrome) when the schema carries no `x-layout` at all.
+The forms engine's `formView` buckets the fields into their `x-section`
+groups, merges consecutive `"tab"`-kind groups into one tab run, and lays each
+group's fields out in a grid honouring `x-colspan` — falling back to a single
+implicit flat group (one column, no chrome) when the schema carries no
+`x-layout` at all.
 
-**A host chooses the grid: `gridColumns`.** `DynamicForm.gridColumns` (default
-`2`) is the column count of every field grid the form builds: each section's,
-each tab set's, and the one it creates inside a host's section or tab-set
-[chrome](#chrome-slots). `flatGridColumns` is the implicit flat bucket's — the
-whole form without `x-layout`, and the trailing group of fields no group names.
-It is `1` at the default, the pre-grouping renderer's single column, and
-follows `gridColumns` as soon as a host sets that to anything else, so one
-property puts the whole form on the host's grid:
-
-```qml
-DynamicForm { gridColumns: 12 }   // x-colspan 6 = half a row, 4 = a third, 12 = full
-```
+**A host chooses the grid: `gridColumns`.** `FormViewOptions::gridColumns`
+(default `2`) is the column count of every group's grid.
+`flatGridColumns` is the implicit flat group's — the whole form without
+`x-layout`, and the trailing group of fields no group names. Unset, it is `1`
+while `gridColumns` is `2` and follows `gridColumns` as soon as a host sets that
+to anything else, so one option puts the whole form on the host's grid
+(`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full).
 
 A field spans `x-colspan` columns (1 when absent), **clamped to its grid's
 column count**, so a span wider than the grid takes one full row rather than
-widening the grid. Both properties are bindings; changing one relays the form.
-With both left at their defaults the layout is unchanged.
-`src/qt/forms/tests/tst_DynamicFormGridColumns.qml` pins it (9 cases); fixing
-every grid back at 2/1 columns reddens 5 of them, and dropping the clamp another
-5.
+widening the grid.
 
-**Tab switching destroys and rebuilds controls, so they re-seed from
-`fieldValues`.** The tab bar drives its `Repeater` off
-`sections[currentTab].fields`, so leaving a tab destroys that tab's field
-delegates and returning to it creates new ones. A control's `text` otherwise
-flows only *outward* (via `onTextChanged` into `fieldValues`) and never back,
-so a returned-to tab showed empty controls while the form went on
-auto-submitting the values it still held — sending data the user could not see.
-Each text-bearing control therefore re-seeds itself from `fieldValues` on
-`Component.onCompleted`, under the `programmaticEdit` suppression so
-re-creating a control never fires the action. A `text:` binding would not work
-here: prefill assigns `text` imperatively, which would break it.
+**Switching tabs keeps what was typed.** The draft lives in the session, not in
+the controls, so a tab whose controls are rebuilt shows the values the form
+still holds and will submit.
 
 ## Renderer contract: the schema key vocabulary
 
@@ -859,8 +835,8 @@ must resolve the `$ref` to see both:
 The **"Where"** column below names the node each key is written to. A renderer
 resolves the `$ref` into `$defs`, then merges: per-property `x-*` keys (from the
 property node) win, and `ExtUnits` (plus glaze's `type`/bounds/`description`) come
-from the resolved def. The shipped `MorphForms` QML renderer's (`src/qt/forms`,
-below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
+from the resolved def. The forms engine's `FormModel::fromSchema` does exactly
+this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
@@ -901,7 +877,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
 | `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to. Omitted for a field in the implicit default group, or when `x-layout` is absent. |
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
-| `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. `DynamicForm` clamps it to the grid's column count (`gridColumns`, see [Layout & grouping](#layout--grouping--sections-tabs-spans)). |
+| `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. The forms engine clamps it to the grid's column count (`gridColumns`, see [Layout & grouping](#layout--grouping--sections-tabs-spans)). |
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
 | ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` — a rule *or* a nested condition — must be treated as "cannot evaluate": a third answer, distinct from both true and false. The renderer neither claims the rule is satisfied nor blocks submission on it; the payload reaches the server, which runs the compiled rule list and has no unrecognised-kind case. See [Renderer fallback](#renderer-fallback) for the full contract and why it is *defer*, not *block*. |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). Absent on `and`/`or`/`not`, which range over nested conditions (`conditions`/`condition` below) instead of fields directly. |
@@ -910,36 +886,29 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | ↳ `valueText` | `equals` condition object | string | Exact decimal spelling of an **integral** `value` whose magnitude exceeds 2^53, emitted only in that case — the number itself does not survive `JSON.parse`, so comparing it would collapse literals the compiled evaluator keeps distinct. A renderer that evaluates `equals` must prefer `valueText` when present and compare digits. Same remedy as [`x-exactMinimum`/`x-exactMaximum`](#exact-numeric-bounds--x-exactminimum--x-exactmaximum) for bounds. |
 | ↳ `conditions` | `and` / `or` condition object | array of condition objects | The nested conditions combined by boolean AND / OR, in declaration order; each element is itself a full condition/rule object (any `kind`, including a nested `and`/`or`/`not`) — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `condition` | `not` condition object | condition object | The single nested condition negated by boolean NOT (singular key, since `not` wraps exactly one child). |
-| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of the shipped renderer's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Emitted by `schemaJson<A>()` when the action declares `static constexpr bool explicitSubmit = true`, the same way `x-layout` is emitted from `formLayout`. An action that declares nothing — or declares it `false` — emits no key at all. |
+| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of a form's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Emitted by `schemaJson<A>()` when the action declares `static constexpr bool explicitSubmit = true`, the same way `x-layout` is emitted from `formLayout`. An action that declares nothing — or declares it `false` — emits no key at all. |
 
 ### Explicit submit mode — `x-submitMode`
 
-The shipped `DynamicForm.qml` renderer's default behavior is to call
-`controller.submitIfValid(actionType, bodyJson)` the instant every field and
-rule is satisfied — safe for a read-only query action, but unsafe for any
+A form's default behavior is to submit the instant every field and rule is
+satisfied — safe for a read-only query action, but unsafe for any
 side-effectful (mutating) action: a mutation would fire on every keystroke
 that happens to leave the form momentarily valid, with no user confirmation.
 
 Setting the top-level `"x-submitMode": "explicit"` schema key opts a form out
 of that default:
 
-- `revalidate()` still recomputes `ready`/`previewLine` live (so `x-rules`,
-  `required`, and every other live-validation affordance are unaffected) but
-  never calls `submitIfValid` on its own.
-- The renderer instead shows an explicit **Submit** button (`objectName:
-  "submitButton"`), enabled only while `ready` — matching the existing
-  `x-order`/required-asterisk convention of gating on the same readiness
-  state the auto-submit label already reflected. Clicking it is the sole
-  trigger; `DynamicForm.submit()` is the function it calls, itself a no-op
+- Readiness is still recomputed live (so `x-rules`, `required`, and every
+  other live-validation affordance are unaffected), but the form never submits
+  on its own.
+- The renderer instead shows an explicit **Submit** button, enabled only while
+  the form is ready. Clicking it is the sole trigger, and submitting is a no-op
   unless the form is currently ready.
-- The button is loaded (via a `Loader`, `active: explicitSubmitMode`) only
-  when the schema opts in — a default (auto-submit) form has no such control
-  anywhere in its item tree, not merely a hidden one.
+- The button exists only when the schema opts in — a default (auto-submit)
+  form has no such control, not merely a hidden one.
 
-Any schema describing a side-effectful action should carry this flag before
-being safely rendered by the shipped renderer; a schema that omits it (every
-existing schema, and any read-only query action) renders exactly as before —
-zero behavior change.
+Any schema describing a side-effectful action should carry this flag; a schema
+that omits it (any read-only query action) keeps the auto-submit default.
 
 #### Declaring it from C++
 
@@ -950,7 +919,7 @@ struct CreatePaste {
     std::string title;
     std::string body;
 
-    // Without this, the shipped renderer auto-submits on validity — which for
+    // Without this, a form auto-submits on validity — which for
     // a mutation means one stored paste per typed character.
     static constexpr bool explicitSubmit = true;
 };
@@ -977,14 +946,10 @@ keeps the decision with the author who knows whether the action has effects.
 ### Array fields — `type: "array"`
 
 glaze emits `{"type": "array", "items": {...}}` for a `std::vector<T>`
-member, standard JSON-Schema vocabulary rather than an `x-*` extension. The
-shipped `DynamicForm.qml` renderer gives it a dedicated
-comma-separated-with-validation `TextField` control (`objectName: "field_" +
-name`, exactly like a scalar field's control — the two are mutually
-exclusive per field, so exactly one claims that name) instead of falling
-through to the plain-text control, whose fallback (`JSON.stringify(text)`)
-would wrap the typed text as a JSON *string*, not an array — a body the
-server's schema validation always rejects.
+member, standard JSON-Schema vocabulary rather than an `x-*` extension. A
+renderer gives it a comma-separated-with-validation control rather than a
+plain-text one, which would send the typed text as a JSON *string*, not an
+array — a body the server's schema validation always rejects.
 
 Typed text is split on comma, each entry trimmed of surrounding whitespace,
 and empty entries dropped: `"red, green, blue"` → `["red","green","blue"]`,
@@ -995,7 +960,7 @@ canonical decimal digits, a `"boolean"` item as `true`/`false`, anything else
 as a JSON string. An entry that does not read as its type leaves the field
 without a literal, as an invalid scalar does. The submitted literal for a **fully-blank** array field
 follows the same blank-means-unengaged convention as every other field
-(`fieldJsonLiteral` returns `null` for empty/whitespace-only text), so an
+(empty or whitespace-only text has no value), so an
 optional, untouched array field is omitted from the request body entirely
 rather than submitted as `[]`. Once the field holds *any* non-whitespace
 text, though — including a comma-only entry like `" , , "`, which is not
@@ -1004,55 +969,31 @@ encodes to a genuine empty array `[]`, not `null`; a `required` array field
 is satisfied by engagement (non-blank text), not by having at least one
 surviving entry.
 
-### Collections of objects — a host slot draws them
+### Collections of objects
 
 A `std::vector<Row>` member is `{"type": "array", "items": {"$ref":
 "#/$defs/Row"}}` (or `items` inlined, for a row type used once), and the row
 type's `$def` is annotated like any object schema — `x-order`, `title`,
 `required`, and every `FieldMeta` key its own `fieldMetadata` declares (see
-[Nested aggregates](#nested-aggregates-recursive-cycle-safe)). The built-in
-controls cannot collect it: the comma-separated array control encodes strings,
-so the member is [unrepresentable](#what-ready-claims) and a form that must
-carry it is not ready.
+[Nested aggregates](#nested-aggregates-recursive-cycle-safe)). A comma-separated
+array control cannot collect it; the forms engine reads it as an `ObjectArray`
+field whose rows are edited cell by cell ([engine.md](engine.md), "The field
+model").
 
-**A host [slot](#theming--component-override-registry) that claims such a
-member makes it representable.** The renderer describes the row type the way
-it describes the action, and hands the result to the slot:
-
-| Field descriptor key | Meaning |
-|---|---|
-| `isObjectArray` | `true` for an array whose `items` resolve to an object schema with `properties`. |
-| `itemFields` | The row type's member descriptors, in `x-order` order — the same shape as a top-level entry of `fields` (`name`, `label`, `unit`, `decimals`, `readOnly`, `hidden`, `required`, `isQuantity`/`isNumber`/`isInteger`/`isBoolean`/`isEnum`/`enumOptions`, …): a grid's columns. Filled for a top-level collection only; one level is described, never more, so a self-referential row type cannot loop. |
-| `claimedBySlot` | `true` when a registered slot resolves for this member. `unrepresentable` is then `""`. |
-
-The slot edits the rows as **cell texts** — `setRows([{sieve: "31.5",
-passing: "100.0"}, …])`, or `setValue` with the same array as JSON text — where
-each cell holds what the built-in control for that member would hold: the typed
-digits of a number or `Quantity` (in the display locale), `"true"`/`"false"`
-for a boolean, the option's `valueJson` for a closed set. The form then encodes
-**every cell with the encoder the same member would get at the top level**
-(`encodeFieldText`): the same syntax, locale normalisation, precision limit and
-declared bounds, so a `Quantity` cell becomes an exact `{num,den,dp}` and an
+**Every cell is encoded with the encoder the same member would get at the top
+level**: the same syntax, locale normalisation, precision limit and declared
+bounds, so a `Quantity` cell becomes an exact `{num,den,dp}` and an
 over-precise one is refused, not rounded. A blank optional cell is omitted from
-its row object. The literal is `null` — no value, so the form is not ready —
-when the text is not an array of objects, when a cell does not encode, or when
-a required member of any row is blank. An empty array is a value: `[]` is
-submitted for it.
+its row object. The collection has no value — so the form is not ready — when a
+cell does not encode, or when a required member of any row is blank. An empty
+array is a value: `[]` is submitted for it.
 
-Cells are always read in the member's **canonical** unit: a row has no unit
-selector of its own. Only a **top-level** collection is handed to a slot. One
-inside a [nested object a slot claims](#nested-objects--a-host-slot-draws-them)
-is encoded by that object's encoder, with the same row rules; one nested inside
-a row stays unrepresentable. A label
-inside a row resolves through an explicit `x-i18nKey` or its literal only — the
-derived `<action>.<field>` key names top-level members, and no row-level stem
-is defined on the C++ side.
+Cells are read in the member's **canonical** unit: a row has no unit selector
+of its own. A label inside a row resolves through an explicit `x-i18nKey` or
+its literal only — the derived `<action>.<field>` key names top-level members,
+and no row-level stem is defined on the C++ side.
 
-`src/qt/forms/tests/tst_DynamicFormObjectArraySlot.qml` pins the contract
-against submitted bodies. Replacing the cell encoder with plain string quoting
-reddens 3 of its 19 cases.
-
-### Nested objects — a host slot draws them
+### Nested objects
 
 A member whose type is a struct — `IgnitionSpecimen specimen`, or
 `std::optional<PycnometerDetermination> determination1` — is an object schema
@@ -1061,70 +1002,33 @@ otherwise a `$ref` into `$defs`, and for a `std::optional` wrapped in
 `{"anyOf": [<that>, {"type": "null"}]}`. Its members are annotated like the
 action's own, `fieldMetadata` included, at every depth and through the
 `std::optional` (see [Nested aggregates](#nested-aggregates-recursive-cycle-safe)).
-The built-in controls cannot collect it, so the member is
-[unrepresentable](#what-ready-claims) — **unless a host
-[slot](#theming--component-override-registry) claims it**, exactly as for a
-[collection of objects](#collections-of-objects--a-host-slot-draws-them):
+The forms engine reads it as an `Object` field whose members are fields of
+their own, described down to four levels below the action and never twice for
+the same `$defs` type on one path, so a self-referential type terminates.
 
-| Field descriptor key | Meaning |
-|---|---|
-| `isObject` | `true` for a member whose schema resolves to an object with `properties` that no typed control claims — not a `Quantity` or a `Choice`, whose own controls encode their object shape. `kind` is `"object"`. |
-| `objectFields` | The object's member descriptors, in `x-order` order, the same shape as a top-level entry of `fields` (`label`, `unit`, `decimals`, `readOnly`, `required`, the kind flags, …). **Recursive:** a member that is itself an object carries its own `objectFields`, and a collection member its `itemFields`. Described for a top-level member and inside another nested object, down to `maxObjectDepth` (4) levels below the action, and never twice for the same `$defs` type on one path, so a self-referential type stops at its first repetition — that inner member is left unrepresentable. |
-| `claimedBySlot` | `true` when a registered slot resolves for this top-level member. `unrepresentable` is then `""`, for it and for every object or collection described inside it. |
-
-The slot edits the value as **cell texts**: `setObject({massOfContainer:
-"512.3", testTemperature: "538"})`, or `setValue` with the same object as JSON
-text. A leaf cell holds what the member's built-in control would hold, as in a
-row; a nested object member holds a nested object of the same shape; a
-collection member holds an array of row objects. The form encodes **every leaf
-with the encoder the same member would get at the top level**
-(`encodeFieldText`: locale normalisation, precision limit, declared bounds), a
-nested object recursively, and a collection with the row encoder. So for
-`MaxDensitySection { PycnometerTestData data; }`:
-
-```js
-setObject({ useSpecificGravity: "false", testLiquidTemperature: "25.0", testLiquidName: "",
-            determination1: { massPycnometerEmpty: "1450.10", massPycnometerAndSample: "3450.25",
-                              excluded: "false" },
-            determination2: {} })
-// → {"data":{"useSpecificGravity":false,"testLiquidTemperature":25.0,
-//            "determination1":{"massPycnometerEmpty":1450.10,"massPycnometerAndSample":3450.25,
-//                              "excluded":false}}}
-```
+**Every leaf is encoded with the encoder the same member would get at the top
+level** (locale normalisation, precision limit, declared bounds), a nested
+object recursively, and a collection with the row encoder:
 
 - A **blank optional leaf** is omitted. A **blank optional object** — absent,
-  `{}`, or one whose every member is blank (an empty collection counts as
-  blank here) — is omitted too.
-- A **blank required leaf**, or a **blank required object**, makes the literal
-  `null`: no value, so the form is not ready. A required object therefore needs
+  or one whose every member is blank (an empty collection counts as blank
+  here) — is omitted too.
+- A **blank required leaf**, or a **blank required object**, leaves the object
+  without a value, so the form is not ready. A required object therefore needs
   at least one member filled to count as present, even when all of its own
-  members are optional. A value that is not an object, or a cell that does not
-  encode, does the same.
-- A top-level object left blank (`setObject({})`) is simply unfilled: omitted
-  when optional, the ordinary submit gate when required.
+  members are optional. A leaf that does not encode does the same.
 
-Cells are read in each member's **canonical** unit. [Prefill](#prefill--loading-a-stored-payload-for-editing)
-decodes a stored object back into this shape (`decodeFieldValue`, member by
-member, the inverse of the encoder), so prefill → no edit → submit carries the
-same values; a stored optional object whose members are all absent decodes to
-nothing and is then omitted.
-
-`src/qt/forms/tests/tst_DynamicFormObjectSlot.qml` pins the contract against
-submitted bodies, with the two consumer shapes above (`BinderIgnitionSection`,
-`MaxDensitySection`). Replacing the leaf encoder with plain string quoting
-reddens 9 of its 24 cases.
+Leaves are read in each member's **canonical** unit. Prefill decodes a stored
+object back member by member, the inverse of the encoder, so prefill → no edit
+→ submit carries the same values; a stored optional object whose members are
+all absent decodes to nothing and is then omitted.
 
 ### Boolean fields — `type: "boolean"`
 
 glaze emits `{"type": "boolean"}` for a `bool` member, and
-`{"type": ["boolean", "null"]}` for a `std::optional<bool>`. The shipped
-`DynamicForm.qml` renderer gives both a `CheckBox` (`objectName: "field_" +
-name`, mutually exclusive per field with the scalar and array controls, so
-exactly one claims that name) rather than letting them fall through to the
-plain-text control. The fallback there (`JSON.stringify(text)`) wrapped the
-value as a JSON *string* — `{"flag":"true"}` — and, because a `TextField`
-applies no validation of its own, accepted literally any text, so
-`{"flag":"banana"}` was submitted just as readily. glaze rejects both with
+`{"type": ["boolean", "null"]}` for a `std::optional<bool>`. A renderer gives
+both a checkbox rather than a plain-text control, which would send the value as
+a JSON *string* — `{"flag":"true"}` — or any text at all. glaze rejects both with
 `expected_true_or_false`; it does not coerce.
 
 The control emits a bare `true` or `false`, never quoted. A `bool` member is
@@ -1150,13 +1054,10 @@ glaze emits `{"type": "number"}` for a bare `double` or `float` member, under
 ```
 
 Such a member carries no `x-decimalPlaces` and is not a `Quantity`, so none of
-the exact-decimal machinery applies to it. The shipped `DynamicForm.qml`
-renderer draws the plain `TextField` and encodes its text as a JSON **number**,
-which it needs a branch of its own to do: the plain-text fall-through
-(`JSON.stringify(text)`) would submit `{"ratio":"3.5"}` where the schema asks
-for `{"ratio":3.5}`, and a `TextField` applies no validation of its own, so
-`{"ratio":"banana"}` would be submitted just as readily and the form would
-report `ready` for it.
+the exact-decimal machinery applies to it. A renderer encodes its text as a
+JSON **number**: a plain-text encoding would submit `{"ratio":"3.5"}` where the
+schema asks for `{"ratio":3.5}`, or `{"ratio":"banana"}` just as readily, with
+the form reporting `ready` for it.
 
 The encoding is:
 
@@ -1208,8 +1109,8 @@ declared precision wins there, and the field keeps the exact encoding.
 
 A bare `math::Rational` member is **not** in this family: its schema is an
 inline object of `num`/`den`/`dp` with no `x-decimalPlaces`, so it is
-[unrepresentable](#what-ready-claims) — the one object-typed member whose C++
-declaration looks scalar.
+encoded as an object of `num`/`den`/`dp` rather than as decimal text — the one
+object-typed member whose C++ declaration looks scalar.
 
 ### Nullable fields whose type is a `$ref` — `anyOf`
 
@@ -1223,14 +1124,14 @@ inline — `std::optional<std::int64_t>`, or a `std::optional<T>` over a strong 
 
 A renderer that resolves only a *top-level* `$ref` sees no type at all here, so
 every field-kind flag is false and the value takes the plain-text path — a
-quoted string the server rejects with `parse_number_failure`. `DynamicForm.qml`
+quoted string the server rejects with `parse_number_failure`. A renderer
 therefore resolves through `anyOf` (and through `oneOf`, which takes the same
 shape when a hand-written or evolved schema spells nullability that way): it
 takes the first branch whose type is not `"null"`, follows a `$ref` inside it,
 and merges the result under the property's own keys, so the field is typed by
 `T` and picks up `T`'s constraints such as `minimum`/`maximum`. Integers on this
 path are emitted as bare, exact numbers — the payload is assembled as JSON
-*text*, never round-tripped through `JSON.parse`, so values beyond 2^53
+*text*, never round-tripped through a double, so values beyond 2^53
 (including `INT64_MAX`) survive intact.
 
 This collapse applies **only** to branches that differ in nullability. A
@@ -1283,7 +1184,7 @@ the member is the same closed set, and it is optional. Exactly one level is
 read this way. A set nested deeper is not a shape any generator produces, and it
 stays "not a closed set" rather than being guessed at.
 
-Two obligations follow, and `DynamicForm.qml` meets both:
+Two obligations follow, and the forms engine meets both:
 
 - **Draw a selection control**, not a text field. The alternatives' `title`s are
   already the human labels, and the set is closed, so this is the same combo box
@@ -1308,9 +1209,8 @@ say what the client already knew.
 An enum **without** a `glz::meta` is refused at compile time. Without the
 declaration, glaze would emit a `$ref` to a `$defs` entry that is the six-way
 wildcard `{"type": ["number", "string", "boolean", "object", "array", "null"]}`,
-naming neither the enumerators nor even a single type — the shipped
-`DynamicForm` draws that wildcard as a checkbox, reporting the form ready for a
-value nobody chose. `schemaJson<A>()` therefore `static_assert`s on
+naming neither the enumerators nor even a single type, which no renderer can
+draw as a choice. `schemaJson<A>()` therefore `static_assert`s on
 `glz::glaze_enum_t` for every `enum class` member it reaches, so a rung that
 declares one without `glz::meta`/`glz::enumerate` fails to build rather than
 shipping a form that lies about being ready.
@@ -1337,8 +1237,8 @@ never was.
 `schemaJson<A>()` therefore also emits the bound as an exact decimal **string**,
 which `JSON.parse` cannot round. A renderer that validates integer input should
 prefer `x-exactMinimum`/`x-exactMaximum` when present and fall back to the numeric
-`minimum`/`maximum` otherwise. The shipped `DynamicForm.qml` compares digits
-directly in that case, since no JS number can hold the bound.
+`minimum`/`maximum` otherwise. The forms engine compares the exact digits in
+that case.
 
 Two deliberate limits:
 
@@ -1366,285 +1266,76 @@ altering how a value is interpreted) is a breaking change and ships only in a
 breaking framework release.** Adding a new, optional `x-*` key that older
 renderers can safely ignore is not breaking.
 
-## Shipped Qt/QML reference renderer
+## Renderers
 
-The schema contract above is renderer-agnostic; morph ships one reference
-renderer for it, Qt/QML, as a reusable component rather than example code.
-
-- **`src/qt/forms`** builds the QML module `MorphForms` (CMake target
-  `morph_forms_module`, `qt_add_qml_module(... URI MorphForms VERSION 1.0)`):
-  `DynamicForm.qml` (the `Repeater`-over-`fields` form renderer: `$ref`
-  and `anyOf` resolution/dual-read, the closed-set selection control (see
-  [Closed sets](#closed-sets--a-reflected-enum-class)),
-  the exact rational digit arithmetic, the unit
-  selector, the required-field submit gate, the options-fetch, layout/
-  grouping into sections/tabs, the widget-hint controls — textarea, slider,
-  radio group — the comma-separated-with-validation `"array"`-typed field
-  control (see [Array fields](#array-fields--type-array)), the explicit
-  submit mode (see [Explicit submit mode](#explicit-submit-mode--x-submitmode)),
-  and the localisation dual-read), `DateTimePicker.qml` (manual
-  ISO-8601 entry plus a calendar/time popup), `SlotRegistry.qml` (below), and
-  `I18nCatalog.hpp`/`.cpp` (a `QObject`/`QML_ELEMENT` in-memory
-  `TranslationProvider` realization — see
-  [Localisation](#localisation--message-keys-and-the-catalog-seam) — shipped
-  alongside the renderer rather than left in a demo, since it is
-  model-agnostic and `DynamicForm`'s `catalog` property consumes it
-  structurally, not by name). It builds whenever `-DMORPH_BUILD_FORMS_QML=ON`,
-  independent of `MORPH_BUILD_EXAMPLES` — an app depends on it directly
-  (`target_link_libraries(... morph_forms_moduleplugin)` plus `import
-  MorphForms` in its own QML) instead of copying or forking it. **Installed**,
-  it is the `forms_qml` component: `find_package(morph CONFIG REQUIRED
-  COMPONENTS forms_qml qt_forms)` and `morph::forms_qmlplugin`. The install
-  carries the backing library, the plugin and the object libraries a static
-  QML module needs (its compiled resources and the plugin's static
-  initialiser — without them an application links and then finds no
-  `MorphForms` at run time), plus `qmldir`/`.qmltypes`/sources under
-  `MORPH_INSTALL_QMLDIR` for tooling, exported as `morph_QML_IMPORT_PATH`. The
-  installed `qmldir`'s `linktarget` names `morph::forms_qmlplugin`, the name a
-  static-Qt build's QML plugin import resolves.
-  `scripts/check_forms_qml_install.sh` (CI job `install-export-forms-qml`)
-  builds and runs an application against an install, and proves the plugin is
-  what it measured by running the same application without it.
-- **`include/morph/qt/forms/forms_controller_core.hpp`** (component
-  `qt_forms`, which also ships the `qt_executor.hpp` it includes, so an install
-  without `MORPH_BUILD_QT` still compiles it) ships
-  `morph::qt::forms::FormsControllerCore<Model>`, a header-only, model-agnostic
-  template (no `Q_OBJECT` — Qt cannot register a class *template* for QML) that
-  owns or composes over the `Bridge`/`BridgeHandler<Model>`/`QtExecutor`
-  wiring an app's own `QObject`/`QML_ELEMENT` controller subclass forwards to.
-  Two constructors decide who owns the `Bridge`:
-  - `FormsControllerCore(schemasJson)` builds and owns a private
-    `ThreadPoolExecutor` + `QtExecutor` + `Bridge` over a `LocalBackend` —
-    the convenient default for a demo or an app with no `Bridge` of its own.
-  - `FormsControllerCore(Bridge& bridge, IExecutor* guiExec, schemasJson)`
-    composes over a caller-supplied `Bridge`/executor instead of building a
-    second, always-local one — the caller decides the deployment mode
-    (`LocalBackend`, `SimulatedRemoteBackend`, `QtWebSocketBackend`, ...), and
-    a later `bridge.switchBackend(...)` on that same `Bridge` is still
-    reachable through this core's handler (the handler re-registers itself
-    automatically, exactly like any other `BridgeHandler`). `bridge` and
-    `guiExec` must outlive the core.
-
-  It exposes `schemasJson()`, `submitIfValid(actionType, bodyJson, onReply,
-  onError)`, and `fetchOptions(optionsAction, bodyJson, onReply, onError)` —
-  both operations dispatch generically via `BridgeHandler::executeJson`, so an
-  app's controller never hardcodes one action, and `fetchOptions`'s `bodyJson`
-  is a true pass-through (`"{}"` for an independent `Choice`, or
-  `{parentField: value, ...}` for a dependent one — see [Choice —
-  server-sourced picklist](#choice--server-sourced-picklist)) rather than
-  always empty; `examples/forms/gui_qml/FormsController.hpp` is the ~20-line
-  reference wrapper (naming its own model type, since Qt cannot register the
-  template itself), still using the owning constructor since the demo has no
-  pre-existing `Bridge` to compose over.
-- **`examples/forms/gui_qml`** is a *consumer* of the shipped module, not its
-  home: its own `LabFormsDemo` QML module carries only `Main.qml` and the
-  `FormsController` subclass naming `lab::LabModel`; `Main.qml` imports
-  `MorphForms` for `DynamicForm`/`I18nCatalog` like any other consumer would.
-- **`include/morph/qt/forms/multi_model_forms_controller_core.hpp`** (same
-  component, same install story) ships
-  `morph::qt::forms::MultiModelFormsControllerCore<Sharing, Model...>`, the
-  multi-model sibling of `FormsControllerCore<Model, Sharing>` for a rung
-  whose forms span more than one registered model
-  (`bookmarks::gui::FormsBridge`, whose forms serve `AuthModel`,
-  `BookmarkModel` and `TagModel`, is the shipped example). Same
-  `schemasJson()`/`submitIfValid()`/`fetchOptions()` surface, over
-  `morph::qt::bridge::MultiModelBridgeCore<Sharing, Model...>`
-  (`include/morph/qt/bridge/multi_model_bridge_core.hpp`) instead of
-  `GenericModelBridgeCore<Model, Sharing>`: it composes one
-  `GenericModelBridgeCore<Model, Sharing>` per `Model` in the pack and routes a
-  submitted action-type id to whichever one serves it, via
-  `GenericModelBridgeCore::servesAction` (which forwards to
-  `BridgeHandler::servesAction`) — a pure existence check over
-  `ActionExecuteRegistry`, the same registry `executeJson` dispatches
-  through — rather than a hand-written `actionType -> Model` table. Models
-  are tried in the order the pack declares them; an action id registered on
-  more than one `Model` in the pack is a configuration bug asserted in debug
-  builds, not a case routed silently. An unrouted action type resolves
-  `onError` directly with `"no model in this client serves action '<id>'"`,
-  the same wording every hand-written router before it agreed on
-  independently.
-
-This is packaging and factoring only: no `x-*` key changed, and a plain
-single-action form renders identically to before the renderer was extracted.
-
-`DynamicForm` connects to the controller through **two** `Connections` blocks,
-not one, because only one of the two signals is universal:
-
-- **`replyReceived(actionType, ok, payload)` is required** of every controller.
-  Its block is strict, so a handler there that matches no signal on the target
-  is a misspelling and the engine reports it.
-- **`optionsReceived(optionsAction, ok, payload)` is optional.** It exists only
-  on a controller that serves a `Choice` field; a controller that serves none
-  deliberately declares neither it nor `fetchOptions()`
-  (`bookmarks::gui::FormsBridge` and `pastebin::gui::FormsBridge` each carry
-  the reasoning: an unused `fetchOptions()` would be a stub with nothing to
-  call it). Its block gates its
-  **target** on the signal being declared — `form.controller.optionsReceived
-  !== undefined`, else `null` — so a controller that omits it is never connected
-  to and the absence is not a warning. Without the split, every form instance
-  warns once about `onOptionsReceived` as soon as a conforming choiceless
-  controller is attached, which forces any GUI test asserting "no QML warnings"
-  to tolerate that exact text.
-
-  The gate is what makes the block optional, **not** `ignoreUnknownSignals`. A
-  controller that does declare `optionsReceived` is connected to strictly, so a
-  misspelling of the handler is still reported. `ignoreUnknownSignals: true`
-  would silence that too, and the silence is expensive: the options never
-  arrive, every `Choice` combo box stays empty, the form never reaches `ready`,
-  and nothing is logged.
-
-`src/qt/forms/tests/tst_DynamicFormChoicelessController.qml` pins both halves:
-a choiceless controller loads with no warning, a `Choice`-serving one still
-receives its options, and a target missing `replyReceived` is still reported.
-
-`DynamicForm.schema` takes the parsed schema **however it is supplied** — a
-declarative QML binding (`schema: controller.schemas[actionType]`), an initial
-property, a `setProperty` from C++, or `createTemporaryObject(component,
-parent, {schema: ...})`. An assigned value round-trips through `QVariant`,
-which turns each of the schema's arrays into a `QVariantList` rather than a JS
-array; the renderer re-reads the schema as plain JSON once, at the property, so
-an array-valued `type` (`["integer","null"]`), the `anyOf`-over-`$ref` collapse
-and closed-set recognition all read the same either way. The same schema
-supplied both ways yields the same field descriptors and the same submitted
-body — asserted in `src/qt/forms/tests/tst_DynamicFormSchemaAsVariant.qml`,
-which builds one form each way and compares them against each other.
-
-The one thing that does **not** survive the `QVariant` boundary is JSON key
-order: the map it converts through is sorted, and the declaration order is
-gone before the renderer is reached, so no renderer can recover it. This is
-the general rule `x-order` already exists for — "renderers lay fields out in
-ascending `x-order`, not in JSON key order", above — and `schemaJson<A>()`
-emits `x-order` on every property, so a generated schema is unaffected. A
-**hand-written** schema that omits `x-order` leaves its fields tied, and the
-sort that orders them is `Array.prototype.sort`, which QML's engine does not
-guarantee to be stable: measured on Qt 6.11.2, four all-equal elements come
-back reordered. So a tied schema lays out in an order that is neither
-declaration order nor key order, bound or assigned. Give every property an
-`x-order`.
-
-One other value JSON cannot carry: a **non-finite** `minimum`/`maximum`. Only a
-hand-authored QML object literal can declare one — `schemaJson<A>()` never
-emits it, and no JSON text can spell it — and the re-read turns it into `null`.
-The renderer reads a bound that is not a finite number as **no bound declared**,
-which is what `maximum: Infinity` already meant, and matches JSON Schema giving
-a null numeric keyword no meaning. Without that, a null bound would read as the
-bound `0` and reject every positive value.
-
-### Prefill — loading a stored payload for editing
-
-An editing flow opens a saved record, reads its DTO and wants the form to show
-it. `DynamicForm.prefill(values)` takes the payload as an object keyed by wire
-name (a parsed action or section DTO); `prefillFromJson(text)` takes its JSON
-and parses it with `JsonExact`, so an id past 2^53 arrives digit for digit.
-Either replaces the whole draft — a member absent from the payload starts
-blank, as after `resetFields()` — and returns `false`, changing nothing, for
-input that is not an object.
-
-Each value becomes the text the built-in control for that member would hold,
-through `decodeFieldValue(field, value)`, the inverse of `encodeFieldText`:
-
-| Member | Wire value | Draft text |
-|---|---|---|
-| `Quantity` | `{num,den,dp}` | exact digits at the field's canonical `x-decimalPlaces`, rounded half-up, in the display locale (`2450.50`, `2450,50` in `de_DE`); the unit selector returns to the canonical unit |
-| plain number | JSON number | never exponent form; padded to `x-displayDecimals` when declared, never rounded to it |
-| integer | JSON integer | its exact digits |
-| `Timestamp` | ISO-8601 (zone designator optional, read as UTC when absent) | wall clock in `displayOffsetMinutes` |
-| `boolean` | `true`/`false` | `"true"`/`"false"` |
-| closed set / `Choice` | the value | its `valueJson` |
-| `std::vector<T>` | array | entries joined by `", "` |
-| `std::vector<Row>` | array of objects | the rows as `{member: cellText}`, each cell decoded by the row member's own descriptor |
-| string | string | itself |
-
-A value whose shape does not match its field decodes to `""` (blank). The
-round trip is the contract: prefilling a form from a payload and editing
-nothing assembles the same payload, in the canonical spelling the encoders
-produce. Every drawn control re-seeds from the new draft (`prefillRevision`),
-a fetched `Choice` re-selects its row whenever its options arrive, dependent
-`Choice`s are re-fetched for their prefilled parents, and slots see the values
-through `fieldText` / `rows`.
-
-**A prefill never submits**, in auto-submit mode included: the final
-revalidation runs inside the `programmaticEdit` window, so a ready prefilled
-form waits for the user. `src/qt/forms/tests/tst_DynamicFormPrefill.qml` pins
-the round trip for every member kind, locale and zone, slots, the fetched
-`Choice`, and the no-submit rule; removing the control re-seed reddens 5 of its
-11 cases and a wrong `Quantity` decoder 8.
+The schema contract above is renderer-agnostic. morph's renderer of it is the
+forms engine ([engine.md](engine.md)): it reads served schema JSON back into a
+`FormModel`, runs a `FormSession` over it — drafts, rules, readiness, prefill
+and the exact body — and draws it with `formView`, which the Qt Quick and
+terminal frontends render. A client outside morph renders the same schemas by
+honouring the keys this document defines; the corpora named in
+[Conformance](#conformance) are its reference.
 
 ### What `ready` claims
 
-`DynamicForm.ready` is a claim about the **payload**: `true` only when the body
-the form would submit satisfies the schema the form was generated from. It is
-deliberately *not* the weaker "every control the renderer drew is filled". Under
-that reading the flag would be `true` for a body the action must reject, and the
-rejection would surface at the action boundary rather than in the form, where the
-user could still correct it. Two obligations stated earlier are instances of the
-same rule: a value outside a [closed set](#closed-sets--a-reflected-enum-class)
-leaves the form not ready even though the combo box holds it, and a `boolean`
-field refuses anything but `true`/`false`.
+`ready` is a claim about the **payload**: `true` only when the body the form
+would submit satisfies the schema the form was generated from. It is
+deliberately *not* the weaker "every control the renderer drew is filled".
+Under that reading the flag would be `true` for a body the action must reject,
+and the rejection would surface at the action boundary rather than in the form,
+where the user could still correct it. Two obligations stated earlier are
+instances of the same rule: a value outside a
+[closed set](#closed-sets--a-reflected-enum-class) leaves the form not ready
+even though the control holds it, and a `boolean` field refuses anything but
+`true`/`false`.
 
-So a member this renderer has **no encoding for** keeps the form short of
-`ready`. `DynamicForm.qml` calls such a member *unrepresentable*, and recognises
-two shapes:
+So a renderer that has **no encoding** for a member keeps the form short of
+`ready` while that member is required or filled, and says why. The forms engine
+has an encoder for every member kind — nested objects and collections of
+objects included — so only a member past its nesting limit (`truncated`) has
+none.
 
-- an **object-typed** member that no typed control claims — a
-  [nested aggregate](#nested-aggregates-recursive-cycle-safe), whose one scalar
-  control collects text where the schema asks for an object. A bare
-  `math::Rational` member is this shape too, and is the instance least likely
-  to be expected: its C++ declaration is a scalar and its schema is an object
-  of `num`/`den`/`dp`. Wrapping it in a `Quantity` — or giving the field an
-  `x-decimalPlaces` — is what hands it the exact-decimal control that encodes
-  that shape;
-- an **array whose `items` are objects** (or arrays), which takes the
-  [`type: "array"` control](#array-fields--type-array) and encodes each entry as
-  a JSON string. A control *was* drawn and the member is unrepresentable anyway,
-  which is precisely why "a control was filled" cannot be what `ready` means.
+### Overrides — `x-widget` and the control kinds
 
-A `Quantity` and a `Choice` are `"type": "object"` in the schema too and are
-**not** unrepresentable: their own controls encode the shape their schema asks
-for. The test is whether an encoding exists, not what the JSON type is.
+A field's control is chosen from its schema: `isChoice` → a picker,
+`isQuantity` → a number with a unit selector, `format: date-time` → a date/time
+control, `x-widget: "textarea"`/`"slider"`/`"radio"` → the
+[widget-hint](#widget-hints--multiline--ranged) controls. An app that wants a
+different control for one field, one unit, one `x-widget` or one kind of
+control registers an override client-side, without forking the renderer
+([engine.md](engine.md), "Rendering": field path → widget hint → unit → kind →
+built-in).
 
-Two seams carry the reason, because a gate that only says "no" is not
-actionable:
+- **`x-widget` (optional property-level key).** A hint naming a control
+  variant when the type alone is ambiguous — the widget-hint values above, or
+  an app-defined id such as `"rating"` an override recognises. Absent, it
+  matches no override — purely additive and ignorable.
+- **The kind of control.** The JSON type does not name the control a field
+  needs: a `Quantity` and a nested object are both `"object"`, a `Choice` is
+  `"integer"`, a closed set and a `Timestamp` are `"string"`. A field's kind is
+  decided in the order its encoder is chosen:
 
-| Read | Where | Meaning |
-|---|---|---|
-| `fields[i].unrepresentable` | field descriptor | Why no control here can collect what the schema asks for, or `""`. A property of the *schema*, so it is readable before anything is typed — a caller can decline the form up front. |
-| `unrepresentableReason` | form | `"<wire name>: <reason>"` for the member submission is currently stuck on, or `""`. Written by `revalidate()` in the same pass that writes `ready`, so the two cannot disagree. Empty while the form is ready **and** while it is merely unfilled: a blank required field or an unsatisfied rule is the ordinary submit gate, which the user can act on. |
+| Kind | Member (schema shape) |
+|---|---|
+| object array | `std::vector<Sub>` (`array` whose `items` are an object) |
+| array | any other `std::vector<T>` |
+| enum | a closed set (`oneOf` of `const`s, or `enum`) |
+| choice | a `Choice` (`x-optionsAction`) |
+| date-time | a `Timestamp` (`format: "date-time"`) |
+| quantity | a `Quantity`, or any property with `x-decimalPlaces` |
+| integer / boolean / number | `type` of that name |
+| object | a nested aggregate, plain or `std::optional` |
+| string | everything else |
 
-The form's status label shows that reason in place of "fill the required (\*)
-fields" — advice no input can act on — and, being the label the
-[accessibility slice](#renderer-conformance-kit) mirrors into
-`Accessible.description`, announces it rather than merely tinting it.
+Overrides never appear in the schema or on the wire — two renderers of the same
+schema may register different ones. This is the "escape hatch always available"
+design principle ([above](#design-principle-infer-by-default-declare-to-override))
+in practice: swap one control without forking the renderer.
 
-**A slot can supply the missing encoding for a collection of objects or a
-nested object.** When a registered slot claims a top-level `std::vector<Row>`
-member or a top-level struct member, `unrepresentable` is `""` for it and the
-form encodes the rows or members the slot writes — see
-[Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
-[Nested objects](#nested-objects--a-host-slot-draws-them). The
-descriptor therefore depends on the slot registry as well as on the schema; the
-`fields` binding reads `SlotRegistry.revision`, so a slot registered after the
-form was built is picked up.
+### Conformance
 
-**An unrepresentable member the payload may legitimately omit does not block
-submission.** Optional and left blank, it is simply absent from the body, and
-that body is one the schema accepts; `unrepresentable` still names it on the
-descriptor, so the member is declined rather than dropped silently. Typing into
-its control is what makes the form unready, since that text has no encoding.
-
-What this does **not** decide is what the renderer should eventually *draw* for
-such a member — a sub-form, a refusal with a diagnostic, or the flattening it
-does today. The readiness answer is the same under all three, so it does not
-wait on that one. `src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml` pins
-both directions: the unready cases with their reasons, and a flat form
-(integer, string, array-of-string, `Quantity`) that names nothing
-unrepresentable and reaches `ready`.
-
-## Renderer conformance kit
-
-A renderer proves it honors the contract above by consuming a **schema
-corpus** and satisfying a set of **expected-behavior assertions** — the
-executable form of this document's "normative" claim.
+A renderer proves it honours the contract above against corpora rather than
+prose:
 
 - **C++ fixture corpus and drift guard**
   (`tests/test_forms_conformance_corpus.cpp`): five fixture action types —
@@ -1656,222 +1347,20 @@ executable form of this document's "normative" claim.
   hand-authored), so a change to `mergeSchemaExtras`/`schemaJson` that alters
   `x-order`, `required`, `x-decimalPlaces`, `x-unitAlternatives`,
   `x-optionsAction`/`x-optionValue`/`x-optionLabel`, `format`, or `ExtUnits`
-  is caught here as a failing assertion (the corpus "drift guard").
-- **QML functional assertions** (`src/qt/forms/tests/tst_conformance.qml`)
-  hand-author schemas mirroring each C++ fixture by name and run them through
-  the shipped `DynamicForm`: fields render in `x-order`; submission is blocked
-  until every `required` field is engaged and enabled once they are; a
-  `Quantity` payload is `{num,den,dp}` exact and a unit switch recomputes it
-  exactly (no float drift); a `Choice` descriptor carries its declared
-  `x-optionsAction`/`x-optionValue`/`x-optionLabel`; a `Timestamp` renders as a
-  date-time control and gates on ISO-8601; two properties sharing one `$def`
-  each keep their own `x-order` while resolving the same `ExtUnits`. The
-  options-fetch itself — an independent `Choice` executing its options action
-  with an empty body, and a dependent one (`x-optionsDependsOn`) with
-  `{parentField: value, ...}` — is asserted separately, in
-  `src/qt/forms/tests/test_forms_controller_core.cpp` (a Catch2 + Qt
-  executable covering `FormsControllerCore<Model>` directly), since
-  `DynamicForm` never calls the options action directly — its controller
-  does.
-- **Accessibility slice** (`src/qt/forms/tests/tst_conformance_accessibility.qml`):
-  every control exposes an accessible name (the wire key — `title` from
-  [Field metadata](#field-metadata--fieldmeta), when declared, is the visible
-  label but the accessible-name fallback is always the wire key), a required field's
-  accessible description announces it, focus order follows `x-order`, and
-  every control (choice combo, radio group, date/time picker, text field,
-  multiline text area, slider, unit selector, and the calendar popup, which
-  gained arrow-key day navigation plus Enter/Escape for exactly this) is
-  keyboard-operable.
-- **Negative assertions** (`src/qt/forms/tests/tst_conformance_negative.qml`,
-  with test-only doubles `BrokenOrderForm.qml`/`BrokenQuantityForm.qml`, never
-  shipped in the `MorphForms` module): a renderer that ignores `x-order` fails
-  exactly the field-order assertion and no others; a renderer that silently
-  rounds an over-precise `Quantity` entry instead of rejecting it fails
-  exactly the exact-payload assertion and no others — proving the kit's
-  assertions are specific, not all-or-nothing.
+  is caught here as a failing assertion.
+- **The engine's corpora** ([engine.md](engine.md), "Corpora"): the rule
+  corpus, the body corpus (the exact bytes a form sends for typed text, per
+  locale and display zone), the instance-bounds corpus, and the rendering
+  claims on `RecordingBackend`, through the interpreter, on Qt Quick and on the
+  terminal.
 
-**Scope note.** The corpus above covers exactly the keys this document's
-renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
-below — informally, "**Tier-1**": the per-action `x-*` schema vocabulary this
-document specifies. Two numeric-bound families sit in the contract table but
-outside the five-fixture corpus, each carrying its own matched C++/QML pair
-instead: `x-exactMinimum`/`x-exactMaximum`
-(`tests/test_forms_exact_bounds.cpp` + `tst_DynamicFormExactBounds.qml`) and
-the declared `minimum`/`maximum`/`multipleOf`
-(`tests/test_forms_field_bounds.cpp` + `tst_DynamicFormFieldBounds.qml`). Both
-are additive per-field keys that no corpus fixture declares, so adding one
-changes no fixture's generated schema — which is why the drift guard has
-nothing to say about them and a dedicated pair does. It does **not** include a wizard/app-shell fixture
-(`w-*`/`app-*`): although the emitters for those "**Tier-2**" keys (the
-wizard/app-shell layer built atop Tier-1, one level up the composition —
-[workflows_navigation.md](workflows_navigation.md)) now exist
-(`morph::flows::wizardSchemaJson`/`morph::app::appSchemaJson`, see
-[workflows_navigation.md](workflows_navigation.md)), no conformance-kit
-fixture exercises them yet — that coverage is deferred to future work,
-exactly as this corpus already treats views (below) separately rather than
-as a sixth `CF*` fixture. The `v-*` view-schema layer
-(`morph::views::viewSchemaJson`, [views.md](views.md)) **is** implemented;
-its own renderer-behavior coverage lives in
-`src/qt/forms/tests/tst_collectionview.qml` rather than this five-fixture
-corpus (a view composes existing action schemas rather than introducing new
-per-field schema keys, so it does not need a sixth `CF*` fixture type here).
-
-## Theming / component-override registry
-
-A field's control is chosen by the renderer's built-in logic (`isChoice` → combo
-or radio group, `isQuantity` → number + unit selector, `format: date-time` →
-date/time picker, `x-widget: "textarea"`/`"slider"` → multiline/ranged
-controls). An app that wants a different control for one field, one unit, one
-`x-widget`, or one JSON type does so through a client-side registry, without
-forking the renderer:
-
-- **`x-widget` (optional property-level key).** A hint naming a control
-  variant when the type alone is ambiguous — e.g. `"textarea"`, `"slider"`,
-  `"radio"` (already dispatched on by the renderer's own widget-hint controls,
-  see [Widget hints](#widget-hints--multiline--ranged)), or an app-defined id
-  such as `"slider"`/`"rating"` a registered `SlotRegistry` slot recognises.
-  It is read with the same dual-read as every other property-level key
-  (`opt(raw["x-widget"], p["x-widget"])`). Absent, it resolves to `""` and
-  never matches `SlotRegistry`'s `byWidget` tier — purely additive and
-  ignorable.
-- **`SlotRegistry` (QML type, module `MorphForms`, entirely client-side).** A
-  lookup a host app populates at startup: `byField(action, field, component)`,
-  `byWidget(xWidget, component)`, `byUnit(unitAscii, component)`,
-  `byKind(kind, component)`, `byType(jsonType, component)`, and
-  `resolve(action, field, xWidget, unitAscii, jsonType, kind)`, which returns
-  the highest-priority match or `null` (`kind` is optional; the five-argument
-  call resolves as before). Resolution order is **field → `x-widget` → unit →
-  kind → type → built-in default**.
-  `DynamicForm` gains a `slotRegistry` property (`null` by default — no
-  behavior change for an app that never sets it); when a field resolves to a
-  registered `Component`, `DynamicForm` loads it via a `Loader` and hides its
-  own built-in control for that field (every built-in control — combo, radio
-  group, date/time picker, text field, text area, slider, unit selector — is
-  gated on the `Loader`'s `sourceComponent` being `null`). A registered slot
-  `Component` implements one small contract: it declares `property var field`
-  and `property var setValue`, both assigned by `DynamicForm`'s
-  `Loader.onLoaded` — `field` is the resolved, merged def+property descriptor,
-  and `setValue(text)` is the same set-value path (`setFieldValue`) the
-  built-in controls use, so an override participates in the required-gate and
-  auto-fire without special-casing.
-
-  A slot may also declare any of six **optional** members, each assigned only
-  when declared (so an existing slot is unaffected):
-
-  | Member | Assigned as | Use |
-  |---|---|---|
-  | `fieldText` | a binding to the field's retained text | Seed and track the control's value. A prefill, `resetFields()`, a `setFieldValue` from code and a tab switch that rebuilds the slot all reach it; without it a slot sees only what it wrote itself. |
-  | `rows` | a binding to the rows of a [collection of objects](#collections-of-objects--a-host-slot-draws-them), as a JS array of `{member: cellText}` (`[]` when none) | Draw the grid. |
-  | `setRows` | `function (rows)` | Write the rows; equivalent to `setValue(JSON.stringify(rows))`. |
-  | `objectValue` | a binding to the value of a [nested object](#nested-objects--a-host-slot-draws-them), as a JS object of `{member: cellText \| nestedValue}` (`{}` when blank) | Draw the sub-form. |
-  | `setObject` | `function (value)` | Write the object; equivalent to `setValue(JSON.stringify(value))`. |
-  | `form` | the `DynamicForm` itself | Reach `encodeFieldText(field, text, 0)` (does this cell encode?) and the rest of the form's public surface. |
-
-  The bindings re-evaluate on `rulesRevision`, which `revalidate()` bumps after
-  every write to the draft. A slot that claims a collection of objects or a
-  nested object is also what makes that member representable — see
-  [Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
-  [Nested objects](#nested-objects--a-host-slot-draws-them). `SlotRegistry.revision` is bumped on every
-  `by*()` call and read inside `resolve()`, for the same reason
-  `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
-  plain objects mutated in place, which does not by itself notify a binding
-  that already read them.
-
-**`byKind` — one host control per kind of control.** The JSON type does not
-name the control a field needs: a `Quantity` and a nested object are both
-`"object"`, a `Choice` is `"integer"`, a closed set and a `Timestamp` are
-`"string"`. Every field descriptor therefore carries `kind`, the control this
-renderer would draw, decided in the order its encoder is chosen:
-
-| `kind` | Member (schema shape) |
-|---|---|
-| `objectArray` | `std::vector<Sub>` (`array` whose `items` are an object) |
-| `array` | any other `std::vector<T>` |
-| `enum` | a closed set (`oneOf` of `const`s, or `enum`) |
-| `choice` | a `Choice` (`x-optionsAction`) |
-| `datetime` | a `Timestamp` (`format: "date-time"`) |
-| `date` | `format: "date"` (drawn as a plain text field by the built-in renderer) |
-| `quantity` | a `Quantity`, or any property with `x-decimalPlaces` |
-| `integer` / `boolean` / `number` | `type` of that name |
-| `object` | a nested aggregate, plain or `std::optional` (unrepresentable without a slot; see [Nested objects](#nested-objects--a-host-slot-draws-them)) |
-| `string` | everything else |
-
-A host registers one kit component per kind (`byKind("quantity", …)`,
-`byKind("choice", …)`, …); a field, `x-widget` or unit registration still wins,
-and `byType` remains the fallback for a kind with none. Pinned by
-`src/qt/forms/tests/tst_SlotRegistryByKind.qml`; removing the tier from
-`resolve()` reddens 4 of its 5 cases.
-
-### Chrome slots
-
-Field slots replace a field's *control*. Everything around the controls — the
-caption, the help line, the section card, the tab bar, the heading, the status
-line, the submit button, the JSON preview and the reply line — is chrome, and a
-host whose visuals come from one UI kit needs to replace that too, or its forms
-stay half-restyled. `SlotRegistry.byChrome(role, component)` registers one
-Component per role, `resolveChrome(role)` returns it (or `null`), and
-`DynamicForm` loads it **in place of** the built-in for that role — the built-in
-is hidden, not drawn beside it:
-
-| Role | Replaces | Members assigned (each only if declared) |
-|---|---|---|
-| `fieldLabel` | the caption and red `*` of every field | `field`, `text` (label), `required` (live, includes `requiredWhen`), `invalid` (live: typed text that does not encode) |
-| `fieldHelp` | the help line of a field that has one | `field`, `text` |
-| `section` | a titled `"section"` group (and `"accordion"`, when no `accordion` chrome is registered) | `title`, `kind`, `section` (`{title, kind, fields}`); **must declare `contentItem`** |
-| `accordion` | a collapsible `"accordion"` group | as `section`; collapsing is the chrome's own |
-| `tabset` | a run of consecutive `"tab"` groups | `tabs` (`[{title}]`), reads the chrome's own `currentIndex`; **must declare `contentItem`** |
-| `header` | the action-type heading | `text` |
-| `status` | the "fill the required (\*) fields" / ready line | `text` (`DynamicForm.statusText`), `ready`, `reason` (`unrepresentableReason`), `explicitSubmit` |
-| `submitButton` | the explicit-mode Submit button | `ready`, `submit()` |
-| `preview` | the monospace JSON preview | `text` (`previewLine`) |
-| `result` | the `ok:`/`err:` reply line | `text`, `ok` |
-
-`CollectionView` and `WizardView` read the same registry for chrome roles of
-their own (`collectionHeader`, `collectionRow`, `confirmDialog`,
-`editorDialog`; `wizardHeader`, `wizardNav` — see
-[views.md](views.md#chrome-slots-and-the-embedded-editors) and
-[workflows_navigation.md](workflows_navigation.md#chrome-slots)), and hand it on
-to every `DynamicForm` they embed. `DateTimePicker` has no chrome of its own: a
-host replaces the whole picker with a field slot (`byKind("datetime", …)`,
-#812).
-
-Every chrome item is also offered `form` (the `DynamicForm`). Values that change
-are assigned as bindings. A role with no registration keeps the built-in
-exactly, so an app that registers nothing sees no change. To **remove** a piece
-of chrome, register an empty `Item`; `preview` and `result` chrome are loaded
-whatever their text, so an app that wants them decides itself when an empty one
-shows.
-
-**Container chrome hosts the fields; it does not re-create them.** For
-`section`, `accordion` and `tabset`, the form creates its field grid
-(`gridColumns` columns, `x-colspan` honoured, the same field delegates) as a child of the
-chrome's `contentItem`, which is expected to be a Layout — a `ColumnLayout` is
-enough. The built-in grid's `Repeater` is emptied under a chrome, so each field
-exists once and its `field_<name>` `objectName` stays unique: prefill,
-`resetFields()` and every test that finds a control by name keep working. A
-`tabset` chrome owns `currentIndex`; the form shows the selected tab's fields
-and, as with the built-in tab bar, rebuilds them on every switch (they re-seed
-from `fieldValues`). The implicit untitled `"flat"` group has no chrome.
-
-`submit()` goes through `DynamicForm.submit()`, whose `ready` guard applies to a
-chrome button exactly as to the built-in one.
-
-`DynamicForm` itself is a `Frame`: its outer border and padding are the
-`Frame`'s `background` and `padding`, which a host sets on the instance
-(`background: null`, `padding: 0`) — no slot is needed for them. The controls a
-field slot does not replace are the style's own `QtQuick.Controls` types; no
-style is imported, so they follow whichever style the application selects.
-
-`src/qt/forms/tests/tst_DynamicFormChrome.qml` pins each role — values handed
-over, built-in hidden, fields created once inside a container — and a form with
-every role registered showing no built-in `Label`, `Button` or `TabBar`.
-Restoring the built-in section `Repeater` under a chrome reddens the
-fields-created-once case.
-
-The registry never appears in the schema or on the wire — two renderers of the
-same schema may register different slots. This is the "escape hatch always
-available" design principle ([above](#design-principle-infer-by-default-declare-to-override))
-in practice: swap one control without forking the renderer.
+`x-exactMinimum`/`x-exactMaximum` (`tests/test_forms_exact_bounds.cpp`) and the
+declared `minimum`/`maximum`/`multipleOf` (`tests/test_forms_field_bounds.cpp`)
+sit outside the five-fixture corpus: they are additive per-field keys no fixture
+declares, so the drift guard has nothing to say about them and a dedicated suite
+does. Views ([views.md](views.md)) and wizards
+([workflows_navigation.md](workflows_navigation.md)) compose existing action
+schemas, and are covered by the engine's collection and wizard suites.
 
 ## Localisation — message keys and the catalog seam
 
@@ -1951,20 +1440,9 @@ only; it defines no translation storage format — a host adapts whatever
 catalog it already owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database)
 into the one `TranslationProvider` signature.
 
-The `examples/forms/gui_qml` reference renderer hosts a concrete, minimal
-realization: `I18nCatalog` (`examples/forms/gui_qml/I18nCatalog.hpp`), an
-in-memory `QObject` catalog (QML cannot hold a `std::function` directly),
-wired into `DynamicForm.qml`'s `resolveText`/`i18nFieldKey` JS mirrors of the
-functions above. It currently resolves only the field label/help/placeholder
-slot — group-title i18n wiring for the already-implemented
-[Layout & grouping](#layout--grouping--sections-tabs-spans) feature remains
-future work. The wizard/app-shell layer
-([workflows_navigation.md](workflows_navigation.md)) is implemented, but its
-QML renderer (`WizardView.qml`/`AppShell.qml`) does not yet accept an
-`I18nCatalog` either, matching `CollectionView.qml`'s own gap (see
-[views.md](views.md), "Limitations") — wizard/app-menu i18n wiring remains
-future work. Cross-field rules (above) are implemented
-but carry no translatable message text of their own — the `x-rules`
+The forms engine resolves field labels, help, placeholders and group titles
+through this seam ([engine.md](engine.md), "FormSession"). Cross-field rules
+(above) carry no translatable message text of their own — the `x-rules`
 vocabulary is structural (`kind`/`fields`/`when`/`value`) only, so a renderer
 builds any rule-violation message from that structure (or its own catalog
 entry, per "Rule messages come from the catalog, not the wire" below), never
@@ -2024,9 +1502,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   agree" is structural rather than a convention a caller can get half right —
   and that convention is exactly what the two edges drift apart on. There is
   deliberately no back-compatible positional overload: two spellings of one call
-  is how they drift. The QML mirror takes the
-  parallel shape, an object literal with the same member names, so the two
-  mirrors stay structurally identical.
+  is how they drift.
 
   Every member is defaulted to its `"C"`-locale spelling, so a caller that names
   none of them gets the identity transform in both directions.
@@ -2053,12 +1529,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   | U+ABF0 | 1 | `mni_IN` |
 
   76 of 711, across eleven distinct sets. Two of them (Chakma U+11136, Adlam
-  U+1E950) are outside the BMP, so one digit is four UTF-8 bytes on the C++
-  edge and two UTF-16 units on the QML edge — both scans therefore decode a
-  code *point* rather than comparing a unit. The figure the issue could defend
-  before this was 24, and it said so plainly: 24 was a count of locales whose
-  *negative sign* is `U+061C U+002D`, not a digit-set count. 76 is the measured
-  one.
+  U+1E950) are outside the BMP, so one digit is four UTF-8 bytes — the scan
+  therefore decodes a code *point* rather than comparing a byte.
 
   Before this, `normalizeLocaleNumber` compared one byte against `['0','9']`,
   so a user of any of those 76 locales could not enter a number at all — a flat
@@ -2083,10 +1555,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   not fail if only the entry edge moved, because entry accepts ASCII digits too
   — so the test that pins this asserts the display text contains no ASCII
   digit as well as asserting the round trip, and it is that assertion which
-  fails for the half-fix. Pinned over all eleven digit sets on both edges:
-  `[morph591]` in `tests/test_render_locale_format.cpp`, and the
-  `test_thePairRoundTripsThroughEveryMeasuredDigitSet` function in
-  `src/qt/forms/tests/tst_i18n.qml`.
+  fails for the half-fix. Pinned over all eleven digit sets:
+  `[morph591]` in `tests/test_render_locale_format.cpp`.
 
   **Entry accepts the locale's digits *and* ASCII ones; display emits only the
   locale's.** That asymmetry is the rule the signs follow, applied to digits: an ASCII `'+'` is accepted in every locale because the
@@ -2163,59 +1633,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   formatted to nothing would turn `-5` into `5`: a valid number of the wrong
   sign, which is silent corruption rather than a rejection.
 
-  The renderer passes the locale's own sign: `DynamicForm.qml` already binds
-  `qtLocale: Qt.locale(displayLocale)` and forwards
-  `qtLocale.decimalPoint`/`qtLocale.groupSeparator`, and now forwards
-  `qtLocale.negativeSign` from the same object at all three call sites. The
-  member is defaulted, so a caller that names only the separators is unchanged.
-
-  **`displayLocale` is a `QLocale` *name*; Qt resolves it, and morph does
-  not.** `DynamicForm.displayLocale` (`src/qt/forms/qml/DynamicForm.qml`)
-  is a plain string, and every locale fact the two numeric edges receive comes
-  out of the `QLocale` that `Qt.locale(displayLocale)` returns — not out of the
-  string. That resolution is Qt's, and it is **not** an identity: a name with no
-  script subtag resolves to the language/territory's *default* script, which for
-  a script-split locale need not be the script whose digits the caller wanted.
-  Measured with Qt 6.11.2 by enumerating
-  `QLocale::matchingLocales(AnyLanguage, AnyScript, AnyTerritory)` — 711
-  locales, eleven distinct `zeroDigit` values — and then reconstructing a
-  `QLocale` from each group's own reported `name()`:
-
-  ```
-  mni_IN       zeroDigit U+09E6    matchingLocales entry named mni_IN: U+ABF0
-  ff_BF        zeroDigit U+0030    matchingLocales entry named ff_BF:  U+1E950 (Adlam)
-  ff_Adlm_BF   zeroDigit U+1E950
-  ```
-
-  Nine of the eleven representative names round-trip; those two do not.
-  `QLocale("ff_BF")` is the Latin-script Fulah and reports ASCII digits, while
-  the `matchingLocales` entry whose `name()` is `ff_BF` is the Adlam-script one.
-  The third row is the remedy and was measured through QML's `Qt.locale(...)`,
-  so the QML path resolves identically.
-
-  **The contract, therefore: the name is the caller's and its resolution is
-  Qt's.** A caller that wants a particular script passes the script-qualified
-  form — `ff_Adlm_BF`, not `ff_BF`. morph neither validates nor normalises
-  `displayLocale`, and deliberately does not warn when
-  `Qt.locale(displayLocale).name() !== displayLocale`: Qt normalises names for
-  many reasons unrelated to scripts, so such a warning would fire on callers
-  with nothing wrong with them, and there is no measured consumer to protect.
-  Measured on this revision, the complete set of names anything in this tree
-  puts through `Qt.locale(displayLocale)` is `{C, de, eu_ES}` — the property's
-  default, the two entries of the example's `ComboBox` model
-  (`examples/forms/gui_qml/qml/Main.qml`), and one test locale. None is
-  script-split, so nothing here can reach the behaviour above. A rung or example
-  that adopts a script-split name is the trigger to revisit this paragraph.
-
-  Two consequences worth stating rather than leaving to be re-derived. First,
-  the round trip is safe under a mis-resolution: both edges read their facts
-  from the *same* `qtLocale` object, so entry and display agree on whatever Qt
-  resolved, and the failure mode is "quietly the wrong locale", never "the
-  display edge emits text the entry edge rejects". Second, `displayLocale` is
-  also the **translation catalog key** (`catalog.lookup(displayLocale, …)`), and
-  there it is used *unresolved* — the raw string. So the one property is read
-  two ways, and a script-qualified name is the spelling the catalog must be
-  keyed on as well.
+  The renderer passes the locale's own sign beside its separators. The member
+  is defaulted, so a caller that names only the separators is unchanged.
 
   **A leading positive sign is accepted on entry and never emitted on
   display.** `normalizeLocaleNumber` reads
@@ -2278,32 +1697,16 @@ Display formatting is the renderer's duty; the wire stays canonical:
   a control edge behave differently in Debug and Release, and would be
   untestable in the configuration where it fires.
 
-  **Both edges, or neither.** `src/qt/forms/qml/DynamicForm.qml` carries a
-  JavaScript mirror of this function, and a divergence between them is a
-  divergence in what the product accepts. The mirror produced byte-identical
-  wrong answers on all of the cases above and carries byte-identical
-  validation now; changing one without the other is the defect, not the fix.
-  The mirror compares one UTF-16 code unit at a time, so the whole-string sign
-  match is spelled `text.startsWith(sign, i)` there rather than `ch === sign` —
-  a one-unit comparison could not match the 2–3 code point forms at all. The
-  mirror's `normalizeLocaleNumber` takes `positiveSign` the same way and drops
-  it the same way, and its `formatCanonicalNumber` takes none, for the reason
-  above; the renderer forwards `qtLocale.positiveSign` at the two entry call
-  sites that already forward `qtLocale.negativeSign`, and nothing changes at the
-  display call site. All three call sites now also forward
-  `qtLocale.zeroDigit`, the display one included — that is what "both edges, or
-  neither" costs for the digit base.
+  **Both edges, or neither.** Entry (`normalizeLocaleNumber`) and display
+  (`formatCanonicalNumber`) take the same `NumericLocale`, and a locale fact
+  one edge honours while the other ignores is a divergence in what the product
+  accepts: the display edge would emit text the entry edge rejects. The signs,
+  the digit base and the separators are therefore matched as whole strings on
+  both, never one code unit at a time — a one-unit comparison could not match
+  the 2–3 code point sign forms at all.
 
-  **The two separators are matched the same way, for consistency rather than
-  for a locale.** Spelling the mirror's *separator* branches as
-  `ch === groupSeparator` and `ch === decimalSeparator` would be a
-  one-code-unit comparison sitting a few lines from the whole-string sign match,
-  with nothing saying why. They are `text.startsWith(sep, i)` as well, advancing the index by the separator's
-  length the way the sign branches already do.
-
-  Unlike the signs, **no locale reaches this**, and the rule rather than a user
-  report is the reason to fix it. Measured with `QLocale::matchingLocales`
-  under Qt 6.11.2, over the same 711 locales:
+  Unlike the signs, **no locale has a multi-unit separator**. Measured with
+  `QLocale::matchingLocales` under Qt 6.11.2, over the same 711 locales:
 
   | field | spellings longer than one UTF-16 code unit |
   | --- | ---: |
@@ -2313,25 +1716,12 @@ Display formatting is the renderer's duty; the wire stays canonical:
   | `positiveSign` (control) | 54 of 711 |
 
   The two sign rows are the control: this is not a measurement that returns
-  zero for any locale field it is pointed at. Every one of the nine distinct
-  `groupSeparator` spellings (U+0027, U+002C, U+002E, U+00A0, U+060C, U+066C,
-  U+12C8, U+202F, U+2E41) and all three `decimalPoint` spellings (U+002C,
-  U+002E, U+066B) is a single code unit, so entry behaviour is byte-identical
-  before and after for every locale Qt knows. The change is to the *rule* this
-  paragraph states, not to the product.
-
-  That has a consequence for how it can be tested, and it is the reason this is
-  written down: **a test driven by a real `Qt.locale(...)` cannot distinguish
-  the fixed mirror from the broken one.** With a one-unit separator,
-  `ch === sep` and `startsWith(sep, i)` agree on all 711, so such a test passes
-  whatever the code does. The corpus that pins this is therefore synthetic —
-  separators of two or more code units that no locale uses, passed straight to
-  both functions — and it is pinned identically on both edges
-  (`[morph599]` in `tests/test_render_locale_format.cpp`, and the
-  `test_aMultiUnitSeparator*` functions in
-  `src/qt/forms/tests/tst_i18n.qml`). One of the synthetic separators is a
-  surrogate pair: a single code *point* that is two code *units*, which a
-  per-code-point mirror would still get wrong.
+  zero for any locale field it is pointed at. So **a test driven by a real
+  locale cannot distinguish whole-string from one-unit separator matching**,
+  and the corpus that pins it is synthetic — separators of two or more code
+  units that no locale uses, passed straight to both functions (`[morph599]`
+  in `tests/test_render_locale_format.cpp`). One of the synthetic separators is
+  a surrogate pair: a single code *point* that is two UTF-16 code *units*.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing
@@ -2575,7 +1965,7 @@ recognise them in a `when` position treats them as "cannot evaluate" and defers
 to the server, which is the sanctioned fallback (see
 [Renderer fallback](#renderer-fallback)) rather than a disagreement between the
 two evaluators. The "Also valid as a condition?" column above records which
-kinds the *shipped renderer's* condition vocabulary evaluates directly; it is
+kinds the forms engine's condition vocabulary evaluates directly; it is
 not the same question as which nodes the C++ factories accept.
 
 The marker is declared per node rather than derived from `isPresentation`
@@ -2856,19 +2246,17 @@ before trusting either:
 | Evaluator | Where | Over what |
 |---|---|---|
 | Compiled | `morph::forms::allRulesSatisfied` (`forms/forms.hpp`) | `A::formRules`, typed nodes over decoded members |
-| Client | `testRule`/`testCondition` in `src/qt/forms/qml/DynamicForm.qml` | the emitted `x-rules` JSON over widget text |
+| Client | the forms engine's `FormSession` (`forms/engine/`) | the emitted `x-rules` JSON over the draft |
 
 They are different code over different representations, so agreement is a
 property to be measured. It is measured by a single shared artifact —
-`tests/data/rule_corpus.json`, **one file with three readers**:
+`tests/data/rule_corpus.json`, **one file with two readers**:
 
 - `tests/test_forms_rule_corpus.cpp` drives every row through
   `allRulesSatisfied`;
 - `tests/test_forms_engine_corpora.cpp` drives the same rows through the forms
   engine's `FormSession` (`docs/spec/forms/engine.md`), and requires its verdict
-  to equal `allRulesSatisfied`'s;
-- `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` drives the same rows
-  through a real `DynamicForm`.
+  to equal `allRulesSatisfied`'s.
 
 Each row is `(schema, field state, expected verdict)`. The schemas are stored
 as **text** and parsed by the renderer exactly as an application parses
@@ -3009,9 +2397,9 @@ runners do **not** apply instance constraints, because they have no instance to
 read one from. See [instance_constraints.md](instance_constraints.md) for the
 API, the emitted keys, and the reasoning behind both of those decisions.
 
-**The shipped renderer honours the decorated values.** That is the half that
-makes decoration worth doing rather than a second opinion nobody reads:
-`DynamicForm.qml` takes `x-decimalPlaces` as the entry granularity whether it
+**The forms engine honours the decorated values.** That is the half that
+makes decoration worth doing rather than a second opinion nobody reads: it
+takes `x-decimalPlaces` as the entry granularity whether it
 came from the compiled type or from a row, and refuses a `Quantity` outside
 `x-minimum`/`x-maximum` in the canonical unit, alongside the compiled
 `minimum`/`maximum` — an instance range narrows the type's, it never widens it.
@@ -3336,72 +2724,15 @@ unrelated places in the schema, e.g. an `Address` nested under both a `Company`
 and a `Person` member of the same action, recurses normally into both and, per
 the `$defs` set above, is annotated once rather than twice.
 
-**What is not claimed here: that `DynamicForm` draws a recursive form.** This
-section is about schema generation, and the measurement above is about schema
-generation. What the shipped renderer does with the document it produces is a
-separate contract, stated next.
-
-#### What `DynamicForm` does with a nested aggregate
-
-The shipped `MorphForms` renderer **renders flat actions**. A nested-aggregate
-member — `$ref`-cyclic or not — is not drawn as a sub-form; it is flattened to
-a single scalar control at the parent level, and its own members reach no
-control at all. That is measured, and pinned by
-`src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml`.
-
-Four statements, each asserted by that suite:
-
-1. **A `$ref` cycle neither loops, hangs nor crashes the renderer.**
-   `resolveRef` (`src/qt/forms/qml/DynamicForm.qml`) follows a `$ref` exactly
-   one level and merges the `$def` under the property; it never recurses, so a
-   cycle is not a loop. The `TreeNode`/`SelfAction` schema quoted above builds
-   a two-field form.
-2. **An object-typed member becomes one plain text field.** For that schema the
-   renderer produces `field_id` and `field_root`, both `TextField`s, and no
-   control for `TreeNode`'s own `name`/`children`.
-3. **An acyclic nested aggregate is flattened identically.** An inlined
-   `address` object with `street`/`city` members yields `field_address` and
-   nothing for `street` or `city`. The cycle is not what stops the renderer —
-   nesting is.
-4. **The form does not report itself ready, and says which member stopped it.**
-   The flattened control collects text, and text is a JSON *string* where the
-   schema asks for an object; a recursive collection member takes the
-   `type: "array"` control, which encodes each entry as a string where the
-   schema asks for an array of objects. Neither member has an encoding, so both
-   are *unrepresentable* (see [What `ready` claims](#what-ready-claims)): while
-   the payload would have to carry one, `ready` is `false`, `previewLine` is
-   empty, `submitIfValid` is never called, and `unrepresentableReason` names the
-   member. An optional nested member left blank is not an exception to this: the
-   body omits it, and that is a body the schema accepts.
-
-Measured on Qt 6.11.2, `QT_QPA_PLATFORM=offscreen`, against the real
-`DynamicForm` with a mock controller. The suite was shown to measure the
-renderer rather than pass vacuously, on each half of point 4 separately: of its
-7 cases, removing `fieldJsonLiteral`'s unrepresentable check — which restores a
-`ready` of `true` for both wrong payloads — turns 4 red on the `ready`
-comparison, and removing `revalidate()`'s `unrepresentableReason` assignment
-turns the same 4 red on the reason instead. What stays green under both is the
-two structural cases — the cycle builds a form, and the member is one control
-rather than a sub-form — and the flat form, which is what makes those four
-failures a statement about readiness rather than about the suite.
-
-Point 4 is the readiness contract applied to a nesting the renderer does not
-draw, **not** a concession to it. A renderer may legitimately decline to draw a
-member it cannot represent; it may not then report that the resulting body is
-acceptable. What stays undecided is the other half — whether the renderer should
-draw the sub-form, decline the schema with a diagnostic, or keep flattening —
-and the readiness answer is the same under all three, so it does not wait on
-that. Nothing in this repository has a nested-aggregate member today, so nothing
-depends on the rendering answer yet.
-
-So: an action with a nested-aggregate member — cyclic or otherwise — is a
-document morph generates completely, a form morph draws only down to the
-nesting, and a body morph declines to assemble — unless the member is a
-top-level collection of objects or a top-level nested object a host slot draws,
-which the form then encodes row by row or member by member (see
-[Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
-[Nested objects](#nested-objects--a-host-slot-draws-them)). Everything above
-describes a member **no slot claims**, and is unchanged by that.
+**What the forms engine does with a nested aggregate.** It reads a nested
+object as an `Object` field and a collection of objects as an `ObjectArray`
+field, each with its own encoder ([Collections of objects](#collections-of-objects),
+[Nested objects](#nested-objects)), described down to four levels below the
+action and never twice for the same `$defs` type on one path. A `$ref` cycle
+therefore stops at its first repetition: that inner member is `truncated`
+([engine.md](engine.md), "The field model") and has no control, so a form that
+must carry it is not ready. An optional member left blank is not an exception:
+the body omits it, and that is a body the schema accepts.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those

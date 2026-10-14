@@ -33,7 +33,7 @@ The four layers, in the order the probe checked them:
 | Layer | Verdict | What was needed |
 |---|---|---|
 | **Journal** (storage, replay, fingerprint) | No change | Nothing — `LogEntry::payload` is opaque JSON text; replay decodes it through the same `ActionTraits<A>::fromJson` used everywhere else. |
-| **Forms client renderer** (`DynamicForm.qml`) | No change | Nothing — it already iterates `schema.properties` generically (verified by re-reading `DynamicForm.qml:227-330`, the round-5-cited "already schema-generic" renderer half; no QML test added by this spike, since nothing in it changes). |
+| **Forms client renderer** (the forms engine) | No change | Nothing — it reads `schema.properties` generically, so a property injected into the served schema is a field like any other. |
 | **Schema growth** (`schemaJson<A>()`-adjacent) | New app-level function, no framework change | A post-hoc DOM rewrite (`ebSchemaJsonWithCustomFields()`) that injects new `properties` nodes into the already-served schema, mirroring `morph::forms::InstanceConstraints::decorate()`'s exact idiom. |
 | **Decode/validate** (dispatch) | New per-action declaration, no framework change | `glz::meta<A>::unknown_read`/`unknown_write` pointed at a `std::map<std::string, Value>` member, **plus** an explicit `value = glz::object(...)` listing the action's compiled members (see "The catch" below). |
 

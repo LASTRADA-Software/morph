@@ -1,189 +1,39 @@
-# Ladder testing strategy — GUIs, dual deployment modes, multi-client stress
+# Ladder testing strategy — screens, dual deployment modes, multi-client stress
 
-Every rung of the [application ladder](LADDER.md) ships GUIs that are unit
-tested in **both deployment modes** — in-process (GUI + `LocalBackend` in one
-process) and client/server (GUI over `QtWebSocketBackend` against a
+Every rung of the [application ladder](LADDER.md) serves screens that are
+tested headless and in **both deployment modes** — in-process (`LocalBackend`
+in one process) and client/server (`QtWebSocketBackend` against a
 `RemoteServer`), including **N clients against one server** for stress tests.
 This document is the binding convention; rung READMEs reference it instead of
 restating it.
 
-**What this machinery actually is (round-7 T4 reframe):** since
-[`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 2 makes presenters
-deliberately contentless ("translate and route, never decide"), the
-BackendRig / client-pool / convergence stack is not really GUI testing —
-it is **a conformance harness for morph's client-side stack** (`Bridge`,
-backends, `QtExecutor`, completions, attach/reconnect under a real Qt
-event loop), which has zero coverage in the repo today. It is therefore
-**owned by the testkit as framework coverage**: the full matrix runs once
-per framework surface it conforms, and each rung runs a *thin
-instantiation* (its presenters through the rig, one suite per model — not
-a per-screen × 3-mode combinatorial matrix). This reframing is also what
-keeps the CI cost curve flat. It was derived from what already exists and is proven in the
-repo: the recipe in `tests/qt/test_qt_websocket.cpp` (in-test
-`QtWebSocketServer` on port 0, `pumpUntil`, N=4 concurrent backends, the
-QProcess client harness, the Qt-owning Catch2 `main()`), the pump helpers in
-`examples/bank/tests/bank_test_support.hpp`, and the presenter shape of
-`examples/bank/gui/controllers/`.
+A screen is deliberately contentless — it names models, queries and mutations
+and decides nothing ([`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 2) — so the
+BackendRig / client-pool / convergence stack is not really UI testing: it is
+**a conformance harness for morph's client-side stack** (`Bridge`, backends,
+`QtExecutor`, completions, attach/reconnect under a real Qt event loop). It is
+owned by the testkit as framework coverage: the full matrix runs once per
+framework surface it conforms, and each rung runs a *thin instantiation* — its
+models through the rig, one suite per model, not a per-screen × 3-mode
+combinatorial matrix. That is also what keeps the CI cost curve flat.
 
-## Current state (verified, 2026-08)
+## Screens (every rung)
 
-- There are **zero GUI tests** in the repo today. Bank's controllers are
-  presenter-shaped but compile only into `bank_gui`, never into `bank_tests`;
-  `BankClient` hard-wires `LocalBackend` (`gui/BankClient.cpp`), so the same
-  GUI cannot be constructed over a socket; the only GUI check is a
-  sleep-pumped screenshot smoke inside `gui/main.cpp`.
-- `examples/bank/tests/test_remote.cpp` uses `SimulatedRemoteBackend`, not a
-  real socket — and `SimulatedRemoteBackend` dispatches with `ConnectionId 0`
-  (no connection scope), so **connection-drop refcounting, `closeConnection`
-  semantics, and shared-instance lifetime across disconnect are untestable in
-  that mode**. Tests about connection lifetime must run over the real
-  WebSocket loopback (or the testkit grows a connection-scoped simulated
-  client via `RemoteServer::openConnection()` — a small, recommended
-  addition that also makes refcount tests deterministic).
-- **No existing test exercises `AllowShared` over the Qt WebSocket
-  transport.** The polls rung's harness will be the first — that is itself
-  coverage the framework needs.
-- Bank is not built in `ci.yml` at all (only `wasm-demo.yml`, tests OFF). The
-  ladder needs a `ladder-tests` CI job: `MORPH_BUILD_QT=ON`, rung examples
-  on, `QT_QPA_PLATFORM=offscreen ctest` — every mechanism already exists in
-  `ci.yml`.
-
-## Presenter architecture (every rung)
-
-1. **Presenters live in a Qt-Core-only static library** —
-   `examples/<rung>/gui_lib/` links `Qt6::Core` and morph only; `gui/`
-   (QML/Widgets app), `gui_wasm/`, and `tests/` all link `gui_lib`.
-   Presenters must instantiate under a plain `QCoreApplication`.
-2. **Backend-parameterized app context.** A shared
-   `examples/common/gui/AppContext` replaces bank's hard-wired
-   `LocalBackend`: `Mode = variant<Local{workers}, Remote{url}>`; it owns
-   (in order) the optional worker pool, the `QtExecutor`, and the `Bridge`,
-   and exposes `login(principal)` → `setDefaultSession`. Presenters take
-   `(Bridge&, IExecutor*)` and **never construct executors or backends
-   themselves.** `Remote` is asynchronously connected and exposes
-   `ready()`/`onReady(cb)`: presenters (which build `BridgeHandler`s, and a
-   `BridgeHandler` constructor registers) **must** be constructed from inside
-   `onReady`. `QtWebSocketBackend::bindModel()` queues a private bind
-   issued before the socket connects and sends it once the
-   connection comes up (`docs/spec/core/backend.md`, "The structural
-   registration surface"), so this is no longer the correctness hazard it was
-   — but building presenters/`BridgeHandler`s from inside `onReady` stays the
-   simpler ordering to reason about, and is what every rung does.
-   `Local` is ready on construction and runs `onReady` inline, so mode-blind
-   code can always route through `onReady`.
-3. **Observable quiescence.** A common `Presenter` base tracks in-flight
-   completions (`track(completion, onOk)` wraps `.then/.onError` in
-   begin/end counters) and exposes `bool busy()` + an `idle()` signal.
-   Tests never sleep; they wait for `busy() == false`.
-4. **Timers live in the view layer.** Presenters expose an explicit
-   `poll()`; the QML/Widgets shell owns the `Timer`. Tests call `poll()`
-   directly — this is what makes `GetEventsSince` loops deterministic.
-5. **Canonical state fingerprint.** Each rung's presenter set exposes
-   `stateFingerprint()` (a comparable snapshot) and `lastEventId()`. These
-   two hooks are the ladder-wide convention the convergence assertion
-   templates over.
-6. **QML is bindings-only**; every conditional, format, and validation lives
-   in the presenter. Per rung: one offscreen engine-load smoke test (engine
-   creates root object, no errors) registered in ctest — not Qt Quick Test,
-   and no synthesized-mouse-event flows.
-7. **One QML-surface audit per rung** (below). The smoke test in rule 6 loads
-   every root with its controller properties null, so it resolves no handler
-   name and no delegate key against a real object; the audit is what covers
-   that.
-
-## The QML-surface drift guard
-
-`examples/common/testkit/qml_surface.hpp` — `QmlSurfaceAudit`.
-
-QML binds a bridge **by string**. `page.tagController.refresh()` and
-`function onListed(rows)` inside a `Connections` block both resolve at run
-time, against an object the compiler never sees. A renamed `Q_INVOKABLE`, a
-`Q_PROPERTY` whose name changed while its getter did not, a handler for a
-signal that no longer exists: none is a compile error, none is a QML warning,
-and none is visible to the rule-6 smoke test, which supplies no controllers at
-all. The failure is a pane that quietly stays empty.
-
-The audit reads the rung's own `gui/qml/*.qml` from the source tree
-(`MORPH_LADDER_SOURCE_ROOT`, already compiled into every rung's test binary)
-and makes those files the expectation. It needs no QML engine and no
-`Qt6::Quick`, so it runs even in configures built without
-`MORPH_BUILD_FORMS_QML`.
-
-```cpp
-QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/<rung>/gui/qml")};
-audit.bind(QStringLiteral("tagController"), tags);          // every file
-audit.bindIn(QStringLiteral("LedgerView.qml"),              // one file only
-             QStringLiteral("bridge"), ledgerBridge);
-const QStringList findings = audit.run();
-INFO(findings.join(QStringLiteral("\n")).toStdString());
-CHECK(findings.isEmpty());
-```
-
-**Covers**, in both directions at once:
-
-- a name QML binds that the bridge does not have — the direction a
-  hand-written metaobject checklist structurally *cannot* cover, since its
-  expectation is a transcription of the same QML;
-- a bridge member no QML binds;
-- argument-count disagreement at a call site, and a handler declaring more
-  parameters than its signal carries;
-- a `Connections` block whose target alias was never bound — i.e. a bridge
-  the audit was silently not handed.
-
-**Does not cover:** argument *types* (QML is dynamically typed there);
-property-bag keys inside an emitted `QVariantMap` (no metaobject exists for
-them — the per-rung "bag shape" cases remain the only guard); QML the rung
-does not own, such as the shipped `MorphForms` renderer's; dynamic member
-access (`bank`'s `AppShell.qml` calls `controllers[current].refresh()`
-through a `var` array, so five reachable invokables sweep as unreferenced);
-inherited members, in the sweep direction only; and whether the shell wires
-an alias to the class the test bound.
-
-`allowUnbound(alias, member, reason)` exempts one member, with a required
-reason. The exemption list is itself audited — a member that has since been
-deleted, an alias nobody bound, or a member QML does bind is a finding — so it
-can only shrink deliberately.
-
-Adopted by every rung that has QML — `bookmarks`, `pastebin`, `polls`,
-`ledger`, `lims` and `kanban` — and by `examples/bank`, which is not a rung.
-The audit's own mutation suite is
-`examples/common/testkit/test_qml_surface.cpp`: every case there drives it
-against a deliberately broken pair and asserts the specific finding.
-
-`bank` is where the two shell shapes diverge, and its adoption is worth
-reading before adding a seventh. It publishes its controllers with
-`QQmlContext::setContextProperty` rather than `setInitialProperties`, so its
-aliases are root-context names: one `bind()` per controller covers all
-thirteen files, no `bindIn()` is needed, and its `Connections` blocks name
-their target as a bare identifier (`target: app`). A bare target counts only
-when it is an alias the audit was handed — an identifier that is not is far
-more often a local `id`, and nothing distinguishes the two — so the
-unbound-bridge check does not reach this shape. `bank` also has a shared
-controller base: a reference written in QML resolves against everything the
-bridge can reach, inherited members included, while the unreferenced-member
-sweep covers only what the bound class declares itself.
-
-`bank` is not built by CI at all today (only its WebAssembly GUI is, in
-`wasm-demo.yml`), so `bank_gui_tests` — like `bank_tests` beside it — runs
-only locally, in a `-DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON`
-configure.
-
-`bank` is also the one place a *third* binary exists, `bank_gui_qml_tests`,
-and the reason is worth stating because no rung needs it. The audit proves a
-name written in a `.qml` file resolves against the metaobject; it cannot prove
-the binding behaves. `MoveMoneyPage.qml`'s account picker was the case that
-forced the distinction: the controller was self-consistent under
-every C++ drive, and the defect was a `ComboBox` whose `currentIndex` nothing
-restored after its `model` was replaced. So `bank_gui_qml_tests` loads the
-shipped `.qml` from the source tree by URL — the `BankGui` QML module lives
-inside the `bank_gui` executable and cannot be linked, and QML's implicit
-import of a component's own directory resolves the sibling types with no
-`qmldir` — wires the real controllers as context properties, and reads
-property values back off the items the engine created. It is not Qt Quick Test
-and it synthesizes no mouse events (rule 6); its only reproduced gesture is the
-two lines `QQuickComboBoxPrivate::itemClicked` runs. Keeping it out of
-`bank_gui_tests` is what preserves that binary's `Qt6::Core`-only,
-no-platform-plugin property.
+1. **Screens are toolkit-free**, enforced by their target's link set:
+   `ladder_<rung>_screens` links morph and the rung's DTOs, and no Qt.
+2. **Every registered screen validates** (spec 5 §3) in the server's own
+   tests: a screen that does not lower is a refused catalog, not a blank page.
+3. **Screen tests run headless** on the harness
+   (`examples/common/testkit/screen_harness.hpp`): a document mounted on
+   `RecordingBackend` over the multi-mode rig, driven by test id — edit,
+   choose, click — and waited on through `testkit/wait.hpp`, never with a
+   sleep. No app hand-writes a client rig.
+4. **One render smoke test per app** on Qt Quick offscreen, through
+   `testkit/render_smoke.hpp`: every screen mounts without a refused
+   document, a failed component or a QML warning.
+5. Fingerprints, journeys, convergence and stress harnesses drive screens
+   through the harness, each simulated client on its own rig bridge, and
+   compare what each client shows.
 
 ## The dual-mode fixture
 
@@ -197,7 +47,7 @@ connection cap, rate limit, timeouts) — how a rung tests a transport-enforced
 limit without standing up a second server beside the rig's own.
 
 - **`Local`** — one `ThreadPoolExecutor{4}`, one
-  `Bridge{LocalBackend}`; N "clients" are N presenter sets over the shared
+  `Bridge{LocalBackend}`; N "clients" are N handler sets over the shared
   bridge (morph's in-process multi-handler semantics).
 - **`LocalSingleThread`** — `LocalBackend` running models on the GUI
   executor itself: the **WASM constraint-parity mode** (exactly bank's
@@ -214,9 +64,7 @@ shared-instance directory and connection scopes — tests asserting directory
 behavior are tagged `[socket-only]`; N-threads-hosting-backends is not
 possible today (`QtExecutor` posts to `QCoreApplication::instance()` only);
 true process separation reuses the QProcess pattern
-(`tests/qt/qt_test_client_main.cpp`) via `process_pool.hpp`, with each rung
-shipping a small headless-client binary that drives its *presenters*, not
-raw handlers.
+(`tests/qt/qt_test_client_main.cpp`) via `process_pool.hpp`.
 
 `rig.socketBackend(i)` hands out the raw `QtWebSocketBackend` for a client,
 for the handful of transport-level operations that have no `Bridge`-level
@@ -224,7 +72,7 @@ equivalent — `negotiateProtocolVersion()` (the `hello` handshake) is the
 motivating one. Everything that merely dispatches actions should use
 `client<Model>()` / `bridge()` instead.
 
-Teardown order (encoded in `~BackendRig`): presenters → client bridges →
+Teardown order (encoded in `~BackendRig`): handlers → client bridges →
 `wsServer.closeGracefully(2s)` → server → **pools, and only then the
 client-facing executors**. That last step is load-bearing rather than
 cosmetic: in `Local` mode a worker thread resolves a `Completion` by posting
@@ -248,7 +96,6 @@ the **only** sanctioned wait surface:
   defaults to 5 s, scaled by `MORPH_LADDER_DEADLINE_MS`.
 - `awaitQt<T>(Completion<T>)` — resolve one completion via the pump,
   rethrow errors.
-- `settle(presenter)` — `pumpUntil(!busy())`.
 
 A `sleep_for` outside `pump.hpp` is a review-rejectable defect. The test
 binary uses the Qt-owning `main()` (QCoreApplication + `Catch::Session` +
@@ -355,7 +202,7 @@ DoD):
   `catch_discover_tests` calls give their tests a `RESOURCE_LOCK` — two
   DB-touching cases from one binary must never run concurrently under
   `ctest -j`.
-- `client_pool.hpp` — typed pool constructing each client's presenters
+- `client_pool.hpp` — typed pool constructing each client's handlers
   against `rig.client(i)`; test bodies are mode-blind.
 - `convergence.hpp` — `requireConverged(clients, deadline)`: round-robin
   `poll()`, wait all-idle, compare `stateFingerprint()` across clients
@@ -406,19 +253,17 @@ DoD):
 - `process_pool.hpp` — QProcess clients for rung-8 scale **and for
   client-crash tests**: kill a client process mid-execute / mid-attach and
   assert connection-scope reclamation under abnormal teardown (distinct
-  from graceful disconnect). First consumer:
-  `kanban/tests/test_kanban_process_separation.cpp`, which hosts the server
-  in the test process (so assertions read `RemoteServer::health()` directly
-  rather than over IPC) and spawns `ladder_kanban_headless` as its clients.
+  from graceful disconnect). A test hosts the server in its own process, so
+  assertions read `RemoteServer::health()` directly rather than over IPC.
   Note `ProcessPool::allExited()` is a predicate for `pumpUntil`, not a
   blocking wait: blocking in `QProcess::waitForFinished` with an in-process
   server stops the loop that server needs to answer the very clients being
   waited on.
 
 Per-rung test naming: `test_model_<entity>.cpp` (full mode matrix),
-`test_gui_<screen>.cpp` (presenter tests, full matrix),
-`test_gui_qml_smoke.cpp`, `test_multiclient.cpp` `[stress]`,
-`test_offline.cpp` (rungs 4/6/7).
+`screens/tests/test_<rung>_screens.cpp` (the screens, on the harness),
+`screens/render_smoke/` (the Qt Quick smoke), `test_multiclient.cpp`
+`[stress]`, `test_offline.cpp` (rungs 4/6/7).
 
 ## The fault-injection wire proxy (and the strand interleaver)
 
@@ -516,47 +361,29 @@ in-process, and this runs no server lifecycle of its own — see
 
 ## WASM reality
 
-Honest position: **WASM GUIs cannot be unit-tested in CI today.** The
-three-layer answer, per rung:
+**Screens are not unit-tested in a browser.** The answer, per rung:
 
-1. **`LocalSingleThread` mode natively** — same presenters, WASM-shaped
+1. **`LocalSingleThread` mode natively** — the same models, WASM-shaped
    wiring, every test run.
-2. **Compile gate** — CI builds the rung's client for wasm32-emscripten so
-   shared GUI code can't drift. Shipped as `.github/workflows/wasm-ladder.yml`
-   (emsdk + a Qt-for-wasm kit, `-DMORPH_CLIENT_ONLY=ON`); the per-rung target
-   wiring is `morph_add_rung()`'s `gui_wasm` block, not a per-rung
-   `CMakeLists.txt` the way bank's is.
-3. **One scripted browser smoke** (emrun + Playwright against the built
-   demo) as an optional stage in the same CI run.
+2. **Compile gate** — `.github/workflows/wasm-demo.yml` builds the generic
+   client for wasm32-emscripten, single-threaded Qt, and publishes it with
+   bank in local mode. Under Emscripten no rung target is built: a rung's
+   screens reach a browser served by its server, not compiled into the page.
 
-Open framework facts every rung must respect (verified):
+Open framework facts every WASM client must respect (verified):
 
-- A WASM client over `QtWebSocketBackend` has still never been *run* — but it
-  is now **compiled** on every qualifying PR. Rung 0 wrote the spike and rung 1
-  wrote a real client over it (`examples/pastebin/gui_wasm`); neither could be
-  compiled when this bullet was written, because no Emscripten toolchain existed
-  in either authoring environment. The compile gate anticipated here has since
-  landed: `.github/workflows/wasm-ladder.yml`'s "Build the ladder's WASM
-  clients" job builds the spike and rungs 1–3's clients by name under
-  `-DMORPH_LADDER_RUNGS=all`, and runs green. So "does it build" is answered;
-  "does it work in a browser" is still not.
 - `QtWebSocketBackend` registers only through `bindModel`, which never
   blocks; its synchronous `registerModel` refuses rather than spin a nested
   event loop, so the registration path is WASM-safe by construction.
-- **`waitForConnected()` hangs the page on WASM** — the WASM client must
+- **`waitForConnected()` hangs the page on WASM** — a WASM client must
   use the `setConnectHandler` pattern instead; the Socket rig's
   `waitForConnected()` recipe is for *native* tests only.
 - A **blocking keyed acquire would nest an event loop that aborts the page on
-  WASM**; `QtWebSocketBackend` has none, and async attach is
-  **not a missing framework prerequisite**. `IBackend::bindModel`
+  WASM**; `QtWebSocketBackend` has none. `IBackend::bindModel`
   (`include/morph/core/backend.hpp`) is the one non-blocking acquire verb —
   a request with a non-empty `primary` is the register-or-attach case, one
-  that also carries a non-zero `current` is the re-point —
-  every keyed `BridgeHandler::execute` goes through it, and
-  `QtWebSocketBackend` implements it natively. A rung's WASM
-  story uses that rather than waiting on the framework. (The rung-1 coupling
-  the pastebin README calls out — burn atomicity via a shared keyed instance —
-  is likewise no longer gated on this.)
+  that also carries a non-zero `current` is the re-point — and every keyed
+  `BridgeHandler::execute` goes through it.
 
 ## Build system and CI (proven by rung 0)
 
@@ -589,28 +416,15 @@ root `CMakeLists.txt` — don't repeat that eight times):
     the non-rung paths that must also trigger the ladder. Both
     `ladder-tests` and `ladder-sanitizers` call it, so their filters are one
     expression and cannot diverge from each other or from the list.
-    `scripts/coverage.sh` and `wasm-ladder.yml`'s named-target build loop
-    read it too.
-  - Three consumers cannot read it, and are checked against it from outside by
-    a gate removed on 2026-09-23, run unconditionally by
-    `.github/workflows/drift-guard.yml`: `wasm-ladder.yml`'s
-    `on.push.paths`/`on.pull_request.paths` (GitHub evaluates these to decide
-    whether to start the workflow, before any step exists to generate them),
-    `codecov.yml`'s per-rung components (read by Codecov, not by us), and
+    `scripts/coverage.sh` reads it too.
+  - Two consumers cannot read it: `codecov.yml`'s per-rung components (read
+    by Codecov, not by us), and
     `examples/<rung>/tests/.clang-tidy` (clang-tidy resolves configuration by
     walking up from the file it is analysing, so a per-directory setting can
     only live in that directory).
-    The checks are behavioural where the semantics can be reproduced — a
-    rung passes only if a real path under its directory actually matches the
-    filter — because a grep for the rung's name would pass on a filter that
-    had been rewritten into one matching nothing. a gate removed on 2026-09-23
-    reintroduces each drift into a scratch copy of the tree, one at a time,
-    and asserts the gate catches it for the stated reason.
-
-  Adding a rung is therefore: add the name to `examples/rungs.txt`, add two
-  lines to `wasm-ladder.yml` plus a component to `codecov.yml`, and copy an
-  existing `examples/*/tests/.clang-tidy` next to the new suite — the three
-  the guard will name explicitly on the same PR if you forget.
+  Adding a rung is therefore: add the name to `examples/rungs.txt`, add a
+  component to `codecov.yml`, and copy an existing
+  `examples/*/tests/.clang-tidy` next to the new suite.
 
 - **Every rung's `tests/` carries a `.clang-tidy`.** It subtracts exactly one
   check, `bugprone-chained-comparison`, and keeps every other one through
@@ -620,7 +434,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
   subtracted it since it existed, and rung tests need the same file for the
   same reason. `examples/bank/tests/` and `examples/common/testkit/` carry it
   too. There is deliberately **no** `examples/.clang-tidy`: one file there
-  would cover every rung's `src/`, `include/` and `gui_lib/` as well, where a
+  would cover every rung's `src/`, `include/` and `screens/` as well, where a
   hand-written `a < b < c` is a real defect — a gate removed on 2026-09-23 fails if
   one appears. It also fails if any `.cpp` in one of those directories is not
   a Catch2 translation unit: clang-tidy resolves configuration from the TU's
@@ -631,17 +445,13 @@ root `CMakeLists.txt` — don't repeat that eight times):
   `testkit/` and are listed as sources of `morph_ladder_testkit`, which is
   the only thing that keeps AUTOMOC seeing `fault_proxy.hpp`'s `Q_OBJECT`
   once the same-basename pairing is gone.
-- `examples/common/` declares exactly three consumable targets:
-  `morph_ladder_testkit` (morph + Catch2 + Qt), `morph_ladder_gui` (STATIC,
-  `Qt6::Core` only, **no Catch2**, **no `Qt6::WebSockets`** — presenter rule
-  1), and `morph_ladder_app` (STATIC, `AppContext` only: the deployment-mode
-  layer, which needs `morph::qt`/`Qt6::WebSockets` for `Remote` and is
-  therefore kept out of `morph_ladder_gui`). A rung's `gui_lib` links
-  `morph::ladder_gui`; the shells that choose a backend (`gui/`, `gui_wasm/`,
-  `tests/`) also link `morph::ladder_app`. Rungs link targets, never paths;
-  the testkit never grows per-rung options.
-- A `morph_add_rung()` function creates `ladder_<rung>_{lib,gui_lib,gui,
-  gui_wasm,tests,headless}` with `catch_discover_tests` + ctest labels
+- `examples/common/` declares the testkit, `morph_ladder_testkit` (morph +
+  Catch2 + Qt), and `examples/common/app` declares `morph_examples_common`
+  (Qt-free: the argument reader, the remote and local sources, and the client
+  shell). Rungs link targets, never paths; the testkit never grows per-rung
+  options.
+- A `morph_add_rung()` function creates `ladder_<rung>_{lib,server,screens,
+  screen_tests,render_smoke,tests}` with `catch_discover_tests` + ctest labels
   (`ladder`, `ladder-<rung>` — Catch2's own tags like `[stress]`/`[tsan]`
   are not translated into ctest labels anywhere in this repo; select on
   them with `ctest -R` against the test name instead), a `TEST_PREFIX` of
@@ -673,37 +483,6 @@ root `CMakeLists.txt` — don't repeat that eight times):
   the rest. `examples/common/CMakeLists.txt` shows the working shape: one
   value per property name in the `catch_discover_tests` call, plus a
   generated `TEST_INCLUDE_FILES` post-pass for the extra labels.
-- Do **not** copy bank's `gui_wasm` shadow-header pattern — with the
-  `gui_lib` split it is unnecessary, and copying it makes the WASM and
-  native builds different programs, silently falsifying the "same client
-  code" DoD. One WASM configure builds all rungs' `gui_wasm` targets
-  (`.github/workflows/wasm-ladder.yml`, which also builds rung 0's spike; it
-  caches emsdk but has no compiler cache yet).
-
-  **What rung 1 learned doing this for real** (the `gui_lib` split is
-  necessary but not sufficient): a client's presenters are
-  `BridgeHandler<Model>` templates, so a WASM client still *names* its rung's
-  model type and therefore still includes its model header. Every rung's
-  models acquire their `Lightweight::DataMapper` connection per `execute()`
-  call from `Lightweight::GlobalDataMapperPool()` (rather than a model
-  owning one via a `WithMapper`-style mixin member — the pattern this
-  section used to document before that mixin was removed in favor of the
-  pool), so the model *header* itself has no Lightweight/ODBC dependency to
-  begin with — only the model's `.cpp` (where the real query/transaction
-  bodies live) does. Configure the WASM build with
-  **`-DMORPH_CLIENT_ONLY=ON`** (removes the registrars that closure over the
-  model's ODBC-backed bodies — `docs/spec/core/registry.md`;
-  `morph_add_rung()` fails the configure with that explanation if it is
-  missing) and that `.cpp` is never compiled for Emscripten at all
-  (`cmake/morph_add_rung.cmake`'s `if(NOT EMSCRIPTEN)` guard around
-  `ladder_<rung>_lib`'s own creation) — no header-level stub or branch is
-  needed on top of that. `include/morph/core/registry.hpp`'s
-  `BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)` remains
-  available for a client willing to make `M` a declaration-only facade type
-  instead, closing the header dependency for cases where a model's own
-  entity types still need a persistence-free stand-in on the WASM include
-  path (see `polls::db::PollRecord` et al.'s own `#ifndef __EMSCRIPTEN__`
-  branch, `poll_entity.hpp`) — no rung's *model* header needs this today.
 - **Sanitizer wiring.** Every rung's targets and every `examples/common`
   target carry an `if(DEFINED AF_SANITIZER) apply_sanitizers(<target>
   ${AF_SANITIZER})` block, the same shape and placement as their
@@ -756,8 +535,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
   ladder, so this cost is paid once there);
   its `ctest` invocation runs
   with `QT_QPA_PLATFORM=offscreen` since the runner has no display. Every
-  ladder CMake target (`morph_ladder_gui`, `morph_ladder_app`,
-  `morph_ladder_testkit`, and each rung's own targets) wraps its definition
+  ladder CMake target (`morph_ladder_testkit` and each rung's own targets) wraps its definition
   in `if(AF_COVERAGE) apply_coverage(<target>) endif()`, the same guard
   `include/morph`'s own targets use. `scripts/coverage.sh` merges multiple
   instrumented binaries into one report via llvm-cov's `-object` flag: one
@@ -820,16 +598,8 @@ here as though it already existed, but it has never been built:
    `clang-coverage` leg, and instrumented inside `kanban-tsan` — and only the
    last of these is meaningful sanitizer coverage.
 
-   Two pieces of this live outside that job as shipped, for reasons of
-   toolchain rather than design. **The GUI half** — each rung's QML module,
-   desktop client and offscreen engine-load smoke test — needs
-   `MORPH_BUILD_FORMS_QML=ON`, whose Qt 6.5 floor the `ladder-tests` runner's
-   distro Qt (6.4.2) does not clear, so it is the `linux-all-features` job
-   (Qt 6.8 via aqtinstall) that configures `MORPH_BUILD_LADDER=ON` together
-   with `MORPH_BUILD_FORMS_QML=ON`. `morph_add_rung()` announces every target
-   it skips on the leg that cannot build them, so the omission is never
-   silent. **The WASM compile gate** needs emsdk plus a Qt-for-wasm kit, and
-   lives in its own workflow, `.github/workflows/wasm-ladder.yml`.
+   The render smoke tests need Qt Quick, so `ladder-tests` installs Qt 6.8
+   via aqtinstall and configures `MORPH_BUILD_QT_QUICK=ON`.
 2. **Weekly**: rung-8 load script (large runner) only — a genuinely
    separate concern from the rest of this tiering (hundreds–thousands of
    sockets, a large self-hosted-class runner), not something that can run
@@ -839,116 +609,25 @@ here as though it already existed, but it has never been built:
    (there is no scheduled workflow in this repo yet), so nothing in the
    ladder should assume a cadence the rest of the project doesn't have.
 
-## What `examples/common`'s coverage number measures (audit, 2026-09)
-
-`codecov.yml`'s `ladder` component scores `examples/common/**` against a 95%
-target. That number was reported as 90.39% on `master` and read as a five-point
-regression. It is a real figure, it is reproducible, and the
-regression is real — but two things about it have to be said before the figure
-means anything, because both of them were being read the other way.
-
-### Two numbers, both correct, four points apart
+## Two coverage numbers
 
 `llvm-cov report`'s line coverage and Codecov's component percentage are not
 the same measurement. Codecov reads the uploaded LCOV and scores
 `hits / (hits + misses + partials)`, where a *partial* is a line that executed
 but carries a branch nothing took. `llvm-cov` counts that line as covered.
-Measured on the same profile, on the tree this section was written against:
-
-|                              | `llvm-cov` lines | Codecov component |
-|------------------------------|------------------|-------------------|
-| `examples/common`            | 96.94%           | 93.68%            |
-
 Whenever the two are quoted side by side without saying which is which, the
-gap looks like a regression or a contradiction. It is neither: it is 39 lines
-with a one-sided branch. **Quote the Codecov figure when arguing about the
-component's target, because that is the one the target is checked against.**
+gap looks like a regression or a contradiction; it is neither. **Quote the
+Codecov figure when arguing about a component's target, because that is the
+one the target is checked against.**
 
 Reproduce either from a coverage run — `cmake --preset clang-coverage` (plus
 `-DMORPH_BUILD_{NET,OFFLINE_SQLITE,QT,LADDER}=ON`), `ctest`, then
 `bash scripts/coverage.sh`. `llvm-cov`'s figure is in that script's own report;
-Codecov's arithmetic runs over `build/clang-coverage/coverage.lcov`.
-
-A prior local measurement of this component disagreed with the uploaded one by
-five points for a *different* reason — a shared compiler cache served objects
-built in another worktree, whose absolute paths matched none of
-`scripts/coverage.sh`'s relative filters, so the records were dropped rather
-than mis-attributed. That is fixed at configure time and gated by
-`scripts/check_coverage_roots.sh`; run it before trusting any local figure.
-
-### Where the drop came from: four files that did not exist at the measurement
-
-`codecov.yml` records `examples/common` at 95.85%, measured when rungs 2-4
-entered the report. Splitting today's figure by whether a file existed then is
-what makes the drop since attributable:
-
-|                                    | hits | miss | partial | lines | Codecov |
-|------------------------------------|-----:|-----:|--------:|------:|--------:|
-| files present at that measurement  |  658 |   17 |      12 |   687 |  95.78% |
-| `qml_surface.cpp`, `process_pool.hpp`, `journey.hpp`, `step_executor.hpp` |  505 |   49 |      40 |   594 |  85.02% |
-
-The code that was measured at 95.85% still measures 95.78%. **Nothing
-regressed.** The component's denominator nearly doubled, and every line of the
-growth is testkit written to serve a later rung and not itself tested to the
-standard the rest of the directory holds. `qml_surface.cpp` alone was 493 of
-the 1281 lines and 70 of the 118 non-hits.
-
-### The artifact set, re-derived
-
-`codecov.yml` names seven lines as measurement artifacts and puts the ceiling
-at 478/485 = 98.56%. That list is still correct about the lines it names and is
-no longer the whole set — the tree it was written against was a third of
-today's size. Re-derived, and split by *why* each line reads uncovered:
-
-**Measurement artifacts — the statement ran; the counter on it did not.**
-llvm-cov puts a "control reached past this block" counter on certain closing
-braces, and there is no `LCOV_EXCL_LINE` equivalent to suppress one.
-
-* `backend_rig.hpp` 218, 225, 255 — the three switch-case `}` after `break;`,
-  one per `Mode`. The three the current comment names.
-* `strand_interleaver.hpp` 71, 97 — `step()` and `runSchedule()`, whose one
-  statement calls a `std::function<void()>`. The two the current comment names;
-  in today's LCOV the zero lands on the `task();` line itself rather than the
-  brace below it.
-* `step_executor.hpp` 89 — the same shape in `runOne()`. **New**: the file
-  postdates the comment.
-* `qml_surface.cpp` 599 — a switch-case `}` after `break;`. **New**, same
-  reason.
-
-**Unreachable by design — the guard cannot fire through the callers it has.**
-
-* `backend_rig.hpp` 256, 267 — the `default:` label and its `throw`. Present
-  only because `-Wswitch-default` demands one on a switch that already covers
-  every enumerator; the file says so at the site. **New.**
-* `fault_proxy.cpp` 68-69 — `onClientConnection`'s null guard. The one the
-  current comment names; `isValidIncomingConnection` is unit-tested directly.
-* `qml_surface.cpp` 92-93, 96-97 — `signalNameOf`'s "not in handler shape"
-  guards. Both call sites match `on[A-Z]\w*`, so the name it is handed can
-  never be too short, unprefixed, or lower-cased at position 2. **New.**
-* `qml_surface.cpp` 353-354 — `record()`'s empty-name early return,
-  unreachable for exactly that reason. **New.**
-
-**Untested, and reachable.** These are not artifacts and are not excused:
-
-* `qml_surface.cpp` 55, 83-84 — the unbalanced-`{` and unterminated-`(`
-  fallbacks, reachable only from QML that does not parse.
-* `qml_surface.cpp` 441-443 — the "cannot read" finding for a `.qml` file
-  `QDirIterator` lists but `QFile::open` refuses. Needs a permission-denied
-  file, which does not survive a git checkout and does not reproduce for a
-  root-running CI container.
-* `fault_proxy.cpp` 17-19 — `~FaultProxy`'s client-socket teardown; every
-  test today closes the leg before the proxy dies.
-* `journey.hpp` 69-72 — the two `catch` arms around a journey step. Pinning
-  them needs a harness that can assert a Catch2 `FAIL` *happened*, which this
-  suite does not have.
-* `process_pool.hpp` 51-53 — `~ClientProcess`'s kill-if-still-running.
-* `process_pool.hpp` 129-130 — `spawn()`'s failed-to-start arm.
-
-**Dead API — no caller anywhere in the tree.** Not a coverage problem; the
-lines are uncovered because nothing wants them:
-
-* `process_pool.hpp` 67 — `ClientProcess::waitForFinished`.
-* `process_pool.hpp` 160-166 — `ProcessPool::killAll`.
+Codecov's arithmetic runs over `build/clang-coverage/coverage.lcov`. A shared
+compiler cache that serves objects built in another worktree drops their
+records, whose absolute paths match none of `scripts/coverage.sh`'s relative
+filters; `scripts/check_coverage_roots.sh` gates that, so run it before
+trusting any local figure.
 
 ## Framework gaps this strategy exposed (all since closed)
 
@@ -965,8 +644,8 @@ taken on trust.
    belongs on this list for a second reason: the transport answers it with an
    `err "rate limited"` addressed to the frame's own `callId`, so the caller's
    `Completion` fails rather than hanging.)
-2. **`Bridge::pendingCalls()`** → `include/morph/core/bridge.hpp`, so
-   `settle()` can be exact rather than substituting presenter-level counters.
+2. **`Bridge::pendingCalls()`** → `include/morph/core/bridge.hpp`, so a
+   test's wait for quiescence can be exact rather than counting by hand.
 3. **`MainThreadExecutor::runOnce()`/`drain()`** →
    `include/morph/core/executor.hpp` — a step and a full drain, not a
    wall-clock pump.

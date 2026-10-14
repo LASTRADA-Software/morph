@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// wizardView on RecordingBackend: what src/qt/forms/tests/tst_wizardview.qml and the wizard half of
-// tst_ViewChrome.qml assert about a drawn wizard (the header, the current step's form, Back and Next and their
-// gates, the chrome slots), re-expressed on mounted widgets. The session's own claims are
+// wizardView on RecordingBackend: a drawn wizard (the header, the current step's form, Back and Next and their
+// gates, the chrome slots), asserted on mounted widgets. The session's own claims are
 // test_forms_engine_wizard.cpp's.
 
 #include <catch2/catch_test_macros.hpp>
@@ -32,7 +31,7 @@ using morph::test::formsengine::Harness;
 using morph::ui::testing::RecordingBackend;
 namespace ui = morph::ui;
 
-// The wizard and schemas of tst_wizardview.qml and tst_ViewChrome.qml.
+// The fixture wizard and its schemas.
 constexpr std::string_view kWizard = R"({"w-title":"Test flow","w-steps":[
   {"action":"WizStepOne","title":"One"},
   {"action":"WizStepTwo","title":"Two","prefill":{"refId":"WizStepOne.id"}}]})";

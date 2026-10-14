@@ -4,7 +4,7 @@ name: Nightly slow checks
 # gates pull requests with: Valgrind memcheck (15min-1h+, the least
 # predictable wait in that workflow) and Linux / all optional features
 # (45min-1h+, the only leg building every MORPH_BUILD_* option together,
-# including MORPH_BUILD_LADDER + MORPH_BUILD_FORMS_QML). Both still run
+# including MORPH_BUILD_LADDER + MORPH_BUILD_QT_QUICK). Both still run
 # immediately on every push to master/main inside ci.yml itself -- unchanged
 # from before that split -- so this workflow's job is to catch what a push
 # cannot: environment drift between pushes (a moved apt/vcpkg package, a
@@ -247,7 +247,6 @@ jobs:
             -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
@@ -255,7 +254,6 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_BUILD_BANK_GUI=ON \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \

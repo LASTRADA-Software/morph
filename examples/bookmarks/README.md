@@ -14,10 +14,9 @@ jobs.
 ## Running it
 
 ```bash
-# One-time configure (Qt 6.5+, an ODBC SQLite3 driver, MORPH_BUILD_FORMS_QML
-# for the schema-driven forms):
+# One-time configure (Qt 6.5+, an ODBC SQLite3 driver):
 cmake -S . -B build -G Ninja \
-    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_FORMS_QML=ON \
+    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON \
     -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=bookmarks
 
 # Server (owns the database, the signing secret, the action journal, the
@@ -28,9 +27,9 @@ BOOKMARKS_TOKEN_SECRET="pick-something-real" \
 BOOKMARKS_DB="DRIVER=SQLite3;Database=bookmarks.db;Timeout=5000" \
 BOOKMARKS_PORT=8766 ./build/examples/bookmarks/ladder_bookmarks_server
 
-# Desktop client, either deployment mode:
-./build/examples/bookmarks/ladder_bookmarks_gui                          # in-process
-./build/examples/bookmarks/ladder_bookmarks_gui --server ws://127.0.0.1:8766
+# The generic client, either deployment mode:
+./build/examples/client/morph_examples_client --server ws://127.0.0.1:8766
+./build/examples/client/morph_examples_client --app bookmarks   # in-process
 ```
 
 Sign in with any username (dev-mode login, no password — see
@@ -45,14 +44,15 @@ single-user by construction. The two-user isolation this rung is *about* is
 only meaningful against the server.
 
 
-## Server-defined screen
+## Server-defined screens
 
-[`screens/bookmarks_screens.cpp`](screens/bookmarks_screens.cpp) declares `bookmarks.main` as a UI document (spec 4)
-over three models, AuthModel, BookmarkModel and TagModel:
-- **Sign-in** is a mutation of `Login` whose reply is installed with `signIn`. `signIn` takes a mutation, not a
-  `form`. The bookmark and tag queries wait for the sign-in.
-- **CreateBookmark, EditBookmark, ImportBookmarks, RenameTag and MergeTags** are `form` nodes.
-- **The list** is a table with multiple selection. Archiving the selection is one `BulkEdit`.
+[`screens/bookmarks_screens.cpp`](screens/bookmarks_screens.cpp) declares two screens as UI documents (spec 4):
+- **`bookmarks.login`**, the public screen, is a mutation of `Login` whose reply is installed with `signIn`, and then
+  opens the collection. The catalog hides `bookmarks.main` until a principal is signed in, because its queries need
+  one.
+- **`bookmarks.main`**, over BookmarkModel and TagModel:
+  - **CreateBookmark, EditBookmark, ImportBookmarks, RenameTag and MergeTags** are `form` nodes.
+  - **The list** is a table with multiple selection. Archiving the selection is one `BulkEdit`.
 
 In process, `screens::prepareLocal()` installs a development token issuer, which a server installs at start-up.
 `morph_examples_client --app bookmarks` runs it (`--db`, default `bookmarks.db`).
@@ -395,9 +395,9 @@ source and test entities, alongside the `examples/pastebin`/
 - Metadata auto-fetch demonstrably running as a background job: bookmark
   appears immediately; title/favicon arrive later, and the minimal
   `GetChangesSince` poll action (the rung-3 preview) is what a client asks for
-  them with. This criterion is met at the model and presenter level, where
-  `GetChangesSince` is implemented, tested and exposed. The **shipped client
-  does not dispatch it** — see the client-gaps list below.
+  them with. This criterion is met at the model level, where
+  `GetChangesSince` is implemented and tested. **No screen dispatches it** —
+  see the client gaps below.
 - Bulk edit is atomic under injected mid-batch failure.
 - The background-job design record (internal-client vs. framework seam,
   service principal, journaling of job mutations) written in this README.
@@ -405,8 +405,7 @@ source and test entities, alongside the `examples/pastebin`/
 ## Known gaps this rung ships with
 
 Everything below is a real gap, stated here rather than left for a reader to
-discover. Gaps in the *client* specifically have their own list further down;
-these are the domain- and test-coverage ones.
+discover.
 
 - **Unicode tag normalization is unaddressed.** "Expected strain points"
   above asks this rung to pick a normalization point (NFC/NFD, case) and
@@ -441,127 +440,18 @@ these are the domain- and test-coverage ones.
   identical to `ReadFilter::Any`. The column, the enum and the filter are all
   wired end to end and would work the moment a mutating action exists; there
   simply isn't one.
-- **The GUI never leaves the first page.** `BookmarkBridge::refresh()`
-  discards the `nextCursor` every list/feed response carries, and no QML
-  binding asks for a further page. The shipped client therefore shows at most
-  the first ~20 bookmarks (and the first ~20 shared-feed entries) with no way
-  to reach the rest. Pagination is fully implemented and tested at the model
-  level — the keyset cursor works — it is only the client that does not use
-  it.
-
-## The client, and its known gaps — stated rather than smoothed over
-
-The desktop client (`gui/`, `gui_lib/`) is schema-driven throughout
-(`../IMPLEMENTATION.md` rule 2): `Login`, `CreateBookmark`, `EditBookmark`,
-`ImportBookmarks`, `RenameTag` and `MergeTags` all render from
-`morph::forms::schemaJson<A>()` through the shipped `MorphForms`
-`DynamicForm`, including the login screen — there is **no hand-built username
-field**, and no hand-built input widget anywhere. Each of the six declares
-`explicitSubmit = true`, so its schema carries `"x-submitMode": "explicit"`
-and the renderer supplies its own gated Submit button
-(`docs/spec/forms/forms.md`, "Explicit submit mode"): there is no hand-built
-submit button either, and every form is bound to the live controller. The one
-non-form input on the whole screen is the per-row selection checkbox, which
-types nothing.
-
-`gui_lib/bookmark_qml_bridges.hpp`'s `FormsBridge` composes
-`morph::qt::forms::MultiModelFormsControllerCore<NoSharing, AuthModel,
-BookmarkModel, TagModel>` directly, over the `Bridge&`/`IExecutor*`
-`AppContext::onReady()` hands it — no rung-owned routing controller sits
-between them; the shipped core routes each action-type string to whichever of
-the three form-serving models owns it, via a plain existence check over
-`ActionExecuteRegistry` rather than a hand-written table.
-
-One piece of glue carries its own written justification, per rule 2's "(b)
-pure glue with no domain logic" clause:
-
-- `gui::FormsBridge::onLoginSucceeded` — installs the token the server
-  returned as the shared `Bridge`'s default session, so every subsequent
-  action carries it. Infrastructure wiring, not business logic: it decides
-  nothing, and both the token and the principal it announces are the
-  server's, never the client's claim.
-
-Known gaps:
-
-- **Array fields are typed as strings, whatever the schema's `items` says.**
-  `DynamicForm` renders a JSON `array` field with a dedicated
-  comma-separated-with-validation control (`src/qt/forms/qml/DynamicForm.qml`'s
-  `isArray` descriptor and `fieldJsonLiteral`/`arrayJsonLiteral`, covered by
-  `src/qt/forms/tests/tst_DynamicFormArrayField.qml`) and encodes it as a
-  genuine JSON array literal, but every entry in that array is a JSON
-  **string**. Array-of-string is therefore the fully supported case and
-  array-of-anything-else is not (`docs/spec/forms/forms.md`, "Array fields").
-  `CreateBookmark::tags`/`EditBookmark::tags` are `std::vector<std::string>`,
-  reaching the renderer as `{"type":"array","items":{"type":"string"}}` —
-  exactly the supported shape — so tagging works from the create and edit
-  forms with no special-casing in `BookmarkListView.qml`, which renders every
-  field the schema declares. Not independently re-verified end to end against
-  this rung's own `MORPH_BUILD_FORMS_QML` build, but the schema shape is
-  identical to the one the framework test above exercises and this rung's
-  forms apply no exclusion.
-- **`BulkEdit` is not a form**, and the reason is the *typing* half above
-  rather than a missing control: its one required member is
-  `std::vector<BookmarkId>`, whose schema is
-  `{"type":"array","items":{"$ref":"#/$defs/BookmarkId"}}` with `BookmarkId`
-  defined as `{"type":["integer","null"], …}`. Typing `1, 2` would submit
-  `["1","2"]`, an array of strings that does not decode back into
-  `std::vector<BookmarkId>`. The GUI drives it from the list's own
-  multi-selection through `BookmarkBridge::bulkArchive` instead, where no
-  typing is involved.
-- **The shipped client never polls for background-job results.** The metadata
-  worker fills a title in some seconds after a bookmark is created, and
-  `GetChangesSince` is the action a client asks for that with — implemented in
-  `BookmarkModel`, exposed as `BookmarkPresenter::getChangesSince`, and tested
-  at both levels. `BookmarkBridge` deliberately does not relay it
-  (`gui_lib/bookmark_qml_bridges.hpp`) and no QML binding asks for it, so a
-  fetched title appears only on the next manual **Refresh**. There is no
-  `Timer` anywhere in this rung's QML.
-- **Six model instances per client, not four.** `app.cpp`'s `kMaxLiveModels`
-  comment budgets "roughly one instance per model type it uses (four in this
-  rung)". The shipped client registers six: the forms controller owns an
-  `AuthModel`, a `BookmarkModel` and a `TagModel` handler, and the three
-  presenters own a `BookmarkModel`, a `TagModel` and a `SharedFeedModel`
-  handler. `BridgeHandler<Model>` is a template over one model type and both
-  classes take `(Bridge&, IExecutor*)` by presenter rule 2, so sharing one
-  handler between them is not expressible today. At the 256 cap that is ~42
-  concurrent clients rather than ~64.
-- **Registration timing.** `BookmarkListView` requests its three bootstrap
-  listings on `Component.onCompleted`, and the login submit is dispatched
-  whenever the user clicks. A call made before its handler's registration
-  round trip lands waits for it and is dispatched once it does, or is
-  rejected if registration fails. `Remote` mode has no connect timeout, so a
-  server that never answers leaves those calls pending.
+- **The screen never leaves the first page.** Its list query asks for the
+  first page and nothing asks for the next `nextCursor`, so it shows at most
+  the first ~20 bookmarks with no way to reach the rest. Pagination is fully
+  implemented and tested at the model level — the keyset cursor works — it is
+  only the screen that does not use it.
+- **No screen polls for background-job results.** The metadata worker fills a
+  title in some seconds after a bookmark is created, and `GetChangesSince` is
+  the action a client asks for that with; no screen dispatches it, so a
+  fetched title appears on the list's next refetch.
+- **`BulkEdit` is not a form.** Its one required member is
+  `std::vector<BookmarkId>`; the screen drives it from the list's own
+  multi-selection, where no typing is involved.
 - **No `--seed`.** `LADDER.md` asks every rung for one; this rung's server
   ships none, deliberately — see `src/server/main.cpp`'s file comment for the
-  argument (seeding by direct model call would need
-  `morph::session::detail::ScopedContext`, the exact detail-namespace reach the
-  *testkit reaches into four detail namespaces* finding objects to (recorded on
-  the `application-ladder` branch; never filed in this repository), and
-  the internal-client alternative is rung 4's `action_driver`
-  work). Demo data is created through the client.
-- **The offscreen QML smoke test proves loading, not behavior** — see
-  `tests/test_gui_qml_smoke.cpp`'s own header comment for exactly what it
-  does and does not cover. The behavioral half is the presenter suites plus
-  the manual end-to-end run.
-
-### Two bugs the first real client run found
-
-Both were invisible to every test that existed, because every test drove the
-models or the presenters directly and none drove *the client*:
-
-1. **Login was unreachable over a real server.**
-   `SigningAuthorizer::authorize()` verifies `Context::token` on every
-   `execute` and rejects when there is none — including for `Login`, the only
-   way to obtain a token. A fresh client got `err "unauthorized"` for
-   everything it could possibly send. `BookmarksAuthorizer::authorize` now
-   carves out exactly `AuthModel`/`Login` and nothing else; see its doc
-   comment for why that gives nothing away, and
-   `tests/test_bookmarks_authorizer.cpp` for the unit-level and
-   over-the-wire regression tests.
-2. **`CreateBookmark::title` was schema-`required`.** It was missing from
-   `optionalFields`, so the generated create form refused to submit without a
-   title — making it impossible to create from the GUI the very title-less
-   bookmark the background metadata fetch exists to complete, which is one of
-   this rung's own definition-of-done items. `title` is now optional in both
-   `CreateBookmark` and `EditBookmark`, matching what `validate()` and the
-   member's own doc comment always said.
+  argument. Demo data is created through the client.

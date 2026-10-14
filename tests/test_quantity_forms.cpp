@@ -667,9 +667,8 @@ TEST_CASE("Forms::SchemaJson::DifferentlyTypedChoiceFieldsKeepTheirOwnTypes", "[
     // If every `Choice<...>` instantiation were named "Choice",
     // glaze would populate one `$defs/Choice` entry from whichever it reached
     // first and had the rest `$ref` it: a `bool` picklist next to an
-    // `int64_t` one described the int64 field as a boolean, and
-    // DynamicForm.qml resolves the `$ref` and draws a checkbox for a
-    // "boolean" type. A single-`Choice` action passes either way, so this
+    // `int64_t` one described the int64 field as a boolean, and a renderer
+    // resolving the `$ref` draws a checkbox for a "boolean" type. A single-`Choice` action passes either way, so this
     // fixture carries three of different types.
     auto const schema = morph::forms::schemaJson<QFMixedChoices>();
     auto parsed = glz::read_json<glz::generic>(schema);

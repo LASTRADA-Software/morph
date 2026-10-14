@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Wizards, headless: the claims of src/qt/forms/tests/tst_wizardview.qml re-expressed on WizardSession, and the
-// rules spec 2 adds for returning to a step and resubmitting a changed one. Back and Next drawn as buttons, and the
-// chrome of tst_ViewChrome.qml, wait for the view.
+// Wizards, headless: WizardSession's steps, and the rules spec 2 adds for returning to a step and resubmitting a
+// changed one. Back and Next drawn as buttons, and the chrome, are test_forms_engine_wizard_view.cpp's.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -24,7 +23,7 @@ using morph::forms::WizardSession;
 using morph::test::formsengine::Call;
 using morph::test::formsengine::Harness;
 
-// The wizard and schemas of tst_wizardview.qml.
+// The fixture wizard and its schemas.
 constexpr std::string_view kWizard = R"({"w-title":"Test flow","w-steps":[
   {"action":"WizStepOne","title":"One"},
   {"action":"WizStepTwo","title":"Two","prefill":{"refId":"WizStepOne.id"}}]})";

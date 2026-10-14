@@ -30,7 +30,7 @@ where a first app trips over them.
 - [6. Persistence](#6-persistence)
 - [7. Registration, and what it buys](#7-registration-and-what-it-buys)
 - [8. The bridge: `Completion<T>` and the executor](#8-the-bridge-completiont-and-the-executor)
-- [9. A GUI on top](#9-a-gui-on-top)
+- [9. Screens on top](#9-screens-on-top)
 - [10. Forms from the compiled action type](#10-forms-from-the-compiled-action-type)
 - [11. Testing](#11-testing)
 - [12. The payoff: making it remote](#12-the-payoff-making-it-remote)
@@ -172,18 +172,18 @@ All tests passed (21 assertions in 3 test cases)
 ## 3. Building and running pastebin
 
 pastebin is [rung 1 of the application ladder](../examples/LADDER.md): one
-entity, one model, SQLite behind Lightweight, a Qt/QML client, and a real
-socket server. It is the same four parts from section 2 at real scale.
+entity, one model, SQLite behind Lightweight, a screen the server serves, and a
+real socket server. It is the same four parts from section 2 at real scale.
 
 It needs Qt 6.5+, an ODBC SQLite3 driver, and a C++23 compiler. Configure:
 
 ```sh
 cmake -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_FORMS_QML=ON \
+    -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON \
     -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=pastebin \
     -DMORPH_BUILD_TESTS=ON -DMORPH_BUILD_EXAMPLES=ON
-cmake --build build --target ladder_pastebin_tests ladder_pastebin_server ladder_pastebin_gui
+cmake --build build --target ladder_pastebin_tests ladder_pastebin_server morph_examples_client
 ```
 
 Run the suite first — it is the fastest confirmation that your toolchain, your
@@ -212,36 +212,35 @@ pastebin-server: listening on port 8765
 
 (The animal-name ids are allocated randomly, so yours will differ.)
 
-The desktop client runs in either deployment mode. Against the server:
+The client is the generic one every example shares: it draws whatever screens
+the application serves. It runs in either deployment mode. Against the server:
 
 ```sh
-./build/examples/pastebin/ladder_pastebin_gui --server ws://127.0.0.1:8765
+./build/examples/client/morph_examples_client --server ws://127.0.0.1:8765
 ```
 
 or entirely in-process, hosting `PasteModel` itself:
 
 ```sh
-PASTEBIN_DB="DRIVER=SQLite3;Database=local.db;Timeout=5000" \
-  ./build/examples/pastebin/ladder_pastebin_gui
+./build/examples/client/morph_examples_client --app pastebin --db local.db
 ```
 
 Section 12 comes back to what is — and is not — different between those two
 command lines.
 
 > **Note on the two modes.** Local mode is deliberately the *smaller*
-> deployment, not an equivalent one:
-> [`gui/main.cpp:53-73`](../examples/pastebin/gui/main.cpp) explains that
-> `pastebin::app::App` — the durable action log and the periodic expiry sweep —
-> lives only in the server binary, so a local-mode client journals nothing and
-> never reclaims expired rows. Opening an expired paste still fails correctly,
-> because `GetPaste`'s own guard never depends on the sweep having run.
+> deployment, not an equivalent one: `pastebin::app::App` — the durable action
+> log and the periodic expiry sweep — lives only in the server binary, so a
+> local-mode client journals nothing and never reclaims expired rows. Opening an
+> expired paste still fails correctly, because `GetPaste`'s own guard never
+> depends on the sweep having run.
 
 ## 4. The model is the application
 
 This is `examples/IMPLEMENTATION.md` rule 1, and the single most load-bearing
 idea in the framework: **all business logic, all invariants and all persistence
 access live in plain, single-threaded model classes with typed actions.**
-Nothing domain-shaped may live in a presenter, in QML, or in `main()`.
+Nothing domain-shaped may live in a screen, in a client, or in `main()`.
 
 pastebin's whole domain is one class,
 [`include/pastebin/models/paste_model.hpp:30`](../examples/pastebin/include/pastebin/models/paste_model.hpp):
@@ -280,7 +279,7 @@ re-entering the model as an ordinary client call — which is exactly what
 pastebin's expiry sweep does.
 
 Write this layer first, and test it (section 11) before there is any bridge or
-any GUI. Every ladder rung does.
+any screen. Every ladder rung does.
 
 ## 5. Strong ids, DTOs, and what `validate()` is for
 
@@ -549,117 +548,74 @@ natural spelling is silently wrong:
 completion.then([this](PasteView v) { /* `this` may be long gone */ });
 ```
 
-This is not hypothetical. [#137](https://github.com/LASTRADA-Software/morph/issues/137)
-was a real use-after-free found by AddressSanitizer: a presenter destroyed
-while a completion was still in flight, whose callback then wrote to freed
-stack memory during test teardown.
+This is not hypothetical: a receiver destroyed while a completion was still in
+flight, whose callback then wrote to freed memory, has been found by
+AddressSanitizer in this repository.
 
-`Completion` has no cancellation and no way to bind a handler to a receiver's
-lifetime — [`docs/spec/core/completion.md`](spec/core/completion.md) lists
-cancellation under **Out of scope** in so many words. A framework-level
-lifetime-and-stop token is tracked as
-[#138](https://github.com/LASTRADA-Software/morph/issues/138) and has not
-landed. **Until it does, write the guard yourself.** The ladder's shared
-presenter base does it with a `QPointer`
-([`examples/common/gui/presenter.hpp:133`](../examples/common/gui/presenter.hpp)):
+`Completion` has no cancellation of its own; a receiver opts in to a lifetime
+gate instead. `morph::async::CallbackScope`
+([`docs/spec/core/callback_scope.md`](spec/core/callback_scope.md)) is a data
+member that hands out weak tokens, and `then(scope, handler)` /
+`onError(scope, handler)` deliver only while the scope is alive and has not
+been stopped:
 
 ```cpp
-QPointer<Presenter> self{this};
-completion
-    .then([self, onOk = std::move(onOk)](T value) {
-        if (!self) { return; }
-        // ... and re-check `self` after onOk returns: the callback itself
-        // may destroy the presenter.
-    })
-    .onError([self, onErr = std::move(onErr)](const std::exception_ptr& err) {
-        if (!self) { return; }
-        // ...
-    });
+class PasteViewer {
+public:
+    void open(pastebin::PasteId id) {
+        _pastes.execute(pastebin::GetPaste{.id = id})
+            .then(_scope, [this](pastebin::PasteView const& view) { show(view); })
+            .onError(_scope, [this](std::exception_ptr const& error) { report(error); });
+    }
+
+private:
+    morph::bridge::BridgeHandler<pastebin::PasteModel> _pastes;
+    morph::async::CallbackScope _scope;  // declared last: destroyed first
+};
 ```
 
-Outside Qt the same shape is spelled with a `shared_ptr<const void> _liveness`
-member (declared **last**, so it dies first) captured as a
-`weak_ptr<const void>` and re-checked before touching `this`. morph uses that
-idiom internally; `Bridge` itself is one example.
+Declare the scope **last**, so it dies before everything its callbacks touch.
 
 Whichever spelling you pick, the rule is the same: **never capture a bare
 `this` in a completion callback.**
 
-## 9. A GUI on top
+## 9. Screens on top
 
-pastebin's UI layer is three thin layers and no domain logic.
-
-**The presenter** translates and routes; it decides nothing
-([`gui_lib/paste_presenter.cpp:16`](../examples/pastebin/gui_lib/paste_presenter.cpp)):
-
-```cpp
-void PastePresenter::create(CreatePaste action) {
-    track<CreatePasteResult>(
-        _handler.execute(std::move(action)),
-        [this](CreatePasteResult result) { emit created(std::move(result)); },
-        [this](const std::exception_ptr& err) { reportError(err); });
-}
-```
-
-`track()` is the shared base from section 8 — it owns the lifetime guard and a
-busy counter, so a presenter subclass never writes either. Note what the
-presenter does *not* do: it does not construct an executor or a backend, and it
-links `Qt6::Core` only, so it is instantiable under a plain `QCoreApplication`
-and testable with no window system at all.
-
-**The QML adapter** exists because of a constraint worth knowing before you hit
-it. `moc` is not a C++ front end, and it mis-parses morph's template-heavy
-`bridge.hpp` (and any ORM headers a model header pulls in), emitting the rest
-of the file inside a namespace it wrongly believes is still open. So a
-`Q_OBJECT` class that needs those headers guards them:
+pastebin has no client code of its own. Its server serves **screens** —
+documents that say what to show and which actions to run — and the generic
+client draws them, in Qt Quick or in a terminal. A screen is written in C++
+against the action types
+([`screens/pastebin_screens.cpp`](../examples/pastebin/screens/pastebin_screens.cpp)):
 
 ```cpp
-#ifndef Q_MOC_RUN
-#include "paste_presenter.hpp"
-#include <morph/core/bridge.hpp>
-#endif
-```
-
-`moc` needs nothing from them — only the macros, signals and `Q_INVOKABLE`
-signatures. This is why every rung hand-writes one `QObject` per model rather
-than generating it: the adapter translates C++ DTOs into the `QString` /
-`QVariantMap` shapes QML binds against, and does nothing else.
-
-**The shell** picks a deployment mode and builds everything else from inside a
-readiness callback ([`gui/main.cpp:79`](../examples/pastebin/gui/main.cpp)):
-
-```cpp
-AppContext ctx{serverUrl ? AppContext::Mode{Remote{.url = *serverUrl}}
-                         : AppContext::Mode{Local{.workers = 4}}};
-
-ctx.onReady([&] {
-    formsBridge = std::make_unique<FormsBridge>(ctx.bridge(), ctx.executor());
-    pasteBridge = std::make_unique<PasteBridge>(ctx.bridge(), ctx.executor());
-    engine.loadFromModule(MORPH_LADDER_QML_URI, "Main");
+auto const pastes = screen.model<PasteModel>("pastes", {.instance = ui::Instance::Private});
+auto const list = screen.query<ListPastes>("list", pastes);
+auto const open = screen.mutation<GetPaste>("open", pastes, {.concurrency = ui::Mode::Exclusive});
+auto const remove = screen.mutation<DeletePaste>("remove", pastes, {.invalidates = {list}});
+return ui::column({
+    ui::form<CreatePaste>(pastes, {.onSuccess = {ui::refetch(list)}}),
+    ui::table(list.value().at(&ListPastesResult::pastes), /* columns, with Open and Delete buttons */),
+    /* the opened paste, and the error line */
 });
 ```
 
-`onReady` matters in remote mode: the socket connects asynchronously, so a
-remote context is not usable the line after its constructor returns. In local
-mode the callback fires synchronously. A handler's registration round trip
-settles asynchronously too, and nothing has to wait for it: a call made through
-a handler whose bind is still in flight is held and dispatched when the bind
-settles, so pastebin's `Main.qml` calls `refresh()` straight away.
+The screen decides nothing about the domain. It names the model, the query
+that lists pastes, the two mutations and when the list refetches; every rule
+about what a paste may be stays in `PasteModel`. Opening a paste is a mutation,
+not a query, because it consumes one of the paste's allowed reads — a refetch
+must never repeat it.
+
+The screen is data on the wire, so the same document runs in either deployment
+mode, and on any frontend. Its tests run headless: they mount it on a recording
+backend and drive it by test id, with no window system at all
+(`examples/pastebin/screens/tests`).
 
 ## 10. Forms from the compiled action type
 
 `morph::forms::schemaJson<A>()` derives a JSON Schema from the action type
 itself. Nothing declares it separately, so it cannot describe a field the
-action does not have — which is the entire point.
-
-pastebin's create form renders from one line
-([`gui_lib/paste_schemas.hpp:31`](../examples/pastebin/gui_lib/paste_schemas.hpp)):
-
-```cpp
-[[nodiscard]] inline std::string pasteSchemasJson() {
-    return std::string{"{\"CreatePaste\":"} + ::morph::forms::schemaJson<pastebin::CreatePaste>() + "}";
-}
-```
+action does not have — which is the entire point. `ui::form<CreatePaste>`
+above is drawn from exactly this schema.
 
 Here is what `schemaJson<pastebin::CreatePaste>()` actually produces
 (abridged, and pretty-printed):
@@ -721,7 +677,7 @@ whatever payload arrives.
 
 ## 11. Testing
 
-Every rung tests the model layer with no GUI at all — that is the point of
+Every rung tests the model layer with no screen at all — that is the point of
 keeping the domain in a plain class. The pattern is a fixture, a real schema,
 and a direct call:
 
@@ -795,14 +751,12 @@ server produces this in the server's log:
 freshly minted opaque number that differs per run.)
 
 Running it without `--server` produces no such traffic at all — the same
-`PasteBridge`, the same `PastePresenter`, the same `BridgeHandler<PasteModel>`,
-the same `ListPastes`, executed in-process.
+screen, the same `ListPastes`, executed in-process.
 
 **What actually differs**, and is worth knowing before you rely on it:
 
-- **Registration timing.** Remote mode's registration is a round trip. Build
-  your handlers inside a readiness callback (section 9); a first fetch made
-  before the handler's bind settles is held until it does.
+- **Registration timing.** Remote mode's registration is a round trip; a first
+  fetch made before a handler's bind settles is held until it does.
 - **Authorization exists only remotely.** `RemoteServer` runs every request
   through an `IAuthorizer`; `LocalBackend` does not authorize at all. The
   default authorizer allows everything (section 13).
@@ -812,7 +766,7 @@ the same `ListPastes`, executed in-process.
 - **Who owns the store.** In remote mode the server owns the database. A
   client that also opens the same SQLite file behind the server's back is a
   second writer, which is exactly the contention pastebin's `SQLITE_BUSY` work
-  exists to avoid — so pastebin's client calls `db::setup()` **only** in local
+  exists to avoid — so the client opens pastebin's database **only** in local
   mode.
 
 `SimulatedRemoteBackend` (section 2) is the third shape: the same
@@ -827,9 +781,8 @@ Read [`docs/spec/`](spec/) before relying on any of these; the short version:
 - **It is not a general-purpose RPC framework.** Request/response only. No
   streaming, no bidirectional channels, no server-initiated push.
 - **`Completion<T>` is a leaf callback primitive, not a future.** No `T→U`
-  chaining, no `co_await`, no cancellation, and no lifetime binding (section
-  8 — write the guard yourself,
-  [#138](https://github.com/LASTRADA-Software/morph/issues/138)).
+  chaining, no `co_await`, and no cancellation; lifetime binding is the opt-in
+  `CallbackScope` of section 8.
 - **Security is app-supplied.** There is no built-in authentication: a
   `Context`'s identity is whatever the client claims until an `IAuthorizer`
   verifies it, and the default authorizer allows everything. Version

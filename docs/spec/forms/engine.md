@@ -24,7 +24,7 @@ is the host's contract.
 - [Collections](#collections)
 - [Wizards](#wizards)
 - [Rendering collections and wizards](#rendering-collections-and-wizards)
-- [Parity with the QML renderer](#parity-with-the-qml-renderer)
+- [Corpora](#corpora)
 - [Design decisions](#design-decisions)
 
 ## Packaging
@@ -149,7 +149,7 @@ and the `ui::Value` rules compare) or a `FieldError` with a stable code — `mal
 - Integers compare as digit strings against the exact bounds (`x-exactMinimum` wins over `minimum`), so nothing
   passes through a double.
 - A `Decimal` or `Quantity` typed in unit *u* (decimals *d*, factor *n/m* to the canonical unit) encodes the
-  unreduced `{num: digits·10^(d−places)·n, den: 10^d·m, dp: canonical places}` — the bytes the QML renderer sends.
+  unreduced `{num: digits·10^(d−places)·n, den: 10^d·m, dp: canonical places}` — the bytes the body corpus pins.
   Bounds, instance bounds and `multipleOf` are checked exactly in the canonical unit.
 - A `Number` is the canonical text typed, gated by its bounds and `x-displayDecimals`.
 - A date-time is the wall clock typed in the display zone, sent as UTC.
@@ -340,46 +340,41 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   builds from `Catalog::view` or `Catalog::wizard` and its model alias (`docs/spec/ui/interpreter.md`,
   "Lowering").
 
-## Parity with the QML renderer
+## Corpora
 
-Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus cases of the existing suites:
+Measured, not asserted, by `tests/test_forms_engine_corpora.cpp` and the corpus cases of the other suites:
 
 - **Rule corpus** (`tests/data/rule_corpus.json`, 46 rows): every row's `ready`, `visible` and `readonly`, and the
-  engine's `ready` against `allRulesSatisfied` on the same row. The QML suite reads the same file.
+  engine's `ready` against `allRulesSatisfied` on the same row, so the client and the server cannot disagree.
 - **Body corpus** (`tests/data/body_corpus.json`): each case is a schema, a locale, a display offset, an optional
-  prefill and the text typed per field; its body is what `DynamicForm` sent, written by
-  `src/qt/forms/tests/tst_BodyCorpus.qml` (`MORPH_FORMS_WRITE_BODY_CORPUS=1` regenerates; otherwise the suite
-  requires the committed bodies). The engine must send the same bytes, case by case.
+  prefill and the text typed per field, and its body is the exact bytes the engine sends — or `null` when the form
+  is not ready.
 - **Instance bounds and conformance**: every row of `tests/data/instance_bounds.json` and every conformance fixture
   through a session.
-- **Rendering**: the view claims of the QuickTests (controls per kind, labels from translations and in `x-order`,
-  the live required mark, help, explicit Submit, the reply and error line, rule-driven visibility and read-only,
-  sections, tab runs, accordions and grids, object panels and collection rows, override precedence and an override
-  driving the session) on `RecordingBackend` (`tests/test_forms_engine_view.cpp`); a `form` document through the
-  interpreter (`tests/test_ui_interpreter_forms.cpp`), on Qt Quick (`tests/qt_quick/test_qt_quick_interpreter.cpp`)
-  and on the terminal (`tests/tui/test_tui_forms.cpp`).
-- **Collections and wizards**: the claims of `tst_collectionview.qml`, the collection half of
-  `tst_LargeIdPrecision.qml`, `tst_wizardview.qml` and the confirm gate of `tst_ViewChrome.qml`, on the same
-  fixtures, against `CollectionSession` and `WizardSession` (`tests/test_forms_engine_collection.cpp`,
-  `tests/test_forms_engine_wizard.cpp`); what they and `tst_ViewChrome.qml` assert about drawn widgets (cells
-  and buttons by test id, the confirm and editor dialogs' visibility, the master-detail layout, the header, row,
-  confirm, editor and navigation chrome) on `RecordingBackend` (`tests/test_forms_engine_collection_view.cpp`,
-  `tests/test_forms_engine_wizard_view.cpp`); a collection and a wizard document through the interpreter, on
-  Qt Quick and on the terminal. `tst_ViewChrome.qml`'s field-label, status and result chrome of the embedded
-  forms has no counterpart: `formView`'s chrome is its options and `Overrides`, which do reach the embedded
-  forms.
+- **Rendering**: controls per kind, labels from translations and in `x-order`, the live required mark, help,
+  explicit Submit, the reply and error line, rule-driven visibility and read-only, sections, tab runs, accordions
+  and grids, object panels and collection rows, override precedence and an override driving the session, on
+  `RecordingBackend` (`tests/test_forms_engine_view.cpp`); a `form` document through the interpreter
+  (`tests/test_ui_interpreter_forms.cpp`), on Qt Quick (`tests/qt_quick/test_qt_quick_interpreter.cpp`) and on the
+  terminal (`tests/tui/test_tui_forms.cpp`).
+- **Collections and wizards**: `CollectionSession` and `WizardSession` (`tests/test_forms_engine_collection.cpp`,
+  `tests/test_forms_engine_wizard.cpp`); drawn widgets — cells and buttons by test id, the confirm and editor
+  dialogs' visibility, the master-detail layout, the header, row, confirm, editor and navigation chrome — on
+  `RecordingBackend` (`tests/test_forms_engine_collection_view.cpp`, `tests/test_forms_engine_wizard_view.cpp`); a
+  collection and a wizard document through the interpreter, on Qt Quick and on the terminal. The chrome of the
+  embedded forms is `formView`'s options and `Overrides`, which reach them.
 
-### Differences from the QML renderer
+### Choices a renderer could make otherwise
 
 Each is a named case of the body corpus, or a test of the engine's own suite:
 
-| Behaviour | QML renderer | Engine | Why |
-|---|---|---|---|
-| Nested objects, collections of objects | unrepresentable unless a slot claims them | fields with their own encoders | spec 2: nothing is unrepresentable |
-| A blank parent of a dependent Choice | clears the child's selection | keeps it (the query is idle) | no options were fetched to judge it against |
-| An operand whose draft does not encode, for `engaged` | engaged (text present) | `Unknown` | a value the server would refuse does not satisfy a condition |
-| A presentation rule naming several fields | the first field | every field it names | membership |
-| Automatic submission while Choice options are in flight | submits the body with the unjudged selection | waits for the options | the body could carry a selection the new parent does not offer |
+| Behaviour | Engine | Why |
+|---|---|---|
+| Nested objects, collections of objects | fields with their own encoders | spec 2: nothing is unrepresentable |
+| A blank parent of a dependent Choice | keeps the child's selection (the query is idle) | no options were fetched to judge it against |
+| An operand whose draft does not encode, for `engaged` | `Unknown` | a value the server would refuse does not satisfy a condition |
+| A presentation rule naming several fields | applies to every field it names | membership |
+| Automatic submission while Choice options are in flight | waits for the options | the body could carry a selection the new parent does not offer |
 
 ## Design decisions
 

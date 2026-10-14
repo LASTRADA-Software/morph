@@ -43,7 +43,7 @@ TEST_CASE("GetEventsSince{} (lastEventId unset) validates -- it means \"from the
 // one dispatch per keystroke -- and FinalizePoll is an irreversible state
 // transition. `explicitSubmit = true` on the action is what stops that, by
 // making schemaJson<A>() emit the top-level "x-submitMode": "explicit" key
-// DynamicForm reads (docs/spec/forms/forms.md, "Explicit submit mode").
+// a form reads (docs/spec/forms/forms.md, "Explicit submit mode").
 //
 // Parsed rather than substring-matched, so a key that landed inside
 // `properties` -- where the renderer would never look -- fails here.
@@ -74,7 +74,7 @@ TEST_CASE("AddComment/FinalizePoll/UndoLastVoteChange emit x-submitMode:\"explic
 TEST_CASE("The actions PollBridge dispatches in typed C++ carry no x-submitMode", "[polls][dto][forms]") {
     // The flag is a *renderer* instruction, and these five never reach the
     // renderer: CreatePoll/SubmitVotes/UpdateVotes are driven by hand-rolled
-    // QML (their array-of-objects fields have no DynamicForm control), and
+    // screens (their array-of-objects fields are not plain form fields), and
     // OpenPoll/GetPollState/GetEventsSince carry nothing a person types.
     // Declaring it on them would state something untrue about how they run.
     CHECK_FALSE(morph::forms::schemaJson<polls::CreatePoll>().contains("x-submitMode"));

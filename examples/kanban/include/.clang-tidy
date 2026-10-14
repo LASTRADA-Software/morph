@@ -59,7 +59,7 @@
 # clang-tidy resolves configuration by walking up from the file it is
 # analysing and offers no finer granularity than a directory, so the only
 # choice is which directory. One up, at `examples/`, is refused: a config there
-# governs every rung's src/, include/ and gui_lib/ together -- a narrow
+# governs every rung's src/, include/ and screens/ together -- a narrow
 # suppression in the shape that quietly becomes a wide one. Nothing gates that
 # placement, so it is a rule to keep by hand.
 #

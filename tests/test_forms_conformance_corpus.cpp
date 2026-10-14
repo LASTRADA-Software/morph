@@ -14,7 +14,7 @@
 // already treats views (below) separately. The view-schema layer (v-*,
 // morph::views::viewSchemaJson, docs/spec/forms/views.md) IS implemented;
 // its own coverage lives in tests/test_views.cpp and
-// src/qt/forms/tests/tst_collectionview.qml rather than this corpus, since a
+// tests/test_forms_engine_collection*.cpp rather than this corpus, since a
 // view composes existing action schemas rather than adding new per-field
 // schema keys of the kind this corpus's CF* fixtures pin.
 //

@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Parity with the QML renderer, measured: the shared x-rules corpus and the
-// body corpus, both driven through the forms engine.
+// The shared x-rules corpus and the body corpus, both driven through the forms
+// engine.
 //
 // - tests/data/rule_corpus.json: every row's `ready`, `visible` and `readonly`
 //   verdicts, and the engine's `ready` against `allRulesSatisfied` on the same
 //   row.
-// - tests/data/body_corpus.json: every case's body, which
-//   src/qt/forms/tests/tst_BodyCorpus.qml wrote from a real DynamicForm, must
-//   be what the engine sends, byte for byte. The few cases where the engine
-//   deliberately sends something else are named below with the body it sends,
-//   and each still pins the QML body, so a change on either side is reviewed.
+// - tests/data/body_corpus.json: every case's body must be what the engine
+//   sends, byte for byte.
 
-#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -173,7 +169,7 @@ struct BodyCase {
     return parsed;
 }
 
-/// The locales the body corpus names, as the QML renderer reads them from Qt.
+/// The locales the body corpus names.
 [[nodiscard]] morph::render::NumericLocale numericLocale(std::string_view name) {
     if (name == "de_DE") {
         return morph::render::NumericLocale{.decimalSeparator = ",", .groupSeparator = "."};
@@ -199,35 +195,6 @@ struct BodyCase {
         harness.type(*form, step.field, step.text);
     }
     return form->body();
-}
-
-/// Where the engine deliberately sends a different body than the QML renderer, and why.
-struct Difference {
-    std::string_view id;
-    std::optional<std::string_view> qml;
-    std::optional<std::string_view> engineSends;
-};
-
-constexpr std::array<Difference, 1> kDifferences{{
-    // Nested objects and collections are fields of the engine; the QML renderer leaves them unrepresentable unless
-    // a slot claims them, so its form never becomes ready.
-    {.id = "prefill/nested",
-     .qml = std::nullopt,
-     .engineSends = R"({"name":"n","address":{"street":"Main","zip":12345},)"
-                    R"("lines":[{"sku":"A","qty":2,"price":{"num":150,"den":100,"dp":2}},{"sku":"B","qty":1}]})"},
-}};
-
-[[nodiscard]] Difference const* differenceFor(std::string_view id) {
-    for (Difference const& entry : kDifferences) {
-        if (entry.id == id) {
-            return &entry;
-        }
-    }
-    return nullptr;
-}
-
-[[nodiscard]] std::optional<std::string> owned(std::optional<std::string_view> text) {
-    return text.has_value() ? std::optional<std::string>{std::string{*text}} : std::nullopt;
 }
 
 }  // namespace
@@ -264,35 +231,16 @@ TEST_CASE("rule corpus: the engine and allRulesSatisfied agree on every row", "[
     }
 }
 
-TEST_CASE("body corpus: the engine sends the QML renderer's bodies, byte for byte", "[forms-engine][corpus]") {
+TEST_CASE("body corpus: the engine sends every case's body, byte for byte", "[forms-engine][corpus]") {
     REQUIRE(bodyCorpus().size() >= 50);
-    std::size_t identical = 0;
     std::size_t ready = 0;
     for (BodyCase const& row : bodyCorpus()) {
         INFO("case " << row.id);
         std::optional<std::string> const sent = engineBody(row);
         ready += sent.has_value() ? 1U : 0U;
-        if (Difference const* const difference = differenceFor(row.id)) {
-            CHECK(row.body == owned(difference->qml));
-            CHECK(sent == owned(difference->engineSends));
-            continue;
-        }
         CHECK(sent == row.body);
-        identical += sent == row.body ? 1U : 0U;
     }
-    CHECK(identical + kDifferences.size() == bodyCorpus().size());
     // The corpus carries both verdicts: a form that never became ready would pass the not-ready rows alone.
     CHECK(ready > 0);
     CHECK(ready < bodyCorpus().size());
-}
-
-TEST_CASE("body corpus: every named difference is a case of the corpus", "[forms-engine][corpus]") {
-    for (Difference const& entry : kDifferences) {
-        INFO(entry.id);
-        bool found = false;
-        for (BodyCase const& row : bodyCorpus()) {
-            found = found || row.id == entry.id;
-        }
-        CHECK(found);
-    }
 }

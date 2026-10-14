@@ -40,7 +40,7 @@ struct CreateColumn {
     /// above already supplies. Without this opt-out the generated form gates
     /// its Submit button on a number the user has no reason to type, and the
     /// hand-built control it replaced defaulted to 0 rather than demanding
-    /// one. Left blank, `DynamicForm` omits the key entirely and glaze
+    /// one. Left blank, the form omits the key entirely and glaze
     /// deserialises the default (`docs/spec/forms/forms.md`, "Empty state").
     static constexpr std::array<std::string_view, 1> optionalFields{"wipLimit"};
 

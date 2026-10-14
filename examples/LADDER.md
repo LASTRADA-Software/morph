@@ -97,7 +97,7 @@ numbers here are load-bearing (rung 7 reuses rung 4's board pieces, rung 8
 reuses rung 2's job pattern). Concretely, bank is absent from
 [`rungs.txt`](rungs.txt) and never calls `morph_add_rung()`, which is what
 keeps it out of `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
-`wasm-ladder.yml`'s build loop, `coverage.sh` and `codecov.yml`'s
+`coverage.sh` and `codecov.yml`'s
 per-rung components. It is nonetheless the largest
 model surface in the tree — eleven models, 41 registered actions — and it has
 the two things a rung has downstream of a number: a `ladder_bank_server`,
@@ -299,8 +299,8 @@ renderer**; no pre-decode wire validation seam (clamped `Rational`s reach
 
 Explicit-submit mode is **closed** (it was the last entry on this list): an
 action declaring `static constexpr bool explicitSubmit = true` makes
-`schemaJson<A>()` emit the top-level `x-submitMode: "explicit"` key, and the
-shipped `DynamicForm.qml` renders its own Submit button — gated on the form's
+`schemaJson<A>()` emit the top-level `x-submitMode: "explicit"` key, and a
+form renders its own Submit button — gated on the form's
 `ready` state — instead of auto-firing on validity
 (`docs/spec/forms/forms.md`, "Explicit submit mode"). Adoption is per rung and
 only `polls` has migrated so far, on all three of its schema-driven actions;

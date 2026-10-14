@@ -803,21 +803,20 @@ the seam.
   pending first edit. Replay still goes through the model
   (`SampleModel::execute(QueuedCapture)`), which owns validation, authorization
   and conflict classification.
-- `examples/kanban/gui_lib/board_qml_bridge.cpp` — the transport-shaped half
-  only: probe, mint an op id, serialise, enqueue, update queue depth. It lives
-  in a presenter, which rule 1 names as forbidden for *domain-shaped* code;
-  nothing there is domain-shaped, so it stands as glue under rule 2's
-  "pure glue with no domain logic" justification. Anything with a domain
+- `morph::ui::QueueingDispatcher` (`include/morph/ui/queueing_dispatcher.hpp`)
+  — the transport-shaped half, in the framework: a document mutation marked
+  `"offline": "queue"` that cannot reach the server is held and replayed in
+  order on reconnect. Nothing there is domain-shaped. Anything with a domain
   invariant in it belongs in a `FieldOutbox`-shaped class instead.
 
 **Scope, and when to revisit.** This is the "explicitly dispositioned in the
 spec as app-layer by design" branch of `examples/IMPLEMENTATION.md`'s promotion
-rule, taken at **two** occurrences of the transport-shaped seam (kanban's
-bridge, lims' outbox) and **one** of the domain-shaped version chaining (lims'
-outbox). No framework primitive is owed yet. A third rung independently growing
-its own enqueue-on-offline path is the trigger to reopen the question of a
-framework-owned outbox dispatcher — a standing disposition must not become the
-reason a third reinvention goes unexamined.
+rule, for the domain-shaped version chaining, which has **one** occurrence
+(lims' outbox). The transport-shaped half for a document's mutations is
+`QueueingDispatcher`'s. A second rung independently growing its own version
+ledger is the trigger to reopen the question of a framework-owned one — a
+standing disposition must not become the reason a reinvention goes
+unexamined.
 
 ## SyncWorker
 

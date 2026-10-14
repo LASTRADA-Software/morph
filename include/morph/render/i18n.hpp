@@ -7,15 +7,9 @@
 ///        message keys (`morph::forms::i18n`, `forms/i18n.hpp`).
 ///
 /// `morph::render` is client-side only and never appears on the wire — it is
-/// the C++ side of the client-side rendering seam. The per-field
-/// widget-override registry that pairs with it is *not* C++ at all: it is
-/// `SlotRegistry`, a QML type in module `MorphForms`
-/// (`src/qt/forms/qml/SlotRegistry.qml`, documented in
-/// docs/spec/forms/forms.md), so do not look for it under this namespace. morph
-/// ships this seam and the resolution algorithm below; it defines **no**
-/// translation storage format. A host adapts whatever catalog it already
-/// owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database) into the one
-/// `TranslationProvider` signature.
+/// the C++ side of the client-side rendering seam. morph ships this seam and the resolution algorithm below; it
+/// defines **no** translation storage format. A host adapts whatever catalog it already owns (Qt `QTranslator`/`.qm`,
+/// a JSON bundle, a database) into the one `TranslationProvider` signature.
 
 #include <functional>
 #include <optional>
@@ -62,14 +56,7 @@ using TranslationProvider =
 // parameters are the resolution chain in precedence order -- explicit key, then
 // derived key, then the schema literal as the fallback -- which is how the
 // @brief above states it, how the body below tries them, and how
-// docs/spec/forms/forms.md specifies it. The QML renderer carries a mirror of
-// this function with the same parameters in the same order
-// (src/qt/forms/qml/DynamicForm.qml, `resolveText(explicitKey, derivedKey,
-// literal)`), and the two are meant to be read against each other. Reordering
-// to break the adjacency here would desynchronise that pair and leave the
-// signature the only place in the stack that does not read as the chain --
-// trading a mistake that no caller in the tree is positioned to make for one a
-// reader of both renderers would.
+// docs/spec/forms/forms.md specifies it.
 //
 // Strong types would remove the hazard outright, but a `TranslationKey` wrapper
 // on this seam would have to be threaded through every caller in morph::forms,

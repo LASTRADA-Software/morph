@@ -73,7 +73,7 @@ struct CreateBookmark {
     /// leaves the form valid, so a `CreateBookmark` bound to a live controller
     /// would store one bookmark per typed character. With this declared,
     /// `schemaJson<CreateBookmark>()` emits `"x-submitMode": "explicit"` and
-    /// `DynamicForm.qml` renders its own gated Submit button instead.
+    /// the form renders its own gated Submit button instead.
     static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept {

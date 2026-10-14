@@ -35,15 +35,18 @@ other rung stays deliberately unstyled.
 ## Server-defined screens
 
 [`screens/kanban_screens.cpp`](screens/kanban_screens.cpp) declares kanban's screens as UI documents (spec 4):
-- **`kanban.projects`**: sign-in (a `Login` mutation whose reply `signIn` installs), the person's projects, and
-  creating one, which opens its board.
-- **`kanban.board`** (`projectId`): the keyed board, forms for columns, swimlanes and tasks, and the grid of
+- **`kanban.login`**, the public screen: a `Login` mutation whose reply `signIn` installs, then the projects.
+- **`kanban.projects`**: the person's projects, and creating one, which opens its board.
+- **`kanban.board`** (`projectId`): the keyed board; forms for columns, swimlanes and tasks; and the grid of
   swimlanes by columns. A card is draggable with its task id. A cell is a drop target that moves the task to the
-  end of the cell, and a card is one that moves it before the card, through a `serial` `MoveTaskPosition`.
+  end of the cell, and a card is one that moves it before the card, through a `serial` `MoveTaskPosition` that is
+  queued while the server cannot be reached and replayed in order on reconnect. Beside the board: members and
+  their roles, automation rules (a `Choice` of the trigger column), the activity stream, which refreshes on every
+  board change, and a task's comments and attachments, whose bytes go over the file side channel.
 
 In process, `screens::prepareLocal()` installs a development token issuer. `morph_examples_client --app kanban` runs
-it (`--db`, default `kanban.db`). Attachments over the file side channel and the offline queue are not on these
-screens yet.
+it (`--db`, default `kanban.db`).
+
 ## What to implement
 
 Models: `BoardModel` keyed by project id (shared instance — every viewer of a
@@ -131,9 +134,7 @@ Build order:
    only — so the name is what a reader follows once the line has moved.
    A replay that keeps
    throwing is retried by `SyncWorker` up to its 5-attempt cumulative cap
-   and then dead-lettered, and `BoardBridge`'s `DeadLetterSink` turns that
-   into a `syncStatusChanged(queueDepth, deadLettered)` emission the GUI
-   renders.
+   and then dead-lettered.
 8. Task attachments — first blob answer: bytes over a side channel (plain
    HTTP endpoint next to the WebSocket server), metadata through actions.
 
@@ -143,94 +144,22 @@ Strand ordering under real contention (2), typed server-side validation (3),
 authorization at Kanboard's granularity (4), journal-derived activity + undo
 (5, 6), the full offline stack (7), shared board instances throughout.
 
-**`morph::forms`: every form on every screen.** Six of this rung's inputs are
-rendered from `morph::forms::schemaJson<A>()` through the shipped `MorphForms`
-`DynamicForm`, each submitting through the renderer's own explicit Submit
-button — the same shape `bookmarks`, `polls`, `lims` and `pastebin` ship:
-
-| Form | Action | Screen |
-|---|---|---|
-| Sign in | `Login` | `gui/qml/LoginView.qml` |
-| Create project | `CreateProject` | `gui/qml/ProjectListView.qml` |
-| Add member | `SetMemberRole` | `gui/qml/MembersView.qml` |
-| Add column | `CreateColumn` | `gui/qml/BoardView.qml` |
-| Add swimlane | `CreateSwimlane` | `gui/qml/BoardView.qml` |
-| New task | `CreateTask` | `gui/qml/BoardView.qml`, one instance per column |
-| Add comment | `AddComment` | `gui/qml/TaskDetailPopup.qml` |
-| Add rule | `CreateRule` | `gui/qml/RulesView.qml` |
-
-Not one of them has a hand-written field or a hand-written submit button; if any
-of those eight actions grows a member, no `.qml` file changes. Both QML bridges
-expose the one schema document (`gui_lib/kanban_schemas.hpp`) and the
-`submitIfValid` controller contract the renderer calls, and each routes only the
-actions its own models serve — an action a controller does not serve is reported
-back on `replyReceived`, never dropped.
-
-Three of those actions carry ids that are *context rather than input* — which
+**`morph::forms`: every form on every screen.** Every input on the board is a
+`form` node rendered from `morph::forms::schemaJson<A>()` by the forms engine —
+`CreateProject`, `SetMemberRole`, `CreateColumn`, `CreateSwimlane`,
+`CreateTask`, `AddComment` and `CreateRule` — with no hand-written field and no
+hand-written submit button. Ids that are *context rather than input* (which
 project a member is added to, which column a task is created in, which task a
-comment lands on. They are declared `hidden` in the DTO's own `fieldMetadata`
-(rule 3's "the DTO *is* the form definition"), so the renderer draws no control
-for them and the view that owns the form supplies them with `setFieldValue`.
-That keeps "type a title in the column you want it in" working without a raw
-row id ever appearing on screen. A fourth, `CreateRule::triggerColumnId`, is a
-user-chosen foreign key rather than context — it stays visible, as a
-`morph::forms::Choice<…, "GetBoardState">` combo box the renderer fetches its
-own options for via `BoardBridge::fetchOptions`, the shape rule 3 prescribes
-for exactly this case.
+comment lands on) are declared `hidden` in the DTO's own `fieldMetadata`, and
+the screen supplies them. `CreateRule::triggerColumnId` is a user-chosen
+foreign key rather than context, so it stays visible as a
+`morph::forms::Choice<…, "GetBoardState">`.
 
-**This is rendered, not merely generated.** `tests/test_gui_forms_render.cpp`
-loads the shipped `.qml` into a real QML engine with real bridges over a real
-backend, and for each of the seven non-login forms asserts the controls the
-renderer drew, the body it assembled, and the row the model ended up with. It
-was mutation-checked twice: dropping the hidden-field seeding leaves `CreateTask`
-permanently `!ready`, and dropping `hidden` from `CreateTask::columnId` makes the
-raw id column visible.
-
-### What is still hand-built, and why
-
-[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids hand-built input
-widgets by default and allows exactly two justifications, each of which has to
-be written here. Two elements remain, both rule 2(a) — "the generated UI
-*cannot* express the interaction":
-
-| Hand-built input | Action | Rule 2 justification |
-|---|---|---|
-| `gui/qml/BoardView.qml`'s drag-and-drop board | `MoveTaskPosition` | **(a).** A drag is a gesture, not a form. See below. |
-| `gui/qml/MembersView.qml`'s per-row role `ComboBox` (`:78`) | `SetMemberRole` | **(a).** Edits one field of an existing row in place, on selection change, with no Submit gesture — not the create-a-new-thing shape `DynamicForm` renders. See below. |
-
-**There is no enum-rendering gap.** `morph::forms::schemaJson` describes a C++
-`enum class` completely — `Role` emits as
-`{"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},…]}` — and
-`DynamicForm` draws that as a combo box, refusing a value outside the set. Both
-`SetMemberRole` and `CreateRule` therefore render as ordinary schema-driven
-forms: `gui/qml/MembersView.qml`'s "add member" row and `gui/qml/RulesView.qml`'s
-"add rule" row are both `DynamicForm`s now, and
-`CreateRule::triggerColumnId` is a `morph::forms::Choice<…, "GetBoardState">`
-(rule 3's shape for a user-chosen foreign key), fetched by the renderer itself
-through `BoardBridge::fetchOptions`. Only `MembersView`'s **per-row** role
-picker — editing an existing member in place, not adding one — stays
-hand-built, on grounds of its own: it is an inline-edit
-interaction, not a form, the same reasoning the drag-and-drop board below
-already gives for its own gesture.
-
-**The drag-and-drop board is not a subsystem gap, and this README should not
-pretend otherwise.** `schemaJson<MoveTaskPosition>()` produces a perfectly good
-schema — `taskId`/`columnId`/`swimlaneId`/`position` required, `opId` honoured
-as optional — and `DynamicForm` would render it without complaint. What is
-missing is not an expressive capacity; it is that nobody moves a card by typing
-four row ids into number fields and pressing Submit. The destination column,
-swimlane and position are *produced by the gesture itself* (`DropArea.onDropped`
-computes them from the drop's own geometry), so the form has no input left to
-collect. A form renderer is the wrong shape for a direct-manipulation gesture,
-and asking `morph::forms` to grow one would be asking it to become a different
-kind of library. Rule 2(a) applies on those grounds — the interaction, not the
-schema — which is why nothing is filed against `morph::forms` for it.
-
-Two smaller findings fell out of rendering these forms for real, both filed
-rather than folded in: every `DynamicForm` warns about `onOptionsReceived`
-against any controller with no `Choice` field, and the renderer mistypes
-array-valued schema keys when `schema` is assigned as a `QVariant` instead of
-bound. Both are in "Findings" below.
+**Moving a card is a gesture, not a form.** `schemaJson<MoveTaskPosition>()`
+produces a perfectly good schema, but nobody moves a card by typing four row
+ids; the destination column, swimlane and position are produced by the drop
+itself. So the board is drag and drop over the view tree's own draggable and
+drop-target nodes, and nothing is filed against `morph::forms` for it.
 
 ## Expected strain points
 
@@ -285,13 +214,8 @@ bound. Both are in "Findings" below.
   [`docs/spec/offline/offline.md`](../../docs/spec/offline/offline.md)
   ("Depth bound and overflow policy").
   What is still true here is narrower and is this rung's own gap, not the
-  framework's: `BoardBridge::enableOfflineQueue` constructs its
-  `SqliteOfflineQueue` from the path alone, passing no `maxDepth`, so
-  kanban's queue is unbounded in the shipped build. Adopting the bound is
-  not a one-line change — the enqueue happens inside a `Q_INVOKABLE` move
-  handler that has no failure path today, so the rung needs a
-  user-visible answer to "this change could not be queued" before it can
-  turn the bound on. (Scope correction from verification, unchanged: the
+  framework's: the client's queue of held moves has no depth bound, so a
+  long outage queues every move the user makes. (Scope correction from verification, unchanged: the
   linear-scan/quadratic enqueue applies to `FileOfflineQueue` only; this
   rung's `SqliteOfflineQueue` dedups via an index. Measure depth growth on
   the SQLite queue; the 10⁴–10⁵-item enqueue-latency measurement belongs to
@@ -330,18 +254,6 @@ one *is* is recorded here; the tracker holds their state:
 
 - The replay-attempt budget cannot tell an undelivered replay from a rejected
   one, so reconnect flaps dead-letter work the server never saw.
-- Every `DynamicForm` warns about `onOptionsReceived` on a controller with no
-  `Choice` field.
-- `DynamicForm` mistypes array-valued schema keys when `schema` is assigned as
-  a `QVariant` rather than bound.
-
-Closed, and kept here because the current shape is the answer to them: the GUI
-being hand-built with no `morph::forms` usage and no rule-2 justification —
-seven forms render through the shipped renderer now, and the two remaining
-hand-built elements each carry their written rule-2(a) justification (see "morph
-subsystems exercised") — and `DynamicForm` rendering a C++ `enum class` as a
-free-text field, which is what would keep `MembersView`/`RulesView`'s
-add-member/add-rule forms hand-built.
 
 Not filed here, deliberately: the applied-ops ledger that "Exactly-once has no
 owner in the stack" (below) forces every rung to rebuild is already filed as one
@@ -361,8 +273,8 @@ separate gap.
   drives is not this rung's to build: `examples/common/testkit/fault_proxy.hpp`
   shipped with rung 0's shared infrastructure, and this rung consumes it.
 - Kill the network mid-drag: client keeps queuing, reconnect replays, board
-  converges; the five-flap dead-letter path surfaces in the GUI — proven by
-  test (`test_board_offline_bridge.cpp`), not yet by a runnable `--seed`
+  converges — proven by test (`test_kanban_offline.cpp`, and the board screen's
+  queued move), not yet by a runnable `--seed`
   demo walkthrough (`LADDER.md`'s ladder-wide "every rung ships a `--seed`
   path" convention is not yet implemented for this rung — a real, separate
   gap, tracked but not yet closed). The offline tests assert the

@@ -2273,7 +2273,7 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
 ///        `Quantity`.
 ///
 /// `ExtUnits` is the key a `Quantity` already carries, so every reader of a
-/// unit -- a renderer's suffix label, `SlotRegistry.byUnit`, a view column --
+/// unit -- a renderer's suffix label, a slot chosen by unit, a view column --
 /// finds a plain member's unit where it finds a `Quantity`'s. A `Quantity`'s
 /// own unit and precision are part of its type; a `FieldMeta` restating them
 /// could only disagree, so for one this is a no-op.
@@ -2346,11 +2346,8 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     // A plain `enum class` with no `glz::meta`/`glz::enumerate` fails glaze's
     // `glaze_enum_t` and falls through `to_json_schema<T>`'s final branch: a
     // six-way wildcard (`{"type": ["number","string","boolean","object",
-    // "array","null"]}`) that states nothing. The shipped Qt/QML `DynamicForm`
-    // then fires two mutually exclusive kind flags on it (`isBoolean` and
-    // `isArray` both true) and draws a checkbox whose payload is a JSON array
-    // of the string "false", reporting the form `ready` for a value nobody
-    // chose. `glz::glaze_enum_t` is the same trait glaze's own
+    // "array","null"]}`) that states nothing, and that a renderer cannot draw
+    // as a choice among values. `glz::glaze_enum_t` is the same trait glaze's own
     // enum schema specialisation gates on, so this fires exactly when that
     // specialisation would not have been reached -- a `static_assert` whose
     // condition depends on @p Member, so it only fires for the specific
@@ -2359,9 +2356,8 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
         static_assert(glz::glaze_enum_t<Member>,
                       "morph::forms: an enum class rendered as a form field must declare a glz::meta with "
                       "glz::enumerate -- without one, schemaJson<A>() cannot describe its closed set of "
-                      "values (glaze emits a six-way wildcard type instead), and the shipped DynamicForm "
-                      "renders that wildcard as a checkbox reporting the form ready for a value the user "
-                      "never chose. See docs/spec/forms/forms.md, \"Closed sets\", and examples/"
+                      "values (glaze emits a six-way wildcard type instead), which no renderer can draw as a "
+                      "choice. See docs/spec/forms/forms.md, \"Closed sets\", and examples/"
                       "IMPLEMENTATION.md rule 3.");
     }
     const FieldMeta* fieldMeta = findFieldMeta<Owner>(name);
@@ -3222,8 +3218,7 @@ template <typename A>
     // this loop needs no changes as new rule kinds are added. (Named
     // emitNode(), not emit(), because Qt's <QObject> headers `#define emit`
     // as an empty macro -- a bare `emit()` silently vanishes and fails to
-    // parse in any translation unit that includes both Qt and this header,
-    // e.g. examples/forms/gui_qml/FormsController.cpp.)
+    // parse in any translation unit that includes both Qt and this header.)
     if constexpr (HasFormRules<A>) {
         glz::generic_u64::array_t xRules{};
         std::apply([&](const auto&... rule) { (xRules.emplace_back(rule.emitNode()), ...); }, A::formRules.rules);

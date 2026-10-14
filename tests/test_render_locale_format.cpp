@@ -157,8 +157,6 @@ TEST_CASE("render::locale_format round-trips through a multi-byte separator", "[
 // `sawAnyOutput` was only set at the bottom of the loop, and the
 // decimal-separator branch `continue`d past it -- so after a separator the sign
 // guard still believed nothing had been emitted and accepted an injected sign.
-// The QML mirror (src/qt/forms/qml/DynamicForm.qml, documented as mirroring
-// this function) always rejected these, so the two control edges disagreed.
 TEST_CASE("normalizeLocaleNumber: a sign after the decimal separator is rejected", "[render][locale][morph497]") {
     // de-DE: comma decimal, dot grouping -- the reported shape.
     REQUIRE_FALSE(
@@ -179,11 +177,9 @@ TEST_CASE("normalizeLocaleNumber: a sign after the decimal separator is rejected
     REQUIRE(morph::render::normalizeLocaleNumber("-1,5", {.decimalSeparator = ",", .groupSeparator = "."}) == "-1.5");
 }
 
-TEST_CASE("normalizeLocaleNumber: the loose shapes stay accepted, in step with the QML mirror",
-          "[render][locale][morph497]") {
-    // Deliberately NOT narrowed to `-?[0-9]+(\.[0-9]+)?`: DynamicForm.qml's
-    // normalizeLocaleNumber accepts all three, and tightening one edge alone
-    // would put them back out of step. Documented on the function.
+TEST_CASE("normalizeLocaleNumber: the loose shapes stay accepted", "[render][locale][morph497]") {
+    // Deliberately NOT narrowed to `-?[0-9]+(\.[0-9]+)?`. Documented on the
+    // function.
     REQUIRE(morph::render::normalizeLocaleNumber(".5", {.decimalSeparator = ".", .groupSeparator = ","}) == ".5");
     REQUIRE(morph::render::normalizeLocaleNumber("5.", {.decimalSeparator = ".", .groupSeparator = ","}) == "5.");
     REQUIRE(morph::render::normalizeLocaleNumber(".", {.decimalSeparator = ".", .groupSeparator = ","}) == ".");
@@ -603,46 +599,25 @@ TEST_CASE("normalizeLocaleNumber: the new parameter costs no existing behaviour"
           "-5");  // the whole-string sign match still holds
 }
 
-// ──── The QML mirror's separators, cross-checked here ────────────────────────
+// ──── Multi-unit separators ─────────────────────────────────────────────────
 //
-// This block adds no C++ behaviour. `normalizeLocaleNumber` has matched both
-// separators as whole strings since it was written -- "accepts a multi-byte
-// group separator" above already pins that. The defect this guards against is
-// in the *QML mirror* (`src/qt/forms/qml/DynamicForm.qml`), which can compare one UTF-16
-// code unit (`ch === groupSeparator`) while this side used
-// `rest.starts_with`. docs/spec/forms/forms.md, "Both edges, or neither": a
-// divergence between the two is a divergence in what the product accepts, so
-// the fix is worth only as much as the evidence that the edges now agree.
+// `normalizeLocaleNumber` matches both separators as whole strings -- "accepts a
+// multi-byte group separator" above already pins that. These rows pin it for a
+// separator of more than one UTF-16 unit, which a renderer comparing one code
+// unit at a time (`ch === groupSeparator`) gets wrong.
 //
-// What that evidence is, stated plainly, because its shape is unusual:
-//
-//   * No locale reaches this. Measured on this revision with
-//     QLocale::matchingLocales under Qt 6.11.2, over all 711 locales:
+// No locale reaches this. Measured with QLocale::matchingLocales under Qt
+// 6.11.2, over all 711 locales:
 //
 //       decimalPoint   with size() > 1 (UTF-16 units): 0
 //       groupSeparator with size() > 1 (UTF-16 units): 0
 //       negativeSign   with size() > 1:                54   <- the control
 //       positiveSign   with size() > 1:                54   <- the control
 //
-//     The two sign counts are the control: this is not a measurement that
-//     returns 0 for any locale field you point it at. All nine distinct
-//     groupSeparator spellings Qt reports (U+0027, U+002C, U+002E, U+00A0,
-//     U+060C, U+066C, U+12C8, U+202F, U+2E41) and all three decimalPoint
-//     spellings (U+002C, U+002E, U+066B) are single code units. So this is a
-//     consistency fix, and nobody is affected today.
-//
-//   * Which is exactly why the corpus below is synthetic. A test driven by a
-//     real locale could not tell the fixed mirror from the broken one -- with
-//     a one-unit separator `ch === sep` and `startsWith(sep, i)` agree on all
-//     711 -- and would be a check that passes whatever the code does.
-//
-// The identical rows are pinned against the mirror in
-// src/qt/forms/tests/tst_i18n.qml -- its two `test_aMultiUnitSeparator...`
-// functions and `test_theDisplayEdgeEmitsAMultiUnitSeparatorAndEntryTakesItBack`.
-// The two
-// lists are meant to be read side by side; a row that disagrees between them is
-// the divergence the rule forbids. UTF-16 units there, UTF-8 bytes here -- the
-// same separators, spelled for each edge's string type.
+// The two sign counts are the control: this is not a measurement that returns
+// 0 for any locale field you point it at. So the corpus below is synthetic: a
+// test driven by a real locale could not tell a whole-string comparison from a
+// one-unit one, and would pass whatever the code does.
 namespace {
 // Two code points: a bidi mark before the separator, the shape 54 locales
 // really give the signs. Spelled as explicit UTF-8 bytes for the same MSVC
@@ -654,9 +629,8 @@ constexpr std::string_view kGroup2 =
 constexpr std::string_view kDecimal2 =
     "\xE2\x80\x8E"
     ",";  // U+200E U+002C
-// One code point each, but two UTF-16 units (a surrogate pair) -- the sharper
-// case for the mirror: a scan that iterated code points rather than code units
-// would still have failed on these.
+// One code point each, but two UTF-16 units (a surrogate pair): a UTF-16 scan
+// that iterated code points rather than code units would still fail on these.
 constexpr std::string_view kGroup4 = "\xF0\x9D\x85\xAD";    // U+1D16D
 constexpr std::string_view kDecimal4 = "\xF0\x9D\x85\xAE";  // U+1D16E
 
@@ -674,7 +648,7 @@ constexpr std::string_view kDecimal4 = "\xF0\x9D\x85\xAE";  // U+1D16E
 }
 }  // namespace
 
-TEST_CASE("locale_format: the multi-unit separator corpus the QML mirror now shares", "[render][locale][morph599]") {
+TEST_CASE("locale_format: the multi-unit separator corpus", "[render][locale][morph599]") {
     // The premise of the spelling: these really are multi-unit on both edges.
     REQUIRE(kGroup2.size() == 4);  // 3 UTF-8 bytes + 1; 2 UTF-16 units
     REQUIRE(kDecimal2.size() == 4);
@@ -699,8 +673,7 @@ TEST_CASE("locale_format: a multi-unit separator is validated exactly as a one-u
           "[render][locale][morph599]") {
     // The grouping validation and the leading-position rule are
     // stated over "the separator", so they have to hold when it is longer than
-    // one unit -- on both edges. Same rows as the mirror's
-    // `test_aMultiUnitSeparatorIsStillValidatedTheSameWay`.
+    // one unit -- on both edges.
     CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "5"}),
                                 {.decimalSeparator = kDecimal2, .groupSeparator = kGroup2}) == std::nullopt);
     CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "2", kGroup2, "3", kGroup2, "4"}),
@@ -722,11 +695,8 @@ TEST_CASE("locale_format: a multi-unit separator is validated exactly as a one-u
 }
 
 TEST_CASE("locale_format: the pair round-trips through a multi-unit separator", "[render][locale][morph599]") {
-    // Where "both edges, or neither" bites. `formatCanonicalNumber` has always
-    // emitted the separators whole on both sides, so with a multi-unit
-    // separator the mirror's display edge produced text its own entry edge then
-    // rejected -- the two-edge disagreement, for a locale that does not exist yet.
-    // This side round-tripped throughout; that is what made the two disagree.
+    // Where "both edges, or neither" bites: what the display edge emits with a
+    // multi-unit separator, the entry edge must take back.
     auto const display = formatCanonicalNumber(
         "-1050.25", {.decimalSeparator = kDecimal2, .groupSeparator = kGroup2, .negativeSign = kSignEuEs});
     CHECK(display == joined({kSignEuEs, "1", kGroup2, "050", kDecimal2, "25"}));
@@ -758,10 +728,6 @@ TEST_CASE("locale_format: the pair round-trips through a multi-unit separator", 
 // rather than digit data, and said so. 76 is the measured one. Two of the sets
 // are outside the BMP, which is why the scan decodes a code point instead of
 // widening a byte comparison: a digit there is four UTF-8 bytes.
-//
-// The same corpus is pinned against the QML mirror in
-// src/qt/forms/tests/tst_i18n.qml ([morph591] there). docs/spec/forms/forms.md,
-// "Both edges, or neither".
 namespace {
 struct DigitSet {
     std::string_view name;
@@ -770,9 +736,9 @@ struct DigitSet {
 };
 
 // One representative per distinct set, spelled as explicit UTF-8 bytes with the
-// code point in the comment -- the house style for this file, and the reason
-// the QML mirror spells them as escapes too: a digit that renders as itself is
-// still unreadable when a reviewer does not read that script.
+// code point in the comment -- the house style for this file: a digit that
+// renders as itself is still unreadable when a reviewer does not read that
+// script.
 constexpr std::array<DigitSet, 11> kDigitSets = {{
     {.name = "ar_BH", .zero = "\xD9\xA0", .five = "\xD9\xA5"},                    // U+0660, U+0665
     {.name = "fa_IR", .zero = "\xDB\xB0", .five = "\xDB\xB5"},                    // U+06F0, U+06F5

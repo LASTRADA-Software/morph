@@ -349,15 +349,15 @@ struct LabModel {
   bounds, and descriptions (via `glz::json_schema<A>`).
 
 [`examples/forms`](examples/forms) shows the whole loop with two renderers
-driven purely by the generated schemas — a self-contained HTML page and a
-runtime-built Qt Quick GUI:
+driven purely by the generated schemas — a self-contained HTML page and the
+forms engine's screens in the generic client:
 
 ```sh
-cmake -B build -G Ninja -DMORPH_BUILD_FORMS_QML=ON    # QML renderer optional
+cmake -B build -G Ninja -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON
 ninja -C build
-./build/examples/forms/morph_forms_demo --emit-html   # write forms_demo.html, open it
-./build/examples/forms/morph_forms_demo               # REPL: paste lines from the page
-./build/examples/forms/gui_qml/morph_forms_qml        # same forms, rendered in QML
+./build/examples/forms/morph_forms_demo --emit-html     # write forms_demo.html, open it
+./build/examples/forms/morph_forms_demo                 # REPL: paste lines from the page
+./build/examples/client/morph_examples_client --app forms  # same forms, as screens
 ```
 
 ## Action log (audit & undo)
@@ -442,7 +442,7 @@ cmake --build build/clang-release --target morph_tests
 ```
 
 Relevant CMake options: `MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
-`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`, `MORPH_BUILD_FORMS_QML`,
+`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`,
 `MORPH_BUILD_DOCUMENTATION`, `MORPH_INSTALL` (on by default when morph is the
 top-level project).
 
@@ -481,33 +481,14 @@ target_link_libraries(your_app PRIVATE morph::net morph::offline_sqlite)
 
 The components are `net` (`MORPH_BUILD_NET`, POSIX only), `tui`
 (`MORPH_BUILD_TUI`; installed when libunicode was found rather than fetched),
-`offline_sqlite` (`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`),
-`qt_quick` (`MORPH_BUILD_QT_QUICK`, which needs `qt`), and `qt_forms` and
-`forms_qml` (both `MORPH_BUILD_FORMS_QML`). Asking for one that
+`offline_sqlite` (`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`)
+and `qt_quick` (`MORPH_BUILD_QT_QUICK`, which needs `qt`). Asking for one that
 was not installed fails at `find_package` and says which.
 
 An install that carries `tui` needs libunicode findable by every consumer, even
 one that does not ask for `tui`: the core-cpp package installed with it was
 built with its TUI, and its own config finds libunicode. Put the libunicode
 prefix the build found on `CMAKE_PREFIX_PATH` next to morph's.
-
-`forms_qml` is the `MorphForms` QML module (`DynamicForm`, `SlotRegistry`,
-`CollectionView`, …), built as a static QML module. Link its plugin and import
-it; `qt_forms` is the header-only `FormsControllerCore` an app's controller
-wraps:
-
-```cmake
-find_package(morph CONFIG REQUIRED COMPONENTS forms_qml qt_forms)
-target_link_libraries(your_app PRIVATE morph::forms_qmlplugin morph::qt_forms)
-# For qmllint / qmlls / your own qmlcachegen to see MorphForms' types:
-list(APPEND QML_IMPORT_PATH "${morph_QML_IMPORT_PATH}")
-```
-
-The module resolves from resources embedded in the plugin, so nothing has to
-be deployed next to the application; the installed
-`<libdir>/qml/MorphForms` (`MORPH_INSTALL_QMLDIR`) directory is for tooling.
-`scripts/check_forms_qml_install.sh` builds and runs such an application
-against an install.
 
 **Or vendor the repo.** `add_subdirectory(morph)` or `FetchContent` works and
 gives you the same `morph::morph` target. morph's own install rules turn

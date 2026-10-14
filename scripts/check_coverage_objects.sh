@@ -106,14 +106,11 @@ coverage_exclusion_reason() {
         # omission should not itself make a legitimate configure unusable. They
         # are the same defect as the three above and get the same one-line fix;
         # they are only separated because nothing in CI has ever measured them.
-        bank_tests|bank_gui_tests|bank_gui_qml_tests)
+        bank_tests)
             echo "GAP: built by -DMORPH_BUILD_BANK_EXAMPLE=ON, which the coverage leg does not set, and never instrumented (examples/bank/CMakeLists.txt). Fix: an if(AF_COVERAGE) apply_coverage(<target>) block there; the names already end in _tests"
             ;;
         morph_vetted_hmac_libsodium_tests|morph_vetted_hmac_openssl_tests)
             echo "GAP: built by -DMORPH_BUILD_HMAC_EXAMPLES=ON, which the coverage leg does not set, and never instrumented (examples/vetted_hmac/CMakeLists.txt). Fix: an if(AF_COVERAGE) apply_coverage(<target>) block there"
-            ;;
-        morph_forms_qml_tests|morph_forms_controller_core_tests)
-            echo "GAP: built by -DMORPH_BUILD_FORMS_QML=ON, which the coverage leg does not set, and never instrumented (src/qt/forms/CMakeLists.txt). These drive include/morph/forms through the QML renderer, so they are the suites most likely to move the forms number when they are instrumented"
             ;;
         *)
             return 1

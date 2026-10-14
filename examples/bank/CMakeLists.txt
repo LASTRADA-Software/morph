@@ -19,30 +19,27 @@ endif()
 # ── WebAssembly build ────────────────────────────────────────────────────────
 # In an Emscripten configure, the native persistence layer (Lightweight ORM over
 # ODBC) cannot exist in the browser, so the whole native stack — Lightweight,
-# bank_lib, the CLI and the tests — is skipped. Only the self-contained WASM GUI
-# (its own in-memory backend) is built. See gui_wasm/.
-# bank_memory_lib is that backend: the GUI-facing models over an in-memory store, under the same class names as the
-# native ones (gui_wasm/include shadows bank/models), which the generic client's bank screens link too.
+# bank_lib, the CLI and the tests — is skipped. bank_memory_lib takes its place:
+# the models over an in-memory store, under the same class names as the native
+# ones (memory/include shadows bank/models), which the generic client's bank
+# screens link in the browser demo.
 if(EMSCRIPTEN)
     add_library(bank_memory_lib STATIC
-        gui_wasm/src/models/auth_model_wasm.cpp
-        gui_wasm/src/models/account_model_wasm.cpp
-        gui_wasm/src/models/customer_model_wasm.cpp
-        gui_wasm/src/models/transaction_model_wasm.cpp
-        gui_wasm/src/models/card_model_wasm.cpp
-        gui_wasm/src/models/payee_model_wasm.cpp
-        gui_wasm/src/models/payment_model_wasm.cpp
-        gui_wasm/src/models/loan_model_wasm.cpp
+        memory/src/models/auth_model_wasm.cpp
+        memory/src/models/account_model_wasm.cpp
+        memory/src/models/customer_model_wasm.cpp
+        memory/src/models/transaction_model_wasm.cpp
+        memory/src/models/card_model_wasm.cpp
+        memory/src/models/payee_model_wasm.cpp
+        memory/src/models/payment_model_wasm.cpp
+        memory/src/models/loan_model_wasm.cpp
         src/core/money.cpp)
     target_include_directories(bank_memory_lib BEFORE PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/gui_wasm/include  # shadow models + bank/wasm store
-        ${CMAKE_CURRENT_SOURCE_DIR}/include)          # shared bank/dto, bank/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/memory/include  # shadow models + bank/wasm store
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)        # shared bank/dto, bank/core
     target_link_libraries(bank_memory_lib PUBLIC morph::morph)
     target_compile_features(bank_memory_lib PUBLIC cxx_std_23)
     apply_bigobj(bank_memory_lib)
-    if(MORPH_BUILD_BANK_GUI)
-        add_subdirectory(gui_wasm)
-    endif()
     return()
 endif()
 
@@ -168,20 +165,17 @@ endif()
 # for line.
 #
 # Gated on Qt because the transport is morph::qt's QtWebSocketServer, exactly
-# as the macro's version is; MORPH_BUILD_BANK_GUI is *not* the gate, since this
-# is a headless server that needs Qt6::Core and no GUI.
+# as the macro's version is.
 #
 # The gate is the *option*, not `TARGET morph::qt`: the root CMakeLists adds
 # examples/bank (line ~523) well before it creates morph::qt (line ~596), so a
 # TARGET check here is false even when Qt is on. Naming the target in
 # target_link_libraries is fine regardless -- CMake resolves link names at
-# generate time, by which point the alias exists. bank/gui/CMakeLists.txt
-# depends on the same ordering.
+# generate time, by which point the alias exists.
 if(MORPH_BUILD_QT)
     # Qt's imported targets are directory-scoped, so naming Qt6::Core below
     # needs a find_package in *this* directory even though the root already ran
-    # one -- the same call bank_gui_qml_tests makes further down for the same
-    # reason. WebSockets comes along because morph::qt's INTERFACE link
+    # one. WebSockets comes along because morph::qt's INTERFACE link
     # requirements name it.
     find_package(Qt6 REQUIRED COMPONENTS Core WebSockets)
     add_executable(ladder_bank_server src/server/main.cpp)
@@ -197,11 +191,6 @@ if(MORPH_BUILD_QT)
     if(DEFINED AF_SANITIZER)
         apply_sanitizers(ladder_bank_server ${AF_SANITIZER})
     endif()
-endif()
-
-# ── Qt 6 GUI (opt-in) ────────────────────────────────────────────────────────
-if(MORPH_BUILD_BANK_GUI)
-    add_subdirectory(gui)
 endif()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
@@ -279,156 +268,5 @@ if(MORPH_BUILD_TESTS)
         catch_discover_tests(bank_tests
             DISCOVERY_MODE PRE_TEST
             PROPERTIES LABELS "bank")
-
-        # ── bank_gui_tests: the GUI's own suite ──────────────────────────────
-        # A second binary rather than more sources in bank_tests: bank_tests
-        # links bank_lib and nothing Qt, and it is built in every
-        # -DMORPH_BUILD_BANK_EXAMPLE=ON configure, including the ones with no
-        # Qt at all. The controllers only exist when MORPH_BUILD_BANK_GUI=ON
-        # (that is the option that adds gui/), so anything holding one has to
-        # be gated on the same switch.
-        #
-        # tests/gui/, not tests/: bank lists its test sources by hand rather
-        # than globbing them, so a file in tests/ that is deliberately absent
-        # from bank_tests reads as an oversight. The subdirectory says which
-        # binary a file belongs to.
-        if(TARGET bank_gui_lib)
-            add_executable(bank_gui_tests
-                tests/gui/test_bank_qml_surface.cpp
-                tests/gui/test_bank_gui_format.cpp
-                # QmlSurfaceAudit, compiled in rather than linked from
-                # morph::ladder_testkit. That library is only created by
-                # MORPH_BUILD_LADDER=ON, an option entirely independent of
-                # MORPH_BUILD_BANK_EXAMPLE — bank is not a ladder rung (it is
-                # absent from examples/rungs.txt and never calls
-                # morph_add_rung), so requiring the ladder's whole shared
-                # testkit to be configured before the bank GUI can be tested
-                # would couple two option trees that have nothing else to do
-                # with each other. It would also over-link: morph_ladder_testkit
-                # pulls in morph::qt, Qt6::WebSockets, ladder_gui and ladder_app,
-                # while the audit itself needs Qt6::Core and nothing more.
-                # This is the same translation unit, not a copy of it, so the
-                # audit still has exactly one implementation.
-                #
-                # testkit_src/, not testkit/: the TU sits one directory up
-                # from its own header so that testkit/.clang-tidy's Catch2
-                # suppression cannot reach it. The
-                # ${PROJECT_SOURCE_DIR}/examples/common include directory below
-                # is what resolves its <testkit/qml_surface.hpp>.
-                ${PROJECT_SOURCE_DIR}/examples/common/testkit_src/qml_surface.cpp
-            )
-            target_include_directories(bank_gui_tests PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests
-                ${PROJECT_SOURCE_DIR}/examples/common)
-            target_link_libraries(bank_gui_tests PRIVATE bank_gui_lib morph_test_main)
-            target_compile_features(bank_gui_tests PRIVATE cxx_std_23)
-            # The audit reads gui/qml/*.qml out of the source tree at run time,
-            # and ctest runs the binary from the build directory. Same macro,
-            # same value (the repo root) and same reason as every ladder rung's
-            # test binary gets from morph_add_rung().
-            target_compile_definitions(bank_gui_tests PRIVATE
-                MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
-            apply_bigobj(bank_gui_tests)
-            # This is the binary that catches an out-of-range
-            # double -> int64_t conversion: it lives in
-            # gui/controllers/Format.hpp, which this suite compiles and drives
-            # directly (tests/gui/test_bank_gui_format.cpp) with Qt6::Core and
-            # no display. Uninstrumented, the suite exercises the conversion on
-            # every run and says nothing.
-            if(DEFINED AF_SANITIZER)
-                apply_sanitizers(bank_gui_tests ${AF_SANITIZER})
-            endif()
-
-            catch_discover_tests(bank_gui_tests
-                DISCOVERY_MODE PRE_TEST
-                PROPERTIES LABELS "bank")
-
-            # ── bank_gui_qml_tests: the QML layer, with a live engine ────────
-            # A third binary, and the reason is the second one's defining
-            # property: bank_gui_tests links Qt6::Core and nothing else, needs
-            # no platform plugin and no display, and its own file header says
-            # so -- that is what lets the surface audit run in any configure
-            # that can compile a QObject. Linking Qt6::Quick into it to gain
-            # one test would cost that, for every run of the audit, forever.
-            #
-            # This target exists because some of bank's GUI logic is *in* the
-            # QML and is invisible from C++. MoveMoneyPage's account picker is
-            # the worked example: the controller is entirely
-            # self-consistent when driven directly, and the defect is a
-            # ComboBox whose `currentIndex` no binding restores after its model
-            # is replaced. Only a live engine over the shipped .qml file can
-            # see that, so only a live engine can hold the regression.
-            #
-            # The .qml files are loaded from the source tree by URL rather than
-            # from the BankGui QML module, which lives inside the bank_gui
-            # *executable* and cannot be linked. QML's implicit import of a
-            # component's own directory resolves the sibling types (Panel,
-            # Picker, Field, AppButton) with no qmldir, so this is the same
-            # file the desktop client ships, not a copy.
-            find_package(Qt6 REQUIRED COMPONENTS Gui Qml Quick QuickControls2)
-            add_executable(bank_gui_qml_tests
-                tests/gui/test_bank_gui_qml_behaviour.cpp
-                # The Qt-owning Catch2 main, in place of Catch2WithMain, with
-                # MORPH_LADDER_TESTKIT_GUI_APP below upgrading its owned
-                # application object to QGuiApplication. Two reasons, both
-                # load-bearing: Qt Quick cannot instantiate an item without a
-                # platform integration, and BankClient's QtExecutor captures
-                # `QCoreApplication::instance()` when it is *constructed*, so
-                # the application has to exist before the first BankClient.
-                ${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp
-            )
-            target_include_directories(bank_gui_qml_tests PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests
-                ${PROJECT_SOURCE_DIR}/examples/common)
-            target_link_libraries(bank_gui_qml_tests PRIVATE
-                bank_gui_lib Catch2::Catch2
-                # Our own main() owns the QGuiApplication, so this cannot link
-                # morph_test_main the way bank_gui_tests above does -- that
-                # library carries a `main` of its own. morph_test_log_level is
-                # the half of it that is wanted here: the --log-level helper
-                # testkit_main.cpp calls, and the tests/ include directory that
-                # puts <testkit/log_level.hpp> on the path. Same split, for the
-                # same reason, as morph_qt_tests (tests/qt/CMakeLists.txt).
-                morph_test_log_level
-                Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
-            target_compile_features(bank_gui_qml_tests PRIVATE cxx_std_23)
-            target_compile_definitions(bank_gui_qml_tests PRIVATE
-                MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}"
-                MORPH_LADDER_TESTKIT_GUI_APP)
-            apply_bigobj(bank_gui_qml_tests)
-            # Also a ctest command, so also not optional -- see bank_tests
-            # above.
-            if(DEFINED AF_SANITIZER)
-                apply_sanitizers(bank_gui_qml_tests ${AF_SANITIZER})
-            endif()
-
-            # offscreen, because the runner may have no display and this suite
-            # never looks at a pixel -- it reads property values off the items
-            # the engine created. The same variable the ladder's own GUI legs
-            # set for ctest (examples/TESTING.md).
-            #
-            # It does not cover the *discovery* run, and that gap cost this
-            # repository a permanently red CI leg. PROPERTIES are
-            # set on the tests Catch2 registers; the run that finds out what
-            # those tests are happens first, and under DISCOVERY_MODE PRE_TEST
-            # it happens inside ctest rather than inside the build. Catch2's
-            # CatchAddTests.cmake execute_process() forwards only DL_PATHS and
-            # DL_FRAMEWORK_PATHS into that run -- never the ENVIRONMENT
-            # property -- so `<binary> --list-tests` starts under whatever
-            # environment invoked ctest. This main constructs a QGuiApplication
-            # before Catch2 parses the flag (examples/common/testkit/
-            # testkit_main.cpp), so with no display and no QT_QPA_PLATFORM it
-            # aborts, CatchAddTests raises message(FATAL_ERROR), and *every*
-            # suite in the tree vanishes from `ctest --show-only` -- the whole
-            # listing fails, not this target's share of it. Anything that
-            # enumerates this build tree headless therefore has to set
-            # QT_QPA_PLATFORM itself; ci.yml's bank-ubsan sweep step carries
-            # the worked example and the measurement.
-            catch_discover_tests(bank_gui_qml_tests
-                DISCOVERY_MODE PRE_TEST
-                PROPERTIES
-                    LABELS "bank"
-                    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-        endif()
     endif()
 endif()

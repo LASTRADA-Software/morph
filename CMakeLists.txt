@@ -25,9 +25,7 @@ endif()
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
-option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
-option(MORPH_BUILD_FORMS_QML     "Build the shipped Qt/QML forms renderer module (MorphForms) and its demo" OFF)
 
 # The application ladder (examples/LADDER.md): a shared testkit + GUI
 # architecture consumed by every ladder rung. Off by default like the other
@@ -119,9 +117,9 @@ option(MORPH_CLIENT_ONLY
     OFF
 )
 
-# Both Qt consumers (the WebSocket backend and the forms QML renderer) need
+# Both Qt consumers (the WebSocket backend and the Qt Quick frontend) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
-if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML OR MORPH_BUILD_QT_QUICK))
+if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_QT_QUICK))
     include(cmake/FindQt.cmake)
 endif()
 
@@ -693,8 +691,8 @@ endif()
 # Two kinds of header are deliberately out of scope:
 #   * anything under a detail/ directory -- not public surface;
 #   * headers owned by an optional component whose target this configuration
-#     did not create (morph::net, morph::qt, morph::qt_forms,
-#     morph::offline_sqlite, morph::tui). Those have their own FILE_SETs and
+#     did not create (morph::net, morph::qt,
+#     morph::offline_sqlite, morph::tui, morph::qt_quick). Those have their own FILE_SETs and
 #     now carry VERIFY_INTERFACE_HEADER_SETS themselves, so they are genuinely
 #     checked whenever their option is ON -- they were not before morph#230,
 #     which is the same blindness one level down. The mapping below is by
@@ -702,7 +700,6 @@ endif()
 #     still gets caught -- which is the drift that actually happens.
 set(_morph_optional_components
     "include/morph/net/:morph_net"
-    "include/morph/qt/forms/:morph_qt_forms"
     "include/morph/qt/:morph_qt"
     "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite"
     "include/morph/tui/:morph_tui"
@@ -714,7 +711,7 @@ file(GLOB_RECURSE _morph_public_headers
 
 # Union of every header set this configuration actually created.
 set(_morph_listed_headers "")
-foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite morph_tui morph_qt_quick)
+foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_offline_sqlite morph_tui morph_qt_quick)
     if(TARGET ${_morph_target})
         get_target_property(_morph_target_headers ${_morph_target} HEADER_SET)
         if(_morph_target_headers)
@@ -767,9 +764,8 @@ unset(_morph_optional_components)
 # Only the morph::offline_sqlite target itself is created here, deliberately
 # ahead of "Application ladder"'s add_subdirectory(examples) further below:
 # examples/kanban/CMakeLists.txt links morph::offline_sqlite (a namespaced
-# target, which CMake requires to already exist at the point it is named --
-# see the identical note on morph::qt_forms vs the plain
-# morph_forms_moduleplugin just below). The tests/offline_sqlite subdirectory
+# target, which CMake requires to already exist at the point it is named).
+# The tests/offline_sqlite subdirectory
 # that also depends on MORPH_BUILD_OFFLINE_SQLITE stays deferred to its
 # original spot, after the "Tests" section, since it links
 # Catch2::Catch2WithMain and that target only exists once Catch2 has been
@@ -875,75 +871,10 @@ if(MORPH_BUILD_OFFLINE_SQLITE)
     )
 endif()
 
-# ── Qt/QML forms renderer setup (optional) ───────────────────────────────────
-# Ships the reference Qt/QML renderer (MorphForms, src/qt/forms) as a reusable
-# component, independent of MORPH_BUILD_EXAMPLES. examples/forms/gui_qml
-# (added from examples/forms/CMakeLists.txt, itself still gated on
-# MORPH_BUILD_EXAMPLES, added further below in "Demo executable") is a
-# *consumer* of this module, not its home -- the find_package/
-# qt_standard_project_setup() call and the morph::qt_forms interface target
-# below must both exist before the "Demo executable" section runs, since that
-# demo's CMakeLists.txt relies on qt_add_library/qt_add_qml_module/
-# qt_add_executable already being defined and links against morph::qt_forms
-# (a namespaced target, which -- unlike a plain target name such as
-# morph_forms_moduleplugin below -- CMake requires to already exist at the
-# point it is named). add_subdirectory(src/qt/forms) itself (which builds the
-# actual MorphForms module/plugin, plus a Catch2-linked test executable) is
-# deferred to just after the "Tests" section further below, since Catch2 is
-# only found/fetched there and its test executable names Catch2::Catch2
-# directly.
-# Emscripten builds this too. MorphForms is a plain Qt Quick QML module over
-# header-only morph code — nothing in it is host-only — and a WASM ladder
-# client has to render the *same* schema-driven Main.qml the desktop client
-# does (examples/TESTING.md's "same client code"), which imports MorphForms.
-# This block used to carry a `NOT EMSCRIPTEN` guard plus a "needs a
-# non-Emscripten toolchain" warning, written when no WASM target consumed the
-# renderer; that claim was never tested. Its one host-only piece, the QuickTest
-# suite, is guarded inside src/qt/forms/CMakeLists.txt instead.
-if(MORPH_BUILD_FORMS_QML)
-    # 6.5 is a hard floor, not a preference: qt_standard_project_setup's
-    # REQUIRES keyword and QQmlApplicationEngine::loadFromModule (used by the
-    # demo) both arrive in 6.5. Stating it here turns "your Qt is too old" into
-    # one clear configure-time message instead of a confusing missing-member
-    # compile error deep in the build (Ubuntu 24.04 still ships 6.4.2).
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
-    qt_standard_project_setup(REQUIRES 6.5)
-
-    # Header-only, model-agnostic controller core (no Q_OBJECT -- Qt cannot
-    # register a class template for QML); an app's own QObject/QML_ELEMENT
-    # controller subclass forwards to it. See
-    # include/morph/qt/forms/forms_controller_core.hpp.
-    add_library(morph_qt_forms INTERFACE)
-    add_library(morph::qt_forms ALIAS morph_qt_forms)
-    # Same standalone-compile check the core target gets: a listed header that
-    # stops being self-contained must fail here, not silently pass (morph#230).
-    set_target_properties(morph_qt_forms PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
-    target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
-    # qt_executor.hpp and generic_model_bridge_core.hpp are listed here too,
-    # not only under morph::qt: forms_controller_core.hpp includes both, and
-    # morph::qt (MORPH_BUILD_QT, which needs Qt WebSockets) is not part of
-    # every install that ships this header. Neither needs anything beyond
-    # QtCore. multi_model_bridge_core.hpp/multi_model_forms_controller_core.hpp
-    # and the owned_local_bridge.hpp detail header they (and the single-model
-    # pair) share are the same story.
-    target_sources(morph_qt_forms
-        INTERFACE
-        FILE_SET HEADERS
-        BASE_DIRS include
-        FILES
-            include/morph/qt/bridge/detail/owned_local_bridge.hpp
-            include/morph/qt/bridge/generic_model_bridge_core.hpp
-            include/morph/qt/bridge/multi_model_bridge_core.hpp
-            include/morph/qt/forms/forms_controller_core.hpp
-            include/morph/qt/forms/multi_model_forms_controller_core.hpp
-            include/morph/qt/qt_executor.hpp
-    )
-endif()
-
 # ── Demo executable ──────────────────────────────────────────────────────────
 if(MORPH_BUILD_EXAMPLES)
     # The console demo uses the thread-pool executor; skip it for the
-    # single-threaded WASM build (which only wants the bank GUI target).
+    # single-threaded WASM build.
     if(NOT EMSCRIPTEN)
         add_executable(morph_example src/main.cpp)
         target_link_libraries(morph_example PRIVATE morph)
@@ -1056,8 +987,7 @@ if(MORPH_BUILD_TESTS)
 endif()
 
 # ── Application ladder (optional) ───────────────────────────────────────────
-# Deferred to here (after the Tests section above), the same way
-# MORPH_BUILD_FORMS_QML's src/qt/forms subdirectory is deferred further below:
+# Deferred to here (after the Tests section above):
 # examples/common/CMakeLists.txt calls find_package(Catch2 3 CONFIG QUIET) and
 # treats "not found" as a hard FATAL_ERROR (its own Catch2 does not get
 # fetched -- it relies on MORPH_BUILD_TESTS=ON having already resolved one).
@@ -1066,19 +996,6 @@ endif()
 # no-system-Catch2 case even though MORPH_BUILD_TESTS=ON.
 if(MORPH_BUILD_LADDER)
     add_subdirectory(examples)
-endif()
-
-# ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
-# The actual MorphForms module/plugin (src/qt/forms), deferred to here (after
-# Catch2 is found/fetched above) since its own CMakeLists.txt links a Catch2
-# test executable directly against Catch2::Catch2 when MORPH_BUILD_TESTS is
-# ON -- the same condition that guards both. Qt6 Quick/Qml was already found
-# and morph::qt_forms already created earlier (before "Demo executable"), so
-# examples/forms/gui_qml (a consumer, added above) only forward-references
-# the plain (non-namespaced) morph_forms_moduleplugin target this creates,
-# which CMake resolves once this subdirectory is processed.
-if(MORPH_BUILD_FORMS_QML)
-    add_subdirectory(src/qt/forms)
 endif()
 
 # ── Fuzz harnesses (optional) ────────────────────────────────────────────────
@@ -1291,7 +1208,7 @@ if(MORPH_INSTALL)
     # morph::morph_net while every in-tree ALIAS and every line of
     # documentation says morph::net. The two names must be the same one.
     set(MORPH_INSTALLED_COMPONENTS "")
-    foreach(_morph_component IN ITEMS offline_sqlite qt_forms qt net)
+    foreach(_morph_component IN ITEMS offline_sqlite qt net)
         if(TARGET morph_${_morph_component})
             set_target_properties(morph_${_morph_component} PROPERTIES
                 EXPORT_NAME ${_morph_component})
@@ -1363,55 +1280,6 @@ if(MORPH_INSTALL)
         unset(_morph_qq_export_name)
     endif()
 
-    # The MorphForms QML module (MORPH_BUILD_FORMS_QML): its backing library,
-    # its plugin, and the object libraries a static QML module carries --
-    # without the latter an installed module links but registers no QML types
-    # and embeds no .qml files. The qmldir/qmltypes/sources go to a QML import
-    # directory for tooling (qmllint, qmlls, a consumer's qmlcachegen); at run
-    # time the module resolves from its embedded resources.
-    set(MORPH_INSTALL_QMLDIR "${CMAKE_INSTALL_LIBDIR}/qml" CACHE STRING
-        "Import directory (relative to the prefix) the MorphForms QML module is installed under")
-    if(TARGET morph_forms_module)
-        set_target_properties(morph_forms_module PROPERTIES EXPORT_NAME forms_qml)
-        set_target_properties(morph_forms_moduleplugin PROPERTIES EXPORT_NAME forms_qmlplugin)
-        # A generated target's name starts with morph_forms_module(plugin)_;
-        # exporting it under that name would read morph::morph_... downstream.
-        foreach(_morph_forms_target IN LISTS MORPH_FORMS_QML_OUTPUT_TARGETS)
-            string(REGEX REPLACE "^morph_" "" _morph_forms_export_name "${_morph_forms_target}")
-            set_target_properties(${_morph_forms_target} PROPERTIES EXPORT_NAME ${_morph_forms_export_name})
-        endforeach()
-        install(TARGETS morph_forms_module morph_forms_moduleplugin ${MORPH_FORMS_QML_OUTPUT_TARGETS}
-            EXPORT morphTargets
-            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-            LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-            OBJECTS DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        )
-        list(APPEND MORPH_INSTALLED_COMPONENTS forms_qml)
-
-        get_target_property(_morph_forms_dir morph_forms_module QT_QML_MODULE_OUTPUT_DIRECTORY)
-        set(_morph_forms_qml_dest "${MORPH_INSTALL_QMLDIR}/MorphForms")
-        install(FILES "${_morph_forms_dir}/morph_forms_module.qmltypes"
-            DESTINATION "${_morph_forms_qml_dest}")
-        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/qt/forms/qml/"
-            DESTINATION "${_morph_forms_qml_dest}/qml"
-            FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
-        # qmldir names the plugin by its build-tree target; a consumer sees the
-        # exported name, which is what a static-Qt build's QML plugin import
-        # looks the plugin up by.
-        install(CODE "
-            file(READ \"${_morph_forms_dir}/qmldir\" _morph_qmldir)
-            string(REPLACE \"linktarget morph_forms_moduleplugin\" \"linktarget morph::forms_qmlplugin\"
-                   _morph_qmldir \"\${_morph_qmldir}\")
-            file(WRITE \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_morph_forms_qml_dest}/qmldir\" \"\${_morph_qmldir}\")
-            message(STATUS \"Installing: \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_morph_forms_qml_dest}/qmldir\")
-        ")
-        unset(_morph_forms_dir)
-        unset(_morph_forms_qml_dest)
-        unset(_morph_forms_target)
-        unset(_morph_forms_export_name)
-    endif()
-
     install(EXPORT morphTargets
         FILE morphTargets.cmake
         NAMESPACE morph::
@@ -1422,7 +1290,6 @@ if(MORPH_INSTALL)
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/morphConfig.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"
         INSTALL_DESTINATION "${MORPH_CMAKE_INSTALL_DIR}"
-        PATH_VARS MORPH_INSTALL_QMLDIR
     )
 
     # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides
@@ -1431,10 +1298,10 @@ if(MORPH_INSTALL)
     # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT only while every
     # installed component is header-only: without it CMake rejects an install
     # made on a differently-sized-void* machine, which is exactly right once a
-    # compiled archive (morph_qt_impl, the MorphForms module, morph::tui,
+    # compiled archive (morph_qt_impl, morph::tui,
     # morph::qt_quick) is in the package.
     set(_morph_arch_independent ARCH_INDEPENDENT)
-    if(TARGET morph_qt_impl OR "forms_qml" IN_LIST MORPH_INSTALLED_COMPONENTS
+    if(TARGET morph_qt_impl
        OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS OR "qt_quick" IN_LIST MORPH_INSTALLED_COMPONENTS)
         set(_morph_arch_independent "")
     endif()
