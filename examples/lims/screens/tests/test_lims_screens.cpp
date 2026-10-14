@@ -64,7 +64,7 @@ TEST_CASE("lims screens: the lifecycle screen opens its sample and allows the tr
                           LocalSetup{.db = {}, .user = "tech"}};
     std::string const header = "sample " + std::to_string(sampleId);
     REQUIRE(harness.waitForText("header", header + " — Registered (v1)"));
-    auto enabled = [&harness](std::string_view testId) {
+    auto const enabled = [&harness](std::string_view testId) {
         return harness.backend().prop(*harness.backend().find("Button", "testId", testId), "enabled") != "false";
     };
     CHECK(enabled("receive"));

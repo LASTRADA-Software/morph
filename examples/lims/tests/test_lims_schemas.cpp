@@ -52,6 +52,6 @@ TEST_CASE("lims' capture form carries its cross-field rules", "[lims][forms][sch
 
 // `x-submitMode` is opt-in: a read-only query declares no `explicitSubmit`, so its schema carries no mode at all.
 TEST_CASE("a read-only lims action's schema carries no submit mode", "[lims][forms][schemas]") {
-    std::string const schema = morph::forms::schemaJson<lims::GetSample>();
+    std::string const& schema = morph::forms::schemaJson<lims::GetSample>();
     CHECK(schema.find("x-submitMode") == std::string::npos);
 }
