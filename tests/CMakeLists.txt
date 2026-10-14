@@ -739,6 +739,7 @@ endif()
 add_executable(morph_table_tests
     table/test_table_source.cpp
     table/test_table_sort.cpp
+    table/test_table_parse.cpp
     table/test_table_filter.cpp
     table/test_table_view_change.cpp
     table/test_table_engine.cpp

@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -28,16 +29,20 @@
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <ios>
+#include <locale>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
+#include <version>
 
 namespace morph::table {
 
@@ -121,10 +126,32 @@ inline constexpr std::size_t kCheckEvery = 2048;
     return value;
 }
 
+/// @brief Parses a floating-point number, all of @p text, through a stream in the classic locale: the fallback of
+///        `parseReal` for a standard library without floating-point `from_chars`.
+///
+/// The classic locale, not the global one: a filter value is the wire's text, so its decimal point is `.` whatever
+/// locale the process runs in.
+/// @param text The text.
+/// @return The value, or nothing when @p text is not exactly a number or is NaN.
+[[nodiscard]] inline std::optional<double> parseRealClassic(std::string_view text) {
+    if (text.empty() || text.front() == '+' || std::isspace(static_cast<unsigned char>(text.front())) != 0) {
+        return std::nullopt;
+    }
+    std::istringstream stream{std::string{text}};
+    stream.imbue(std::locale::classic());
+    double value = 0;
+    stream >> std::noskipws >> value;
+    if (stream.fail() || stream.peek() != std::char_traits<char>::eof() || std::isnan(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
 /// @brief Parses a floating-point number, all of @p text.
 /// @param text The text.
 /// @return The value, or nothing when @p text is not exactly a number or is NaN.
 [[nodiscard]] inline std::optional<double> parseReal(std::string_view text) {
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
     double value = 0;
     auto const* const first = std::to_address(text.begin());
     auto const* const last = std::to_address(text.end());
@@ -133,6 +160,10 @@ inline constexpr std::size_t kCheckEvery = 2048;
         return std::nullopt;
     }
     return value;
+#else
+    // libc++ before floating-point from_chars, such as Emscripten's.
+    return parseRealClassic(text);
+#endif
 }
 
 }  // namespace detail
