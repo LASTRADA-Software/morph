@@ -79,6 +79,7 @@ jobs:
           host: linux
           target: desktop
           arch: linux_gcc_64
+          modules: qtwebsockets
           dir: ${{ runner.temp }}/qt
 
       # Qt 6.7+ ships WebAssembly under host=all_os / target=wasm (not
@@ -90,6 +91,7 @@ jobs:
           host: all_os
           target: wasm
           arch: wasm_singlethread
+          modules: qtwebsockets
           dir: ${{ runner.temp }}/qt
 
       - name: Set up emsdk
