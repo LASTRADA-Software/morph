@@ -10,6 +10,9 @@
 - [Closing](#closing)
 - [Switching](#switching)
 - [Captions](#captions)
+- [Start and record](#start-and-record)
+- [Host screens](#host-screens)
+- [Navigator and pins](#navigator-and-pins)
 - [Design decisions](#design-decisions)
 
 ## Shape
@@ -17,8 +20,8 @@
 - `Workspace(runtime, backend, host, options, parent)` makes a `TabsWidget` appended to `parent` (a backend root
   when it is null): the shell's root, which the host places. Each tab is a page slot of that bar, and its screen is
   mounted into it with `DocumentScreenHost::mountInto`.
-- `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty}`; empty
-  treats every screen as plain.
+- `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
+  available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
   `WorkspaceTab{screenId, identity, caption}`; `active()` is the shown tab's index, `std::nullopt` while none is open.
 - An application routes its host's `onNavigate` to `open`, so a document's `navigate` opens or focuses a tab.
@@ -63,6 +66,52 @@ A tab's caption is its screen's `title`, followed by ` •` while `dirty` is tru
 handle's `title` and `dirty` that re-sends every caption and the selection with `setTabs` and `setSelected`. A tab is
 re-keyed without any action: `open` reads each tab's identity from its handle when it looks.
 
+## Start and record
+
+- **The record.** `WorkspaceOptions::onRecord` receives the open tabs' routes, in order, each time the tabs change:
+  when a tab opens, closes or is replaced.
+  - A document screen's route is `DocumentScreenHost::routeOf`, and a host screen's is its catalog id.
+  - A tab whose params have no route form is left out.
+  - With `WorkspaceOptions::scheduler`, the record is written once, `recordDelay` after the last change of a
+    burst. `flushRecord()` writes it at once and cancels the pending write, as sign-out does before the session
+    is cleared. `record()` is the list as it would be written now.
+- **The start.** `start(WorkspaceStart{start, fallback, recorded})` answers the number of tabs it opened, and makes
+  the first of them active.
+  - With `start == "resume"` it opens every recorded route that reads back and whose screen is `available`, in
+    order. Skipped: an unknown screen, a param that no longer parses, and an unavailable entry. The `fallback`
+    opens when none did.
+  - Any other `start` is the screen id to open.
+
+## Host screens
+
+A screen whose `WorkspaceScreen::host` names a host screen is mounted by the factory registered under that name
+in `WorkspaceOptions::hosts` ([host.md](host.md#host-screens)), into the tab's page. Its tab is like any other:
+- the caption follows the handle's `title` and `dirty`;
+- closing runs the handle's `requestClose`;
+- it takes part in the recent order and the record.
+
+A name with no factory refuses the mount with `no host screen `<name>` is registered`.
+
+## Navigator and pins
+
+`ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
+- **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
+  heading, `navigator_group_<module>/<group>`, and each entry is a button, `nav_<id>`.
+- **Unavailable entries** are disabled, with their reason as the tooltip, and neither open nor prefetch.
+- **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
+  ASCII case, and the headings of the groups that still show an entry.
+  - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown.
+  - Without it, the title is the entry's string, or a message reference's `fallback`.
+  - `focusSearch()` is what the navigator's shortcut calls.
+- **Pins** are the person's ordered shortcuts, the buttons `pin_<id>` in `navigator_pins`.
+  - The stored list is read once, dropping unknown and repeated ids and those past `maxPins`.
+  - `pin(id)` appends one; it is refused for an unknown or pinned id, or when the pins are full. `unpin(id)`
+    removes one.
+  - Each change sends the whole new list to `onPins`. The application stores it, under the app document's `pins`
+    point.
+- **Open and prefetch.** Choosing an available entry or pin calls `onOpen(id)`, which an application routes to
+  `Workspace::open`. Hovering one calls `onPrefetch(id)`, which it routes to `DocumentScreenHost::prefetch`.
+
 ## Design decisions
 
 - **The shell drives the `TabsWidget` itself**, as `Mounted` does for a `Tabs` node, rather than mounting a view
@@ -74,5 +123,8 @@ re-keyed without any action: `open` reads each tab's identity from its handle wh
 - **In `morph::ui`, not the forms engine.** The shell needs only the host contract, the view backend and the
   catalog's facts.
 
-Not here yet: the navigator, pins, prefetch on hover, the `resume` start and its session record (§7), and host
-screens from a registry (§15).
+- **A record is routes, and its debounce is the caller's clock.** A route reads back against the screen's declared
+  params, so a recorded tab reopens as the instance it was. A host screen has no params, so its route is its id.
+  Without a scheduler the record is written on every change; with one, once per burst.
+- **A host screen factory mounts into a container, not a `QQuickItem`**, so one registry serves every backend
+  ([host screens](host.md#host-screens)).
