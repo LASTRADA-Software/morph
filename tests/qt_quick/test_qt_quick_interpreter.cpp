@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <memory>
 #include <morph/reactive/testing/manual_scheduler.hpp>
+#include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <string>
 #include <string_view>
@@ -536,4 +537,66 @@ TEST_CASE("qt_quick interpreter: a wizard document steps on", "[qt_quick][interp
     CHECK(QtHarness::widget("field_sampleId").shownText() == "9007199254740993");
     REQUIRE(h.dispatcher.count("Lims_ConfirmSample") == 1);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_ConfirmSample")).body == R"({"sampleId":9007199254740993})");
+}
+
+namespace {
+
+/// A host that places screens itself: it only records where a document asks to go.
+class PlacingHost final : public ui::DocumentScreenHost {
+public:
+    PlacingHost(QtHarness& harness, ui::DocumentScreenHostOptions options)
+        : DocumentScreenHost{harness.session, harness.dispatcher, std::move(options)} {}
+
+    using DocumentScreenHost::onNavigate;
+
+    void onNavigate(std::string_view screenId, ui::ParamMap const& params) override {
+        static_cast<void>(params);
+        navigated.emplace_back(screenId);
+    }
+
+    std::vector<std::string> navigated;
+};
+
+constexpr char const* kPlaced = R"({
+  "vocab": "ui/1", "id": "placed", "title": "Placed",
+  "state": { "count": { "init": 0 } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "placed.count", "text": { "fn": "format", "args": [ "{0}", { "ref": "count" } ] } },
+    { "kind": "button", "testId": "placed.more", "label": "more",
+      "onClick": [ { "set": "count", "value": { "fn": "add", "args": [ { "ref": "count" }, 1 ] } } ] } ] } })";
+
+}  // namespace
+
+// Mutation: have rootOf answer null for a document screen (the host cannot reach the screen's item).
+TEST_CASE("qt_quick interpreter: a host mounts a document through DocumentScreenHost and places its root item",
+          "[qt_quick]") {
+    QtHarness h;
+    std::shared_ptr<ui::Document const> const placed = loadOrFail(kPlaced, corpusCatalog());
+    PlacingHost host{h, ui::DocumentScreenHostOptions{
+                            .documents = [&placed](std::string_view id) -> std::shared_ptr<ui::Document const> {
+                                return id == "placed" ? placed : nullptr;
+                            },
+                            .backend = &h.scene.backend(),
+                            .guard = {},
+                            .application = nullptr,
+                            .diagnostics = {}}};
+    auto mounted = host.mount("placed", ui::ParamMap{});
+    REQUIRE(mounted.has_value());
+    h.scene.settle();
+    ui::Widget const* const root = ui::DocumentScreenHost::rootOf(**mounted);
+    REQUIRE(root != nullptr);
+    QQuickItem& item = Scene::itemOf(*root);
+
+    // The host puts the item in its own layout; the screen keeps working there.
+    QQuickItem* const original = item.parentItem();
+    QQuickItem place{h.scene.window().contentItem()};
+    item.setParentItem(&place);
+    QQuickItem const* const count = QtHarness::widget("placed.count").item();
+    REQUIRE(count != nullptr);
+    CHECK(place.isAncestorOf(count));
+    CHECK((*mounted)->title().get() == "Placed");
+    h.scene.click(*QtHarness::widget("placed.more").item());
+    h.scene.settle();
+    CHECK(count->property("text").toString() == QStringLiteral("1"));
+    item.setParentItem(original);
 }

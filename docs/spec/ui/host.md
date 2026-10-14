@@ -51,7 +51,11 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 
 - **`mount`** looks the document up and mounts it. An unknown id is `MountError{…, "unknown screen"}`; the
   interpreter's refusal (a missing or mistyped param, a document without a view) is `MountError` with its path and
-  reason. `rootOf(handle)` gives the mounted root widget, which the host places in its layout.
+  reason. `rootOf(handle)` gives the mounted root widget, which the host places in its layout; on Qt Quick,
+  `qt_quick::Backend::itemOf(*rootOf(handle))` is the screen's root `QQuickItem`.
+- **`mountInto(screenId, params, parent)`** mounts as `mount` does, with the screen's root widget appended to the
+  host's own container instead of made a backend root: a tab's page, a pane. The container outlives the handle. A
+  refused mount leaves the container as it was.
 - **`identityOf`** evaluates the document's `identity` over the params alone, without mounting, and answers its
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,
   the session), and one whose identity is `null` answer `std::nullopt`: their identity is known only once mounted,

@@ -138,6 +138,9 @@ public:
 }
 ```
 
+- On Qt Quick, `DocumentScreenHost` over a `qt_quick::Backend` is the renderer as a `ScreenHost`: a mounted
+  screen's root item is `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which the host reparents into its
+  own layout, and `mountInto` mounts a screen into a container the host made with the backend.
 - `qt_quick::Renderer` (spec 3 §1) implements `ScreenHost` over a connected source and exposes each
   mounted screen's root `QQuickItem` beside its handle. The host places the item wherever its shell
   wants it. `onNavigate` is called by the renderer and implemented by the host.

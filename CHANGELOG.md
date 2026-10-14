@@ -11,6 +11,10 @@ API surface).
 
 ### Changed
 
+- **`DocumentScreenHost::mountInto(screenId, params, parent)`** mounts a screen with its root widget appended to the
+  host's own container, such as a tab's page, instead of as a backend root. On Qt Quick a host places a screen
+  through `Backend::itemOf(*DocumentScreenHost::rootOf(handle))`, which a test now drives end to end.
+
 - **A document's `custom` node shows its component when the backend can load it.** `ui::Custom` carries the props
   its component declares (`CustomProp`, a `Prop` of text, `bool` or `double`), the host component's `minVersion` and
   an `onEvent` handler. `IViewBackend::createCustom` is a non-pure factory that returns null for "not loaded", so
