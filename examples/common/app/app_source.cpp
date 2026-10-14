@@ -156,35 +156,46 @@ std::vector<std::string> ClientSource::screens() const {
     return ids;
 }
 
-void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
-    _schemas.clear();
+std::vector<std::string> ClientSource::modelTypes() const {
     std::vector<std::string> types;
-    if (_loaded->catalog.models) {
+    if (_loaded && _loaded->catalog.models) {
         for (auto const& [type, info] : *_loaded->catalog.models) {
             static_cast<void>(info);
             types.push_back(type);
         }
     }
+    return types;
+}
+
+void ClientSource::recordSchemas(std::string const& document) {
+    auto parsed = ui::parseJson(document);
+    if (!parsed) {
+        return;
+    }
+    if (auto const* const actions = std::get_if<ui::Json::object_t>(&parsed->data)) {
+        for (auto const& [action, schema] : *actions) {
+            _schemas.insert_or_assign(action, glz::write_json(schema).value_or(std::string{}));
+        }
+    }
+}
+
+void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
+    _schemas.clear();
+    std::vector<std::string> const types = modelTypes();
     if (types.empty()) {
         done();
         return;
     }
     // A type whose schemas do not arrive leaves its actions without one: their forms report it when they mount.
-    auto pending = std::make_shared<std::size_t>(types.size());
-    auto finished = std::make_shared<std::function<void()>>(std::move(done));
+    auto const pending = std::make_shared<std::size_t>(types.size());
+    auto const finished = std::make_shared<std::function<void()>>(std::move(done));
     for (std::string const& type : types) {
-        fetchSchemas(type, [this, alive, pending, finished](std::expected<std::string, std::string> document) {
+        fetchSchemas(type, [this, alive, pending, finished](std::expected<std::string, std::string> const& document) {
             if (!*alive) {
                 return;
             }
             if (document) {
-                if (auto parsed = ui::parseJson(*document)) {
-                    if (auto const* const actions = std::get_if<ui::Json::object_t>(&parsed->data)) {
-                        for (auto const& [action, schema] : *actions) {
-                            _schemas.insert_or_assign(action, glz::write_json(schema).value_or(std::string{}));
-                        }
-                    }
-                }
+                recordSchemas(*document);
             }
             if (--*pending == 0) {
                 (*finished)();
@@ -233,7 +244,7 @@ void ClientSource::open(ui::AppContext& context,
                 return;
             }
             _loaded = std::move(*opened);
-            loadSchemas(alive, [this, alive, ready = std::move(ready)]() {
+            loadSchemas(alive, [this, alive, ready = std::move(ready)] {
                 if (*alive) {
                     ready(_loaded->bundle);
                 }

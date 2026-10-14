@@ -145,6 +145,10 @@ private:
     ui::Exchange _exchange;
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
+    // The model types the loaded catalog names.
+    [[nodiscard]] std::vector<std::string> modelTypes() const;
+    // Records each action's schema of one `{actionType: schema}` document; a document that does not parse adds none.
+    void recordSchemas(std::string const& document);
     // The schema of each action, by action id, fetched for every model type the catalog names.
     std::map<std::string, std::string, std::less<>> _schemas;
     std::optional<ui::LoadedBundle> _loaded;
