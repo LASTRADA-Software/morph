@@ -58,6 +58,19 @@ worked example), §7 (the workspace shell); spec 5 §7 (live recalculation). In-
 
 - Retire `examples/lims/gui/` and `examples/lims/gui_lib/`, and their CMake and CI references.
 
+What building slice (a) found:
+
+- **The generic client had no schemas.** Its catalog's `schema` lookup was empty, so no `form`, `collection` or
+  `wizard` node could mount through it. A source now fetches every catalog model's `{actionType: schema}` document
+  before it reports the bundle: over its exchange in remote mode, from the in-process registry in local mode.
+- **A deferred call's arguments are read when it runs.** `morph_add_rung` defines the screen tests and the render
+  smoke at the end of the top level, once `morph::examples_common` exists, and bakes the rung's name and directory in
+  with `cmake_language(EVAL)`.
+- **Left for a later slice:**
+  - a lims server for remote mode: lims has none, so its screens run in local mode only;
+  - live recalculation through `evaluate`: `CaptureConcentration` declares no computed fields yet;
+  - the presenters' `busy()`: replaced by each mutation's concurrency, `serial` for the transitions.
+
 ## Slice (b): `lims.sample` (spec 4 §5, spec 6 §11)
 
 As spec 4 §5 lists it:
