@@ -39,6 +39,18 @@ invariant, multi-currency, budget math, and rule cascades.
   (<https://www.kimai.org/documentation/rounding.html>) as explicit action
   parameters.
 
+
+## Server-defined screen
+
+[`screens/ledger_screens.cpp`](screens/ledger_screens.cpp) declares `ledger.main` as a UI document (spec 4):
+- sign-in, a ledger and its accounts;
+- the monthly statement job. Requesting it submits the job, which the server's report runner runs. The screen polls
+  the job's status with `refreshEvery`, which skips a tick while a poll is in flight, and stops once the job is done
+  or failed. The last status is kept in a state, since a query's value goes when its gate closes. Each outcome has
+  a screen test, which runs the job as the runner does.
+
+In process, `screens::prepareLocal()` installs a development token issuer. `morph_examples_client --app ledger` runs
+it (`--db`, default `ledger.db`). Local mode has no report runner, so a requested statement stays pending there.
 ## What to implement
 
 Models: `LedgerModel` (accounts + transactions, keyed by ledger/book id),

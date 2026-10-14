@@ -14,6 +14,12 @@
 #include "bank/db/database.hpp"
 #endif
 
+#if MORPH_CLIENT_HAS_LEDGER
+#include <ledger_screens.hpp>
+
+#include "ledger/db/database.hpp"
+#endif
+
 #if MORPH_CLIENT_HAS_KANBAN
 #include <kanban_screens.hpp>
 
@@ -56,6 +62,14 @@ std::vector<LocalApp> localApps() {
                                 std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
                                 bank::db::setup("DRIVER=SQLite3;Database=" + file);
                             }});
+#endif
+#if MORPH_CLIENT_HAS_LEDGER
+    apps.push_back(
+        LocalApp{.name = "ledger", .bundle = &ledger::screens::bundle, .setUp = [](LocalSetup const& setup) {
+                     std::string const file = setup.db.empty() ? std::string{"ledger.db"} : setup.db;
+                     ledger::db::setup("DRIVER=SQLite3;Database=" + file);
+                     ledger::screens::prepareLocal();
+                 }});
 #endif
 #if MORPH_CLIENT_HAS_KANBAN
     apps.push_back(
