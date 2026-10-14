@@ -2,25 +2,18 @@
 //
 // The compiled half of the x-rules agreement check.
 //
-// `x-rules` is evaluated twice — here by `morph::forms::allRulesSatisfied`, and
-// again in JavaScript by `src/qt/forms/qml/DynamicForm.qml` — and nothing pinned
-// the two to each other. Two divergences were reachable through rule/literal
-// combinations the spec explicitly sanctions:
+// `x-rules` is evaluated on the server by `morph::forms::allRulesSatisfied` and
+// on the client by the forms engine. Two rule/literal combinations the spec
+// sanctions are where a client-side evaluator most easily disagrees:
 //
-//   (a) `equals` against a `bool` literal — the renderer compared the field as
-//       text, so `"true" === true` was false and the rule never fired on the
-//       client while firing here. The client submitted a body the server
-//       rejects.
-//   (b) `equals` against an `int64` literal beyond 2^53 — the renderer's
-//       JSON.parse rounded the literal, collapsing values this evaluator keeps
-//       distinct. The client blocked a submission the server would accept.
+//   (a) `equals` against a `bool` literal — comparing the field as text makes
+//       `"true" == true` false, so the rule never fires on the client while
+//       firing here, and the client submits a body the server rejects.
+//   (b) `equals` against an `int64` literal beyond 2^53 — parsing the literal
+//       as a double collapses values this evaluator keeps distinct, so the
+//       client blocks a submission the server would accept.
 //
-// This file pins the compiled verdicts for one action and four field states;
-// src/qt/forms/tests/tst_DynamicFormRuleAgreement.qml drives the *verbatim*
-// schemaJson output of this same action through the renderer and asserts the
-// matching verdict. Neither file is meaningful alone — the point is that the
-// two agree, so they are written against the same action and the same states
-// deliberately.
+// This file pins the compiled verdicts for one action and four field states.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>

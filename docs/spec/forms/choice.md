@@ -165,8 +165,8 @@ Its schema writer does `auto& def = defs[name_v<T>]; if (!def.type) { … }`, so
 if two instantiations shared the single name `"Choice"`, the second one would be
 skipped and `$ref` the *first* one's definition. An action holding a `bool`
 picklist and an `int64_t` picklist would describe the int64 field as a boolean —
-and `DynamicForm.qml` resolves the `$ref`, reads `type`, and draws a checkbox
-for `"boolean"`. A generic validating client is misled the same way, since the
+and a renderer resolving the `$ref` reads `type` and draws a checkbox for
+`"boolean"`. A generic validating client is misled the same way, since the
 document ships `additionalProperties: false` and a standard `required` array,
 i.e. it is presented as validatable.
 
@@ -298,14 +298,12 @@ system cannot check, because the strings are opaque NTTPs:
 
 ### Option ids larger than 2^53
 
-An option id is carried exactly, whatever its magnitude. The renderer parses an
-`OptionsAction` reply with `JsonExact.parse` (`src/qt/forms/qml/JsonExact.js`),
-which keeps an integer literal a double cannot represent as its exact digits,
-and emits those digits verbatim into the submitted body.
+An option id is carried exactly, whatever its magnitude. The forms engine parses
+an `OptionsAction` reply keeping every digit of an integer literal a double
+cannot represent, and emits those digits verbatim into the submitted body.
 
 This is a guarantee, not an implementation note, because the alternative is
-silent: JavaScript numbers are IEEE-754 doubles, so a plain `JSON.parse` rounds
-an id above 2^53 on the way in, and re-serialising the rounded number submits a
+silent: a parser that reads numbers as IEEE-754 doubles rounds an id above 2^53 on the way in, and re-serialising the rounded number submits a
 *different* id than the app sent. Doubles round to even in that range, so a
 dense id sequence collapses pairwise — two option rows reduce to the same
 `valueJson`, the combo box shows two entries the UI cannot tell apart, and the

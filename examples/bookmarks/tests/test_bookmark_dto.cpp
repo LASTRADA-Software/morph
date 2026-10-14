@@ -45,7 +45,7 @@ TEST_CASE("CreateBookmark's optionalFields excludes everything but url", "[bookm
 TEST_CASE("The generated create/edit schemas do not mark title required", "[bookmarks][dto]") {
     // The other half of the guard above: `optionalFields` is only meaningful
     // through `morph::forms::schemaJson<A>()`'s derived `required` array,
-    // which is what `DynamicForm` actually reads. Checking the list without
+    // which is what a form actually reads. Checking the list without
     // checking the schema would not have caught the original bug either.
     for (const auto& schema : {::morph::forms::schemaJson<bookmarks::CreateBookmark>(),
                                ::morph::forms::schemaJson<bookmarks::EditBookmark>()}) {

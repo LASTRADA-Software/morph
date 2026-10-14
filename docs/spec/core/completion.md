@@ -417,13 +417,10 @@ same thread the Qt event loop and every `QtExecutor`-posted completion
 callback already run on.
 This is not a degradation switch: deadlines still fire, with the same
 first-result-wins race and the same `ClientTimeoutError`. It exists because a
-`wasm_singlethread` Qt build (what `.github/workflows/wasm-ladder.yml` installs
-and what `cmake/morph_add_rung.cmake` builds against, with no `-pthread`) links
-Emscripten's non-pthread `pthread_create` stub, so constructing a `std::thread`
-throws `std::system_error` at runtime — which would have made
-`setExecuteDeadline` unusable from a browser tab, and with it
-`examples/common/gui/event_poller.hpp`, whose constructor calls it
-unconditionally. One behavioural difference: callbacks are never concurrent
+`wasm_singlethread` Qt build (what `.github/workflows/wasm-demo.yml` installs,
+with no `-pthread`) links Emscripten's non-pthread `pthread_create` stub, so
+constructing a `std::thread` throws `std::system_error` at runtime — which
+would make `setExecuteDeadline` unusable from a browser tab. One behavioural difference: callbacks are never concurrent
 with the caller there, so `cancel()` really does mean "no callback runs after
 this returns" — its post runs at the start of the next pump, before any timer
 callback of that pump — whereas the threaded build's `cancel()` returns while
@@ -433,8 +430,8 @@ callback. A
 caller that must work in both builds gets the weaker of the two: every
 scheduled callback has to stay safe to run after its own `cancel()`, which the
 deadline callback here does by settling a write-once `CompletionState` it
-holds a `shared_ptr` to. The `wasm-ladder` and `wasm-demo` workflows compile
-and link this build; no test in this repository runs it.
+holds a `shared_ptr` to. The `wasm-demo` workflow compiles and links this
+build; no test in this repository runs it.
 
 **Mechanics.** Every `executeVia()` call made while a non-zero deadline is
 installed arms a timer on a `Bridge`-owned

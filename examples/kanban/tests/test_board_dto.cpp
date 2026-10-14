@@ -79,7 +79,7 @@ TEST_CASE("kanban::BoardEventId: fromRowId wraps an ordinary row id unchanged", 
 //
 // `optionalFields`, `explicitSubmit` and `fieldMetadata` are only meaningful
 // through `morph::forms::schemaJson<A>()`'s output, which is what
-// `DynamicForm` actually reads (bookmarks' test_bookmark_dto.cpp makes the
+// a form actually reads (bookmarks' test_bookmark_dto.cpp makes the
 // same distinction for the same reason). Checking the C++ declarations without
 // checking the emitted schema would prove nothing about the screen.
 
@@ -101,7 +101,7 @@ TEST_CASE("Every board form's schema opts out of auto-submit", "[kanban][dto][fo
 TEST_CASE("CreateColumn's schema leaves wipLimit out of required", "[kanban][dto][forms][issue344]") {
     // `wipLimit = 0` means unlimited and is the aggregate default, so the form
     // must not gate its Submit button on a number the user has no reason to
-    // type. Left blank, DynamicForm omits the key and the default applies.
+    // type. Left blank, the form omits the key and the default applies.
     const auto schema = ::morph::forms::schemaJson<kanban::CreateColumn>();
     CAPTURE(schema);
     glz::generic_u64 dom{};

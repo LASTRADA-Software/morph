@@ -226,9 +226,7 @@ public:
     /// and their results arrive in whatever order the backend answers them —
     /// the last reply to land wins, which need not be the last call made. An
     /// earlier handler-side draft did collapse patches arriving during a
-    /// flight; nothing does now, here or on the standalone-form path (the
-    /// shipped renderer's `DynamicForm` calls `submitIfValid` on every change
-    /// that leaves the form ready, with no in-flight suppression either). A
+    /// flight; nothing does now, here or on the standalone-form path. A
     /// caller that wants one request per pause throttles or debounces on its
     /// own side.
     ///

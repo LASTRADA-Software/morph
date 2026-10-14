@@ -4,9 +4,6 @@
 // left blank. `BlankAs::Empty` emits `"x-blankAs": "empty"` so an edit form
 // can clear a stored `std::optional<std::string>` (submit `""`) instead of
 // omitting the member, which the model reads as "leave it unchanged".
-//
-// src/qt/forms/tests/tst_DynamicFormBlankAs.qml pins the renderer half
-// against the same key.
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>

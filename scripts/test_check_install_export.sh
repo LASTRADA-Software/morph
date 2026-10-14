@@ -249,7 +249,7 @@ expect_caught "find_dependency(glaze) dropped from the package config" \
 # installed there is no morph::<component> in morphTargets.cmake to inspect,
 # so that check would compare nothing and pass on any regression.
 expect_caught "no optional component installed, leaving the export-name check with nothing to read" \
-    "edit CMakeLists.txt -e 's@foreach(_morph_component IN ITEMS offline_sqlite qt_forms qt net)@foreach(_morph_component IN ITEMS \"\")@'" \
+    "edit CMakeLists.txt -e 's@foreach(_morph_component IN ITEMS offline_sqlite qt net)@foreach(_morph_component IN ITEMS \"\")@'" \
     fast \
     "no optional component was installed"
 

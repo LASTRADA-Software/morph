@@ -236,8 +236,8 @@ make a member field wrong to set.
 
 ## Limitations
 
-- No renderer ships for `s-*` yet. `WizardView.qml` has no section-group
-  counterpart in `src/qt/forms`; a host consuming the document builds its own
+- No renderer ships for `s-*` yet: the forms engine has no section-group
+  counterpart to `wizardView`, so a host consuming the document builds its own
   layout for now.
 - `resolved()` returns JSON-encoded strings, not typed values — the same shape
   `FlowSession::resolved` has, and the same caller-side decode.

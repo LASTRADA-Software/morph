@@ -76,18 +76,6 @@ endif()
 if("qt" IN_LIST morph_KNOWN_COMPONENTS)
     find_dependency(Qt6 COMPONENTS WebSockets)
 endif()
-if("qt_forms" IN_LIST morph_KNOWN_COMPONENTS)
-    find_dependency(Qt6 6.5 COMPONENTS Core)
-endif()
-# The MorphForms QML module: morph::forms_qml (backing library) and
-# morph::forms_qmlplugin, which is what an application links. The import
-# directory holding its qmldir/qmltypes is exported for tooling, e.g.
-# list(APPEND QML_IMPORT_PATH "${morph_QML_IMPORT_PATH}").
-if("forms_qml" IN_LIST morph_KNOWN_COMPONENTS)
-    find_dependency(Qt6 6.5 COMPONENTS Core Gui Qml Quick)
-    set_and_check(morph_QML_IMPORT_PATH "@PACKAGE_MORPH_INSTALL_QMLDIR@")
-endif()
-
 # morph::qt_quick links Qt Quick and its Controls, and morph::qt for QtExecutor.
 if("qt_quick" IN_LIST morph_KNOWN_COMPONENTS)
     find_dependency(Qt6 6.5 COMPONENTS Core Gui Qml Quick QuickControls2)

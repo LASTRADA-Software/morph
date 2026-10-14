@@ -37,19 +37,10 @@ class DataMapper;
 
 namespace ledger::db {
 /// @brief Forward-declared rather than included: `ledger_entity.hpp` pulls in
-///        `<Lightweight/DataMapper/DataMapper.hpp>`, and this header is
-///        reachable from `ledger_presenter.hpp`, a `Q_OBJECT` header moc must
-///        parse. moc mis-parses Lightweight's namespace structure and then
-///        believes every later namespace is nested inside `Lightweight`,
-///        emitting `Lightweight::ledger::gui::LedgerPresenter` and failing to
-///        compile.
-///
-///        Only a reference to `std::vector<AccountRecord>` appears below, so
-///        a declaration suffices; `ledger_model.cpp` includes the real header
-///        for the definitions. This also matches rung 4's shape --
-///        `kanban/models/board_model.hpp` includes only core and dto headers
-///        and never its own entity header, which is precisely why no kanban
-///        presenter ever hit this.
+///        `<Lightweight/DataMapper/DataMapper.hpp>`, which a client that only
+///        names the model's actions has no use for. Only a reference to
+///        `std::vector<AccountRecord>` appears below, so a declaration
+///        suffices; `ledger_model.cpp` includes the real header.
 struct AccountRecord;
 }  // namespace ledger::db
 

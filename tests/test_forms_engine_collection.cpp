@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Collections, headless: the claims of src/qt/forms/tests/tst_collectionview.qml, the collection half of
-// tst_LargeIdPrecision.qml and the confirm gate of tst_ViewChrome.qml, re-expressed on CollectionSession. What
-// those files assert about a drawn view (cells in a table, a visible dialog, chrome slots) waits for the view.
+// Collections, headless: CollectionSession's rows, selection, large-id precision and confirm gate. What a drawn
+// view shows (cells in a table, a visible dialog, chrome slots) is test_forms_engine_collection_view.cpp's.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -30,7 +29,7 @@ using morph::forms::CollectionSession;
 using morph::test::formsengine::Call;
 using morph::test::formsengine::Harness;
 
-// The view and schemas of tst_collectionview.qml.
+// The fixture view and its schemas.
 constexpr std::string_view kView = R"({
   "v-kind": "collection", "v-title": "Rows", "v-query": "ListRows", "v-rowKey": "id",
   "v-columns": [

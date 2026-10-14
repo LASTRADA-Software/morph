@@ -55,9 +55,8 @@ enum class ReportStatus : std::uint8_t { Pending, Done, Failed };
 ///        called unconditionally by `BRIDGE_REGISTER_ACTION`
 ///        (`morph::model::detail::buildActionDescription`), independent of
 ///        whether a rung renders any form -- fails to compile: glaze emits a
-///        six-way wildcard type for a metaless enum, and the shipped Qt/QML
-///        `DynamicForm` draws that as a checkbox reporting the form `ready`
-///        for a value nobody chose. Same shape as
+///        six-way wildcard type for a metaless enum, which no renderer can
+///        draw as a choice. Same shape as
 ///        `kanban::Role`/`kanban::RuleMutationType`
 ///        (examples/kanban/include/kanban/core/types.hpp), the rungs that
 ///        established this convention.

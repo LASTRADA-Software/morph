@@ -8,7 +8,7 @@
 # a path relative to the generated file, and since the generated file lives
 # deep inside the build tree that path is a long run of "..":
 #
-#     #include "../../../../../../examples/ledger/gui_lib/budget_presenter.hpp"
+#     #include "../../../../../../examples/<rung>/<dir>/<class>.hpp"
 #
 # A quoted include is resolved against the including file's own directory *and*
 # against every -I entry, so the compiler attempts that same climb from each of
@@ -23,9 +23,8 @@
 # and the project's -Werror turns every AUTOMOC target into a build failure.
 # That is not hypothetical: a git worktree under .claude/worktrees/<name>/
 # (where the agent harness puts them) sits exactly six levels inside the
-# checkout it was made from, which is exactly the climb, so every
-# ladder_<rung>_gui_lib -- and every ladder_<rung>_tests that links one --
-# stopped building at all.
+# checkout it was made from, which is exactly the climb, so every AUTOMOC
+# target stops building at all.
 #
 # cmake/compiler_options.cmake sets CMAKE_AUTOMOC_PATH_PREFIX so moc emits the
 # header path relative to the include directory it was found under

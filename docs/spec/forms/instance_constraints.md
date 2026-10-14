@@ -77,10 +77,10 @@ Added to the renderer contract in [forms.md](forms.md#renderer-contract-the-sche
 Emitted only when at least one declared field actually exists on the schema; a
 schema with no decorations carries no `x-instanceConstraints` key.
 
-### What the shipped renderer does with them
+### What the forms engine does with them
 
-A key nothing reads is the two-key workaround wearing one name, so
-`DynamicForm.qml` honours all three:
+A key nothing reads is the two-key workaround wearing one name, so the forms
+engine honours all three:
 
 | Key | Effect in the renderer |
 |---|---|

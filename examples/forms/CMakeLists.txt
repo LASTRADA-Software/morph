@@ -2,8 +2,7 @@
 #
 # Schema-driven forms demo: generates JSON Schemas from action structs,
 # emits a self-contained HTML form renderer, and executes pasted action
-# lines through the type-erased dispatcher. See also gui_qml/ for the Qt
-# Quick renderer of the same schemas.
+# lines through the type-erased dispatcher.
 
 add_executable(morph_forms_demo main.cpp)
 target_link_libraries(morph_forms_demo PRIVATE morph::morph)
@@ -15,10 +14,6 @@ if(DEFINED AF_SANITIZER)
 endif()
 if(AF_COVERAGE)
     apply_coverage(morph_forms_demo)
-endif()
-
-if(MORPH_BUILD_FORMS_QML)
-    add_subdirectory(gui_qml)
 endif()
 
 # Demo-level tests: they drive the *shipped* artifacts (the emitted page's JS

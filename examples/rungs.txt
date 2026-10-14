@@ -19,19 +19,13 @@
 #   examples/CMakeLists.txt          which rungs add_subdirectory() considers
 #   scripts/ladder_rungs.sh          the reader; builds ci.yml's path regex
 #   .github/workflows/ci.yml         ladder-tests / ladder-sanitizers filters
-#   .github/workflows/wasm-ladder.yml  its named-target build loop
 #   scripts/coverage.sh              which rung test binaries are profiled
 #
-# Consumers that CANNOT read it. A drift-guard job checked them against it
-# until the meta-gates were removed; keep them in step by hand:
-#   .github/workflows/wasm-ladder.yml  on.push.paths / on.pull_request.paths
-#                                      (GitHub evaluates these before any
-#                                      step runs, so they must be literal)
+# Consumers that CANNOT read it; keep them in step by hand:
 #   codecov.yml                        per-rung components
 #
 # Adding a rung: add its name here, and nothing else needs a hand edit except
-# the two literal lists above -- which the guard will name explicitly if you
-# forget. Omitting a rung here while examples/<rung>/CMakeLists.txt calls
+# codecov.yml's components. Omitting a rung here while examples/<rung>/CMakeLists.txt calls
 # morph_add_rung() is a hard configure error, by design: this list is the one
 # whose staleness must fail loudly, because everything else derives from it.
 #
@@ -46,7 +40,7 @@
 # this file. What needs this file is morph_add_rung(), which bank does not
 # call, so the hard error above never fires for it. Adding the name here would
 # not describe bank; it would enrol bank in every consumer above -- ci.yml's
-# ladder-tests and ladder-sanitizers, wasm-ladder.yml's build loop,
+# ladder-tests and ladder-sanitizers,
 # coverage.sh and codecov.yml's per-rung components -- which is a scope
 # decision rather than a naming one.
 

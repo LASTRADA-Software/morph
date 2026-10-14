@@ -115,7 +115,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=MinSizeRel \
             -DQT_HOST_PATH="$HOST" \
             -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_BUILD_BANK_GUI=ON -DMORPH_BUILD_TESTS=OFF \
+            -DMORPH_BUILD_TESTS=OFF \
             -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON
 
       - name: Build

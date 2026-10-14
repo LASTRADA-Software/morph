@@ -1223,7 +1223,7 @@ template <auto U, std::uint32_t Dec>
 ///
 /// Exists because Emscripten's bundled libc++ (older than the Linux/Windows
 /// standard library this project otherwise builds against — see
-/// `.github/workflows/wasm-ladder.yml`'s `EMSDK_VERSION`) has a known
+/// `.github/workflows/wasm-demo.yml`'s `EMSDK_VERSION`) has a known
 /// limitation recognising `std::formatter` partial specializations
 /// parameterized over an `auto` non-type template parameter (`U` here) for
 /// `std::format`'s compile-time formattability check — `std::format("{}",

@@ -1,114 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Shared ladder infrastructure: the presenter architecture (gui/) and the
-# testkit (testkit/). See examples/TESTING.md.
+# Shared ladder infrastructure: the testkit (testkit/). See examples/TESTING.md.
 
-# MORPH_BUILD_QT is required in *every* configure, Emscripten included:
-# morph_ladder_app below is AppContext, whose Remote mode is a
-# QtWebSocketBackend, and a WASM client is remote-only by rule
-# (examples/IMPLEMENTATION.md rule 4's WASM clause). Native configures
-# additionally need it for the testkit's BackendRig Socket mode and the
-# fault-injection proxy.
-if(NOT MORPH_BUILD_QT)
-    message(FATAL_ERROR
-        "MORPH_BUILD_LADDER requires MORPH_BUILD_QT=ON: AppContext's Remote mode, "
-        "the testkit's BackendRig Socket mode and the fault-injection proxy all "
-        "need morph::qt (Qt6::WebSockets).")
-endif()
-
-# Qt6::WebSockets is required under Emscripten too — morph::qt's own INTERFACE
-# links it, so every consumer below (and the WASM spike) needs it present. An
-# earlier revision of this file assumed the opposite ("not part of the standard
-# Qt-for-WebAssembly module set") and returned before this call; that was never
-# tested against a real Emscripten toolchain, and it only deferred the same
-# failure to the link. Qt does ship QtWebSockets for wasm; a wasm Qt kit
-# installed without that module now fails here, at configure time, with Qt's
-# own clear message instead of an undefined-symbol wall.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core WebSockets)
-qt_standard_project_setup(REQUIRES 6.5)
-
-# ── morph_ladder_gui: presenters, Qt6::Core only, no Catch2 ─────────────────
-# Deliberately does NOT link morph::qt/morph_qt_impl (and so not
-# Qt6::WebSockets): examples/TESTING.md's "Presenter architecture" rule 1
-# requires presenters to instantiate under a plain QCoreApplication. The one
-# piece of shared gui/ code that genuinely needs the WebSocket backend —
-# AppContext, for its Remote mode — lives in morph_ladder_app below instead.
-#
-# apply_coverage() (every ladder target below, when AF_COVERAGE is ON —
-# see IMPLEMENTATION.md rule 5): AUTOMOC's generated mocs_compilation.cpp
-# lives under the build tree, so scripts/coverage.sh's source-path filter
-# (which only ever names source-tree paths, e.g. examples/common) already
-# excludes moc output from the completeness bar — nothing extra needed here.
-add_library(morph_ladder_gui STATIC
-    gui/presenter.cpp
-    gui/error_text.cpp
-    gui/event_poller.cpp
-    # Header-only (templated on the rung's own id type, so there is nothing to
-    # instantiate here), listed so it is visible as part of this target's
-    # surface rather than only as an #include from ten rung files.
-    gui/id_qml.hpp
-)
-add_library(morph::ladder_gui ALIAS morph_ladder_gui)
-target_include_directories(morph_ladder_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(morph_ladder_gui PUBLIC morph::morph Qt6::Core)
-target_compile_features(morph_ladder_gui PUBLIC cxx_std_23)
-set_target_properties(morph_ladder_gui PROPERTIES AUTOMOC ON)
-apply_warnings(morph_ladder_gui)
-if(AF_COVERAGE)
-    apply_coverage(morph_ladder_gui)
-endif()
-# AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage() is
-# above, and for the same reason -- without it, a --preset clang-tsan build
-# of the ladder compiles this target with no sanitizer instrumentation at
-# all, so any race in code it contributes would never be caught even though
-# the preset name suggests otherwise. See .github/workflows/ci.yml's
-# kanban-tsan job, the first CI leg to actually build ladder code under a
-# sanitizer preset.
-if(DEFINED AF_SANITIZER)
-    apply_sanitizers(morph_ladder_gui ${AF_SANITIZER})
-endif()
-
-# ── morph_ladder_app: AppContext — the deployment-mode-choosing layer ───────
-# Split out of morph_ladder_gui so that target can stay Qt6::Core-only (see
-# its comment above). A rung's gui_lib links morph::ladder_gui; the shells
-# that actually pick a backend (gui/, gui_wasm/, tests/) also link this.
-add_library(morph_ladder_app STATIC
-    gui/app_context.cpp
-)
-add_library(morph::ladder_app ALIAS morph_ladder_app)
-target_include_directories(morph_ladder_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(morph_ladder_app PUBLIC morph::morph morph::qt morph_qt_impl Qt6::Core)
-target_compile_features(morph_ladder_app PUBLIC cxx_std_23)
-# No Q_OBJECT here today (AppContext is a plain class); AUTOMOC is set to match
-# the other ladder targets' convention so adding one later needs no CMake edit.
-set_target_properties(morph_ladder_app PROPERTIES AUTOMOC ON)
-apply_warnings(morph_ladder_app)
-if(AF_COVERAGE)
-    apply_coverage(morph_ladder_app)
-endif()
-# See morph_ladder_gui's identical AF_SANITIZER block above.
-if(DEFINED AF_SANITIZER)
-    apply_sanitizers(morph_ladder_app ${AF_SANITIZER})
-endif()
-
-# ── WebAssembly build ────────────────────────────────────────────────────────
-# Everything above this line builds under Emscripten and is exactly what a WASM
-# client needs: the presenter base (morph_ladder_gui) and the deployment-mode
-# layer (morph_ladder_app, i.e. AppContext in its Remote shape). Everything
-# below does not and never will — morph_ladder_testkit and ladder_common_tests
-# need Catch2 (MORPH_BUILD_TESTS is never part of a WASM configure, mirroring
-# examples/bank/CMakeLists.txt's own EMSCRIPTEN early return) and the
-# Lightweight ORM speaks ODBC, which does not exist in a browser
-# (examples/IMPLEMENTATION.md rule 4's WASM clause).
-#
-# Rung 0 returned *before* the two targets above as well, which left every
-# rung's gui_wasm target with no morph::ladder_gui/morph::ladder_app to link —
-# flagged as a known gap when morph_add_rung() shipped (task 8) and closed
-# here, when rung 1's WASM client became the first real consumer.
+# A rung builds nothing in a browser: its models need the SQLite ORM, and its
+# screens reach a browser through the generic client, which examples/client
+# builds. So under Emscripten there is nothing here to build.
 if(EMSCRIPTEN)
-    add_subdirectory(wasm_spike)
     return()
 endif()
+
+# The testkit's BackendRig Socket mode and the fault-injection proxy need
+# morph::qt (Qt6::WebSockets).
+if(NOT MORPH_BUILD_QT)
+    message(FATAL_ERROR
+        "MORPH_BUILD_LADDER requires MORPH_BUILD_QT=ON: the testkit's BackendRig Socket mode and the "
+        "fault-injection proxy need morph::qt (Qt6::WebSockets).")
+endif()
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core WebSockets)
+qt_standard_project_setup(REQUIRES 6.5)
 
 if(NOT MORPH_BUILD_TESTS)
     message(FATAL_ERROR
@@ -124,7 +34,7 @@ set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 # Lightweight defaults to a shared library on Windows (LIGHTWEIGHT_BUILD_SHARED_DEFAULT
 # in its own CMakeLists.txt), which means its classes need dll-interface annotations
 # they don't have -- any target that both links Lightweight and calls apply_warnings()
-# (ladder_common_tests, every rung's gui_lib, transitively through ladder_<rung>_lib)
+# (ladder_common_tests, transitively through ladder_<rung>_lib)
 # fails under /WX on Lightweight's own C4251/C4275. Forcing a static build sidesteps
 # the DLL export boundary (and its warnings) entirely instead of punching warning
 # holes through every consumer target.
@@ -175,30 +85,26 @@ endif()
 # strand_interleaver.hpp (DeterministicExecutor), step_executor.hpp
 # (StepExecutor), db_fixture.hpp and
 # db_fault_fixture.hpp are fully header-defined and have no .cpp: none is a
-# QObject, none needs MOC, and the library already links non-empty TUs
-# (fault_proxy.cpp, qml_surface.cpp), so content-free placeholder TUs would be
-# dead weight. qml_surface.cpp is a .cpp for the opposite reason: it is a
-# regex/QMetaObject walker with no reason to be inlined into every rung's test
-# TU, and it deliberately stays out of apply_warnings()' reach by living in
-# this target (see the note below on Lightweight).
+# QObject, none needs MOC, and the library already links a non-empty TU
+# (fault_proxy.cpp), so content-free placeholder TUs would be dead weight.
 #
-# Those two TUs live in testkit_src/ rather than beside their headers in
+# That TU lives in testkit_src/ rather than beside their headers in
 # testkit/, and the reason is clang-tidy's configuration resolution: it reads
 # the configuration from the path of the translation unit it is analysing, and
 # testkit/.clang-tidy subtracts bugprone-chained-comparison on the argument
 # that the finding is Catch2's REQUIRE expansion rather than a defect. That
 # argument is true of the twenty-one Catch2 sources in that directory and says
-# nothing about a library TU with no REQUIRE in it. Placed in testkit/ these two
+# nothing about a library TU with no REQUIRE in it. Placed in testkit/ it
 # would inherit the suppression on those terms anyway, contradicting the file's
 # own prose ("a hand-written `a < b < c` in the code under test is still
 # reported"); one directory up it cannot reach them, so the claim holds by
 # construction rather than by assertion. The headers stay in testkit/ because
 # every consumer includes them as <testkit/...>; only the TUs are separated.
 #
-# Which is why the two headers are listed as sources below, and they are not
+# Which is why the header is listed as a source below, and it is not
 # there to be compiled. AUTOMOC finds a Q_OBJECT header two ways: next to the
 # .cpp of the same basename, or listed among the target's own sources. Moving
-# the TUs out of testkit/ broke the first, fault_proxy.hpp declares a QObject,
+# the TU out of testkit/ broke the first, fault_proxy.hpp declares a QObject,
 # and nothing generated moc_fault_proxy.cpp any more -- a failure that is
 # invisible at compile time and that the static library archives happily. It
 # surfaces only at the first link that needs the vtable:
@@ -213,19 +119,15 @@ endif()
 # the same remedy, for the same reason, that cmake/morph_add_rung.cmake
 # already applies to every rung -- its _lib_headers glob exists because a
 # rung splits include/<rung>/app/app.hpp from src/app/app.cpp, and
-# pastebin::app::App is where this repository last hit it. Both headers are
-# listed rather than only the one carrying a Q_OBJECT today, so the move is
-# moc-neutral by construction instead of by which header happens to need moc.
+# pastebin::app::App is where this repository last hit it.
 add_library(morph_ladder_testkit STATIC
     testkit_src/fault_proxy.cpp
-    testkit_src/qml_surface.cpp
     testkit/fault_proxy.hpp
-    testkit/qml_surface.hpp
 )
 add_library(morph::ladder_testkit ALIAS morph_ladder_testkit)
 target_include_directories(morph_ladder_testkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(morph_ladder_testkit PUBLIC
-    morph::morph morph::qt morph_qt_impl morph::ladder_gui morph::ladder_app
+    morph::morph morph::qt morph_qt_impl
     Catch2::Catch2 morph_test_log_level Qt6::WebSockets Lightweight::Lightweight
 )
 target_compile_features(morph_ladder_testkit PUBLIC cxx_std_23)
@@ -235,7 +137,7 @@ set_target_properties(morph_ladder_testkit PROPERTIES AUTOMOC ON)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_testkit)
 endif()
-# See morph_ladder_gui's identical AF_SANITIZER block above. BackendRig and
+# AF_SANITIZER: BackendRig and
 # DbFixture live in this target, and BoardModel's strand-serialized dispatch
 # (the thing kanban-tsan's stress test actually exercises) runs through the
 # testkit's own pump/rig plumbing, so it needs instrumentation exactly as
@@ -254,10 +156,6 @@ add_executable(ladder_common_tests
     testkit/test_db_busy_fixture.cpp
     testkit/test_db_pool_drain.cpp
     testkit/test_backend_rig.cpp
-    testkit/test_presenter.cpp
-    testkit/test_error_text.cpp
-    testkit/test_id_qml.cpp
-    testkit/test_event_poller.cpp
     testkit/test_fault_proxy.cpp
     testkit/test_strand_interleaver.cpp
     testkit/test_step_executor.cpp
@@ -266,7 +164,6 @@ add_executable(ladder_common_tests
     testkit/test_offline_rig.cpp
     testkit/test_convergence.cpp
     testkit/test_client_pool.cpp
-    testkit/test_qml_surface.cpp
 )
 target_link_libraries(ladder_common_tests PRIVATE morph::ladder_testkit)
 # morph::ladder_testkit links Lightweight::Lightweight PUBLIC (above), and
@@ -274,8 +171,7 @@ target_link_libraries(ladder_common_tests PRIVATE morph::ladder_testkit)
 # SYSTEM (its CMakeLists.txt) — so without this, apply_warnings() below
 # (-Werror included) applies in full to every Lightweight header this
 # target transitively sees. Same fix, same rationale, as
-# cmake/morph_add_rung.cmake's identical block for ladder_<rung>_gui_lib/
-# ladder_<rung>_tests.
+# cmake/morph_add_rung.cmake's identical block for ladder_<rung>_tests.
 get_target_property(_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
 if(_lightweight_includes)
     target_include_directories(ladder_common_tests SYSTEM PRIVATE ${_lightweight_includes})
@@ -287,7 +183,6 @@ apply_warnings(ladder_common_tests)
 if(AF_COVERAGE)
     apply_coverage(ladder_common_tests)
 endif()
-# See morph_ladder_gui's identical AF_SANITIZER block above.
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(ladder_common_tests ${AF_SANITIZER})
 endif()

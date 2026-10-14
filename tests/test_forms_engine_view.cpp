@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// formView on RecordingBackend: the view claims of the QML renderer's QuickTests (tst_dynamicform.qml,
-// tst_DynamicFormSubmitMode.qml, tst_DynamicFormChrome.qml, tst_DynamicFormGridColumns.qml, tst_DynamicFormRules.qml,
-// tst_DynamicFormObjectSlot.qml, tst_DynamicFormObjectArraySlot.qml, tst_slot_registry.qml,
-// tst_SlotRegistryByKind.qml, tst_DynamicFormDisplayUnit.qml, tst_DynamicFormReseedSubmit.qml,
-// tst_conformance_accessibility.qml, tst_i18n.qml), re-expressed on mounted widgets.
+// formView on RecordingBackend: submit modes, chrome, grid columns, rules, object and object-array slots, slots by
+// kind, display units, reseeding, accessibility and translation, asserted on mounted widgets.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>

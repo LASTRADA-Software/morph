@@ -7,18 +7,12 @@
 //
 //   1. `schemaJson<A>()` really does emit `{"type":"boolean"}` for a `bool`
 //      member, and an `anyOf` with **no top-level "type" key** for a bare
-//      `std::optional<std::int64_t>`. Those are the exact shapes the QML
-//      renderer has to recognise, so if glaze's schema output ever changes
-//      shape, this fails here rather than silently un-fixing the renderer.
+//      `std::optional<std::int64_t>`. Those are the exact shapes a renderer
+//      has to recognise, so if glaze's schema output ever changes shape, this
+//      fails here rather than silently breaking the renderers.
 //   2. `ActionTraits<A>::fromJson` -- the same codec `bridge.hpp` and
 //      `registry.hpp` use to admit an action payload -- *accepts* the bare
-//      literals the fixed renderer now emits and *rejects* the quoted ones it
-//      used to emit. glaze does not coerce.
-//
-// The emission side is asserted in src/qt/forms/tests/
-// tst_DynamicFormBooleanAndAnyOf.qml against the same literals. The two
-// halves cannot run in one process (the renderer is QML, the codec is C++),
-// so they are deliberately written against identical payload text.
+//      literals and *rejects* quoted ones. glaze does not coerce.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>

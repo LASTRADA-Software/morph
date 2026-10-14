@@ -14,7 +14,7 @@ You need a C++23 compiler, CMake with Ninja, and the dependencies declared in
 integration, `-DMORPH_BUILD_QT=ON`). CMake presets are provided — `cmake
 --list-presets` shows the configured matrix; the README documents the full set
 of build options (`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
-`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`, `MORPH_BUILD_FORMS_QML`, …).
+`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`, …).
 
 A plain configure/build/test loop:
 

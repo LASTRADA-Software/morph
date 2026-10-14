@@ -1,12 +1,11 @@
 {
   "readme": [
-    "The per-instance constraints corpus. ONE file, THREE readers:",
+    "The per-instance constraints corpus, read by",
     "  tests/test_forms_instance_constraints.cpp -- InstanceConstraints::checkValue, and the forms engine",
-    "  src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml -- a real DynamicForm",
     "",
     "The point of the seam is that ONE declaration both serves a schema and",
     "checks a submitted value, so the two cannot drift. That is only worth",
-    "anything if the shipped renderer honours what was served -- otherwise the",
+    "anything if the forms engine honours what was served -- otherwise the",
     "instance's range is a second opinion nobody reads, which is the two-keys-",
     "for-one-concept outcome the seam exists to remove.",
     "",
@@ -17,7 +16,7 @@
     "",
     "The 'compiled' rows are the control: the same values against the",
     "undecorated schemaJson<ICCapture>(), where they are accepted. Without them",
-    "a renderer that rejected everything would pass."
+    "a check that rejected everything would pass."
   ],
   "constraints": {
     "field": "value",

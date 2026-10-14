@@ -106,7 +106,7 @@ struct Login {
     ///        (`docs/spec/forms/forms.md`, "Explicit submit mode").
     ///
     /// `Login` is side-effectful: it mints a signed bearer token. A bound
-    /// `DynamicForm` without this would mint one per typed character, since
+    /// form without this would mint one per typed character, since
     /// `username` becomes a valid principal as soon as its first character is
     /// entered.
     static constexpr bool explicitSubmit = true;

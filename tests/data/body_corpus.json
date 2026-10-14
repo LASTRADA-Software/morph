@@ -1,9 +1,7 @@
 {
   "readme": [
-    "The body corpus: what the QML renderer's DynamicForm sends, byte for byte, for typed text.",
-    "Written by src/qt/forms/tests/tst_BodyCorpus.qml (MORPH_FORMS_WRITE_BODY_CORPUS=1 regenerates",
-    "every body from a real DynamicForm); without the variable that suite requires the committed",
-    "bodies. tests/test_forms_engine_corpora.cpp requires the forms engine to send the same bytes.",
+    "The body corpus: what a form sends, byte for byte, for typed text.",
+    "tests/test_forms_engine_corpora.cpp requires the forms engine to send exactly these bytes.",
     "",
     "A case: 'schema' (JSON text), 'locale' (C or de_DE), 'offset' (display zone, minutes east of UTC),",
     "optional 'prefill' (JSON text, loaded first), 'steps' (each sets one field's text, after",
@@ -770,7 +768,7 @@
       "offset": 0,
       "prefill": "{\"name\":\"n\",\"address\":{\"street\":\"Main\",\"zip\":12345},\"lines\":[{\"sku\":\"A\",\"qty\":2,\"price\":{\"num\":150,\"den\":100,\"dp\":2}},{\"sku\":\"B\",\"qty\":1}]}",
       "steps": [],
-      "body": null
+      "body": "{\"name\":\"n\",\"address\":{\"street\":\"Main\",\"zip\":12345},\"lines\":[{\"sku\":\"A\",\"qty\":2,\"price\":{\"num\":150,\"den\":100,\"dp\":2}},{\"sku\":\"B\",\"qty\":1}]}"
     }
   ]
 }

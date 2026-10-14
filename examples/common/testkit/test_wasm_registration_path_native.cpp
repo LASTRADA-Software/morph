@@ -17,11 +17,7 @@
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
 // serialize these types across the wire) needs external linkage on the
 // type — see glaze/reflection/get_name.hpp's `extern const T external`, and
-// test_fault_proxy.cpp's/test_backend_rig.cpp's identical note. Distinctly
-// named from wasm_spike/spike_model.hpp's SpikeEchoModel/SpikeEchoAction:
-// this test target and main_wasm.cpp's registration would violate ODR if
-// ever linked into the same process (wasm_spike/spike_model.hpp's own
-// comment), so this test uses its own model instead of reusing that one.
+// test_fault_proxy.cpp's/test_backend_rig.cpp's identical note.
 struct WasmSpikeProbeAction {
     int value = 0;
 };

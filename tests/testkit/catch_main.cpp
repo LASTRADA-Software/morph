@@ -9,7 +9,7 @@
 // means owning `main` and driving Catch::Session directly.
 //
 // The Qt-owning suites (tests/qt, tests/net_qt_interop, examples/common's
-// testkit, src/qt/forms/tests) cannot link this file, because they already
+// testkit) cannot link this file, because they already
 // define their own `main` to control the QCoreApplication's lifetime. They call
 // the same morph::testkit::configureSession() from inside it, so the option
 // behaves identically across every suite.

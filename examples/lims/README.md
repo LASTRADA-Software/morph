@@ -161,9 +161,7 @@ transitions; journal as regulatory audit.
   declared one (review D1, §7 below); (b) `x-unitAlternatives` lists
   **direct relation edges only**, so InvenTree-style "enter in any
   compatible unit" needs a deliberately complete relations array; chained
-  ratios are not cross-checked; (c) the shipped QML converter silently
-  clears input above a 1e12 divisor — exactly the fine-ratio range of
-  trace-concentration relations (ng/L↔mg/L); (d)
+  ratios are not cross-checked; (c)
   `std::optional<Quantity<U>>` silently loses all unit annotations — use
   empty `Quantity`/`optionalFields`, and lint for the optional spelling.
 - **Empty-principal audit entries**: the authorize/authenticate TOCTOU can
@@ -513,8 +511,8 @@ fail-closes on an unknown preparation code exactly as it does for an unknown
 qualifier code.
 
 **The parity suite.** `test_conditional_logic.cpp` evaluates the *served*
-`x-rules` JSON with a generic, data-driven evaluator — the one a non-QML client
-has to write — and asserts it agrees with the compiled `allRulesSatisfied`
+`x-rules` JSON with a generic, data-driven evaluator — the one a client outside
+morph has to write — and asserts it agrees with the compiled `allRulesSatisfied`
 across all 24 points of the rule state space, with the matrix asserted to
 contain both verdicts so a client that always says yes could not pass. It also
 pins the two behaviours D8 names: `equals` is **not** vacuous on an unengaged
@@ -556,9 +554,9 @@ second writer is visible immediately. Building a worksheet to demonstrate a
 hazard the design already forecloses would demonstrate nothing.
 
 **The one gap it would re-hit is already filed.** A batch assignment
-(`vector<SampleAnalysis>`) is an array-of-objects field, which `DynamicForm`'s
-array control does not render — a gap `examples/polls` hit and recorded first.
-Re-confirming it costs a model and a table and produces no new finding.
+(`vector<SampleAnalysis>`) is an array-of-objects field, which the forms engine
+renders as an `ObjectArray`. Building one costs a model and a table and
+produces no new finding.
 
 **What would change the answer.** A worksheet becomes worth building the day
 this rung needs an operation that is *atomic across several samples* — one
@@ -705,14 +703,13 @@ files no uploaded report contained. Fixed here.
   `morph_offline_sqlite_tests` target fails identically, which is why the
   durable queue had never been built here before.
 - **`x-rules` has one client-side evaluator and no shared corpus.** **Closed.**
-  A shared corpus now pins the compiled evaluator
-  (`morph::forms::allRulesSatisfied`) to the QML one: one checked-in file,
-  `tests/data/rule_corpus.json`, is driven through both —
+  A shared corpus pins the compiled evaluator
+  (`morph::forms::allRulesSatisfied`) to the forms engine's: one checked-in
+  file, `tests/data/rule_corpus.json`, is driven through both —
   `tests/test_forms_rule_corpus.cpp` on the compiled side,
-  `tst_DynamicFormRuleCorpus.qml` on the client side — so a rule kind added to
-  one evaluator and not the other now fails a shared test instead of shipping
-  silently divergent (`tests/forms_rule_corpus.hpp`,
-  `tests/test_forms_rule_agreement.cpp`). A non-QML client still has to
+  `tests/test_forms_engine_corpora.cpp` on the client side — so a rule kind
+  added to one evaluator and not the other fails a shared test instead of
+  shipping silently divergent. A client outside morph still has to
   reimplement the vocabulary; the corpus is what keeps that reimplementation
   honest against the compiled evaluator's behavior.
 - **a ladder test whose name contains a semicolon never gets its

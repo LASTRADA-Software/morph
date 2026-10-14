@@ -10,9 +10,6 @@
 // comparing against it admits `INT64_MAX + 1` as "not greater". A string
 // survives JSON.parse intact; these tests pin that the string is emitted, and
 // emitted *only* where a double would actually lose something.
-//
-// src/qt/forms/tests/tst_DynamicFormExactBounds.qml pins the renderer half
-// against the same key names.
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>

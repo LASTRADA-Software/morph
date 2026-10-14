@@ -3,25 +3,19 @@
 // The compiled half of the shared `x-rules` corpus.
 //
 // `x-rules` is evaluated twice — here by `morph::forms::allRulesSatisfied`,
-// and again in JavaScript by `src/qt/forms/qml/DynamicForm.qml`. Before this
-// file the only thing tying the two together was a hand-mirrored pair of test
-// files covering three of the sixteen rule kinds: adding a kind to one side
-// left the other silently untested, and two kinds (`atLeastOneOf`,
-// `mutuallyExclusive`) could be disabled client-side with the whole renderer
-// suite still green.
+// which the server runs, and by the forms engine's `FormSession`, which a
+// client runs.
 //
-// The pin is `tests/data/rule_corpus.json`: **one file, three
+// The pin is `tests/data/rule_corpus.json`: **one file, two
 // readers**. This file drives every row through the compiled evaluator;
-// `tests/test_forms_engine_corpora.cpp` through the forms engine, and
-// `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` through a real
-// `DynamicForm`. No reader owns the cases, so the evaluators cannot be pinned
-// to different case lists.
+// `tests/test_forms_engine_corpora.cpp` through the forms engine. No reader
+// owns the cases, so the evaluators cannot be pinned to different case lists.
 //
 // Three assertions here are what make the corpus non-drifting rather than
 // merely shared:
 //
 //   1. every schema in the corpus is the current `schemaJson<A>()`
-//      byte-for-byte, so an emitter change cannot leave the renderer being fed
+//      byte-for-byte, so an emitter change cannot leave the engine being fed
 //      a schema no compiled action produces any more;
 //   2. every named `detail::RuleKind` appears somewhere in the corpus, so a
 //      seventeenth kind cannot be added to the vocabulary without rows;

@@ -16,7 +16,7 @@ execution mode.
 - [The `app-*` app-shell document](#the-app--app-shell-document)
 - [C++ descriptors](#c-descriptors)
 - [`FlowSession<Model, Steps...>`](#flowsessionmodel-steps)
-- [The Qt/QML reference renderer](#the-qtqml-reference-renderer)
+- [Rendering](#rendering)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
@@ -203,9 +203,7 @@ public:
   one request each, and their replies land in whatever order the backend
   answers — the last reply to arrive wins, which need not be the last call
   made. An earlier handler-side draft did collapse patches arriving during a
-  flight; nothing does now — not here, and not on the standalone-form path,
-  where `DynamicForm` calls `submitIfValid` on every change that leaves the
-  form ready with no in-flight suppression either. A caller that wants one
+  flight; nothing does now, here or on the standalone-form path. A caller that wants one
   request per pause throttles or debounces on its own side; `FlowSession`
   deliberately does not, since it cannot know the host's input cadence.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
@@ -247,62 +245,18 @@ public:
   loop could deliver into a half-dead session. This is the "teardown that pumps" escape hatch callback_scope.md
   documents, and `FlowSession` is its worked example.
 
-## The Qt/QML reference renderer
+## Rendering
 
-`src/qt/forms/qml/WizardView.qml` is the reference implementation of a
-stepper, shipped as part of the `MorphForms` QML module (CMake target
-`morph_forms_module`) alongside `DynamicForm.qml` (reused **unmodified** per
-step) and `CollectionView.qml`. It lives in `src/qt/forms`, not
-`examples/forms/gui_qml`, for the same reason [views.md](views.md) gives for
-`CollectionView.qml`: it is fully generic over its `wizardSchema`/`schemas`/
-`controller` properties — nothing in it names `lab::` anything — so it ships
-as a reusable component rather than example code. `WizardView` renders one
-`w-steps` entry per `DynamicForm` inside a `Repeater` (not a `Loader`), kept
-alive for the wizard's lifetime in a `StackLayout` so a step's entered values
-survive Back/Next navigation; `applyPrefill(index)` reads
-`controller.resolvedValue(path)` for each of a step's declared `prefill`
-entries and calls that `DynamicForm`'s `setFieldValue(field, value)`.
-
-`examples/forms/gui_qml/qml/AppShell.qml` is the demo-specific consumer —
-like `Main.qml`, it instantiates the app's own `FormsController` QML type by
-name (Qt cannot register a class template for QML, so each app writes its
-own controller subclass; see [forms.md](forms.md), "Shipped Qt/QML reference
-renderer"). It renders `app-menu` as a sidebar `ListView` and a `Loader`
-whose `sourceComponent` is chosen from the selected screen's `kind`
-(`DynamicForm` for `"form"`, `WizardView` for `"wizard"`, an explicit
-placeholder `Label` for anything else, including the reserved but
-unimplemented `"view"`). `AppShell.qml` is registered as the demo's new
-default entry point (`examples/forms/gui_qml/main.cpp` now loads
-`"AppShell"` instead of `"Main"`); `Main.qml` is untouched and still
-independently buildable/loadable.
-
-`FormsController` (the demo's `QObject`/`QML_ELEMENT` wrapper around
-`morph::qt::forms::FormsControllerCore<lab::LabModel>`) exposes
-`wizardSchemasJson`/`appSchemaJson` the same way E-G7 added `viewsJson` —
-a `Q_PROPERTY` on the demo-specific subclass calling a `lab::` free function,
-not a change to the model-agnostic `FormsControllerCore<Model>`. Resolved-value
-tracking (`Q_INVOKABLE QString resolvedValue(path) const`) is populated by a
-free function in `FormsController.cpp` that flattens the top-level keys of
-both the submitted body and the reply into a `"<ActionType>.<field>"` map on
-every successful `submitIfValid` — result keys are written after (and so win
-over) draft keys on a name collision, mirroring `FlowSession::captureResult`'s
-precedence exactly, just implemented as plain JSON manipulation instead of
-the typed template API (see [Design decisions](#design-decisions)).
-
-### Chrome slots
-
-`WizardView.slotRegistry` (null by default) is handed to every step's
-`DynamicForm`, and two chrome roles replace the stepper's own chrome
-([forms.md, "Chrome slots"](forms.md#chrome-slots)):
-
-| Role | Replaces | Members |
-|---|---|---|
-| `wizardHeader` | the "title (n / m)" heading | `title`, `stepIndex`, `stepCount`, `stepTitle` |
-| `wizardNav` | Back / Next and the last-step note | `canBack`, `canNext`, `lastStep`, `stepIndex`, `stepCount`, `back()`, `next()` |
-
-`next()` is gated by `canNext` — the current step's action must have replied
-ok — exactly as the built-in Next button is, and runs the same prefill.
-Pinned by `src/qt/forms/tests/tst_ViewChrome.qml`.
+The forms engine renders a wizard: `WizardModel::fromSchema` reads the `w-*`
+document, `WizardSession` keeps one `FormSession` per step alive for the
+wizard's lifetime — so a step's values survive Back and Next — resolves each
+step's `prefill` from earlier steps' bodies and replies, and `wizardView` draws
+the header, the current step's form and Back/Next with their gates
+([engine.md](engine.md), "Wizards" and "Rendering collections and wizards").
+Result fields win over draft fields on a name collision, the same order as
+`FlowSession::captureResult`. A document's `wizard` node reaches it through the
+interpreter; the app shell's menu and screens are the host's
+(`docs/spec/ui/host.md`).
 
 ## API reference
 
@@ -340,12 +294,11 @@ Pinned by `src/qt/forms/tests/tst_ViewChrome.qml`.
 | Decision | Choice | Why |
 |---|---|---|
 | Header location | `include/morph/forms/{flows,app}.hpp`, not a new top-level directory | Both modules are small, tightly coupled to `forms.hpp`'s `FixedString`/schema machinery, and `include/morph/util/` already establishes the precedent that one directory can host several distinct namespaces — `views.hpp` (E-G7) independently converged on the same answer. |
-| QML component placement | `WizardView.qml` ships in the shared `MorphForms` module (`src/qt/forms/qml`); `AppShell.qml` stays in the demo (`examples/forms/gui_qml/qml`) | `WizardView` is fully generic (duck-typed `controller`, schema-driven), exactly like `CollectionView.qml` — it ships alongside it. `AppShell.qml` instantiates the demo's own concrete `FormsController` QML type by name, exactly like `Main.qml` already does, so it stays with the demo that defines that type. |
 | No runtime wizard/app registry | `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP` only specialise traits | Neither a wizard nor an app is ever executed or looked up by string id at runtime; the consuming code always names the concrete type. Avoids a second registry to keep in lockstep with the schema-emission call sites, mirroring how the example's own `schemasJson()` already hand-assembles its schema set rather than walking a generic registry. |
 | Prefill resolution lives with the caller/renderer | `FlowSession::resolved(path)` is read-only; nothing calls `set<>` automatically | Matches the wizard document's own wording that the renderer resolves and issues the `set<>` calls; keeps `FlowSession` a pure sequencer with no opinion on *when* a step should be pre-populated. |
-| Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `FormsController`'s QML-facing resolved-value map applies the same order | A deterministic, testable rule for the one genuinely ambiguous point in the source design (prefill can come from "an earlier step's result *or* submitted draft"), applied identically on both the typed C++ path and the QML reference renderer's JSON path. |
+| Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `WizardSession`'s resolved values apply the same order | A deterministic, testable rule for the one genuinely ambiguous point in the source design (prefill can come from "an earlier step's result *or* submitted draft"), applied identically on the typed C++ path and the runtime wizard. |
 | Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `std::get<A>(_drafts)` needs a unique `T`, and reusing a step type would silently collide the two steps' drafts. |
-| QML reference renderer does not use `FlowSession` | `WizardView.qml`/`AppShell.qml`/`FormsController` sequence wizards via plain `executeJson` + a JSON resolved-value map, not the typed template API | QML/MOC cannot name a C++ action type generically at compile time, and `FormsController.hpp` must stay free of template-heavy morph headers (its existing `Q_MOC_RUN` guard). `FlowSession` remains available for non-QML/typed embeddings and is exercised directly by `tests/test_flows_apps.cpp`. |
+| The rendered wizard does not use `FlowSession` | `WizardSession` sequences a served `w-*` document over JSON bodies, not the typed template API | A client renders a wizard it was served and cannot name its C++ action types. `FlowSession` remains available for typed embeddings and is exercised directly by `tests/test_flows_apps.cpp`. |
 
 ## Limitations
 
@@ -353,25 +306,9 @@ Pinned by `src/qt/forms/tests/tst_ViewChrome.qml`.
   value but no `ViewScreen` type exists yet — it would be added once a need
   arises to route an app-shell menu entry straight at a
   [views.md](views.md) `morph::views` view, requiring no change to
-  `appSchemaJson` itself. The reference demo's `AppShell.qml` renders an
-  explicit placeholder for any screen `kind` it does not recognise, rather
-  than silently doing nothing. `examples/forms/lab_schemas.hpp`'s
-  `SamplesView` (a `morph::views::CollectionView`, rendered standalone by
-  `Main.qml`) is therefore not one of `LabApp`'s menu entries — integrating
-  it would require `ViewScreen`, which this plan deliberately does not add.
-- **No cross-screen state store in the reference renderer.** `AppShell.qml`
-  destroys and recreates a wizard's `WizardView` instance when the menu
-  routes away and back (a `Loader.sourceComponent` change), resetting its
-  step to 0. This is consistent with the source spec's Non-goals ("Not a
-  general application framework. No client-side state store...").
-- **Prefill does not resync a widget's displayed value.** `WizardView`'s
-  `applyPrefill` updates the target step's `fieldValues` (and therefore the
-  assembled submission) via `DynamicForm.setFieldValue`, but does not push
-  the value back into the visible `TextField`/`ComboBox`, since
-  `DynamicForm.qml`'s fields are write-only from the widget's side (a
-  pre-existing characteristic, not introduced here). A user who edits the
-  prefilled field after arriving overwrites it normally; only the *visual*
-  echo of the prefilled value is missing.
+  `appSchemaJson` itself. `examples/forms/lab_schemas.hpp`'s `SamplesView`
+  (a `morph::views::CollectionView`) is therefore not one of `LabApp`'s menu
+  entries — integrating it would require `ViewScreen`.
 - **`Steps...` uniqueness is a hard requirement, not a documented escape
   hatch.** A wizard that needs the same action type twice (e.g. two
   identically-shaped approval steps) is not expressible with one
@@ -396,26 +333,22 @@ Pinned by `src/qt/forms/tests/tst_ViewChrome.qml`.
   persistence, throws on a `set<>` targeting the wrong step, and surfaces
   `BackendChangedError` on the current step's error callback when a backend
   switch lands mid-flight (`tests/test_flows_apps.cpp`, `FlowSession:*`).
-- The QML reference renderer's stepper (`WizardView.qml`) is covered by
-  `src/qt/forms/tests/tst_wizardview.qml` (run as part of the
-  `forms_qml_logic` ctest, alongside `tst_collectionview.qml` and the rest
-  of the `MorphForms` module's own test corpus): Next stays disabled until
-  the step replies ok, Next/Back move the step index, and prefill lands in
-  the next step's `fieldValues`.
+- The rendered wizard is covered by `tests/test_forms_engine_wizard.cpp` and
+  `tests/test_forms_engine_wizard_view.cpp`: Next stays disabled until the
+  step replies ok, Next/Back move the step index, and prefill lands in the
+  next step's draft.
 
 ## Cross-references
 
 - [forms.md](forms.md) — the per-action schema each wizard step and each
-  `kind: "form"` screen renders; `FixedString`, the schema key vocabulary,
-  and the Qt/QML reference renderer's package layout (`src/qt/forms` vs.
-  `examples/forms/gui_qml`) this spec's own renderer section follows.
+  `kind: "form"` screen renders; `FixedString` and the schema key vocabulary.
+- [engine.md](engine.md) — the wizard session and view that render this
+  document.
 - [choice.md](choice.md) — `FixedString`'s other consumer; the "declare a
   compile-time name, validate at runtime" pattern `Bind`/`MenuEntry`/screen
   `Id`s reuse.
 - [views.md](views.md) — the `v-*` view-schema layer; the `kind: "view"`
-  screen this document reserves but does not yet implement, and the
-  precedent (`CollectionView.qml` shipping in `src/qt/forms`) this spec's
-  `WizardView.qml` placement follows.
+  screen this document reserves but does not yet implement.
 - [../core/bridge.md](../core/bridge.md) — `BridgeHandler::execute`,
   `ActionValidator::ready`, and `BackendChangedError` — the mechanism
   `FlowSession` extends to span a sequence without adding a new dispatch path.

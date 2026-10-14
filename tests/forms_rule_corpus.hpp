@@ -8,19 +8,15 @@
 ///        row be evaluated by `morph::forms::allRulesSatisfied` without a
 ///        per-row C++ statement.
 ///
-/// `x-rules` has two evaluators — `morph::forms::allRulesSatisfied` here, and
-/// a JavaScript reimplementation in `src/qt/forms/qml/DynamicForm.qml` — and
-/// and nothing structural pins them to each other. A hand-mirrored
-/// pair of test files does not fix that: adding a rule kind to one side leaves
-/// the other silently untested, which is how `atLeastOneOf` and
-/// `mutuallyExclusive` could be disabled client-side with the renderer suite
-/// still green.
+/// `x-rules` has two evaluators — `morph::forms::allRulesSatisfied`, which the
+/// server runs, and the forms engine's `FormSession`, which a client runs — and
+/// a hand-mirrored pair of test files would not pin them to each other: adding a
+/// rule kind to one side leaves the other silently untested.
 ///
-/// The pin is `tests/data/rule_corpus.json`: **one file, three
+/// The pin is `tests/data/rule_corpus.json`: **one file, two
 /// readers**. `tests/test_forms_rule_corpus.cpp` drives every row through the
-/// compiled evaluator, `tests/test_forms_engine_corpora.cpp` through the forms
-/// engine, and `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` through a
-/// real `DynamicForm`. No reader owns the cases.
+/// compiled evaluator and `tests/test_forms_engine_corpora.cpp` through the
+/// forms engine. No reader owns the cases.
 ///
 /// This header is also the corpus's generator: `corpusActions()` exposes each
 /// fixture's `schemaJson<A>()`, and the C++ test asserts the checked-in file
@@ -275,7 +271,7 @@ using Draft = std::map<std::string, std::string, std::less<>>;
 /// would be a second place the case list lives, and the two would drift.
 ///
 /// The text spellings are the renderer's, not C++'s: a quantity is integral
-/// decimal text, a boolean is `"true"`/`"false"` (what `DynamicForm`'s
+/// decimal text, a boolean is `"true"`/`"false"` (what a form's
 /// CheckBox stores), an integer is digits. A member type outside that set is
 /// left default-constructed rather than guessed at.
 /// @tparam A     Action type (a reflectable aggregate).

@@ -17,7 +17,7 @@ on:
 # jobs waiting behind this workflow with none running, and the oldest run here
 # had been queued for over five hours.
 #
-# `docs.yml`, `wasm-demo.yml` and `wasm-ladder.yml` already do this; `ci.yml` is
+# `docs.yml` and `wasm-demo.yml` already do this; `ci.yml` is
 # by far the largest workflow and was the one without it.
 concurrency:
   group: ci-${{ github.ref }}
@@ -121,11 +121,11 @@ env:
   # since macro arguments are spelled in the caller's file -- is reported on
   # both. Verified against this job's own red report, run 35581623269:
   #
-  #     .../test_bank_gui_qml_behaviour.cpp:115:1: error: function
+  #     .../test_<suite>.cpp:115:1: error: function
   #     'dummyFunction72' has cognitive complexity of 87 (threshold 25)
   #     /usr/include/catch2/catch_test_macros.hpp:142:28: note: expanded from
   #         macro 'TEST_CASE'
-  #     .../test_bank_gui_qml_behaviour.cpp:121:23: note: nesting level
+  #     .../test_<suite>.cpp:121:23: note: nesting level
   #         increased to 2
   #
   # -- the last line is the lambda in `REQUIRE(pumpUntil([&app] { ... }))`,
@@ -145,7 +145,8 @@ env:
   # compiler's implicit /usr/include with no include flag at all: over the 751
   # entries this job's configure produces, none names catch2.
   CATCH2_VERSION: "3.4.0"
-  # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
+  # The ladder and the Qt Quick frontend need Qt 6.5+; ubuntu-24.04 apt still
+  # ships 6.4.2.
   QT_VERSION: "6.8.1"
 
 jobs:
@@ -823,8 +824,7 @@ jobs:
           sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
-      # unconditionally (not gated on MORPH_BUILD_FORMS_QML) and Ubuntu
-      # 24.04 still ships 6.4.2 -- the identical gap the "all optional
+      # and Ubuntu 24.04 still ships 6.4.2 -- the identical gap the "all optional
       # features" and "Application ladder" jobs' own install-qt-action steps
       # already document. Named qt6-base-dev/qt6-websockets-dev/qt6-tools-dev
       # used to be installed above; replaced wholesale rather than kept
@@ -1170,41 +1170,18 @@ jobs:
   # file gives), so MORPH_BUILD_LADDER=ON does not reach it either. This job is
   # the only instrumented build bank gets.
   #
-  # What that covers, stated exactly, because the obvious claim is too strong.
-  # An out-of-range double -> std::int64_t conversion in
-  # examples/bank/gui/controllers/Format.hpp -- on the path of every amount
-  # typed into the bank GUI -- exits bank_gui_tests 1 here with
-  #
-  #     examples/bank/gui/controllers/Format.hpp:76:38: runtime error:
-  #     9.2e+19 is outside the range of representable values of type 'long'
-  #
-  # but only because a test calls parseMinor with such a value. Measured: with
-  # that test absent, the same defective header leaves this leg green. A
-  # sanitizer leg reaches only what the suites drive, and this one's reach is
-  # bounded by how much of bank they drive.
+  # A sanitizer leg reaches only what the suites drive: this one's reach is
+  # bank_tests, plus the bank server's own code where those tests link it.
   #
   # Why a job of its own rather than a flag on linux-sanitizers' clang-ubsan
-  # leg. Two measured reasons. (1) That leg builds no Qt, and its own comment
-  # reserves the matrix against GUI stacks; bank's GUI is where this class of
-  # UB lives, so covering it means adding Qt there. (2) Cold, cacheless, 12
-  # cores, clang 22.1.8: that leg's shape (core + net + offline_sqlite, no Qt)
-  # is 36s configure / 144s build over 144 ninja edges, and this job's shape is
-  # 64s / 391s over 287. Folding one into the other roughly triples the slowest
-  # leg of a three-leg matrix, whose duration is then the matrix's. Split out,
-  # the three existing legs are untouched and this runs beside them. Same
-  # argument as kanban-tsan above.
+  # leg: that leg builds no Qt, and bank's server links morph::qt. Folding Qt
+  # and the Lightweight ORM into a three-leg matrix makes that leg the slowest
+  # one, whose duration is then the matrix's. Same argument as kanban-tsan
+  # above.
   #
-  # ubsan rather than asan: UBSan is the sanitizer that diagnoses the
-  # conversion class above, and an ASan run over a Qt GUI needs the
-  # detect_leaks=0 and suppression story ladder-sanitizers already carries,
-  # which this job would have to acquire before it could be believed. Bank
-  # under ASan is worth having and is not covered here.
-  #
-  # The bill was measured: turning bank on and instrumenting every one of its
-  # targets produces **zero** UBSan findings. bank_tests (145 assertions in 21
-  # cases), bank_gui_tests (19 in 5) and bank_gui_qml_tests (32 in 2) all pass
-  # clean, and so does the full 1696-test suite of this configure. Nothing is
-  # suppressed here and there is no allowlist entry.
+  # ubsan rather than asan: UBSan diagnoses the numeric-conversion class bank's
+  # money arithmetic is exposed to. Bank under ASan is worth having and is not
+  # covered here. Nothing is suppressed and there is no allowlist entry.
   bank-sanitizers:
     name: Bank example / UBSan
     runs-on: ubuntu-24.04
@@ -1281,18 +1258,14 @@ jobs:
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
             sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
-      # MORPH_BUILD_BANK_GUI=ON, not MORPH_BUILD_BANK_EXAMPLE alone: the
-      # controllers and Format.hpp -- the numeric-conversion surface this job
-      # exists for -- live in bank_gui_lib, which only exists when the GUI
-      # option adds gui/. Without it this job instruments bank_lib and the ORM
-      # and misses the half of bank that does the arithmetic. No MORPH_BUILD_LADDER: bank is not a rung, so
-      # it would add every rung's tree for nothing.
-      - name: Configure (clang-ubsan, bank example + GUI)
+      # MORPH_BUILD_QT=ON builds bank's server alongside bank_lib. No
+      # MORPH_BUILD_LADDER: bank is not a rung, so it would add every rung's
+      # tree for nothing.
+      - name: Configure (clang-ubsan, bank example)
         run: |
           cmake --preset clang-ubsan \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_BUILD_BANK_GUI=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
@@ -1300,11 +1273,8 @@ jobs:
 
       # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
       # catch_discover_tests() runs each POST_BUILD-discovered Qt-linked test
-      # binary once during the build to enumerate its cases — see ladder-tests'
-      # own Build step. In this configure that is morph_qt_tests
-      # (tests/qt/CMakeLists.txt:91); it is *not* bank's three suites, which
-      # are PRE_TEST and therefore enumerate at ctest time instead. The step
-      # below is where that matters.
+      # binary once during the build to enumerate its cases -- in this
+      # configure, morph_qt_tests.
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
@@ -1314,56 +1284,14 @@ jobs:
       # make. It is not a formality here: bank's targets need an
       # apply_sanitizers() call of their own, and this sweep is what says so
       # rather than letting the leg report a clean bank run over uninstrumented
-      # binaries. Measured with bank configured on and the AF_SANITIZER blocks
-      # absent:
+      # binaries.
       #
-      #     ::error::check_sanitizer_instrumentation: 3 of 9 ctest binaries
-      #     are not ubsan-instrumented
-      #
-      # naming bank_tests, bank_gui_tests and bank_gui_qml_tests. With the
-      # blocks in place the same sweep reports 9 of 9.
-      #
-      # QT_QPA_PLATFORM=offscreen, and this is the step that cannot do without
-      # it. The sweep's first act is `ctest --show-only=json-v1`, and ctest
-      # is exactly where bank's PRE_TEST discovery runs: listing the tests
-      # *executes* `bank_gui_qml_tests --list-tests`, whose main constructs a
-      # QGuiApplication (examples/common/testkit/testkit_main.cpp) before
-      # Catch2 ever sees the flag. With no display and no QT_QPA_PLATFORM that
-      # aborts; Catch2's CatchAddTests.cmake raises a message(FATAL_ERROR) on a
-      # nonzero discovery, and ctest then exits 8 having printed no JSON at all
-      # — not bank's entries missing, the entire listing, every other suite
-      # included. The sweep correctly refuses to pass having examined nothing,
-      # so the symptom is the guard and the cause is the missing variable --
-      # a diagnostic worth expecting. The Test step below declares the same value,
-      # which is the point: this sweep's subject is the binaries that step will
-      # run, so it has to enumerate them in that step's environment.
-      #
-      # Reproduced locally against this very configure (clang 22.1.8, Catch2
-      # 3.16.0, Qt 6.11.2 — the runner's versions differ, the code path does
-      # not), by emulating the runner's one distinguishing property, a headless
-      # session:
-      #
-      #     $ env -u DISPLAY -u WAYLAND_DISPLAY \
-      #           bash scripts/check_sanitizer_instrumentation.sh \
-      #                build/clang-ubsan ubsan
-      #     ::error::check_sanitizer_instrumentation: ctest listed no tests in
-      #     build/clang-ubsan -- this check would pass having examined nothing
-      #     `ctest --show-only=json-v1` exited 8 and wrote 0 bytes of stdout.
-      #       | CMake Error at .../CatchAddTests.cmake:307 (message):
-      #       |   Error listing tests from executable
-      #       |   '.../examples/bank/bank_gui_qml_tests':
-      #       |     Result: Subprocess aborted
-      #
-      #     $ env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
-      #           bash scripts/check_sanitizer_instrumentation.sh \
-      #                build/clang-ubsan ubsan
-      #     check_sanitizer_instrumentation: 9 ctest binaries all carry
-      #     __ubsan_ symbols (0 allowlisted).
-      #
-      # Same tree, same build, one environment variable apart. That is also
-      # why the two earlier attempts to reproduce this job's failure locally
-      # could not: a workstation has a display, so the same command enumerates
-      # all nine there whether or not the variable is set.
+      # QT_QPA_PLATFORM=offscreen because the sweep's first act is `ctest
+      # --show-only=json-v1`, which runs every PRE_TEST discovery, and a
+      # Qt-linked test binary listing its cases with no display and no
+      # platform aborts; the listing then prints no JSON at all and the sweep
+      # refuses to pass having examined nothing. The Test step below declares
+      # the same value: this sweep's subject is the binaries that step runs.
       - name: Every ctest binary is instrumented
         env:
           QT_QPA_PLATFORM: offscreen
@@ -1371,8 +1299,7 @@ jobs:
 
       # -L bank, not the whole suite: this configure also builds morph_tests
       # and morph_qt_tests, which linux-sanitizers' clang-ubsan leg already
-      # runs under the identical instrumentation -- 1696 tests and 212s
-      # measured locally, against 28 tests and 6s for bank's own three suites.
+      # runs under the identical instrumentation.
       # The label is applied by examples/bank/CMakeLists.txt's
       # catch_discover_tests calls; a filter that matched nothing would be this
       # repository's named failure mode, and CMakePresets.json's base-test sets
@@ -1772,12 +1699,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
-      # (QQmlApplicationEngine::loadFromModule, used by MORPH_BUILD_FORMS_QML
-      # rungs) and Ubuntu 24.04 still ships 6.4.2 — the exact gap the "all
-      # optional features" job's identical step already documents. This job
-      # configures MORPH_BUILD_LADDER=ON without MORPH_BUILD_FORMS_QML, but
-      # examples/common/CMakeLists.txt's Qt6 6.5 REQUIRED applies unconditionally
-      # (it is not gated on MORPH_BUILD_FORMS_QML), so the floor still bites here.
+      # and Ubuntu 24.04 still ships 6.4.2 — the exact gap the "all optional
+      # features" job's identical step already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
         if: steps.filter.outputs.run == 'true'
         uses: jurplel/install-qt-action@v4.3.1
@@ -1870,10 +1793,9 @@ jobs:
 
       # ── moc output that climbs out of the build tree ─────────────────
       # Same gate as linux-qt above, and for the same reason -- see its
-      # comment. This job is the one that matters most: ladder_<rung>_gui_lib
-      # is the AUTOMOC target every ladder_<rung>_tests binary links, so this
-      # build tree is the one carrying the output that stops compiling when a
-      # generated include ascends.
+      # comment. This job builds every rung's Qt-linked targets, so this build
+      # tree carries the most moc output that stops compiling when a generated
+      # include ascends.
       - name: Check no generated moc include ascends
         if: steps.filter.outputs.run == 'true'
         run: bash scripts/check_automoc_includes.sh build/gcc-debug
@@ -2445,9 +2367,8 @@ jobs:
             sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
           fi
 
-      # Not the distro's Qt: MORPH_BUILD_FORMS_QML needs 6.5+ (see the version
-      # floor in CMakeLists.txt) and Ubuntu 24.04 still ships 6.4.2, whose
-      # QQmlApplicationEngine has no loadFromModule.
+      # Not the distro's Qt: the ladder and MORPH_BUILD_QT_QUICK need 6.5+ and
+      # Ubuntu 24.04 still ships 6.4.2.
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4.3.1
         with:
@@ -2495,29 +2416,8 @@ jobs:
           # shellcheck disable=SC2086
           # MORPH_BUILD_LADDER belongs in this job by its own charter ("every
           # MORPH_BUILD_* option … enabling them together also proves they
-          # compose") and closes a real hole: until it was added here, *no* CI
-          # leg configured MORPH_BUILD_LADDER=ON together with
-          # MORPH_BUILD_FORMS_QML=ON. The ladder-tests job below cannot — its
-          # distro Qt is 6.4.2, under the 6.5 floor MORPH_BUILD_FORMS_QML
-          # requires — so each rung's QML module, desktop client and offscreen
-          # engine-load smoke test were built by nothing at all. This job has
-          # Qt ${{ env.QT_VERSION }} from aqtinstall, so here they are built,
-          # and the smoke test runs, on every push.
-          #
-          # MORPH_BUILD_BANK_GUI (with MORPH_BUILD_BANK_EXAMPLE, which it needs
-          # -- examples/bank/CMakeLists.txt only descends into gui/ from the
-          # bank example's own subdirectory) was, until this line, the single
-          # MORPH_BUILD_* option no job in .github/workflows/ enabled at all:
-          # the `linux-everything` preset that sets it is named by no workflow.
-          # What that costs is a target that stops compiling on master with
-          # every gate green. This is the one leg that can host it:
-          # it already installs Qt ${{ env.QT_VERSION }} from aqtinstall (the
-          # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
-          # other bank jobs use cannot give) and already installs the
-          # ODBC/SQLite/yaml-cpp/libzip set the bank example's Lightweight
-          # fetch requires. Nothing now checks that the next option is added
-          # here too -- the option-coverage job that did was removed with the
-          # meta-gates.
+          # compose"): it is the one leg with Qt ${{ env.QT_VERSION }} from
+          # aqtinstall, the ladder, Qt Quick and the bank example together.
           # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
           # Configure steps for why leaving it unset is what lets
           # fastcache-cc be selected.
@@ -2526,7 +2426,6 @@ jobs:
             -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
@@ -2534,7 +2433,6 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_BUILD_BANK_GUI=ON \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
             $EXTRA \
             $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
@@ -2558,8 +2456,7 @@ jobs:
       # Same gate as linux-qt, and for the same reason -- see its comment.
       # This is the widest build it reaches: the clang leg is the only one that
       # compiles moc output under -Weverything, where -Wshadow-header is what
-      # actually fires, and this job is the only one that builds
-      # morph_forms_module's AUTOMOC output at all.
+      # actually fires.
       - name: Check no generated moc include ascends
         run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
 
@@ -3060,59 +2957,8 @@ jobs:
       # generated header is likewise a configure_file() (configure-time), not
       # a build-time add_custom_command, so it's already on disk too.
       #
-      # That paragraph answers "which generated headers exist without a
-      # build?" for configure_file() output and *only* for configure_file()
-      # output, while reading as though it had settled the question. It has
-      # not: AUTOMOC's output is the other kind -- a build-time
-      # add_custom_command -- and two sources #include it by name. See the
-      # AUTOMOC step below, which is why this says "no full Build step" rather
-      # than "no Build step".
-      #
-      # Compiler caching (sccache/fastcache-cc) is still not set up here. That
-      # step compiles 67 objects; a real build of this configure would compile
-      # the database's 737, so the caching steps would cost more setup than
-      # they could save.
-      #
-      # MORPH_BUILD_BANK_GUI is the second flag "every optional feature is ON
-      # here" is easy to be wrong about. It
-      # defaults OFF (CMakeLists.txt), gates `add_subdirectory(gui)` in
-      # examples/bank/CMakeLists.txt, and the bank GUI's *tests* are gated on
-      # it too -- bank_gui_tests only exists `if(TARGET bank_gui_lib)`, which
-      # is that option's target. Without it, eleven tracked sources have no
-      # compile command in this job's database and are dropped, unanalysed,
-      # by the filter below: nine under examples/bank/gui/ and two under
-      # examples/bank/tests/gui/.
-      #
-      # Measured locally with clang 22.1.8, Qt 6, this job's own flag
-      # set, cold build directory each time:
-      #
-      #   without BANK_GUI: 703 entries, 695 distinct in-workspace sources,
-      #                     270 under examples/; 63 of 473 tracked C/C++
-      #                     sources absent from the database; configure 63.7s
-      #   with BANK_GUI:    737 entries, 727 distinct in-workspace sources,
-      #                     281 under examples/; 52 absent; configure 64.4s
-      #
-      # The delta is exactly the eleven files, and the configure cost is under
-      # a second -- an `add_subdirectory` of Qt Quick targets nothing here ever
-      # builds. Both of the filter step's floors (600 in-workspace, 200 under
-      # examples/) move further from their limit, not closer.
-      #
-      # This needs nothing new installed: linux-all-features already builds
-      # this option on the same runner image with the same
-      # `jurplel/install-qt-action@v4 modules: qtwebsockets` install and the
-      # same apt set, so the GUI's Qml/Quick/QuickControls2 requirement is
-      # already known to be met.
-      #
-      # What it does *not* do is clear the eleven files' existing findings.
-      # Measured on the same configure, whole-file, with this step's own
-      # `-extra-arg` pair: 97 findings inside the eleven sources themselves
-      # (44 cppcoreguidelines-pro-bounds-avoid-unchecked-container-access, 23
-      # performance-unnecessary-value-param, 9 misc-const-correctness, 8
-      # readability-identifier-length, 13 others), across ten of them --
-      # BankController.cpp is clean. clang-tidy-diff only reports on *changed*
-      # lines, so none of that goes red until someone edits one of these files
-      # on a line that carries a finding. Clearing them is separate work from
-      # putting them in the database, and is deliberately not folded in here.
+      # Compiler caching (sccache/fastcache-cc) is not set up here: nothing is
+      # compiled beyond a few generated headers.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
@@ -3120,121 +2966,14 @@ jobs:
             -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DMORPH_BUILD_LOAD_TESTS=ON \
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_BUILD_BANK_GUI=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
-
-      # Two sources end with `#include "<own-basename>.moc"` -- the AUTOMOC
-      # idiom for a Q_OBJECT declared inside a .cpp rather than in a header:
-      # examples/common/testkit/test_qml_surface.cpp and
-      # src/qt/forms/tests/tst_main.cpp. AUTOMOC writes that header at *build*
-      # time into <target>_autogen/include/, so after a configure-only run it
-      # does not exist and clang-tidy dies on the whole translation unit --
-      # `error: 'tst_main.moc' file not found [clang-diagnostic-error]` -- with
-      # WarningsAsErrors:"*" turning it into a failed job, before a single
-      # changed line is analysed. Reproduced locally with this job's own
-      # configure flags and clang-tidy 22.1.8: one line added to each of the
-      # two files, and clang-tidy-diff.py exits 1 with exactly those two
-      # diagnostics and nothing else.
-      #
-      # Suppressing the diagnostic instead is not available, not merely
-      # unattractive. -Wno-missing-include-dirs below covers an include
-      # *directory* that does not exist, not a #include that resolves to
-      # nothing; and clang-tidy does not let a compiler error be filtered at
-      # all. Measured locally with clang-tidy 22.1.8 on tst_main.cpp with the
-      # moc absent: `-checks=-clang-diagnostic-error`,
-      # `-checks=-clang-diagnostic-*` and `--warnings-as-errors=''` each still
-      # exit 1 reporting the same line. The only remaining way to "filter" it
-      # would be to grep clang-tidy-diff.py's output and override its exit
-      # code -- a gate that cannot fail, built deliberately.
-      #
-      # So the headers get generated, for these two targets only. Not `cmake
-      # --build` over everything, and not every *_autogen target either:
-      # building all 91 of them was measured locally at 264 objects and 179s,
-      # because a <target>_autogen target depends on that target's link
-      # dependencies. Just these two, with USE_COMPILER_CACHE=OFF on a 12-core
-      # Linux box: 100 ninja edges, 67 compilations, 7 links, 9 moc runs, 31s.
-      # 39 of the 67 are the vendored Lightweight ORM, which
-      # ladder_common_tests depends on transitively -- that, not moc, is what
-      # this step costs. A four-core hosted runner pays more.
-      #
-      # The target list is written out rather than derived, so that it is
-      # greppable and reviewable; the *check* underneath is derived from the
-      # tree, so the list cannot go quietly stale. It rescans every tracked
-      # C++ source for the self-include idiom and fails if a .moc that a
-      # source names is still absent -- which is what a third source adopting
-      # the idiom looks like. It also fails when it finds no self-include at
-      # all: a step that generates nothing and reports green is this
-      # repository's standing failure mode, and an empty scan is exactly how
-      # this one would produce it.
-      - name: Generate the AUTOMOC headers two sources include by name
-        run: |
-          cmake --build build/clang-debug --target \
-            ladder_common_tests_autogen \
-            morph_forms_qml_tests_autogen
-
-          python3 - <<'PY'
-          import json
-          import pathlib
-          import re
-          import subprocess
-          import sys
-
-          root = pathlib.Path().resolve()
-          database = json.loads(
-              pathlib.Path("build/clang-debug/compile_commands.json").read_text())
-          command_of = {
-              pathlib.Path(entry["file"]).resolve(): entry["command"]
-              for entry in database
-          }
-
-          tracked = subprocess.run(
-              ["git", "ls-files", "-z", "*.cpp", "*.cc", "*.cxx"],
-              capture_output=True, text=True, check=True).stdout.split("\0")
-          self_include = re.compile(
-              r'^[ \t]*#[ \t]*include[ \t]+"([^"]+\.moc)"', re.M)
-
-          found = 0
-          missing = 0
-          for name in filter(None, tracked):
-              source = pathlib.Path(name)
-              for moc in self_include.findall(source.read_text(errors="replace")):
-                  found += 1
-                  command = command_of.get((root / source).resolve())
-                  if command is None:
-                      # Not in this configure's database: clang-tidy cannot
-                      # analyse the file at all, which is a different problem
-                      # and not one this step can fix.
-                      print(f"::warning::{name} self-includes {moc} but has no "
-                            f"compile command in this configure")
-                      continue
-                  directories = re.findall(r'-I(\S+_autogen/include)', command)
-                  if not directories:
-                      print(f"::error::{name} self-includes {moc} but its compile "
-                            f"command names no *_autogen/include directory")
-                      missing += 1
-                      continue
-                  if not any((pathlib.Path(d) / moc).is_file() for d in directories):
-                      print(f"::error::{name}: {moc} was not generated -- add this "
-                            f"source's <target>_autogen to the cmake --build above")
-                      missing += 1
-                      continue
-                  print(f"ok: {name} -> {moc}")
-
-          if found == 0:
-              print("::error::no tracked source self-includes a .moc -- this "
-                    "step's scan has stopped detecting the idiom it exists for")
-              sys.exit(1)
-          print(f"ok: {found} self-included .moc header(s), {missing} missing")
-          sys.exit(1 if missing else 0)
-          PY
 
       # libunicode, which core::tui links when MORPH_BUILD_TUI is on, writes its UCD tables and enum headers
       # (`ucd_enums.h` and the rest) at build time, from a custom command, unless a previous build left them in its
@@ -3332,12 +3071,11 @@ jobs:
           # another directory (the "Application ladder" job's own "Check no
           # generated moc include ascends" step is the standing guard on that).
           #
-          # It is not sufficient for a generated header that a source includes
-          # *by name*. This flag says nothing about `#include "tst_main.moc"`:
-          # the directory it would be found in is one of the 90, but the error
-          # raised is the file not being there, not the directory. That is what
-          # the AUTOMOC step above generates, and why this job builds two
-          # targets.
+          # It would not be sufficient for a generated header a source includes
+          # *by name* (an AUTOMOC `#include "<own-basename>.moc"`): the error
+          # raised is the file not being there, not the directory. No source
+          # does that; one that starts to needs its <target>_autogen built
+          # before this step.
           # And it is not sufficient for a source this configure does not
           # build at all. That is one structural problem with three faces --
           # a generated header, tests/lint/ text fixtures, and an
@@ -3725,38 +3463,3 @@ jobs:
           CC: gcc-15
           CXX: g++-15
         run: bash scripts/check_install_export.sh
-
-  install-export-forms-qml:
-    name: MorphForms QML module consumability
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # GCC 15 for the same reason install-export uses it (<print>); the GL and
-      # xcb libraries are what the offscreen QPA plugin still links against.
-      - name: Install GCC 15, ninja and the Qt runtime libraries
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build \
-            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
-            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
-
-      # Not the distro's Qt: MORPH_BUILD_FORMS_QML needs 6.5+ and Ubuntu 24.04
-      # ships 6.4.2 (see linux-all-features' identical step).
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          cache: true
-
-      # Install MorphForms to a scratch prefix, then build and *run* an
-      # application that renders a DynamicForm from it -- plus the vacuity
-      # guard that the same application without the plugin cannot.
-      - name: Install MorphForms and render a form from the prefix
-        env:
-          CC: gcc-15
-          CXX: g++-15
-        run: bash scripts/check_forms_qml_install.sh

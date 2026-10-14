@@ -67,11 +67,11 @@ struct UpdateVotes {
 /// `gui/qml/VoteView.qml` can bind these three forms straight to
 /// `PollBridge`: `schemaJson<A>()` stamps `x-submitMode: "explicit"`
 /// (`docs/spec/forms/forms.md`, "Explicit submit mode"), which suppresses
-/// `DynamicForm`'s default auto-submit-on-validity and renders the shipped
-/// renderer's own Submit button instead. Without it a live `controller`
+/// a form's default auto-submit-on-validity and renders its own Submit
+/// button instead. Without it a live `controller`
 /// would post one comment per keystroke that happened to leave the form
 /// valid. These are the only three `PollModel` actions rendered by
-/// `DynamicForm` (`gui_lib/poll_schemas.hpp`), and all three mutate.
+/// a form, and all three mutate.
 struct AddComment {
     std::string participantName;
     std::string body;

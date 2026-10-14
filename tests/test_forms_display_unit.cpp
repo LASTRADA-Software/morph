@@ -9,9 +9,6 @@
 // carries, and the precision as `x-displayDecimals`, deliberately *not*
 // `x-decimalPlaces`, which would hand the property the `{num,den,dp}` encoding
 // a `double` cannot decode.
-//
-// src/qt/forms/tests/tst_DynamicFormDisplayUnit.qml pins the renderer half
-// against the same key names.
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>

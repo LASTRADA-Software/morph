@@ -2,7 +2,7 @@
 
 **Status: server-side complete, no client.** Build order steps 1–10 and
 7b's three follow-on items are built and tested (`src/`, `include/`,
-`tests/`). crm is the only built rung with no `gui/` and no `gui_wasm/`, so the
+`tests/`). crm is the only built rung with no screens, so the
 parts of the definition of done that name a rendering client are not met.
 Two smaller items also fall short of what this README asks for: lists ship
 unpaginated, and the deleted-field lifecycle has one of its three arrival
@@ -89,9 +89,8 @@ schemas/layouts). Build order (each step is a usable milestone):
    per-field schema annotations, arbitrarily deep) is a real, tested
    framework feature — but this rung's own "Expected strain points" section
    already names its actual gap: *no shipped renderer exists for it*
-   ("the QML renderer has no array/child-table control — quote lines need
-   an app-level recursive validator plus a child-table renderer
-   [framework gap]"). Embedding contacts inside `AccountView` would produce
+   ("quote lines need an app-level recursive validator plus a child-table
+   renderer").  The forms engine's `ObjectArray` field is that renderer now. Embedding contacts inside `AccountView` would produce
    a schema no client here can render as an editable child table anyway, so
    step 2 uses the pattern that actually works end-to-end today — the same
    `Choice`-backed lookup + filtered list-action shape `lims`'s "child
@@ -571,10 +570,9 @@ compiled-types vs. runtime-metadata boundary.
   mode** (presenter owns the single `submitIfValid`) built before any form
   ships; the two-phase duplicate-detection flow is impossible without it.
 - **Nested line items get schemas but no enforcement** (review D3):
-  `allRequiredEngaged` and precision reconciliation stop at top level, and
-  the QML renderer has no array/child-table control — quote lines need an
-  app-level recursive validator plus a child-table renderer [framework
-  gap]. Empty-vs-zero also bites here: a computed total with a
+  `allRequiredEngaged` and precision reconciliation stop at top level, so
+  quote lines need an app-level recursive validator plus a child-table
+  renderer (the forms engine's `ObjectArray` field). Empty-vs-zero also bites here: a computed total with a
   never-entered discount computes to *empty*, not `qty × price` — decide
   per field.
 - **Per-field authz vs. one journal**: journal payloads are stored whole,
@@ -605,8 +603,7 @@ Three things this README asks for that the rung does not currently have.
 Each is listed with why it was left, so the gap is a decision on the record
 rather than an omission a reader has to discover.
 
-- **No client — no `gui/`, no `gui_wasm/`.** Every other built rung ships a
-  `gui/`; pastebin, bookmarks and polls also ship a `gui_wasm/`. The
+- **No client — no screens.** Every other built rung serves screens. The
   server-side halves of the form story *are* built and tested —
   `crm::gui::crmSchemasJson()` serves every form action's schema, and
   `crm::gui::updateAccountSchemaJsonFor()` shapes it per caller — but
@@ -743,7 +740,7 @@ nothing wants them.
   87.15% by Codecov's own arithmetic (`hits / (hits + misses + partials)` over
   the uploaded LCOV) and from 91.27% to 92.08% by `llvm-cov`'s line count. Those
   are two different measurements of the same profile, not a discrepancy — see
-  `../TESTING.md`, "What `examples/common`'s coverage number measures", for
+  `../TESTING.md`, "Two coverage numbers", for
   which one a `codecov.yml` target is checked against.
 
 ## Definition of done

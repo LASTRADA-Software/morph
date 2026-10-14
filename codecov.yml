@@ -2,11 +2,10 @@
 #
 # Coverage is produced by the `clang-coverage` CI job via scripts/coverage.sh:
 # always include/morph (the library), plus examples/common (the ladder's
-# hand-written GUI/testkit code — real coverage of morph's own client stack,
+# hand-written app/testkit code — real coverage of morph's own client stack,
 # not app-specific logic; see examples/TESTING.md's "round-7 T4 reframe") and
-# every built rung's own models/app/presenter code, whenever that leg's
-# configure also builds the ladder. Tests, a rung's `main()` shells
-# (`gui/`, `gui_wasm/`), demo src/, fetched dependencies, and
+# every built rung's own models/app/screens code, whenever that leg's
+# configure also builds the ladder. Tests, demo src/, fetched dependencies, and
 # AUTOMOC-generated files (which live under the build tree, never under a
 # source-tree path this config names) are excluded.
 
@@ -283,13 +282,8 @@ component_management:
     # `examples/pastebin/**`, but a component can only score files the
     # uploaded report contains, and that report is whatever
     # `scripts/coverage.sh` names in its `SOURCES` array. For this rung that
-    # is `include/`, `src/` and `gui_lib/`: the DTOs, the model and app
-    # bootstrap, and the hand-written presenter/QML-adapter layer. It is
-    # **not** `gui/` or `gui_wasm/` — those are `main()` shells (engine setup,
-    # argv parsing, `setInitialProperties`) with no unit-testable seam,
-    # exercised by the offscreen QML engine-load smoke test and by hand, and
-    # they are named in `ignore:` below so their absence is a decision rather
-    # than an accident. `tests/` is excluded for the same reason
+    # is `include/`, `src/` and `screens/`: the DTOs, the model and app
+    # bootstrap, and the screen documents. `tests/` is excluded for the same reason
     # examples/common's is: a suite scoring its own test code inflates the
     # number it is supposed to police.
     #
@@ -313,11 +307,6 @@ component_management:
     #     transaction, while that transaction holds the write lock. The
     #     source documents it as unreachable in practice and treats it as
     #     "gone" rather than asserting.
-    # `gui_lib/` itself is fully covered: `paste_presenter.cpp`,
-    # `paste_qml_bridges.cpp` and both headers' inline bodies are at 100%
-    # lines, by `tests/test_paste_presenter.cpp` and
-    # `tests/test_paste_qml_bridges.cpp`.
-    #
     # 96%, not something nearer the 98.22% ceiling, for two reasons: it leaves
     # a margin below that ceiling rather than sitting on it, and the ceiling
     # is not perfectly stable — `paste_model.cpp` scores 2 or 3 missed lines
@@ -606,8 +595,7 @@ comment:
 
 # Nothing in examples/ other than examples/common and the built rungs ever
 # gets compiled by the coverage job's configure (MORPH_BUILD_LADDER builds
-# examples/common's targets plus each rung named by MORPH_LADDER_RUNGS and,
-# under Emscripten only, wasm_spike — which this job never reaches), so
+# examples/common's targets plus each rung named by MORPH_LADDER_RUNGS), so
 # bank/forms/concepts/etc. never produce coverage data here in the first
 # place; excluding them explicitly documents the intent rather than relying
 # on that as an accident of what happens to be built. A rung's own test
@@ -623,41 +611,11 @@ ignore:
   - "examples/qt_tls_client/**"
   - "examples/common/testkit/test_*.cpp"
   - "examples/common/testkit/testkit_main.cpp"
-  - "examples/common/wasm_spike/**"
+  # Each rung's own test sources, on the same terms as examples/common's.
   - "examples/pastebin/tests/**"
-  - "examples/pastebin/gui/**"
-  - "examples/pastebin/gui_wasm/**"
-  # Rungs 2-4, on exactly the same terms as rung 1 above: a rung's own test
-  # sources are excluded so the suite does not score itself, and `gui/` +
-  # `gui_wasm/` are `main()` shells with no unit-testable seam. These entries
-  # arrive with morph#141, which is what first put these rungs into the
-  # coverage report at all -- scripts/coverage.sh had only ever named rung 1.
   - "examples/bookmarks/tests/**"
-  - "examples/bookmarks/gui/**"
-  - "examples/bookmarks/gui_wasm/**"
   - "examples/polls/tests/**"
-  - "examples/polls/gui/**"
-  - "examples/polls/gui_wasm/**"
   - "examples/kanban/tests/**"
-  - "examples/kanban/gui/**"
-  - "examples/kanban/gui_wasm/**"
-  # Rungs 5-6, on the same terms. Both entered the coverage report for the
-  # first time with rung 6's fix to scripts/coverage.sh.
   - "examples/ledger/tests/**"
-  - "examples/ledger/gui/**"
-  - "examples/ledger/gui_wasm/**"
   - "examples/lims/tests/**"
-  - "examples/lims/gui/**"
-  - "examples/lims/gui_wasm/**"
-  # Rung 7, crm, on the same terms. Missing until now: every rung from
-  # bookmarks onwards got its three entries as it landed, and crm's were not
-  # added. Nothing failed, because scripts/coverage.sh's SOURCES array names
-  # only examples/crm/{include,src,gui_lib} and so never put crm's tests or
-  # main() shells into a report for these lines to exclude -- which is exactly
-  # the point of writing them down: the entries state the intent rather than
-  # leaving the exclusion to be an accident of what the other script happens to
-  # name. A gate (since removed) checked that each rung has a `component_id`,
-  # not that it has these, so the omission was unguarded then and is now.
   - "examples/crm/tests/**"
-  - "examples/crm/gui/**"
-  - "examples/crm/gui_wasm/**"

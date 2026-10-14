@@ -88,7 +88,7 @@
 # nothing.
 #
 # One directory up, at `examples/`, is not available and should not be: a
-# config there governs every rung's src/, include/ and gui_lib/ together, which
+# config there governs every rung's src/, include/ and screens/ together, which
 # is the shape in which a narrow suppression quietly becomes a wide one. That
 # holds regardless of how narrow this key is -- the file would be reaching seven
 # rungs' production code on the strength of an argument made about the bank

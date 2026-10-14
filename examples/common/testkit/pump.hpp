@@ -80,21 +80,4 @@ T awaitQt(::morph::async::Completion<T> completion,
     return std::move(*state->value);
 }
 
-/// @brief `pumpUntil(!presenter.busy())` — waits for a presenter's tracked
-///        completions to drain. See `examples/common/gui/presenter.hpp`
-///        (Task 6) for `busy()`'s contract; this template has no header
-///        dependency on that type, so Task 6 requires no change here.
-/// @tparam PresenterLike Anything exposing `bool busy() const`.
-/// @param presenter Presenter whose in-flight completions to drain.
-/// @param deadline  Wall-clock budget passed through to `pumpUntil`.
-/// @return `true` if the presenter went idle before the deadline, `false` on
-///         timeout — `[[nodiscard]]` because a silently ignored timeout turns
-///         "the action never completed" into "the assertion below reads stale
-///         state", which is exactly the flake this primitive exists to avoid.
-template <typename PresenterLike>
-[[nodiscard]] bool settle(const PresenterLike& presenter,
-                          std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
-    return pumpUntil([&] { return !presenter.busy(); }, deadline);
-}
-
 }  // namespace morph::ladder::testkit

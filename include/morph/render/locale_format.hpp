@@ -476,8 +476,7 @@ struct SignMatch {
 /// two digit families in one entry, or any character that is not a digit)
 /// yields `std::nullopt` rather than a best-effort guess. The decimal point
 /// counts as output, so a sign placed straight after the separator ("`,-5`" in
-/// a de-DE locale) is rejected -- matching the QML mirror in
-/// `src/qt/forms/qml/DynamicForm.qml`, which rejects it too.
+/// a de-DE locale) is rejected.
 ///
 /// @par Grouping is validated, not stripped
 /// A group separator is only dropped where a group separator can legally be:

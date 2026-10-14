@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// collectionView on RecordingBackend: what src/qt/forms/tests/tst_collectionview.qml, tst_ViewChrome.qml and the
-// collection half of tst_LargeIdPrecision.qml assert about a drawn collection (cells and buttons by test id, the
-// confirm and editor dialogs' visibility, the chrome slots, the master-detail layout), re-expressed on mounted
-// widgets. The session's own claims are test_forms_engine_collection.cpp's.
+// collectionView on RecordingBackend: a drawn collection (cells and buttons by test id, the confirm and editor
+// dialogs' visibility, the chrome slots, the master-detail layout), asserted on mounted widgets. The session's own
+// claims are test_forms_engine_collection.cpp's.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -38,7 +37,7 @@ using morph::test::formsengine::Harness;
 using morph::ui::testing::RecordingBackend;
 namespace ui = morph::ui;
 
-// The view and schemas of tst_collectionview.qml and tst_ViewChrome.qml.
+// The fixture view and its schemas.
 constexpr std::string_view kView = R"({
   "v-kind": "collection", "v-title": "Rows", "v-query": "ListRows", "v-rowKey": "id",
   "v-columns": [

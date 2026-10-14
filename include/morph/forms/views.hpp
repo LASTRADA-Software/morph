@@ -497,7 +497,7 @@ template <typename V>
 
     // The row element type is the query result itself when it is a
     // std::vector<...>, else its first array-valued member, in declaration
-    // order — the same two shapes Choice's optionRows reads (DynamicForm.qml).
+    // order — the same two shapes a Choice reads its option rows from.
     std::string columnsJson = "[]";
     if constexpr (isStdVector<Result>) {
         using Row = typename std::remove_cvref_t<Result>::value_type;
