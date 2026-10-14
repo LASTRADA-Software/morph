@@ -24,6 +24,7 @@
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/journal/action_log.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -1147,6 +1148,20 @@ TEST_CASE("an attach that creates the instance carries contextKey to a configure
         server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_CounterModel", "77", 0, "77"))));
     REQUIRE(reply.kind == "ok");
     REQUIRE(requestedFor == std::vector<std::string>{"SHI_CounterModel:77"});
+}
+
+// Mutation: drop the key in LocalBackend's registerModelWithContext (the entry is journalled under "").
+TEST_CASE("an instance a local attach creates journals under its key, as a server's log provider attaches it",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    auto const log = std::make_shared<morph::journal::InMemoryActionLog>(exec);
+    morph::journal::ScopedActionLog const installed{log};
+    Bridge bridge{makeLocal(exec), exec};
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    handler.attach(77);
+    settle(handler.execute(ShiAddTo{.id = 77, .amount = 3}));
+    REQUIRE_FALSE(log->entries("77").empty());
+    CHECK(log->entries("77").front().entityKey == "77");
 }
 
 TEST_CASE("attach and instances stamp the verified principal", "[shared-instances]") {

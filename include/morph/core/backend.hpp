@@ -1410,13 +1410,17 @@ private:
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
         ::morph::exec::detail::ModelId next{};
         if (request.primary.empty()) {
-            next = createAndTrack(std::move(request.factory));
+            auto [mid, holder] = createHolder(std::move(request.factory));
+            journalUnder(*holder, request.contextKey);
+            _instances.insertPrivate(mid, std::move(holder));
+            next = mid;
         } else {
             detail::DirectoryKey dirKey{request.typeId, request.primary};
             if (auto const attached = _instances.attach(dirKey)) {
                 next = *attached;
             } else {
                 auto [mid, holder] = createHolder(std::move(request.factory));
+                journalUnder(*holder, request.contextKey.empty() ? request.primary : request.contextKey);
                 _instances.insertShared(mid, std::move(holder), std::move(dirKey));
                 next = mid;
             }
@@ -1427,6 +1431,21 @@ private:
             deregisterModel(request.current);
         }
         return next;
+    }
+
+    /// @brief Attaches the default action log to @p holder under @p contextKey, the key a server's
+    ///        `ServerConfig::logProvider` attaches it under, so a keyed instance journals under its identity whichever
+    ///        backend holds it. Nothing when the key is empty or no default log is installed: the holder keeps what
+    ///        its factory attached.
+    /// @param holder     The new instance.
+    /// @param contextKey Its stable identity; empty if none.
+    static void journalUnder(::morph::model::detail::IModelHolder& holder, std::string const& contextKey) {
+        if (contextKey.empty()) {
+            return;
+        }
+        if (auto log = ::morph::journal::defaultActionLog()) {
+            holder.attachActionLog(std::move(log), contextKey);
+        }
     }
 
     /// @brief Builds a holder via @p factory, records it under a fresh id, and
