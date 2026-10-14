@@ -33,11 +33,17 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 # only in instrumentation — cannot diverge.
 #
 #   examples/common/       the shared testkit/GUI/app libraries every rung links
+#   examples/forms/, examples/bank/, examples/client/
+#                          applications on server-defined screens whose screen
+#                          tests and render smoke this job runs, and the
+#                          generic client that links them
 #   examples/CMakeLists.txt, examples/rungs.txt
 #                          which rungs get configured at all
 #   include/morph/         the library the ladder exists to exercise
 #   src/qt/                the compiled bodies of morph_qt_impl — the very
 #                          thing the testkit conformance-tests
+#   src/qt_quick/          the renderer the render smoke tests mount every
+#                          screen on
 #   cmake/, CMakeLists.txt, CMakePresets.json
 #                          a change to any can break or silently skip the job
 #   .github/workflows/ci.yml, scripts/ladder_rungs.sh
@@ -58,10 +64,14 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 # macOS still ships, where `readonly` on an array assignment is a syntax error.
 _extra_patterns=(
     'examples/common/'
+    'examples/forms/'
+    'examples/bank/'
+    'examples/client/'
     'examples/CMakeLists\.txt$'
     'examples/rungs\.txt$'
     'include/morph/'
     'src/qt/'
+    'src/qt_quick/'
     'cmake/'
     'CMakeLists\.txt$'
     'CMakePresets\.json$'

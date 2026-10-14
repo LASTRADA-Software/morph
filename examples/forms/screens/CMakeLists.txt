@@ -31,7 +31,9 @@ if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit)
     if(AF_COVERAGE)
         apply_coverage(forms_screen_tests)
     endif()
-    catch_discover_tests(forms_screen_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 LABELS "forms")
+    # Labelled as a rung's are, so the ladder job's `ctest -L ladder` runs them.
+    catch_discover_tests(forms_screen_tests DISCOVERY_MODE PRE_TEST TEST_PREFIX "forms.screens."
+        PROPERTIES TIMEOUT 120 LABELS "ladder-forms" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     if(TARGET morph_qt_quick)
         add_executable(forms_render_smoke tests/test_forms_render.cpp)
@@ -52,6 +54,7 @@ if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit)
             cmake_path(GET _forms_qt_core PARENT_PATH _forms_dl_paths)
         endif()
         catch_discover_tests(forms_render_smoke DISCOVERY_MODE PRE_TEST DL_PATHS "${_forms_dl_paths}"
-            PROPERTIES TIMEOUT 120 LABELS "forms" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+            TEST_PREFIX "forms.render."
+            PROPERTIES TIMEOUT 120 LABELS "ladder-forms" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()
