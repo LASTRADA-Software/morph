@@ -14,6 +14,12 @@
 #include "bank/db/database.hpp"
 #endif
 
+#if MORPH_CLIENT_HAS_POLLS
+#include <polls_screens.hpp>
+
+#include "polls/db/database.hpp"
+#endif
+
 #if MORPH_CLIENT_HAS_BOOKMARKS
 #include <bookmarks_screens.hpp>
 
@@ -43,6 +49,12 @@ std::vector<LocalApp> localApps() {
     apps.push_back(LocalApp{.name = "bank", .bundle = &bank::screens::bundle, .setUp = [](LocalSetup const& setup) {
                                 std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
                                 bank::db::setup("DRIVER=SQLite3;Database=" + file);
+                            }});
+#endif
+#if MORPH_CLIENT_HAS_POLLS
+    apps.push_back(LocalApp{.name = "polls", .bundle = &polls::screens::bundle, .setUp = [](LocalSetup const& setup) {
+                                std::string const file = setup.db.empty() ? std::string{"polls.db"} : setup.db;
+                                polls::db::setup("DRIVER=SQLite3;Database=" + file);
                             }});
 #endif
 #if MORPH_CLIENT_HAS_BOOKMARKS

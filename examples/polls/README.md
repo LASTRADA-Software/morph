@@ -211,6 +211,18 @@ runs on.
    identity field this rung defines (`OptionId`, `PollEventId`) is already
    a strong type, per the usual rule.
 
+
+## Server-defined screens
+
+[`screens/polls_screens.cpp`](screens/polls_screens.cpp) declares polls' screens as UI documents (spec 4):
+- **`polls.create`** is a form over `CreatePoll`, whose option list the forms engine edits. The new poll opens.
+- **`polls.vote`** (`pollId`):
+  - the keyed `PollModel` instance, opened by a `latest` mutation and re-opened on a backend switch;
+  - the options with their counts;
+  - `SubmitVotes` for the first vote, then `UpdateVotes`. The picks are the form's draft, which a reconnect keeps;
+  - comments, and the activity feed, which refreshes on every vote, comment and finalization.
+
+`morph_examples_client --app polls` runs them in process (`--db`, default `polls.db`).
 ## Framework prerequisites (built as part of this rung, before the app tasks that depend on them consume them)
 
 Two items `LADDER.md`'s "Framework prerequisites" section named as blocking
