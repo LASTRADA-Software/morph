@@ -14,6 +14,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
+#include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -21,6 +23,7 @@
 #include <testkit/screen_harness.hpp>
 #include <vector>
 
+#include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban_screens.hpp"
 
 namespace {
@@ -32,9 +35,15 @@ using morph::examples::testing::ScreenHarness;
 using morph::ladder::testkit::DbFixture;
 
 LocalApp kanbanApp() {
-    return LocalApp{.name = "kanban", .bundle = &kanban::screens::bundle, .setUp = [](LocalSetup const&) {
-                        kanban::screens::prepareLocal();
-                    }};
+    return LocalApp{.name = "kanban",
+                    .bundle = &kanban::screens::bundle,
+                    .setUp = [](LocalSetup const&) { kanban::screens::prepareLocal(); },
+                    // The secret prepareLocal's token issuer signs with, which a simulated server verifies.
+                    .serverAuthorizer =
+                        [] {
+                            return std::make_shared<kanban::auth::KanbanAuthorizer>("kanban-local-development",
+                                                                                    morph::session::hmacSha256);
+                        }};
 }
 
 void reportProblems(ScreenHarness const& harness) {
@@ -174,9 +183,9 @@ void buildBoard(ScreenHarness& harness) {
     REQUIRE(harness.waitFor([&harness] { return holds(harness, cells(harness).at(0), "Write"); }));
 }
 
-ScreenHarness openLogin() {
+ScreenHarness openLogin(RigMode mode = RigMode::Local) {
     return ScreenHarness{
-        kanbanApp(), std::string{kanban::screens::kLogin}, RigMode::Local, {}, LocalSetup{.db = {}, .user = {}}};
+        kanbanApp(), std::string{kanban::screens::kLogin}, mode, {}, LocalSetup{.db = {}, .user = {}}};
 }
 
 }  // namespace
@@ -331,4 +340,17 @@ TEST_CASE("kanban screens: a picked file is attached to a task, and downloads ba
     std::ifstream input{saved, std::ios::binary};
     std::string const got{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     CHECK(got == bytes);
+}
+
+// Mutation: install the principal without the reply's token (every call after sign-in is refused), or skip the
+// catalog reload (the projects screen is not listed, and the navigation to it fails).
+TEST_CASE("kanban screens: signing in to a server installs its token and reloads the catalog", "[kanban-screens]") {
+    DbFixture fixture;
+    ScreenHarness harness = openLogin(RigMode::Simulated);
+    buildBoard(harness);
+    reportProblems(harness);
+    CHECK(harness.problems().empty());
+    CHECK(harness.mounted() == std::vector<std::string>{std::string{kanban::screens::kLogin},
+                                                        std::string{kanban::screens::kProjects},
+                                                        std::string{kanban::screens::kBoard}});
 }

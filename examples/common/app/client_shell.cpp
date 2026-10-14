@@ -58,8 +58,40 @@ std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
 /// from disk to upload it and save a downloaded one, moving the bytes over the source's file side channel.
 class Application final : public ui::InterpreterHost {
 public:
-    Application(ClientSource& source, std::filesystem::path downloads)
-        : _source{&source}, _downloads{std::move(downloads)} {}
+    /// The shell's side of a sign-in: install the principal and token, reload, then mount.
+    using SignedIn = std::function<void(std::string principal, std::string token)>;
+
+    Application(ClientSource& source, std::filesystem::path downloads, SignedIn signedIn,
+                std::function<void()> signedOut)
+        : _source{&source},
+          _downloads{std::move(downloads)},
+          _signedIn{std::move(signedIn)},
+          _signedOut{std::move(signedOut)} {}
+
+    // The reply's `principal`, and its `token` when it carries one, unless it says `ok: false`.
+    bool signIn(ui::Value const& reply) override {
+        ui::ValueRecord const* const record = reply.asRecord();
+        if (record == nullptr) {
+            return false;
+        }
+        auto const accepted = record->find("ok");
+        if (accepted != record->end() && accepted->second.asBool() != nullptr && !*accepted->second.asBool()) {
+            return false;
+        }
+        auto const text = [record](char const* field) {
+            auto const found = record->find(field);
+            std::string const* const value = found == record->end() ? nullptr : found->second.asString();
+            return value == nullptr ? std::string{} : *value;
+        };
+        std::string principal = text("principal");
+        if (principal.empty()) {
+            return false;
+        }
+        _signedIn(std::move(principal), text("token"));
+        return true;
+    }
+
+    void signOut() override { _signedOut(); }
 
     bool uploadFor(ui::UploadRequest const& request, std::function<void(ui::Value)> progress,
                    std::function<void(std::expected<ui::Value, std::string>)> done) override {
@@ -124,26 +156,11 @@ public:
         return true;
     }
 
-    // The reply's `principal`, when it names one and does not say `ok: false`.
-    bool signIn(ui::Value const& reply) override {
-        ui::ValueRecord const* const record = reply.asRecord();
-        if (record == nullptr) {
-            return false;
-        }
-        auto const accepted = record->find("ok");
-        if (accepted != record->end() && accepted->second.asBool() != nullptr && !*accepted->second.asBool()) {
-            return false;
-        }
-        auto const principal = record->find("principal");
-        std::string const* const name = principal == record->end() ? nullptr : principal->second.asString();
-        return name != nullptr && !name->empty() && _source->adoptPrincipal(*name);
-    }
-
-    void signOut() override { static_cast<void>(_source->adoptPrincipal(_source->signedOutPrincipal())); }
-
 private:
     ClientSource* _source;
     std::filesystem::path _downloads;
+    SignedIn _signedIn;
+    std::function<void()> _signedOut;
 };
 
 class Shell final : public ui::MountedShell {
@@ -164,31 +181,16 @@ public:
 
     /// Loads the bundle's screens and mounts the start screen.
     void start(ui::Bundle const& bundle, ClientSource& source) {
-        ui::Catalog const catalog = source.catalog();
-        for (std::string const& screenId : source.screens()) {
-            auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
-            if (!loaded) {
-                problem(loaded.error().message());
-                continue;
-            }
-            _documents.emplace(screenId, std::make_shared<ui::Document const>(std::move(*loaded)));
-        }
-        std::string start = _options.startScreen;
-        if (start.empty() && !_documents.empty()) {
-            for (std::string const& screenId : source.screens()) {
-                if (_documents.contains(screenId)) {
-                    start = screenId;
-                    break;
-                }
-            }
-        }
+        _source = &source;
+        loadDocuments(bundle);
+        std::string const start = _options.startScreen.empty() ? firstScreen(false) : _options.startScreen;
         if (start.empty()) {
             show("The application has no screen this client can open.");
             return;
         }
         ui::SessionOptions sessionOptions;
         sessionOptions.scheduler = &_context->scheduler();
-        sessionOptions.catalog = catalog;
+        sessionOptions.catalog = source.catalog();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
@@ -196,11 +198,35 @@ public:
             return found == _documents.end() ? nullptr : found->second;
         };
         hostOptions.backend = _backend;
-        _application = std::make_unique<Application>(source, _options.downloads);
+        _application = std::make_unique<Application>(
+            source, _options.downloads,
+            [this](std::string principal, std::string token) {
+                reloadThen(true,
+                           [this, principal = std::move(principal), token = std::move(token)](auto done) mutable {
+                               _source->signIn(std::move(principal), std::move(token), std::move(done));
+                           });
+            },
+            [this] {
+                // Every screen goes first, so their private instances are released under the session that owns them;
+                // from a posted task, since the screen that signed out is still running its commands.
+                reloadThen(false, [this](auto done) {
+                    _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
+                        if (auto const live = alive.lock(); live != nullptr && *live) {
+                            unmount();
+                            _source->signOut(done);
+                        }
+                    });
+                });
+            });
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
             *_session, source.dispatcher(), std::move(hostOptions), [this](std::string screenId, ui::ParamMap params) {
+                // A navigation a sign-in asks for waits for the catalog the sign-in reloads, which lists the screen.
+                if (_reloading) {
+                    _pending = std::pair{std::move(screenId), std::move(params)};
+                    return;
+                }
                 // Posted: the current screen is replaced, which must not happen inside
                 // the handler of one of its own elements.
                 _context->executor().post([alive = std::weak_ptr<bool>{_alive}, this, screenId = std::move(screenId),
@@ -222,6 +248,75 @@ public:
     }
 
 private:
+    // The documents of every screen the catalog lists, loaded against its facts; a screen whose document does not
+    // load is reported and left out.
+    void loadDocuments(ui::Bundle const& bundle) {
+        _documents.clear();
+        ui::Catalog const catalog = _source->catalog();
+        for (std::string const& screenId : _source->screens()) {
+            auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
+            if (!loaded) {
+                problem(loaded.error().message());
+                continue;
+            }
+            _documents.emplace(screenId, std::make_shared<ui::Document const>(std::move(*loaded)));
+        }
+    }
+
+    // The first screen the catalog lists that loaded: signed in, the first that is not public; signed out, the first
+    // that is, such as the login screen; either way, the first at all when there is none such.
+    [[nodiscard]] std::string firstScreen(bool signedIn) const {
+        std::string fallback;
+        for (std::string const& screenId : _source->screens()) {
+            if (!_documents.contains(screenId)) {
+                continue;
+            }
+            if (_source->isPublic(screenId) != signedIn) {
+                return screenId;
+            }
+            if (fallback.empty()) {
+                fallback = screenId;
+            }
+        }
+        return fallback;
+    }
+
+    // Runs @p change, which installs a session and reloads the catalog, holding navigation until the catalog is
+    // current; then mounts the navigation that waited, or keeps a screen that signed in in place, or mounts the start
+    // screen for the new session: after a sign-in the first screen that is not public, after a sign-out the first that
+    // is.
+    void reloadThen(bool signingIn, std::function<void(std::function<void(bool)>)> const& change) {
+        _reloading = true;
+        _pending.reset();
+        change([this, signingIn, alive = std::weak_ptr<bool>{_alive}](bool loaded) {
+            // Posted, even when the reload answered at once: the document that signed in may still ask to navigate
+            // in the same handler, and that navigation is what this mounts.
+            _context->executor().post([this, signingIn, loaded, alive] {
+                auto const live = alive.lock();
+                if (live == nullptr || !*live) {
+                    return;
+                }
+                _reloading = false;
+                if (!loaded || _source->bundle() == nullptr) {
+                    show("The session changed, and its screens could not be loaded.");
+                    return;
+                }
+                loadDocuments(*_source->bundle());
+                auto const pending = std::exchange(_pending, std::nullopt);
+                if (pending) {
+                    mount(pending->first, pending->second);
+                    return;
+                }
+                // A screen that signed in in place, and is still listed, stays as it is; a login screen, which is
+                // public, gives way to the start screen of the new session.
+                if (_current && _documents.contains(_currentId) && !_source->isPublic(_currentId)) {
+                    return;
+                }
+                mount(firstScreen(signingIn), {});
+            });
+        });
+    }
+
     void mount(std::string const& screenId, ui::ParamMap const& params) {
         unmount();
         auto handle = _host->mount(screenId, params);
@@ -230,6 +325,7 @@ private:
             return;
         }
         _current = std::move(*handle);
+        _currentId = screenId;
         if (_options.onMounted) {
             _options.onMounted(screenId);
         }
@@ -253,11 +349,15 @@ private:
     ui::IViewBackend* _backend;
     ClientShellOptions _options;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
+    ClientSource* _source = nullptr;
+    bool _reloading = false;
+    std::optional<std::pair<std::string, ui::ParamMap>> _pending;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
     std::unique_ptr<ui::Session> _session;
     std::unique_ptr<Application> _application;
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ScreenHandle> _current;
+    std::string _currentId;
     std::optional<ui::Mounted> _message;
 };
 
