@@ -88,7 +88,8 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 | Check | `{"id", "assert": e, "message": e, "targets": [ids], "blocking": bool}` under `checks` | `CheckDecl` |
 
 An `instance` string other than `private` and `shared` is a constant key. Durations are
-non-negative integers of milliseconds. `serialKey` is valid only with `"concurrency": "serial"`.
+non-negative integers of milliseconds. `serialKey` is valid only with `"concurrency": "serial"`, and reads the run's body as `body`
+(`event` is not in scope there: a run started by a button and one started by a drop key the same).
 
 ## Commands
 

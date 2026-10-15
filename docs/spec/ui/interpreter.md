@@ -123,8 +123,8 @@ canonical body is the body's JSON with record fields in name order.
 
 A run evaluates its body (the command's, in the command's scope, or the declaration's, in the
 mutation's scope; `{}` without either) and is refused, queued or sent as `concurrency` says:
-`exclusive` refuses a run while one is in flight; `serial` queues per `serialKey` (its canonical JSON)
-and sends the next when the previous settles; `latest` sends every run and applies only the newest
+`exclusive` refuses a run while one is in flight; `serial` queues per `serialKey` (its canonical JSON;
+the key is evaluated with the run's body bound as `body`) and sends the next when the previous settles; `latest` sends every run and applies only the newest
 reply; `parallel` applies each. `pending` counts runs in flight and queued.
 
 - **Optimistic writes** are layers on the entry of the named query: the shown value is the confirmed

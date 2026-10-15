@@ -212,6 +212,47 @@ TEST_CASE("interpreter control: a serial mutation queues runs per key and sends 
     CHECK(h.text("result") == "2");
 }
 
+// Mutation: evaluate serialKey without the `body` binding -> every key is null, one queue, task 2 waits for task 1.
+TEST_CASE("interpreter control: a serial key reads the run's body, so runs queue per item", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "per-item",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "mutations": { "move": { "model": "sample", "action": "Lims_Save", "concurrency": "serial",
+                               "serialKey": { "ref": "body.task" } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "one", "label": "1", "onClick": { "run": "move", "body": { "obj": { "task": 1 } } } },
+        { "kind": "button", "testId": "two", "label": "2", "onClick": { "run": "move", "body": { "obj": { "task": 2 } } } } ] } })");
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    REQUIRE(h.diagnostics.empty());
+    h.backend.click(h.byTestId("Button", "one"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "two"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "one"));
+    h.settle();
+    // Tasks 1 and 2 are in flight together; the second run of task 1 waits for the first.
+    REQUIRE(h.dispatcher.count("Lims_Save") == 2);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_Save")).body == R"({"task":2})");
+    h.reply(h.dispatcher.last("Lims_Save"), "{}");
+    CHECK(h.dispatcher.count("Lims_Save") == 2);
+    h.reply(h.dispatcher.last("Lims_Save") - 1, "{}");
+    REQUIRE(h.dispatcher.count("Lims_Save") == 3);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_Save")).body == R"({"task":1})");
+}
+
+TEST_CASE("interpreter control: a serial key may not read event, which only some commands have", "[ui][interpreter]") {
+    auto const loaded = ui::loadDocumentText(R"({
+      "vocab": "ui/1", "id": "per-event",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "mutations": { "move": { "model": "sample", "action": "Lims_Save", "concurrency": "serial",
+                               "serialKey": { "ref": "event" } } },
+      "view": { "kind": "spacer" } })",
+                                             ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+    REQUIRE_FALSE(loaded.has_value());
+    CHECK(loaded.error().reason == "`event` is read only inside a command list");
+}
+
 TEST_CASE("interpreter control: a latest mutation applies only the newest reply", "[ui][interpreter]") {
     Harness h;
     auto screen = h.mount(mutations("latest"));

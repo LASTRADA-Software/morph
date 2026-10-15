@@ -2424,7 +2424,9 @@ private:
             checkExpr(*mutation.body, context);
         }
         if (mutation.serialKey) {
-            checkExpr(*mutation.serialKey, context);
+            CheckContext keyContext = context;
+            keyContext.bindings.emplace_back("body", Type::any());
+            checkExpr(*mutation.serialKey, keyContext);
         }
         for (std::size_t index = 0; index < mutation.invalidates.size(); ++index) {
             if (!_queries.contains(mutation.invalidates.at(index))) {

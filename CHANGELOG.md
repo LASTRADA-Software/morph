@@ -11,6 +11,11 @@ API surface).
 
 ### Changed
 
+- **A serial mutation's `serialKey` reads the run's body as `body`.** The key
+  could read nothing a run carries, so per-item serialization (one queue per
+  task) could not be declared. `{"ref": "body.taskId"}` now keys each run by its
+  body, the same whichever command started it; `event` stays out of scope.
+
 - **`morph::ui::author::Screen::emit()` is `write()`.** Qt defines `emit` as a
   keyword macro, so a Qt server — which is where screens are written — could not
   include the builders after a Qt header. `tests/qt/test_qt_keywords.cpp`
