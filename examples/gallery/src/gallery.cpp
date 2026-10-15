@@ -7,6 +7,7 @@
 #include <memory>
 #include <morph/core/registry.hpp>
 #include <morph/ui/author.hpp>
+#include <morph/ui/author_forms.hpp>
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
@@ -17,6 +18,8 @@
 
 BRIDGE_REGISTER_MODEL(gallery::GalleryModel, "Gallery_Model")
 BRIDGE_REGISTER_ACTION(gallery::GalleryModel, gallery::ListFacts, "Gallery_ListFacts")
+BRIDGE_REGISTER_ACTION(gallery::GalleryModel, gallery::AddFact, "Gallery_AddFact")
+BRIDGE_REGISTER_ACTION(gallery::GalleryModel, gallery::ConfirmFact, "Gallery_ConfirmFact")
 
 namespace gallery {
 
@@ -29,7 +32,13 @@ std::vector<Fact> GalleryModel::execute(ListFacts const& /*action*/) const {
             Fact{.id = 3, .label = "Vocabulary", .value = "ui/1"}};
 }
 
-std::vector<std::string_view> pendingKinds() { return {"form", "collection", "wizard"}; }
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
+Fact GalleryModel::execute(AddFact const& action) const {
+    return Fact{.id = 4, .label = action.label, .value = action.value};
+}
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
+bool GalleryModel::execute(ConfirmFact const& action) const { return action.keep; }
 
 ui::Screen homeScreen() {
     return ui::screen(std::string{kHomeScreen}, [](ui::Scope& screen) {
@@ -122,7 +131,13 @@ ui::Screen homeScreen() {
              ui::dropZone({ui::text({.text = "Drop files here"})}, {.onDrop = ui::set(picked, "dropped")}),
              ui::customize(density), ui::custom(swatch).a11y("Swatch")});
 
-        return ui::column({menus, inputs, layout, overlays, lists, feedback}, {.gap = 12});
+        auto const forms =
+            ui::panel({ui::form<AddFact>(model).id(ui::element("addFact")).testId("addFact"),
+                       ui::collection<FactsView>(model).id(ui::element("factsView")).testId("factsView"),
+                       ui::wizard<FactWizard>(model).id(ui::element("factWizard")).testId("factWizard")},
+                      {.title = "Forms", .padding = 8});
+
+        return ui::column({menus, inputs, layout, overlays, lists, feedback, forms}, {.gap = 12});
     });
 }
 
