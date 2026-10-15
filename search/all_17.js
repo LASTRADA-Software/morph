@@ -78,9 +78,10 @@ var searchData=
   ['wrapped_75',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
   ['wrappedmember_76',['WrappedMember',['../dd/def/query_8hpp.html#a05b2c9c396ec1ae74024242ea14fcd12',1,'morph::table::detail']]],
   ['wrappedmodelkey_77',['WrappedModelKey',['../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html',1,'morph::model']]],
-  ['writeenvelope_78',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]],
-  ['writemessage_79',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
-  ['writeto_80',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
-  ['writtencell_81',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]],
-  ['ws_5fconnection_2ehpp_82',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
+  ['write_78',['write',['../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html#ae3739a9cb7918c38d816e0423626a0da',1,'morph::ui::author::Screen']]],
+  ['writeenvelope_79',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]],
+  ['writemessage_80',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
+  ['writeto_81',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
+  ['writtencell_82',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]],
+  ['ws_5fconnection_2ehpp_83',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
 ];
