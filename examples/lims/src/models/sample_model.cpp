@@ -356,6 +356,28 @@ void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
     mapper.Create(row);
 }
 
+/// @brief Refuses a preparation `reportedReading` cannot multiply by.
+///
+/// The conditional field, made load-bearing (README §5). `validate()` has
+/// already established that a `diluted` preparation carries a factor -- the
+/// client learns the same rule from `x-rules` in the served schema and the
+/// server re-runs the compiled one -- so what is left is the one check a
+/// cross-field rule cannot express: a factor must be a positive number.
+/// @param capture The capture.
+/// @throws ValidationError for a diluted aliquot without a positive factor, or an unknown preparation code.
+void checkPreparation(const CaptureConcentration& capture) {
+    if (capture.dilution.hasValue() && *capture.dilution == std::string{kDilutionDiluted}) {
+        if (!capture.dilutionFactor.hasValue() || (*capture.dilutionFactor).numerator <= 0) {
+            throw ValidationError{"CaptureConcentration: a diluted aliquot needs a positive dilution factor"};
+        }
+    } else if (capture.dilution.hasValue() && *capture.dilution != std::string{kDilutionNeat}) {
+        // Fail-closed on an unknown preparation code, for the same reason the
+        // qualifier codes are: guessing turns "this client speaks a dialect we
+        // do not know" into a silently undiluted reading.
+        throw ValidationError{"CaptureConcentration: unknown dilution mode '" + *capture.dilution + "'"};
+    }
+}
+
 }  // namespace
 
 ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author,
@@ -396,32 +418,16 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
                               std::string{Concentration::unitMeta().id}};
     }
 
-    // The conditional field, made load-bearing (README §5). `validate()` has
-    // already established that a `diluted` preparation carries a factor -- the
-    // client learns the same rule from `x-rules` in the served schema and the
-    // server re-runs the compiled one -- so all that is left here is the
-    // domain arithmetic and the one check a cross-field rule cannot express:
-    // a factor must be a positive number.
-    auto dilutionMultiplier = ::morph::math::Rational::one(::morph::math::DecimalPlaces{3});
-    if (capture.dilution.hasValue() && *capture.dilution == std::string{kDilutionDiluted}) {
-        if (!capture.dilutionFactor.hasValue() || (*capture.dilutionFactor).numerator <= 0) {
-            throw ValidationError{"CaptureConcentration: a diluted aliquot needs a positive dilution factor"};
-        }
-        dilutionMultiplier = *capture.dilutionFactor;
-    } else if (capture.dilution.hasValue() && *capture.dilution != std::string{kDilutionNeat}) {
-        // Fail-closed on an unknown preparation code, for the same reason the
-        // qualifier codes are: guessing turns "this client speaks a dialect we
-        // do not know" into a silently undiluted reading.
-        throw ValidationError{"CaptureConcentration: unknown dilution mode '" + *capture.dilution + "'"};
-    }
+    checkPreparation(capture);
 
     auto qualifier = ResultQualifier::Measured;
     std::optional<::morph::math::Rational> stored;
     bool outOfSpec = false;
-    if (capture.value.hasValue()) {
-        // Exact: the reported concentration accounts for the dilution, and it
-        // does so through `Rational`, never a `double`.
-        const auto reading = *capture.value * dilutionMultiplier;
+    // Exact, and the same derivation the action's computed `reportedValue`
+    // previews, before that field's display rounding. With the preparation
+    // checked above, it is empty only for a non-reading.
+    if (const auto reported = reportedReading(capture)) {
+        const auto& reading = *reported;
 
         // One declaration, both jobs. This is the same
         // `versionConstraints(...)` the catalogue built to decorate the served

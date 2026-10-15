@@ -212,6 +212,10 @@ struct CaptureConcentration {
     /// mis-declared dilution changes the reported concentration.
     DilutionFactor dilutionFactor;
 
+    /// @brief The concentration this capture reports: the reading times its
+    ///        dilution, computed by the server on every evaluation and run.
+    Concentration reportedValue;
+
     /// @brief Neither half of the sum is *unconditionally* required — the
     ///        `exactlyOneOf` rule below is the only gate on them.
     ///
@@ -241,6 +245,16 @@ struct CaptureConcentration {
         ::morph::forms::visibleWhen(&CaptureConcentration::dilutionFactor,
                                     ::morph::forms::equals(&CaptureConcentration::dilution, "diluted")));
 
+    /// @brief The reported concentration, from `reportedReading`. Only the
+    ///        reading is a declared input: an absent dilution means neat, so
+    ///        declaring the dilution members would blank every neat reading.
+    static constexpr auto computedFields = ::morph::forms::computeList(
+        ::morph::forms::computed<&CaptureConcentration::reportedValue, &CaptureConcentration::value>(
+            [](auto const& capture) {
+                auto const reading = reportedReading(capture);
+                return reading ? Concentration{*reading} : Concentration{};
+            }));
+
     /// @brief Whether this capture is well-formed.
     ///
     /// Deliberately *not* `allRequiredEngaged`: that would demand both fields
@@ -257,6 +271,27 @@ struct CaptureConcentration {
     ///        result mid-keystroke.
     static constexpr bool explicitSubmit = true;
 };
+
+/// @brief The concentration a capture reports: its reading times the dilution
+///        it declares, exactly (`Rational`, never a `double`).
+/// @param capture The capture.
+/// @return The product; empty for a non-reading, an unknown preparation, or a
+///         diluted aliquot without a positive factor.
+[[nodiscard]] inline std::optional<::morph::math::Rational> reportedReading(CaptureConcentration const& capture) {
+    if (!capture.value.hasValue()) {
+        return std::nullopt;
+    }
+    auto multiplier = ::morph::math::Rational::one(::morph::math::DecimalPlaces{3});
+    if (capture.dilution.hasValue() && *capture.dilution == kDilutionDiluted) {
+        if (!capture.dilutionFactor.hasValue() || (*capture.dilutionFactor).numerator <= 0) {
+            return std::nullopt;
+        }
+        multiplier = *capture.dilutionFactor;
+    } else if (capture.dilution.hasValue() && *capture.dilution != kDilutionNeat) {
+        return std::nullopt;
+    }
+    return *capture.value * multiplier;
+}
 
 /// @brief One captured result, as served back.
 struct ResultView {
