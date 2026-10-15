@@ -21,6 +21,8 @@ MorphField {
         readOnly: root.readOnly
         placeholderText: root.placeholder
         echoMode: root.password ? TextInput.Password : TextInput.Normal
+        // Declared, not left to Qt Quick Controls, so the field is a node whether or not accessibility is active.
+        Accessible.role: Accessible.EditableText
         onTextEdited: {
             root.edited = true
             root.fire("change", text)

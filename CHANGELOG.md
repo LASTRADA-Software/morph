@@ -31,6 +31,18 @@ API surface).
   with it the loader refuses a patch of a record result without `at`, or with
   an `at` that is not one of them.
 
+- **A Qt Quick widget is one accessible node with the role the document
+  names.** The roles of spec 6 §6 `group`, `text`, `edit` and `chart` mapped to
+  no Qt role, so such a node fell back to a plain item; a button's and a text's
+  role and name sat on the control inside the widget rather than on the item
+  that carries the test id, which itself read as an unnamed plain item; and a
+  key-value list exposed its captions and values as separate nodes. Each of
+  those four roles now maps to Qt's; a button's item is a Button named by its
+  label, with the press action, and a text's is StaticText named by its text,
+  with the control inside not a second node; a key-value pair is one node named
+  `"<caption>: <value>"`; and the test id is also written to `Accessible.id`
+  on a Qt that has it.
+
 - **An `evaluate` query's handle reads the action it evaluates.**
   `Scope::evaluate<A>` returned a `QueryHandle<A>` whose value was typed as
   `A`'s result, while the reply is `A`'s own body with its computed fields

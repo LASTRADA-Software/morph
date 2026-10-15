@@ -41,6 +41,10 @@ MorphField {
         width: root.controlWidth
         model: root.options
         currentIndex: -1
+        // Declared rather than left to Qt Quick Controls, which fills a control's role and name in only once the
+        // platform's accessibility is active: on a platform without a bridge the combo box would be no node at all.
+        Accessible.role: Accessible.ComboBox
+        Accessible.name: combo.displayText
         onActivated: index => root.choose(index)
 
         // Reported also with no options, so a failed fetch of them can be retried when the user asks for them.

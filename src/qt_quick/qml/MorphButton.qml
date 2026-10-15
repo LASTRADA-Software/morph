@@ -9,6 +9,12 @@ MorphWidget {
 
     property string label: ""
 
+    // The widget's item is the one node a driver finds by test id, so it is the button: it carries the role, the
+    // label as its name and the press action, and the control inside it is not a second node.
+    defaultName: label
+    defaultRole: Accessible.Button
+    Accessible.onPressAction: root.fire("click", undefined)
+
     focusTarget: button
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
@@ -17,6 +23,7 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
+        Accessible.ignored: true
         onClicked: root.fire("click", undefined)
         Keys.onReturnPressed: root.fire("click", undefined)
         Keys.onEnterPressed: root.fire("click", undefined)

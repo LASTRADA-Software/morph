@@ -28,6 +28,9 @@ MorphWidget {
                 readonly property var pair: root.items[Math.floor(index / 2)]
                 text: pair ? (index % 2 === 0 ? pair.label : pair.value) : ""
                 color: index % 2 === 0 ? Theme.muted : Theme.text
+                // One node per pair, named "<caption>: <value>", so a test reads a value without a second query.
+                Accessible.name: pair ? pair.label + ": " + pair.value : ""
+                Accessible.ignored: index % 2 === 1
             }
         }
     }

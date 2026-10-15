@@ -22,6 +22,9 @@ Item {
     property bool hoverWatched: false
     property string a11yName: ""
     property int a11yRole: 0
+    // What assistive technology reads when the document names no name or role: a kind's own text and role.
+    property string defaultName: ""
+    property int defaultRole: Accessible.Client
     property string surface: ""
     // A drag key as text (`i:<int64>` or `s:<text>`); empty when the widget cannot be dragged.
     property string dragKey: ""
@@ -47,8 +50,8 @@ Item {
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
     Layout.columnSpan: columnSpan
 
-    Accessible.name: a11yName
-    Accessible.role: a11yRole
+    Accessible.name: a11yName !== "" ? a11yName : defaultName
+    Accessible.role: a11yRole !== 0 ? a11yRole : defaultRole
 
     ToolTip.text: tooltip
     ToolTip.visible: tooltip !== "" && hover.hovered
