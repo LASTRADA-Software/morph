@@ -109,8 +109,10 @@ canonical body is the body's JSON with record fields in name order.
   first key and a change to idle move at once.
 - **`refreshEvery`** refetches on the scheduler's period and skips a tick while a request is in flight
   or a debounce waits.
-- **`refreshOn`** is the session's bookkeeping: a mutation that succeeds refetches every mounted query
-  of the same model type whose `refreshOn` names its action, in every screen of the session.
+- **`refreshOn`** is the session's bookkeeping: a mutation that succeeds, or a submit of a form, a
+  collection or a wizard that succeeds, refetches every mounted query of the same model type whose
+  `refreshOn` names its action, in every screen of the session. A collection's own list query and a
+  form's choice options are reads, not submits, and refetch nothing.
 - **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **Eviction.** An entry no mounted query uses is dropped `keepUnused` after its last user left. Without

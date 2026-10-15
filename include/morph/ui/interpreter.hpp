@@ -1941,6 +1941,7 @@ private:
     void wireForm(ElementState& element);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     [[nodiscard]] forms::Submitter aliasCalls(ModelAlias* alias);
+    [[nodiscard]] forms::Submitter aliasSubmits(ModelAlias* alias, std::string read = {});
     [[nodiscard]] forms::FormSessionOptions engineOptions() const;
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -1994,6 +1995,8 @@ private:
 
     std::shared_ptr<Document const> _doc;
     SlotId _slots = 1;
+    /// @brief Expires with the screen, so a reply that arrives after it is gone reports nothing.
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 };
 
 }  // namespace detail
@@ -4932,8 +4935,8 @@ inline void ScreenCore::wireForm(ElementState& element) {
     } else if (node.name("submit") == "auto") {
         model = model->withSubmitMode(forms::SubmitMode::Automatic);
     }
-    forms::Submitter const call = aliasCalls(alias->model);
-    element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), call, call, engineOptions());
+    element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), aliasSubmits(alias->model),
+                                                        aliasCalls(alias->model), engineOptions());
     if (ExprPtr const prefill = node.prop("prefill")) {
         // A prefill follows its expression: a query's row arriving, or another record chosen, loads the form again.
         forms::FormSession* const form = element.form.get();
@@ -5011,6 +5014,24 @@ inline forms::Submitter ScreenCore::aliasCalls(ModelAlias* alias) {
     };
 }
 
+// The calls of a form, collection or wizard: a success other than of @p read, the collection's own query, tells the
+// session, which refetches the queries whose `refreshOn` names the action, as a mutation's success does.
+inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string read) {
+    return [this, alias, call = aliasCalls(alias), read = std::move(read)](
+               std::string_view actionId, std::string body) -> async::Completion<std::string> {
+        async::Completion<std::string> completion = call(actionId, std::move(body));
+        if (actionId != read) {
+            completion.then([this, alive = std::weak_ptr<bool>{_alive}, typeId = alias->decl->type,
+                             action = std::string{actionId}](std::string const&) {
+                if (!alive.expired()) {
+                    session.actionSucceeded(typeId, action);
+                }
+            });
+        }
+        return completion;
+    };
+}
+
 // The session's locale, translations and display zone, as every form the engine builds here reads them.
 inline forms::FormSessionOptions ScreenCore::engineOptions() const {
     FormatContext const& format = session.formatting();
@@ -5056,7 +5077,9 @@ inline void ScreenCore::wireComposite(ElementState& element) {
             report(node.path, "the view document of `" + action + "` lists `" + std::string{model->query()} + "`");
             return;
         }
-        element.collection = std::make_unique<forms::CollectionSession>(runtime(), *std::move(model), schemas, call,
+        std::string query{model->query()};
+        element.collection = std::make_unique<forms::CollectionSession>(runtime(), *std::move(model), schemas,
+                                                                        aliasSubmits(alias->model, std::move(query)),
                                                                         call, engineOptions());
         return;
     }
@@ -5073,8 +5096,8 @@ inline void ScreenCore::wireComposite(ElementState& element) {
         return;
     }
     try {
-        element.wizard =
-            std::make_unique<forms::WizardSession>(runtime(), *std::move(model), schemas, call, call, engineOptions());
+        element.wizard = std::make_unique<forms::WizardSession>(runtime(), *std::move(model), schemas,
+                                                                aliasSubmits(alias->model), call, engineOptions());
     } catch (std::invalid_argument const& error) {
         report(node.path, error.what());
     }

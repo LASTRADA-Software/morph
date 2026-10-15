@@ -817,6 +817,12 @@ API surface).
 
 ### Fixed
 
+- **A form's, collection's or wizard's submit triggers `refreshOn`.** Only a
+  `mutation`'s success refetched the queries whose `refreshOn` named its action;
+  the same action submitted through a `form` node refetched nothing, so a screen
+  had to `refetch` by hand in every form's `onSuccess`. A collection's own list
+  query and a form's choice options are reads and still refetch nothing.
+
 - **An installed `qt_forms` component compiles.** `forms_controller_core.hpp`
   includes `morph/qt/qt_executor.hpp`, which was installed only by the `qt`
   component (`MORPH_BUILD_QT`, which needs Qt WebSockets), so an install built

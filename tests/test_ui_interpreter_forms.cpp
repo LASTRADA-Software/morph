@@ -223,3 +223,65 @@ TEST_CASE("collection node: a view document listing another action is reported",
     CHECK(h.dispatcher.calls.empty());
     CHECK(h.backend.find("Text", "text", "Lims_ListStale").has_value());
 }
+
+namespace {
+
+// A query of the sample model refetched by the submits of a form, a collection and a wizard on the same screen.
+std::string refreshedBy(std::string_view node) {
+    return std::string{R"({
+  "vocab": "ui/1", "id": "refreshed",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "queries": { "results": { "model": "sample", "action": "Lims_ListResults",
+    "refreshOn": [ "Lims_CaptureConcentration", "Lims_DeleteSample", "Lims_ListSamples", "Lims_ConfirmSample" ] } },
+  "view": { "kind": "column", "children": [ { "kind": "text", "text": { "query": "results" } }, )"} +
+           std::string{node} + " ] } }";
+}
+
+}  // namespace
+
+TEST_CASE("form, collection and wizard nodes: a submit that succeeds refetches the queries naming it in refreshOn",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    SECTION("a form") {
+        auto const screen = h.mount(refreshedBy(
+            R"({ "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration", "submit": "explicit" })"));
+        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
+        h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
+        h.settle();
+        h.backend.click(h.byTestId("Button", "form_submit"));
+        h.settle();
+        h.fail(h.dispatcher.last("Lims_CaptureConcentration"));
+        CHECK(h.dispatcher.count("Lims_ListResults") == 1);  // a failure is not a success
+        h.backend.click(h.byTestId("Button", "form_submit"));
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+    }
+    SECTION("a collection, whose own list query is a read, not a submit") {
+        auto const screen =
+            h.mount(refreshedBy(R"({ "kind": "collection", "model": "sample", "action": "Lims_ListSamples" })"));
+        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":7,"name":"Water"}]})");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 1);
+        h.backend.click(h.byTestId("Button", "rowAction_Lims_DeleteSample_7"));
+        h.settle();
+        h.backend.click(h.byTestId("Button", "confirm_accept"));
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_DeleteSample"), "{}");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+        // The collection reloads its list after the delete; that read refetches nothing.
+        h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[]})");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+    }
+    SECTION("a wizard's step") {
+        auto const screen =
+            h.mount(refreshedBy(R"({ "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" })"));
+        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
+        h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+    }
+}
