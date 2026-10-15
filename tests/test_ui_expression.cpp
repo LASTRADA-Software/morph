@@ -244,12 +244,38 @@ TEST_CASE("ui expressions: the display functions use the client's formatting", "
     CHECK(run(R"({"fn": "decimal", "args": [{"lit": {"num": 3, "den": 2, "dp": 1}}, 2]})") == Value{"1,50"});
     CHECK(run(R"({"fn": "date", "args": [{"ref": "when"}, "long"]})") == Value{"long 2026"});
     CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}]})") == Value{"medium+time 2026"});
-    CHECK(morph::ui::functionNames().size() == 40);
+    CHECK(morph::ui::functionNames().size() == 41);
     CHECK(morph::ui::isName("a_1"));
     CHECK_FALSE(morph::ui::isName("1a"));
     CHECK_FALSE(morph::ui::isName(""));
     CHECK_FALSE(morph::ui::isName("a-b"));
     CHECK_FALSE(morph::ui::isName("a~"));
+}
+
+// Mutation: parse with a default NumericLocale -> "12,5" does not parse and the first check fails.
+TEST_CASE("ui expressions: parseDecimal reads typed text as an exact decimal in the client's locale", "[ui][expr]") {
+    StaticEnvironment env;
+    env.format.numeric = morph::render::NumericLocale{.decimalSeparator = ",", .groupSeparator = "."};
+    auto const run = [&env](std::string_view text) {
+        auto parsed = parseExpression(*parseJson(text));
+        REQUIRE(parsed.has_value());
+        return evaluate(**parsed, env);
+    };
+    auto const decimal = [](std::int64_t num, std::int64_t den, std::uint32_t places) {
+        return Value{morph::ui::Decimal{morph::math::Rational{
+            morph::math::Numerator{num}, morph::math::Denominator{den}, morph::math::DecimalPlaces{places}}}};
+    };
+    CHECK(run(R"({"fn": "parseDecimal", "args": ["12,5"]})") == decimal(25, 2, 1));
+    CHECK(run(R"({"fn": "parseDecimal", "args": ["1.234,5", 3]})") == decimal(2469, 2, 3));
+    // Text that is not a number yet, or finer than the places allow, is null and not an error.
+    CHECK(run(R"({"fn": "parseDecimal", "args": [""]})").isNull());
+    CHECK(run(R"({"fn": "parseDecimal", "args": ["12,"]})").isNull());
+    CHECK(run(R"({"fn": "parseDecimal", "args": ["1,25", 1]})").isNull());
+    CHECK(run(R"({"fn": "parseDecimal", "args": [null]})").isNull());
+    CHECK(env.diagnostics.empty());
+    // A wrong kind is a mismatch, reported.
+    CHECK(run(R"({"fn": "parseDecimal", "args": ["1", 19]})").isNull());
+    CHECK(env.diagnostics.size() == 1);
 }
 
 // Mutation: make PermissiveResolver refuse refs -> the comprehension check of a plain ref fails.

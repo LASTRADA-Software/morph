@@ -201,3 +201,32 @@ TEST_CASE("interpreter calculation: write-through is serial per row, and rows do
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration")).body ==
           R"({"inputs":{"mass":"10"},"resultId":1})");
 }
+
+// Mutation: make parseDecimal ignore its places -> "12.5" is sent at 1 place, not 3, and the body differs.
+TEST_CASE("interpreter calculation: parseDecimal turns a cell's text into the number the body carries",
+          "[ui][interpreter]") {
+    Harness h;
+    std::string document = kCalc;
+    std::string const typed = R"("onChange": [ { "set": "draft.mass", "value": { "ref": "event" } } ])";
+    document.replace(document.find(typed), typed.size(),
+                     R"("onChange": [ { "set": "draft.mass",
+                         "value": { "fn": "parseDecimal", "args": [ { "ref": "event" }, 3 ] } } ])");
+    auto const screen = h.mount(document);
+    h.reply(0, kRows);
+    h.reply(1, R"({"concentration":1})");
+    h.reply(2, R"({"concentration":2})");
+    int const mass = widgets(h, "TextInput", "mass").at(0);
+    // Part-way through typing the text spells no number: the draft is null, and the input keeps what was typed.
+    h.backend.edit(mass, "12.");
+    h.settle();
+    CHECK(prop(h, "TextInput", "mass", 0, "text") == "12.");
+    h.advance(300ms);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EvaluateResult")).body ==
+          R"({"inputs":{"mass":null},"resultId":1})");
+    h.backend.edit(mass, "12.5");
+    h.settle();
+    CHECK(prop(h, "TextInput", "mass", 0, "text") == "12.5");
+    h.advance(300ms);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EvaluateResult")).body ==
+          R"({"inputs":{"mass":{"num":25,"den":2,"dp":3}},"resultId":1})");
+}
