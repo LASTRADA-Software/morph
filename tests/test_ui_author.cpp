@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <concepts>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -423,6 +424,9 @@ ui::Screen declarationsScreen() {
                                                   .refreshOn = sample.actions<CaptureConcentration, LoadSample>()});
         auto header = screen.query<GetHeader>("header", working);
         auto preview = screen.evaluate<EvaluateResult>("preview", working, {{&EvaluateResult::resultId, picked}});
+        // An evaluation's value is the action body, its computed fields filled, so the handle reads the action.
+        static_assert(std::same_as<decltype(preview)::Result, EvaluateResult>);
+        CHECK(text(preview.at(&EvaluateResult::resultId)) == R"({"ref":"preview.resultId"})");
 
         static_cast<void>(screen.mutation<CaptureConcentration>(
             "capture", sample,

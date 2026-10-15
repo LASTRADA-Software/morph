@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **An `evaluate` query's handle reads the action it evaluates.**
+  `Scope::evaluate<A>` returned a `QueryHandle<A>` whose value was typed as
+  `A`'s result, while the reply is `A`'s own body with its computed fields
+  filled, so `at(&A::computed)` did not compile and `at` on a result member
+  read a field that is not there. It now returns `QueryHandle<A, A>`;
+  `QueryHandle` takes the value's type as a second, defaulted parameter.
+
 - **An `arrange` customize point belongs to a screen.** The loader accepted it
   only in the app document, which has no view, so its `of` named a node of no
   document. It is now a screen-scope point whose `of` must name an element of

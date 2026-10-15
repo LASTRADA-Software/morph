@@ -89,7 +89,7 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `state<T>(name)`, `state(name, constant)`, `state(name, handle)` | `state.name` with its type and `init`; `state<Any>` leaves the type to the init |
 | `let(name, handle)` | `let.name` |
 | `query<A>(name, model, body, {.when, .debounce, .refreshEvery, .staleTime, .refreshOn})` | `queries.name` with `action` |
-| `evaluate<A>(name, model, body, options)` | `queries.name` with `evaluate` (spec 5 §7) |
+| `evaluate<A>(name, model, body, options)` | `queries.name` with `evaluate` (spec 5 §7); its handle's value is typed as `A`, since the reply is the body with its computed fields filled |
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .invalidates, .patch, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |

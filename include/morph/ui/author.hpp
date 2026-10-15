@@ -1156,12 +1156,14 @@ private:
 };
 
 /// @brief A query declared by a scope.
-/// @tparam Action The action it runs; `::morph::model::ActionTraits<Action>::Result` is the value's type.
-template <typename Action>
+/// @tparam Action The action it runs.
+/// @tparam Value  The value's C++ type: the action's result for a call, the action itself for an evaluation.
+// NOLINTNEXTLINE(readability-redundant-typename): MSVC needs it on a dependent default argument (C4346).
+template <typename Action, typename Value = typename ::morph::model::ActionTraits<Action>::Result>
 class QueryHandle {
 public:
     /// @brief The value's C++ type.
-    using Result = ::morph::model::ActionTraits<Action>::Result;
+    using Result = Value;
 
     /// @brief A query by name.
     /// @param name The query's name.
@@ -1914,13 +1916,14 @@ public:
     /// @param model   The alias it goes through.
     /// @param body    The body, which is the query's key.
     /// @param options The gate, timing and `refreshOn`.
-    /// @return The query's handle.
+    /// @return The query's handle. Its value is the action body as the server reconciled it, computed fields
+    ///         filled, with `errors` and `ready` beside the fields.
     template <typename Action, typename Model>
         requires Runs<Model, Action>
-    QueryHandle<Action> evaluate(std::string const& name, ModelHandle<Model> const& model,
-                                 Body<Action> const& body = {}, QueryOptions const& options = {}) {
+    QueryHandle<Action, Action> evaluate(std::string const& name, ModelHandle<Model> const& model,
+                                         Body<Action> const& body = {}, QueryOptions const& options = {}) {
         declareQuery<Model, Action>(name, model.alias(), "evaluate", body, options);
-        return QueryHandle<Action>{name};
+        return QueryHandle<Action, Action>{name};
     }
 
     /// @brief A mutation (spec 5 §5).
