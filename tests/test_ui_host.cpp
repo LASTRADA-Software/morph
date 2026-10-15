@@ -19,6 +19,8 @@
 
 #include "ui_interpreter_support.hpp"
 
+using morph::ui::CloseChoice;
+using morph::ui::CloseGuard;
 using morph::ui::Document;
 using morph::ui::DocumentScreenHost;
 using morph::ui::DocumentScreenHostOptions;
@@ -55,6 +57,17 @@ constexpr std::string_view kSaving = R"({
     { "kind": "button", "testId": "upload", "label": "upload",
       "onClick": [ { "upload": "/tmp/a.csv", "to": "save", "as": "ref" } ] } ] } })";
 
+/// A draft that saves through `onSave`: the save's success clears `dirty`, its failure leaves it.
+constexpr std::string_view kDraft = R"({
+  "vocab": "ui/1", "id": "draft", "dirty": { "ref": "changed" },
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "changed": { "init": false } },
+  "mutations": { "save": { "model": "sample", "action": "Lims_Attach", "body": { "obj": {} },
+                           "onSuccess": [ { "set": "changed", "value": false } ] } },
+  "onSave": [ { "notify": "saving" }, { "run": "save" } ],
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "edit", "label": "edit", "onClick": [ { "set": "changed", "value": true } ] } ] } })";
+
 /// A screen that opens a chooser as a dialog and takes its answer.
 constexpr std::string_view kOpener = R"({
   "vocab": "ui/1", "id": "opener", "title": { "ref": "picked" },
@@ -76,7 +89,11 @@ constexpr std::string_view kChooser = R"({
 class Shell final : public DocumentScreenHost {
 public:
     Shell(Harness& harness, std::optional<bool> guardAnswer)
-        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, guardAnswer, this)} {}
+        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, scripted(guardAnswer, this), {})} {}
+
+    Shell(Harness& harness, CloseGuard guard, std::function<void(ScreenHandle&)> saveFailed)
+        : DocumentScreenHost{harness.session, harness.dispatcher,
+                             options(harness, std::move(guard), std::move(saveFailed))} {}
 
     void onNavigate(std::string_view screenId, ParamMap const& params) override {
         navigated.emplace_back(std::string{screenId}, params);
@@ -98,10 +115,22 @@ public:
     int guarded = 0;
 
 private:
-    static DocumentScreenHostOptions options(Harness& harness, std::optional<bool> guardAnswer, Shell* self) {
+    static CloseGuard scripted(std::optional<bool> guardAnswer, Shell* self) {
+        if (!guardAnswer) {
+            return {};
+        }
+        return [self, answer = *guardAnswer](ScreenHandle&, std::function<void(CloseChoice)> const& choose) {
+            ++self->guarded;
+            choose(answer ? CloseChoice::Discard : CloseChoice::Cancel);
+        };
+    }
+
+    static DocumentScreenHostOptions options(Harness& harness, CloseGuard guard,
+                                             std::function<void(ScreenHandle&)> saveFailed) {
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"saving", loadOrFail(kSaving, morph::ui::testing::corpusCatalog())},
+            {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"opener", loadOrFail(kOpener, morph::ui::testing::corpusCatalog())},
             {"chooser", loadOrFail(kChooser, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
@@ -111,12 +140,8 @@ private:
         };
         made.backend = &harness.backend;
         made.application = &harness.host;
-        if (guardAnswer) {
-            made.guard = [self, answer = *guardAnswer](ScreenHandle&, std::function<void(bool)> const& decide) {
-                ++self->guarded;
-                decide(answer);
-            };
-        }
+        made.guard = std::move(guard);
+        made.saveFailed = std::move(saveFailed);
         return made;
     }
 };
@@ -246,6 +271,183 @@ TEST_CASE("onClose's work is waited for, a second request joins the first, and c
         CHECK(second.calls == 1);
         CHECK((DocumentScreenHost::rootOf(*saving) == nullptr) == !keep);
     }
+}
+
+/// The host's side of the three-choice guard: it records each ask and whether save was offered, and answers with a
+/// scripted choice.
+struct Prompt {
+    CloseChoice choice = CloseChoice::Cancel;
+    std::vector<bool> offeredSave;
+    int failures = 0;
+
+    [[nodiscard]] CloseGuard guard() {
+        return [this](ScreenHandle& screen, std::function<void(CloseChoice)> const& choose) {
+            offeredSave.push_back(screen.canSave());
+            choose(choice);
+        };
+    }
+
+    [[nodiscard]] std::function<void(ScreenHandle&)> failed() {
+        return [this](ScreenHandle&) { ++failures; };
+    }
+};
+
+// Mutation: canSave answers true for every document screen (note offers save).
+TEST_CASE("Save is offered only to a screen that declares onSave", "[ui][host][guard]") {
+    Harness harness;
+    Prompt prompt;
+    Shell shell{harness, prompt.guard(), prompt.failed()};
+    auto draft = std::move(*shell.mount("draft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+    auto note = std::move(*shell.mount("note", ParamMap{{"noteId", Value{std::int64_t{1}}}}));
+    harness.settle();
+    CHECK(draft->canSave());
+    CHECK_FALSE(note->canSave());
+    REQUIRE(draft->dirty().get());
+    Outcome outcome;
+    draft->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(prompt.offeredSave.size() == 1);
+    CHECK(prompt.offeredSave.front());
+}
+
+// Mutation: answer the save as soon as onSave's batch ends (the screen closes before the save has answered).
+TEST_CASE("Save and close runs onSave, waits for it, and closes the screen it left clean", "[ui][host][guard]") {
+    Harness harness;
+    Prompt prompt{.choice = CloseChoice::Save};
+    Shell shell{harness, prompt.guard(), prompt.failed()};
+    auto draft = std::move(*shell.mount("draft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+
+    Outcome outcome;
+    draft->requestClose(outcome.callback());
+    harness.settle();
+    CHECK(count(harness.host.log, "notify  saving") == 1);
+    REQUIRE(harness.dispatcher.calls.size() == 1);
+    CHECK_FALSE(outcome.closed.has_value());  // the save is pending
+    CHECK(DocumentScreenHost::rootOf(*draft) != nullptr);
+
+    harness.reply(0, "{}");
+    CHECK(outcome.closed == true);
+    CHECK(outcome.calls == 1);
+    CHECK(prompt.failures == 0);
+    CHECK(DocumentScreenHost::rootOf(*draft) == nullptr);
+}
+
+// Mutation: close after a save without reading dirty (the failed save closes the screen).
+TEST_CASE("A save that leaves the screen dirty keeps it open and is reported", "[ui][host][guard]") {
+    Harness harness;
+    Prompt prompt{.choice = CloseChoice::Save};
+    Shell shell{harness, prompt.guard(), prompt.failed()};
+    auto draft = std::move(*shell.mount("draft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+
+    Outcome outcome;
+    draft->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(harness.dispatcher.calls.size() == 1);
+    harness.fail(0);
+    CHECK(outcome.closed == false);
+    CHECK(prompt.failures == 1);
+    CHECK(draft->dirty().get());
+    CHECK(DocumentScreenHost::rootOf(*draft) != nullptr);
+}
+
+// Mutation: run onSave for every choice (discard logs saving and calls the model).
+TEST_CASE("Discard closes without saving, cancel keeps the screen, and save without onSave keeps it",
+          "[ui][host][guard]") {
+    for (CloseChoice const choice : {CloseChoice::Discard, CloseChoice::Cancel}) {
+        Harness harness;
+        Prompt prompt{.choice = choice};
+        Shell shell{harness, prompt.guard(), prompt.failed()};
+        auto draft = std::move(*shell.mount("draft", ParamMap{}));
+        harness.backend.click(harness.byTestId("Button", "edit"));
+        harness.settle();
+        Outcome outcome;
+        draft->requestClose(outcome.callback());
+        harness.settle();
+        bool const discard = choice == CloseChoice::Discard;
+        CHECK(outcome.closed == discard);
+        CHECK(count(harness.host.log, "notify  saving") == 0);
+        CHECK(harness.dispatcher.calls.empty());
+        CHECK((DocumentScreenHost::rootOf(*draft) == nullptr) == discard);
+    }
+
+    Harness harness;
+    Prompt prompt{.choice = CloseChoice::Save};
+    Shell shell{harness, prompt.guard(), prompt.failed()};
+    auto note = std::move(*shell.mount("note", ParamMap{{"noteId", Value{std::int64_t{1}}}}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+    Outcome outcome;
+    note->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(prompt.offeredSave == std::vector<bool>{false});
+    CHECK(outcome.closed == false);
+    CHECK(prompt.failures == 0);
+    CHECK(DocumentScreenHost::rootOf(*note) != nullptr);
+}
+
+// Mutation: carry the choice out through the ScreenHandle the guard was given (a use after free under ASan, and the
+// closed request is answered twice).
+TEST_CASE("A guard that answers after its screen's handle is gone does nothing", "[ui][host][guard]") {
+    Harness harness;
+    std::function<void(CloseChoice)> later;
+    Shell shell{harness, [&later](ScreenHandle&, std::function<void(CloseChoice)> const& choose) { later = choose; },
+                [](ScreenHandle&) { FAIL("a save that never ran cannot fail"); }};
+    auto draft = std::move(*shell.mount("draft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+    Outcome outcome;
+    draft->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(later);
+    draft.reset();  // the shell quits: the handle closes its screen and answers the request
+    harness.settle();
+    CHECK(outcome.closed == true);
+    later(CloseChoice::Save);
+    harness.settle();
+    CHECK(outcome.calls == 1);
+    CHECK(harness.dispatcher.calls.empty());
+    CHECK(count(harness.host.log, "notify  saving") == 0);
+}
+
+// Mutation: run onSave again for a save that joins one in progress (saving is logged twice).
+TEST_CASE("A second save joins the first, and a save its screen outlives is never answered", "[ui][host][guard]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto draft = std::move(*shell.mount("draft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+
+    Outcome first;
+    Outcome second;
+    draft->save(first.callback());
+    draft->save(second.callback());
+    harness.settle();
+    CHECK(count(harness.host.log, "notify  saving") == 1);
+    REQUIRE(harness.dispatcher.calls.size() == 1);
+    harness.reply(0, "{}");
+    CHECK(first.closed == true);  // `closed` holds the save's answer: clean
+    CHECK(second.closed == true);
+    CHECK(first.calls == 1);
+    CHECK(DocumentScreenHost::rootOf(*draft) != nullptr);  // a save alone never closes
+
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+    Outcome orphan;
+    draft->save(orphan.callback());
+    harness.settle();
+    draft->forceClose();
+    harness.settle();
+    CHECK(orphan.calls == 0);
+
+    Outcome refused;
+    draft->save(refused.callback());  // closed: it cannot save
+    CHECK(refused.closed == false);
 }
 
 // Mutation: run onClose from forceClose (closing is logged).

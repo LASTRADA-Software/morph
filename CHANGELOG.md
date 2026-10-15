@@ -270,6 +270,15 @@ API surface).
 
 ### Added
 
+- **The close guard's three choices** (spec 6 §15). A `CloseGuard` now
+  answers with a `CloseChoice` instead of a bool: *save and close* runs the
+  screen's `onSave`, waits for the work it started, and closes only a screen it
+  left clean, calling `DocumentScreenHostOptions::saveFailed` otherwise;
+  *discard and close* does not save; *cancel* keeps the screen. `ScreenHandle`
+  gains `canSave()` and `save(done)`, which a host screen's handle overrides to
+  offer saving. A guard written as `decide(true)`/`decide(false)` becomes
+  `choose(CloseChoice::Discard)`/`choose(CloseChoice::Cancel)`.
+
 - **An `arrange` point orders and hides a column's or row's children.** The
   container a screen's `arrange` point names now lowers to a keyed list over its
   children's ids: the stored `[{"id", "hidden"}]` choice orders them, hides some,
