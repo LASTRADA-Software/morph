@@ -14,11 +14,15 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/forms/engine/form_session.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "forms_engine_support.hpp"
 
 using morph::math::DecimalPlaces;
 
@@ -91,6 +95,18 @@ struct FDUFluentAction {
 
     static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
         morph::forms::FieldMeta{.field = "density"}.withUnit("kg/m³").withDecimals(DecimalPlaces{3}),
+    };
+};
+
+/// Money held as bare `Rational`s: declared places make the decorated ones one decimal field.
+struct FDUMoneyAction {
+    morph::math::Rational amount;
+    std::optional<morph::math::Rational> limit;
+    morph::math::Rational ratio;
+
+    static constexpr std::array<morph::forms::FieldMeta, 2> fieldMetadata{
+        morph::forms::FieldMeta{.field = "amount", .decimals = DecimalPlaces{2}},
+        morph::forms::FieldMeta{.field = "limit", .decimals = DecimalPlaces{2}},
     };
 };
 
@@ -207,4 +223,36 @@ TEST_CASE("Forms::FieldMeta::DisplayUnitLeavesTheWireUntouched", "[forms][field_
     std::string roundTripped{};
     REQUIRE_FALSE(glz::write_json(decoded, roundTripped));
     CHECK(roundTripped.contains(R"("density":1.25)"));
+}
+
+// Mutation: emit x-displayDecimals for a Rational too -> the property keeps no declared places and the engine shows
+// three integer boxes.
+TEST_CASE("Forms::FieldMeta::DecimalsOnABareRationalDeclareItsPlaces", "[forms][field_meta][display_unit]") {
+    auto const dom = schemaDom(morph::forms::schemaJson<FDUMoneyAction>());
+    CHECK(dom["properties"]["amount"]["x-decimalPlaces"].as<std::uint64_t>() == 2);
+    CHECK_FALSE(dom["properties"]["amount"].contains("x-displayDecimals"));
+    CHECK(dom["properties"]["limit"]["x-decimalPlaces"].as<std::uint64_t>() == 2);
+    // An undeclared Rational keeps its object form.
+    CHECK_FALSE(dom["properties"]["ratio"].contains("x-decimalPlaces"));
+}
+
+TEST_CASE("Forms::FieldMeta::ADecoratedRationalIsEnteredAsOneDecimal", "[forms][field_meta][display_unit]") {
+    morph::test::formsengine::Harness harness;
+    auto const form = harness.session("FDUMoney", morph::forms::schemaJson<FDUMoneyAction>());
+    CHECK(form->field("amount").spec().kind == morph::forms::FieldKind::Decimal);
+    CHECK(form->field("limit").spec().kind == morph::forms::FieldKind::Decimal);
+    CHECK(form->field("ratio").spec().kind == morph::forms::FieldKind::Object);
+    harness.type(*form, "amount", "12.34");
+    harness.type(*form, "limit", "100");
+    harness.type(*form, "ratio.num", "1");
+    harness.type(*form, "ratio.den", "3");
+    harness.type(*form, "ratio.dp", "6");
+    REQUIRE(form->body().has_value());
+    CHECK(form->body()->contains(R"("amount":{"num":1234,"den":100,"dp":2})"));
+    FDUMoneyAction decoded{};
+    REQUIRE_FALSE(glz::read_json(decoded, *form->body()));
+    CHECK(decoded.amount ==
+          morph::math::Rational{morph::math::Numerator{1234}, morph::math::Denominator{100}, DecimalPlaces{2}});
+    REQUIRE(decoded.limit.has_value());
+    CHECK(decoded.limit->numerator == 100);
 }

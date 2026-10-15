@@ -258,6 +258,13 @@ API surface).
 
 ### Added
 
+- **A bare `math::Rational` member can declare its places and be entered as one
+  decimal.** Its schema was the `{num, den, dp}` object, so a form rendered three
+  integer inputs and 12.34 was typed as 1234, 2 and 100. `FieldMeta::decimals`
+  on a `Rational` (or `std::optional<Rational>`) member is now emitted as
+  `x-decimalPlaces`, which makes the field a `Decimal`; an undeclared member is
+  unchanged.
+
 - **`parseDecimal(text, dp?)` turns typed text into a number.** A text input's
   `event` is text, and no expression turned it into a number a body could
   carry, so a cell feeding a calculation could not be written. `parseDecimal`
