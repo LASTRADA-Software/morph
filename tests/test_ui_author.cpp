@@ -72,6 +72,16 @@ struct UploadFile {
     std::string name;
 };
 
+struct ListSamples {
+    std::int64_t page = 0;
+};
+
+/// A list action's record result: the rows in one member, beside a scalar.
+struct SampleList {
+    std::vector<ResultView> samples;
+    std::int64_t total = 0;
+};
+
 struct SampleModel {
     using PrimaryKey = std::int64_t;
     std::vector<ResultView> execute(ListResults const& action);
@@ -82,6 +92,7 @@ struct SampleModel {
     Header execute(GetHeader const& action);
     std::vector<Header> execute(ListProjects const& action);
     bool execute(UploadFile const& action);
+    SampleList execute(ListSamples const& action);
 };
 
 struct SignIn {
@@ -139,6 +150,7 @@ AUTHOR_TEST_ACTION(GetHeader, author_test::Header, "Lims_GetHeader")
 AUTHOR_TEST_ACTION(ListProjects, std::vector<author_test::Header>, "Lims_ListProjects")
 AUTHOR_TEST_ACTION(UploadFile, bool, "Lims_UploadFile")
 AUTHOR_TEST_ACTION(SignIn, author_test::Token, "Auth_SignIn")
+AUTHOR_TEST_ACTION(ListSamples, author_test::SampleList, "Lims_ListSamples")
 
 template <>
 struct morph::ui::author::ActionFacts<author_test::ListResults> {
@@ -170,6 +182,7 @@ using author_test::Header;
 using author_test::HeaderSection;
 using author_test::ListProjects;
 using author_test::ListResults;
+using author_test::ListSamples;
 using author_test::LoadSample;
 using author_test::ResultInputs;
 using author_test::ResultView;
@@ -861,6 +874,39 @@ TEST_CASE("registration runs the load-time validation with the builders' catalog
         REQUIRE(refusal.has_value());
         CHECK(refusal->path == "/mutations/capture/optimistic/with/obj/concentration");
     }
+    SECTION("a patch of a query whose action answers a record, without `at`") {
+        auto const refusal = refusalOf(ui::screen("author.patchAt", [](ui::Scope& screen) {
+            auto const sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});
+            auto samples = screen.query<ListSamples>("samples", sample);
+            static_cast<void>(screen.mutation<CaptureConcentration>(
+                "capture", sample,
+                {
+                    .patch = ui::Patch{.query = samples, .key = ui::ref("result.id"), .with = ui::ref("result")},
+                }));
+            return ui::spacer();
+        }));
+        REQUIRE(refusal.has_value());
+        CHECK(refusal->path == "/mutations/capture/patch");
+    }
+    SECTION("an `at` that is not one of the result's lists") {
+        auto const refusal = refusalOf(ui::screen("author.patchAt", [](ui::Scope& screen) {
+            auto const sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});
+            auto samples = screen.query<ListSamples>("samples", sample);
+            static_cast<void>(screen.mutation<CaptureConcentration>("capture", sample,
+                                                                    {
+                                                                        .patch =
+                                                                            ui::Patch{
+                                                                                .query = samples,
+                                                                                .at = "total",
+                                                                                .key = ui::ref("result.id"),
+                                                                                .with = ui::ref("result"),
+                                                                            },
+                                                                    }));
+            return ui::spacer();
+        }));
+        REQUIRE(refusal.has_value());
+        CHECK(refusal->path == "/mutations/capture/patch/at");
+    }
     SECTION("a credential-bearing mutation queued offline") {
         auto const refusal = refusalOf(ui::screen("author.offline", [](ui::Scope& screen) {
             auto session = screen.model<SessionModel>("session");
@@ -908,6 +954,43 @@ TEST_CASE("the registry keeps one screen per id and answers the catalog", "[ui][
     CHECK(signIn->credential);
     CHECK(signIn->secretFields == std::vector<std::string>{"token"});
     CHECK_FALSE(catalog.action("Unknown").has_value());
+}
+
+TEST_CASE("a patch names the list inside a record result with `at`, and the catalog knows the lists",
+          "[ui][author][registration]") {
+    ui::Screen const screen{
+        "author.patchAt", [](ui::Scope& scope) {
+            auto const sample = scope.model<SampleModel>("sample", {.instance = ui::Instance::Private});
+            auto samples = scope.query<ListSamples>("samples", sample);
+            static_cast<void>(scope.mutation<CaptureConcentration>("capture", sample,
+                                                                   {
+                                                                       .patch =
+                                                                           ui::Patch{
+                                                                               .query = samples,
+                                                                               .at = "samples",
+                                                                               .key = ui::ref("result.id"),
+                                                                               .with = ui::ref("result"),
+                                                                           },
+                                                                   }));
+            return ui::spacer();
+        }};
+    ui::ScreenRegistry registry;
+    auto const added = registry.add(screen);
+    if (!added) {
+        FAIL(added.error().message());
+    }
+    CHECK(registry.find("author.patchAt")
+              ->text.contains(R"("patch":{"query":"samples","at":"samples","key":{"ref":"result.id"})"));
+
+    morph::ui::Catalog const catalog = registry.catalog();
+    CHECK(catalog.action("Lims_ListSamples")->listFields == std::vector<std::string>{"samples"});
+    CHECK(catalog.action("Lims_CaptureConcentration")->listFields == std::vector<std::string>{});
+    ui::CatalogFacts facts;
+    facts.action<SampleModel, ListResults>();
+    facts.action<SampleModel, LoadSample>();
+    // A bare list and a scalar are not records: the catalog does not say, so a patch is checked when it runs.
+    CHECK_FALSE(facts.actions.at("Lims_ListResults").listFields.has_value());
+    CHECK_FALSE(facts.actions.at("Lims_LoadSample").listFields.has_value());
 }
 
 TEST_CASE("catalog facts keep the first fact recorded", "[ui][author]") {

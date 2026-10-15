@@ -84,6 +84,7 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 | Derived | `"name": e` under `let` | `LetDecl` |
 | Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshOn", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |
 | Mutation | `{"model", "action", "body", "concurrency", "serialKey", "invalidates", "patch", "optimistic", "onSuccess", "onError", "offline"}` | `MutationDecl`, `Concurrency`, `PatchDecl` |
+| Patch | `{"query": q, "at": member, "key": e, "with": e}` under `patch` and `optimistic`; `at` is optional and not empty | `PatchDecl` |
 | Watch | `{"on": e, "source": "any" \| "user", "do": commands}` under `watch` | `WatchDecl`, `WatchSource` |
 | Check | `{"id", "assert": e, "message": e, "targets": [ids], "blocking": bool}` under `checks` | `CheckDecl` |
 
@@ -225,12 +226,16 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 `ui::Catalog` holds two lookups the caller supplies: `model(typeId)` → `ModelInfo{stateless,
 keyed}` and `action(actionId)` → `ActionInfo{modelType, calculatedFields, secretFields,
-credential}`. In local mode the caller answers them in-process from the model registry; on the
+credential, listFields}`. In local mode the caller answers them in-process from the model registry; on the
 server, registration answers them from the same registry; a remote client answers them from the UI
 service's `ui-catalog` reply. With them, a document is also refused when a model type or action is
 unknown, an `instance` expression names a model that is not keyed, an action belongs to another
 model type, `refreshOn` names an action of another model type, an `optimistic` `with` writes a field
 the server calculates, or a mutation that sends a credential or returns a secret is queued offline.
+`listFields`, when present, says the query's action answers a record and names the record's members
+that hold a list; a `patch` or `optimistic` of such a query is then refused without an `at` (it could
+never find a list) or with an `at` that is not one of them. When it is absent, the catalog does not
+know the result's shape, and a patch that finds no list is reported by the interpreter when it runs.
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
 an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
 an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's

@@ -138,6 +138,13 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   `permissionsStale`.
 - **`patch` and `optimistic`** replace the row of the query's list whose `id` field equals `key`; a
   record `with` is merged over a record row (its fields replace the row's), anything else replaces it.
+  The list is the query's value itself, or, with `at`, the member of that record value `at` names; the
+  rest of the record is kept. A key no row has changes nothing and is not a fault: the row is not
+  loaded. A patch whose query has a value but finds no list there — the value is not a list and there
+  is no `at`, or the value has no list at `at` — changes nothing and is reported once through
+  `diagnostics()` at the mutation's `/patch` or `/optimistic` path, since it can never apply. An
+  `optimistic` write is checked when the run starts, a `patch` when its reply arrives; before the query
+  has a value there is nothing to miss.
 
 ## Relations
 

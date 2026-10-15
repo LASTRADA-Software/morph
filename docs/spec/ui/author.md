@@ -196,12 +196,13 @@ which holds neither the UI facts nor which model an action belongs to:
 | `stateless` | `ModelFacts<M>::stateless`, `false` unless the application specialises it |
 | An action id and its model type | `ActionTraits<A>::typeId()`, and the model of the handle the action runs through (a query, mutation, `refreshOn`, form or table) |
 | `calculatedFields`, `secretFields`, `credential` | `ActionFacts<A>`, empty unless the application specialises it |
+| `listFields` | The members glaze writes as a JSON array, when glaze writes the result type of the model's `execute(A)` as a record; absent for any other result |
 
 Facts gathered by a screen take precedence over the registry's, and the first fact recorded for an
 id is kept. Because the builders check model and action types at compile time, the catalog's
 unknown-model, unknown-action, wrong-model and `refreshOn` rules cannot fire on builder output;
-the keyed-instance, optimistic and offline rules can, and registration refuses them with their
-paths.
+the keyed-instance, optimistic, patch `at` and offline rules can, and registration refuses them with
+their paths. A `Patch`'s `at` names the list member of a record result, and is written only when set.
 
 ## Accessibility rules
 

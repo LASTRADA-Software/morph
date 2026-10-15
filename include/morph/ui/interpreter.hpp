@@ -468,16 +468,33 @@ namespace detail {
     return Value{std::move(merged)};
 }
 
-/// @brief Replaces, in a list of rows, the row whose `id` equals @p key.
-/// @param rows The list.
-/// @param key  The row's id.
-/// @param with The new content, merged over the row.
-/// @return The new list, or `std::nullopt` when no row matched or @p rows is not a list.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
-[[nodiscard]] inline std::optional<Value> patchRows(Value const& rows, Value const& key, Value const& with) {
-    ValueList const* const items = rows.asList();
-    if (items == nullptr || key.isNull()) {
-        return std::nullopt;
+/// @brief Why a patch left a query's value as it was.
+enum class PatchMiss : std::uint8_t {
+    NoList,  ///< The value, or its `at` member, is not a list: the patch can never apply, and is reported.
+    NoRow,   ///< No row's `id` equals the key: the row is not loaded, which is not a fault.
+};
+
+/// @brief Replaces the row whose `id` equals @p key in a query's list of rows.
+/// @param value      The query's value: the list itself, or a record holding it in member @p listMember.
+/// @param listMember The record member holding the list; empty when @p value is the list.
+/// @param key        The row's id.
+/// @param with       The new content, merged over the row.
+/// @return The new value, or why it is unchanged.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
+[[nodiscard]] inline std::expected<Value, PatchMiss> patchRows(Value const& value, std::string_view listMember,
+                                                               Value const& key, Value const& with) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
+    ValueRecord const* const record = listMember.empty() ? nullptr : value.asRecord();
+    if (!listMember.empty() && (record == nullptr || !record->contains(listMember))) {
+        return std::unexpected(PatchMiss::NoList);
+    }
+    Value const* const rows = record == nullptr ? &value : &record->find(listMember)->second;
+    ValueList const* const items = rows->asList();
+    if (items == nullptr) {
+        return std::unexpected(PatchMiss::NoList);
+    }
+    if (key.isNull()) {
+        return std::unexpected(PatchMiss::NoRow);
     }
     ValueList out = *items;
     bool found = false;
@@ -488,9 +505,27 @@ namespace detail {
         }
     }
     if (!found) {
-        return std::nullopt;
+        return std::unexpected(PatchMiss::NoRow);
     }
-    return Value{std::move(out)};
+    if (record == nullptr) {
+        return Value{std::move(out)};
+    }
+    ValueRecord patched = *record;
+    patched.insert_or_assign(std::string{listMember}, Value{std::move(out)});
+    return Value{std::move(patched)};
+}
+
+/// @brief What a patch that found no list reports.
+/// @param query      The query it patches.
+/// @param listMember The record member it names; empty when none.
+/// @return The diagnostic's reason.
+[[nodiscard]] inline std::string patchMissReason(std::string_view query, std::string_view listMember) {
+    if (listMember.empty()) {
+        return "the value of `" + std::string{query} +
+               "` is not a list, so the patch changes nothing; `at` names the record member that holds the list";
+    }
+    return "the value of `" + std::string{query} + "` has no list at `" + std::string{listMember} +
+           "`, so the patch changes nothing";
 }
 
 /// @brief Removes the named fields from a record, and from each record of a list.
@@ -524,6 +559,8 @@ namespace detail {
 struct OptimisticLayer {
     /// @brief The run that made it.
     std::uint64_t run = 0;
+    /// @brief The record member holding the list; empty when the value is the list.
+    std::string at;
     /// @brief The row's id.
     Value key;
     /// @brief What was written.
@@ -906,7 +943,7 @@ public:
     void showLayers(detail::CacheEntry& entry) {
         Value shown = entry.confirmed;
         for (detail::OptimisticLayer const& layer : entry.layers) {
-            if (auto patched = detail::patchRows(shown, layer.key, layer.with)) {
+            if (auto patched = detail::patchRows(shown, layer.at, layer.key, layer.with)) {
                 shown = std::move(*patched);
             }
         }
@@ -2820,7 +2857,15 @@ inline void MutationRuntime::applyOptimistic(Run& run) {
     bindings.push_back(Binding{.name = "body", .read = [body = run.body] { return body; }});
     Value key = _scope->core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->optimistic->key); });
     Value with = _scope->core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->optimistic->with); });
-    entry->layers.push_back(OptimisticLayer{.run = run.id, .key = std::move(key), .with = std::move(with)});
+    // Before a value has arrived there is no list to miss.
+    if (entry->hasValue.peek() &&
+        patchRows(entry->confirmed, _decl->optimistic->at, key, with).error_or(PatchMiss::NoRow) ==
+            PatchMiss::NoList) {
+        _scope->core.report(pointerAppend(_decl->path, "optimistic"),
+                            patchMissReason(_decl->optimistic->query, _decl->optimistic->at));
+    }
+    entry->layers.push_back(
+        OptimisticLayer{.run = run.id, .at = _decl->optimistic->at, .key = std::move(key), .with = std::move(with)});
     _scope->core.session.showLayers(*entry);
     run.layered.push_back(std::move(entry));
 }
@@ -2859,7 +2904,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                 Value confirmed = entry->confirmed;
                 for (OptimisticLayer const& layer : entry->layers) {
                     if (layer.run == run->id) {
-                        if (auto patched = patchRows(confirmed, layer.key, layer.with)) {
+                        if (auto patched = patchRows(confirmed, layer.at, layer.key, layer.with)) {
                             confirmed = std::move(*patched);
                         }
                     }
@@ -2892,8 +2937,12 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                     Value const with =
                         core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->with); });
                     if (entry) {
-                        if (auto patched = patchRows(entry->confirmed, key, with)) {
+                        auto patched = patchRows(entry->confirmed, _decl->patch->at, key, with);
+                        if (patched) {
                             session.confirm(*entry, *patched);
+                        } else if (patched.error() == PatchMiss::NoList && entry->hasValue.peek()) {
+                            core.report(pointerAppend(_decl->path, "patch"),
+                                        patchMissReason(_decl->patch->query, _decl->patch->at));
                         }
                     }
                 }

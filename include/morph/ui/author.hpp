@@ -86,6 +86,34 @@ struct ActionFacts {
 template <typename Model, typename Action>
 concept Runs = requires(Model& model, Action& action) { model.execute(action); };
 
+namespace detail {
+
+/// @brief The members of an action result that hold a list, when the result is a record.
+/// @tparam Result The action's result type.
+/// @return The names glaze writes them under, or `std::nullopt` when glaze does not write @p Result as a record.
+template <typename Result>
+[[nodiscard]] std::optional<std::vector<std::string>> listFields() {
+    if constexpr (!std::is_class_v<Result> || (!glz::reflectable<Result> && !glz::glaze_object_t<Result>)) {
+        return std::nullopt;
+    } else {
+        std::vector<std::string> names;
+        [&names]<std::size_t... I>(std::index_sequence<I...>) {
+            // An action whose result has no members expands the fold below to nothing.
+            [[maybe_unused]] auto add = [&names]<std::size_t Index> {
+                using Member =
+                    std::remove_cvref_t<decltype(::morph::detail::reflectedMember<Index>(std::declval<Result&>()))>;
+                if constexpr (glz::writable_array_t<Member>) {
+                    names.emplace_back(glz::reflect<Result>::keys[Index]);
+                }
+            };
+            (add.template operator()<I>(), ...);
+        }(std::make_index_sequence<glz::reflect<Result>::size>{});
+        return names;
+    }
+}
+
+}  // namespace detail
+
 /// @brief The catalog facts the builders gathered from the model and action types a screen names.
 struct CatalogFacts {
     /// @brief Model facts by registered type id.
@@ -127,10 +155,14 @@ struct CatalogFacts {
     void action() {
         model<Model>();
         actions.emplace(std::string{::morph::model::ActionTraits<Action>::typeId()},
-                        ActionInfo{.modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                                   .calculatedFields = ActionFacts<Action>::calculatedFields(),
-                                   .secretFields = ActionFacts<Action>::secretFields(),
-                                   .credential = ActionFacts<Action>::credential});
+                        ActionInfo{
+                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            .calculatedFields = ActionFacts<Action>::calculatedFields(),
+                            .secretFields = ActionFacts<Action>::secretFields(),
+                            .credential = ActionFacts<Action>::credential,
+                            .listFields = detail::listFields<::morph::model::HandlerResultT<
+                                decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
+                        });
     }
 
     /// @brief The facts as a `ui::Catalog`.
@@ -1470,6 +1502,8 @@ enum class Mode : std::uint8_t {
 struct Patch {
     /// @brief The query whose cached list it patches.
     std::optional<QueryRef> query;
+    /// @brief The member of the query's record value that holds the list; empty when the value is the list itself.
+    std::string at;
     /// @brief The row key, read against the reply bound as `result` (patch) or the body bound as `body`
     ///        (optimistic).
     AnyHandle key;
@@ -2091,6 +2125,9 @@ private:
             }
             Json part = Json::object_t{};
             detail::put(part, "query", replacement->query->name());
+            if (!replacement->at.empty()) {
+                detail::put(part, "at", replacement->at);
+            }
             detail::put(part, "key", replacement->key.json());
             detail::put(part, "with", replacement->with.json());
             detail::put(decl, key, std::move(part));
