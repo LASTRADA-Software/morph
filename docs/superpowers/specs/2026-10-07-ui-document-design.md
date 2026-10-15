@@ -457,7 +457,8 @@ Two declarations cover it.
                            "body": { "obj": { "resultId": { "row": "id" }, "inputs": { "ref": "draft" } } } } } },
   "columns": [
     { "label": "Mass",   "cell": { "kind": "textInput", "id": "mass", "commitOn": "change",
-                                   "value": { "ref": "draft.mass" }, "onChange": { "set": "draft.mass", "value": { "ref": "event" } } } },
+                                   "value": { "ref": "draft.mass" },
+                                   "onChange": { "set": "draft.mass", "value": { "fn": "parseDecimal", "args": [ { "ref": "event" }, 3 ] } } } },
     { "label": "Result", "cell": { "kind": "text",
                                    "text": { "fn": "quantity", "args": [ { "fn": "coalesce", "args": [ { "ref": "calc.concentration" }, { "row": "concentration" } ] } ] },
                                    "stale": { "pending": "calc" } } } ] }
@@ -486,7 +487,8 @@ without refetching the list.
    the row's elements of the same name. A transport failure becomes the row's error and keeps the
    stale value.
 6. **Exactness.** Inputs and results travel as `int`, `decimal` and `quantity`, and are formatted in
-   C++.
+   C++. A text input's `event` is text; `parseDecimal` turns it into a decimal, `null` while the
+   text does not spell one, and the input keeps what the user typed until the value shows the same.
 7. **Offline.** A preview that cannot reach the server leaves the cells stale and shows the row's
    error. A write-through edit goes through the client's offline queue when its mutation declares
    `"offline": "queue"` (§5).

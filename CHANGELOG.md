@@ -228,6 +228,14 @@ API surface).
 
 ### Added
 
+- **`parseDecimal(text, dp?)` turns typed text into a number.** A text input's
+  `event` is text, and no expression turned it into a number a body could
+  carry, so a cell feeding a calculation could not be written. `parseDecimal`
+  reads the text in the client's locale as an exact decimal through
+  `render::parseDecimal`, at `dp` places when given; text that does not spell a
+  number yet is `null`, not an error. The author builder is
+  `ui::author::parseDecimal`.
+
 - **A wire transport sends an envelope of any kind and reads its reply.**
   `morph::backend::IEnvelopeTransport::request(envelope, cbExec)`, implemented by
   `SocketBackend` and `QtWebSocketBackend`, sends the envelope with the session it

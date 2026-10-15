@@ -874,6 +874,21 @@ template <typename R = Any>
     return call("round", {value, places});
 }
 
+/// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not
+/// spell one.
+/// @param text The text, typically a text input's `event`.
+/// @return The decimal, at the places typed.
+[[nodiscard]] inline AnyHandle parseDecimal(AnyHandle const& text) { return call("parseDecimal", {text}); }
+
+/// @brief `parseDecimal(text, dp)`: typed text as an exact decimal at @p places; `null` while it does not spell one,
+/// or when it has more fraction digits than @p places.
+/// @param text   The text, typically a text input's `event`.
+/// @param places The places, 0 to 18.
+/// @return The decimal.
+[[nodiscard]] inline AnyHandle parseDecimal(AnyHandle const& text, std::int64_t places) {
+    return call("parseDecimal", {text, places});
+}
+
 /// @brief `quantity(x)`: a quantity for display in its own unit.
 /// @param value The quantity.
 /// @return The text.

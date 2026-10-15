@@ -106,6 +106,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf` |
 | Display | `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
+| Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
 
 - `format`'s placeholders are `{0}`, `{1}`, …; `{{` and `}}` are literal braces. An argument shows
@@ -116,6 +117,11 @@ arithmetic, and `any` where it depends on data the document does not describe.
   `min` and `max` return the element itself.
 - `any` and `all` are Kleene over the elements: `any([])` is `false`, `all([])` is `true`.
 - `indexOf` is `null` when the value is absent; `includes` is `false`.
+- `parseDecimal` reads text typed in the active locale (its separators, sign and digits, through
+  `render::parseDecimal`) as an exact decimal, at `dp` places when given and otherwise at the places
+  typed. Text that does not spell a number, or has more fraction digits than `dp`, is `null` and not
+  an error: it is what an entry holds while it is being typed. It is how a text input's `event`
+  becomes a number a body can carry.
 
 ## Formatting
 

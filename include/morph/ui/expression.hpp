@@ -123,6 +123,7 @@ enum class FunctionId : std::uint8_t {
     Date,
     DateTime,
     Translate,
+    ParseDecimal,
 };
 
 struct Expr;
@@ -187,7 +188,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 40> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 41> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -244,6 +245,7 @@ inline constexpr std::array<FunctionSpec, 40> kFunctions = {{
      {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), kindBit(TypeKind::String), 0},
      TypeKind::String},
     {"t", 2, 3, {kindBit(TypeKind::String), kindBit(TypeKind::String), kindBit(TypeKind::Record)}, TypeKind::String},
+    {"parseDecimal", 1, 2, {kindBit(TypeKind::String), kindBit(TypeKind::Int), 0}, TypeKind::Decimal},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1950,6 +1952,26 @@ private:
                     return mismatch(expr, "the date functions take a timestamp and a style");
                 }
                 return std::move(*text);
+            }
+            case FunctionId::ParseDecimal: {
+                std::string const* const text = args.at(0).asString();
+                std::optional<std::uint32_t> declared;
+                if (args.size() > 1) {
+                    std::int64_t const* const places = args.at(1).asInt();
+                    if (places == nullptr || !std::in_range<std::uint32_t>(*places) ||
+                        std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
+                        return mismatch(expr, "`parseDecimal` takes text and places from 0 to 18");
+                    }
+                    declared = static_cast<std::uint32_t>(*places);
+                }
+                if (text == nullptr) {
+                    return mismatch(expr, "`parseDecimal` takes text and places from 0 to 18");
+                }
+                // Text that does not spell a number is what an entry holds while it is typed: `null`, not an error.
+                if (auto parsed = render::parseDecimal(*text, context.numeric, declared)) {
+                    return Decimal{*parsed};
+                }
+                return Value{};
             }
             case FunctionId::Translate:
                 if (args.at(0).asString() == nullptr || args.at(1).asString() == nullptr) {
