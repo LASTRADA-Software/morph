@@ -68,6 +68,27 @@ constexpr std::string_view kDraft = R"({
   "view": { "kind": "column", "children": [
     { "kind": "button", "testId": "edit", "label": "edit", "onClick": [ { "set": "changed", "value": true } ] } ] } })";
 
+/// A screen whose onClose uploads a file to its save, or downloads one: the close waits for the transfer.
+constexpr std::string_view kTransferring = R"({
+  "vocab": "ui/1", "id": "transferring", "params": { "download": "bool" },
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "mutations": { "save": { "model": "sample", "action": "Lims_Attach", "body": { "obj": {} } } },
+  "onClose": [ { "if": [ { "ref": "download" },
+                         [ { "download": "ref-1", "save": "dialog", "name": "a.csv" } ],
+                         [ { "upload": "/tmp/a.csv", "to": "save", "as": "ref" } ] ] } ],
+  "view": { "kind": "text", "text": "x" } })";
+
+/// A draft whose onSave uploads the file its save attaches; the save's success clears `dirty`.
+constexpr std::string_view kUploadDraft = R"({
+  "vocab": "ui/1", "id": "uploadDraft", "dirty": { "ref": "changed" },
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "changed": { "init": false } },
+  "mutations": { "save": { "model": "sample", "action": "Lims_Attach", "body": { "obj": {} },
+                           "onSuccess": [ { "set": "changed", "value": false } ] } },
+  "onSave": [ { "upload": "/tmp/a.csv", "to": "save", "as": "ref" } ],
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "edit", "label": "edit", "onClick": [ { "set": "changed", "value": true } ] } ] } })";
+
 /// A screen that opens a chooser as a dialog and takes its answer.
 constexpr std::string_view kOpener = R"({
   "vocab": "ui/1", "id": "opener", "title": { "ref": "picked" },
@@ -131,6 +152,8 @@ private:
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"saving", loadOrFail(kSaving, morph::ui::testing::corpusCatalog())},
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
+            {"transferring", loadOrFail(kTransferring, morph::ui::testing::corpusCatalog())},
+            {"uploadDraft", loadOrFail(kUploadDraft, morph::ui::testing::corpusCatalog())},
             {"opener", loadOrFail(kOpener, morph::ui::testing::corpusCatalog())},
             {"chooser", loadOrFail(kChooser, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
@@ -273,6 +296,49 @@ TEST_CASE("onClose's work is waited for, a second request joins the first, and c
     }
 }
 
+// Mutation: take no count in runTransfer (the screen closes while the upload is in flight, and its save never runs).
+TEST_CASE("onClose waits for an upload in flight and the save it hands over to", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto screen = std::move(*shell.mount("transferring", ParamMap{{"download", Value{false}}}));
+    harness.settle();
+
+    Outcome outcome;
+    screen->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(harness.host.uploadDone);
+    CHECK_FALSE(outcome.closed.has_value());  // the upload is in flight
+    CHECK(DocumentScreenHost::rootOf(*screen) != nullptr);
+
+    harness.host.uploadDone(Value{std::string{"ref-1"}});
+    harness.settle();
+    REQUIRE(harness.dispatcher.calls.size() == 1);
+    CHECK(harness.dispatcher.calls.at(0).body == R"({"ref":"ref-1"})");
+    CHECK_FALSE(outcome.closed.has_value());  // its save is in flight
+
+    harness.reply(0, "{}");
+    CHECK(outcome.closed == true);
+    CHECK(DocumentScreenHost::rootOf(*screen) == nullptr);
+}
+
+// Mutation: take no count for a download (the screen closes while the download is in flight).
+TEST_CASE("onClose waits for a download in flight", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto screen = std::move(*shell.mount("transferring", ParamMap{{"download", Value{true}}}));
+    harness.settle();
+
+    Outcome outcome;
+    screen->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(harness.host.downloadDone);
+    CHECK_FALSE(outcome.closed.has_value());
+
+    harness.host.downloadDone(Value{std::string{"/home/a.csv"}});
+    harness.settle();
+    CHECK(outcome.closed == true);
+}
+
 /// The host's side of the three-choice guard: it records each ask and whether save was offered, and answers with a
 /// scripted choice.
 struct Prompt {
@@ -354,6 +420,34 @@ TEST_CASE("A save that leaves the screen dirty keeps it open and is reported", "
     CHECK(prompt.failures == 1);
     CHECK(draft->dirty().get());
     CHECK(DocumentScreenHost::rootOf(*draft) != nullptr);
+}
+
+// Mutation: take no count for an upload (the save is judged while the upload is in flight, and reported as failed).
+TEST_CASE("Save and close waits for onSave's upload and its save before judging dirty", "[ui][host][guard]") {
+    Harness harness;
+    Prompt prompt{.choice = CloseChoice::Save};
+    Shell shell{harness, prompt.guard(), prompt.failed()};
+    auto draft = std::move(*shell.mount("uploadDraft", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+
+    Outcome outcome;
+    draft->requestClose(outcome.callback());
+    harness.settle();
+    REQUIRE(harness.host.uploadDone);
+    CHECK_FALSE(outcome.closed.has_value());
+    CHECK(prompt.failures == 0);
+
+    harness.host.uploadDone(Value{std::string{"ref-1"}});
+    harness.settle();
+    REQUIRE(harness.dispatcher.calls.size() == 1);
+    CHECK_FALSE(outcome.closed.has_value());
+    CHECK(prompt.failures == 0);
+
+    harness.reply(0, "{}");
+    CHECK(outcome.closed == true);
+    CHECK(prompt.failures == 0);
+    CHECK(DocumentScreenHost::rootOf(*draft) == nullptr);
 }
 
 // Mutation: run onSave for every choice (discard logs saving and calls the model).

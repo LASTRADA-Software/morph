@@ -11,6 +11,14 @@ API surface).
 
 ### Changed
 
+- **An upload or download in flight holds a close open.** `Screen::pending()`
+  counted dialogs and mutation runs only, so an `onClose` whose work was an
+  upload closed the screen at once and its mutation never ran, and a *save and
+  close* whose `onSave` uploaded judged `dirty` before the upload had ended. A
+  transfer now counts as pending from the host accepting it to its settle; an
+  upload's mutation takes its own count before the transfer gives its count
+  back. A transfer the host refuses never counts.
+
 - **A `patch` or `optimistic` write reaches the list inside a record value.**
   A list action that answers a record holding its rows
   (`{"results": [...]}`) could never be patched: the interpreter patched only

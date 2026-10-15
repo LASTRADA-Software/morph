@@ -1953,8 +1953,8 @@ public:
     ValueRecord prefDefaults;
     /// @brief The screen's `submitted`.
     reactive::Signal<bool> submitted;
-    /// @brief The open dialogs and drawers and the mutation runs in flight, across every scope of the screen: what
-    ///        a close waits for (spec 6 §3).
+    /// @brief The open dialogs and drawers, the mutation runs and the transfers in flight, across every scope of the
+    ///        screen: what a close waits for (spec 6 §3).
     reactive::Signal<int> pendingWork;
 
     /// @brief Counts pending work in or out.
@@ -2004,6 +2004,8 @@ private:
     void runReset(Command const& command, CommandCtx const& ctx, Done const& done);
     void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
+    void runDownload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
+    void runUpload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
     bool unsupported(Command const& command, std::string_view what) {
         report(command.path, std::string{what} + " is not supported by the host");
         return false;
@@ -2108,8 +2110,9 @@ public:
         return flag != nullptr && *flag;
     }
 
-    /// @brief Whether the screen has work a close waits for: an open dialog or drawer, or a mutation run in flight, in
-    ///        any of its scopes (spec 6 §3). A tracked read, so an Effect that reads it runs again when it changes.
+    /// @brief Whether the screen has work a close waits for: an open dialog or drawer, a mutation run, or an upload or
+    ///        download in flight, in any of its scopes (spec 6 §3). A tracked read, so an Effect that reads it runs
+    ///        again when it changes.
     /// @return It.
     [[nodiscard]] bool pending() const { return _core->pendingWork.get() > 0; }
 
@@ -4051,49 +4054,102 @@ inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const&
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a download and an upload, each settled.
-inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
-    RtScope const& scope = *ctx.scope;
-    Value const file = evalIn(scope, ctx.bindings.get(), command.value);
-    std::weak_ptr<RtScope> const weak = ctx.scope;
-    if (command.kind == CommandKind::Download) {
-        Value const name = evalIn(scope, ctx.bindings.get(), command.extra);
-        auto settled = [this, weak, target = command.target, preview = command.option == "preview",
-                        done](std::expected<Value, std::string> const& reply) {
-            auto const held = weak.lock();
-            if (!held) {
-                return;
-            }
-            runtime().batch([&] {
-                bool const succeeded = reply.has_value();
-                if (succeeded && preview) {
-                    NameRef const* const found = held->find(target);
-                    if (found != nullptr && found->category == NameCategory::State) {
-                        initState(*found->state->scope, *found->state);
-                        session.noteWrite();
-                        found->state->value->set(*reply);
-                    }
-                }
-                done(succeeded);
-            });
-        };
-        if (host == nullptr || !host->download(file, command.option, name, settled)) {
-            unsupported(command, "`download`");
-            done(false);
+/// @brief A transfer's share of its screen's pending count.
+///
+/// A transfer is pending from the host accepting it to its settle: its completion carries on the command list that
+/// started it, which the close protocol and save-and-close wait for. The count is taken once the host accepts, so a
+/// refused transfer never counts, and a host that settles before it returns leaves nothing taken. It is given back
+/// once, also when the transfer settles after its scope is gone, but not after the screen itself is gone, since the
+/// count went with it.
+class TransferHold {
+public:
+    /// @brief A hold that counts nothing yet.
+    /// @param core  The screen whose count it moves.
+    /// @param alive Expires with the screen.
+    TransferHold(ScreenCore& core, std::weak_ptr<bool> alive) : _core{&core}, _alive{std::move(alive)} {}
+
+    /// @brief Counts the transfer, unless it has already settled.
+    void take() {
+        if (_state == State::NotTaken) {
+            _state = State::Taken;
+            _core->addPending(1);
         }
+    }
+
+    /// @brief Gives the count back, if one was taken and the screen is still there; the transfer counts no more.
+    void release() {
+        if (_state == State::Taken && !_alive.expired()) {
+            _core->addPending(-1);
+        }
+        _state = State::Released;
+    }
+
+private:
+    enum class State : std::uint8_t { NotTaken, Taken, Released };
+
+    ScreenCore* _core;
+    std::weak_ptr<bool> _alive;
+    State _state = State::NotTaken;
+};
+
+inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
+    Value const file = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
+    if (command.kind == CommandKind::Download) {
+        runDownload(command, ctx, file, std::move(done));
+    } else {
+        runUpload(command, ctx, file, std::move(done));
+    }
+}
+
+inline void ScreenCore::runDownload(Command const& command, CommandCtx const& ctx, Value const& file, Done done) {
+    Value const name = evalIn(*ctx.scope, ctx.bindings.get(), command.extra);
+    auto const hold = std::make_shared<TransferHold>(*this, _alive);
+    auto const settled = [this, weak = std::weak_ptr<RtScope>{ctx.scope}, target = command.target,
+                          preview = command.option == "preview", done,
+                          hold](std::expected<Value, std::string> const& reply) {
+        auto const held = weak.lock();
+        if (!held) {
+            hold->release();
+            return;
+        }
+        runtime().batch([&] {
+            bool const succeeded = reply.has_value();
+            NameRef const* const found = succeeded && preview ? held->find(target) : nullptr;
+            if (found != nullptr && found->category == NameCategory::State) {
+                initState(*found->state->scope, *found->state);
+                session.noteWrite();
+                found->state->value->set(*reply);
+            }
+            done(succeeded);
+            hold->release();
+        });
+    };
+    if (host == nullptr || !host->download(file, command.option, name, settled)) {
+        unsupported(command, "`download`");
+        done(false);
         return;
     }
+    hold->take();
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome an upload can have.
+inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx, Value const& file, Done done) {
+    RtScope const& scope = *ctx.scope;
+    std::weak_ptr<RtScope> const weak = ctx.scope;
+    auto const hold = std::make_shared<TransferHold>(*this, _alive);
     NameRef const* const transferName = command.transfer.empty() ? nullptr : scope.find(command.transfer);
     TransferState* const transfer =
         transferName != nullptr && transferName->category == NameCategory::Transfer ? transferName->transfer : nullptr;
-    auto progress = [weak, transfer](Value fraction) {
+    auto const progress = [weak, transfer](Value fraction) {
         if (weak.lock() && transfer != nullptr) {
             transfer->progress.set(std::move(fraction));
         }
     };
-    auto settled = [this, weak, kept = detached(ctx), transfer, command = &command,
-                    done](std::expected<Value, std::string> reply) {
+    auto const settled = [this, weak, kept = detached(ctx), transfer, command = &command, done,
+                          hold](std::expected<Value, std::string> reply) {
         auto const held = weak.lock();
         if (!held) {
+            hold->release();
             return;
         }
         runtime().batch([&] {
@@ -4103,6 +4159,7 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
             }
             if (!reply) {
                 done(false);
+                hold->release();
                 return;
             }
             NameRef const* const found = held->find(command->target);
@@ -4112,8 +4169,10 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
             Value const base = evalIn(*held, kept.bindings.get(), mutation.decl().body);
             ValueRecord fields = base.asRecord() == nullptr ? ValueRecord{} : *base.asRecord();
             fields.insert_or_assign(command->binding.empty() ? std::string{"file"} : command->binding, *reply);
+            // The run takes its own count before this one is given back, so pending never reads zero in between.
             mutation.run(Value{std::move(fields)}, std::make_shared<Bindings const>(*kept.bindings),
                          [done](bool succeeded, Value const&) { done(succeeded); });
+            hold->release();
         });
     };
     if (host == nullptr) {
@@ -4139,7 +4198,9 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
         }
         unsupported(command, "`upload`");
         done(false);
+        return;
     }
+    hold->take();
 }
 
 }  // namespace detail
