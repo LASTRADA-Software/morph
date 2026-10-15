@@ -145,9 +145,10 @@ ui::Screen resultsScreen() {
         auto const open = screen.mutation<OpenSample>(
             "open", sample, {.body = {{&OpenSample::sampleId, sampleId}}, .onSuccess = {ui::set(opened, true)}});
         auto const verify = screen.mutation<VerifyResult>("verify", sample, {.concurrency = ui::Mode::Serial});
-        auto const results = screen.query<ListResults>(
-            "results", sample, {},
-            {.when = opened, .refreshOn = sample.actions<CaptureConcentration, VerifyResult>()});
+        // A capture is not in `refreshOn`: a row's capture patches its own row, and the form refetches the list
+        // itself, since it may add a row.
+        auto const results = screen.query<ListResults>("results", sample, {},
+                                                       {.when = opened, .refreshOn = sample.actions<VerifyResult>()});
         auto const conflicts = screen.query<ListConflicts>("conflicts", sample, {}, {.when = opened});
         auto const analyses = screen.query<ListAnalyses>("analyses", catalog);
         // The capture's reported concentration while it is typed: the server evaluates the form's fields as the
@@ -173,27 +174,72 @@ ui::Screen resultsScreen() {
                  {.text = ui::format("{0} analyses", {ui::count(analyses.value().at(&ListAnalysesResult::analyses))})})
                  .testId("analyses"),
              ui::form<CaptureConcentration>(sample,
-                                            {.fields = {{&CaptureConcentration::reportedValue, {.omit = true}}}})
+                                            {
+                                                .fields = {{&CaptureConcentration::reportedValue, {.omit = true}}},
+                                                .onSuccess = {ui::refetch(results)},
+                                            })
                  .id(capture)
                  .testId("capture"),
              ui::text({.text = ui::format("Reported {0} mg/L",
                                           {reported.value().at(&CaptureConcentration::reportedValue)})})
                  .stale(reported.pending())
                  .testId("reported"),
-             ui::table(results.value().at(&ListResultsResult::results),
-                       {.key = ui::row(&ResultView::id),
-                        .columns = {{.name = "analysis",
-                                     .label = "Analysis",
-                                     .cell = ui::text({.text = ui::row("analysisVersionId")})},
-                                    {.name = "value", .label = "Value", .cell = ui::text({.text = ui::row("value")})},
-                                    {.name = "outOfSpec",
-                                     .label = "Out of spec",
-                                     .cell = ui::text({.text = ui::row("outOfSpec")})},
-                                    {.name = "verify",
-                                     .label = "",
-                                     .cell = ui::button({.label = "Verify",
-                                                         .onClick = ui::run(verify, {{&VerifyResult::resultId,
-                                                                                      ui::row(&ResultView::id)}})})}}})
+             ui::table(
+                 results.value().at(&ListResultsResult::results), {.key = ui::row(&ResultView::id)},
+                 [&](ui::DeclScope& row) {
+                     // Write-through: a re-capture replaces the row's result with a new one under a new id, so the
+                     // patch is keyed on the row it was typed into, not on the reply.
+                     auto const recapture =
+                         row.mutation<CaptureConcentration>("recapture", sample,
+                                                            {
+                                                                .concurrency = ui::Mode::Serial,
+                                                                .patch =
+                                                                    ui::Patch{
+                                                                        .query = results,
+                                                                        .at = "results",
+                                                                        .key = ui::row(&ResultView::id),
+                                                                        .with = ui::ref("result"),
+                                                                    },
+                                                            });
+                     // At the places typed: the model refuses a reading finer than its version declares, and
+                     // padding the text would claim precision nobody measured.
+                     auto const recaptureBody = ui::run(
+                         recapture,
+                         {
+                             {&CaptureConcentration::analysisVersionId, ui::row(&ResultView::analysisVersionId)},
+                             {&CaptureConcentration::value, ui::parseDecimal(ui::event())},
+                         });
+                     return std::vector<ui::TableColumn>{
+                         {
+                             .name = "analysis",
+                             .label = "Analysis",
+                             .cell = ui::text({.text = ui::row("analysisVersionId")}),
+                         },
+                         {.name = "value", .label = "Value", .cell = ui::text({.text = ui::row("value")})},
+                         {
+                             .name = "recapture",
+                             .label = "Re-capture",
+                             .cell = ui::textInput({
+                                                       .label = "Re-capture value",
+                                                       .onSubmit = recaptureBody,
+                                                   })
+                                         .testId("recapture"),
+                         },
+                         {
+                             .name = "outOfSpec",
+                             .label = "Out of spec",
+                             .cell = ui::text({.text = ui::row("outOfSpec")}),
+                         },
+                         {
+                             .name = "verify",
+                             .label = "",
+                             .cell = ui::button({
+                                 .label = "Verify",
+                                 .onClick = ui::run(verify, {{&VerifyResult::resultId, ui::row(&ResultView::id)}}),
+                             }),
+                         },
+                     };
+                 })
                  .a11y("Results")
                  .testId("results"),
              ui::text({.text = verify.error()}).testId("verifyError"),
