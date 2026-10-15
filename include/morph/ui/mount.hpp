@@ -605,6 +605,7 @@ private:
         widget.setOnSelect(inputEvent(
             spec.onSelect,
             controlled(scope, spec.selected, [&widget](std::optional<Key> const& key) { widget.setSelected(key); })));
+        widget.setOnOpen(event(spec.onOpen));
         return widget;
     }
 

@@ -95,6 +95,8 @@ public:
     /// Requests the option with @p selected; an open list highlights it when it is among the options.
     void setSelected(std::optional<ui::Key> const& selected) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
+    /// Calls @p onOpen when the user opens the list, also when there are no options and so no list to show.
+    void setOnOpen(ui::Action onOpen) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The label of the marked option; empty when none is marked.
@@ -135,6 +137,7 @@ private:
     std::vector<ui::SelectOption> _options;
     std::optional<ui::Key> _selected;
     std::function<void(ui::Key)> _onSelect;
+    ui::Action _onOpen;
     std::unique_ptr<::core::tui::List> _popup;  ///< A Popup, shown as an overlay while open.
     ::core::tui::Point _popupAt{};              ///< Where the open list is shown, in screen cells.
     int _popupRows = 0;                         ///< How many rows the open list may take where it is shown.

@@ -355,6 +355,8 @@ void DropdownSelectImpl::setSelected(std::optional<ui::Key> const& selected) {
 
 void DropdownSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSelect = std::move(onSelect); }
 
+void DropdownSelectImpl::setOnOpen(ui::Action onOpen) { _onOpen = std::move(onOpen); }
+
 ::core::tui::Size DropdownSelectImpl::naturalSize() const { return {.width = widestLabel(_options) + 4, .height = 1}; }
 
 std::string DropdownSelectImpl::probeText() const { return labelOf(_options, _selected); }
@@ -385,9 +387,18 @@ void DropdownSelectImpl::activate() { static_cast<void>(open()); }
 void DropdownSelectImpl::closePopup() { close(); }
 
 // The list takes the focus last: the focus leaving its old place may run a handler (a field committing what was
-// typed), which may destroy this select, or close the list by putting the select out of reach.
+// typed), which may destroy this select, or close the list by putting the select out of reach. `onOpen` runs last for
+// the same reason, from a copy, and nothing of this select is touched after it.
 bool DropdownSelectImpl::open() {
-    if (_open || _options.empty() || !actionable() || readOnly() || !fieldDrawn()) {
+    if (_open || !actionable() || readOnly() || !fieldDrawn()) {
+        return false;
+    }
+    if (_options.empty()) {
+        // Nothing to show; the user still asked, and the handler may fetch what to show next time.
+        ui::Action const onOpen = _onOpen;
+        if (onOpen) {
+            onOpen();
+        }
         return false;
     }
     auto const place = placement();
@@ -402,7 +413,12 @@ bool DropdownSelectImpl::open() {
     context().popups.push_back(this);
     context().screen->showOverlay(*_popup, place.origin);
     refresh();
-    return focusPopup(context(), *this, *_popup);
+    ui::Action const onOpen = _onOpen;
+    bool const focused = focusPopup(context(), *this, *_popup);
+    if (focused && onOpen) {
+        onOpen();
+    }
+    return focused;
 }
 
 // Nothing here runs a handler: the focus going back to the field leaves only the list, whose blur ends here at once.

@@ -125,6 +125,24 @@ TEST_CASE("tui lists: a dropdown opens its list as an overlay and closes on a ch
     CHECK(harness.draw() == Rows{"[Green ▾]"});
 }
 
+// Mutation: drop the onOpen call for an empty dropdown -> opening one with no options reports nothing.
+TEST_CASE("tui lists: a dropdown reports being opened, also with no options to show", "[tui][lists]") {
+    Harness harness{20, 4};
+    auto const select = harness.make<DropdownSelectImpl>(nullptr);
+    int opened = 0;
+    select->setOnOpen([&] { ++opened; });
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK_FALSE(select->isOpen());
+    CHECK(opened == 1);
+    select->setOptions(colours());
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(select->isOpen());
+    CHECK(opened == 2);
+}
+
 TEST_CASE("tui lists: Esc closes a dropdown without choosing", "[tui][lists]") {
     Harness harness{20, 4};
     auto const select = harness.make<DropdownSelectImpl>(nullptr);

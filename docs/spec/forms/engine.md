@@ -193,7 +193,9 @@ it. A view mounted on it is destroyed first.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
   longer contain is cleared (`clear`, the default of spec 5's `onStale`), but only once the query has answered for
   the current parents, so a selection prefilled before its options arrive survives. An idle query, and a failed
-  fetch, keep the selection.
+  fetch, keep the selection. A failed fetch is not repeated on its own: `retryOptions()` fetches again, and opening
+  the field's dropdown in `formView` runs it, so options that failed when the form was built (an action that needs
+  the screen's own setup first) are fetched once the user asks for them.
 - **Automatic submission waits for options in flight.** While any top-level Choice is fetching, its selection is
   unjudged — a parent just changed — so the automatic Effect does not submit; the settled query wakes it, after
   a stale selection has been cleared.

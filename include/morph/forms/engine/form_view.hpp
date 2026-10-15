@@ -169,6 +169,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                     field->text().set(*value);
                 }
             },
+        .onOpen = [field] { field->retryOptions(); },
         .style = style,
         .field = fieldState(field),
         .common = controlCommon(field),

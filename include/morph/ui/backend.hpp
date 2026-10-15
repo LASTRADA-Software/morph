@@ -218,6 +218,13 @@ public:
     /// @brief Sets what a user choice calls, with the option's key.
     /// @param onSelect The handler; empty does nothing.
     virtual void setOnSelect(std::function<void(Key)> onSelect) = 0;
+
+    /// @brief Calls @p onOpen each time the user opens the dropdown, also when it has no options to show. A radio
+    ///        group, and a backend that does not report opening, keep the default, which never calls it: opening is a
+    ///        hint, such as a retry of a failed fetch of the options, never something a select relies on.
+    /// @param onOpen The handler; empty stops calling one.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from; the default drops it.
+    virtual void setOnOpen(Action onOpen) { static_cast<void>(onOpen); }
 };
 
 /// @brief One entry of a menu as a `MenuWidget` shows it.

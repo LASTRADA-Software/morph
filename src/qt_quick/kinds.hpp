@@ -65,6 +65,7 @@ public:
     void setOptions(std::vector<ui::SelectOption> const& options) override;
     void setSelected(std::optional<ui::Key> const& key) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
+    void setOnOpen(ui::Action onOpen) override;
     [[nodiscard]] std::string shownText() const override;
     /// The index of the option the select marks, or -1.
     [[nodiscard]] int marked() const;

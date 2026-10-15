@@ -374,6 +374,36 @@ TEST_CASE("formView: Choice option keys keep ids past 2^53 exact", "[forms-engin
     }
 }
 
+// Mutation: make retryOptions do nothing -> the failed fetch is never repeated and the select stays empty.
+TEST_CASE("formView: opening a Choice whose options fetch failed fetches them again", "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{"slot":{"type":["integer","null"],"x-order":0,
+      "x-optionsAction":"ListRows","x-optionValue":"id","x-optionLabel":"name"}},"required":["slot"]})";
+    Harness harness;
+    harness.server.optionsWith([](morph::test::formsengine::Call const&) { return std::nullopt; });
+    RecordingBackend backend;
+    auto const form = harness.session("Probe", kSchema);
+    {
+        ui::Mounted const view{harness.rt, backend, morph::forms::formView(*form)};
+        harness.settle();
+        harness.server.rejectFetch(0, "the board is not open yet");
+        harness.settle();
+        auto const select = backend.find("Select", "testId", "field_slot");
+        REQUIRE(select.has_value());
+        CHECK(backend.prop(*select, "options") == "[]");
+        harness.server.optionsWith([](morph::test::formsengine::Call const&) {
+            return std::optional<std::string>{R"([{"id":1,"name":"One"}])"};
+        });
+        backend.open(*select);
+        harness.settle();
+        CHECK(harness.server.fetches().size() == 2);
+        CHECK(backend.prop(*select, "options") == R"(["1":One])");
+        // Options that were fetched are not fetched again by opening.
+        backend.open(*select);
+        harness.settle();
+        CHECK(harness.server.fetches().size() == 2);
+    }
+}
+
 TEST_CASE("formView: a date-time control's draft and instant convert in the display zone", "[forms-engine][view]") {
     namespace engine = morph::forms::detail::engine;
     CHECK_FALSE(engine::draftInstant("2024-02-30", true, 0).has_value());

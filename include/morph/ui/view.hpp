@@ -460,6 +460,9 @@ struct Select {
     Prop<std::optional<Key>> selected;
     /// @brief Called with the key the user chose.
     std::function<void(Key)> onSelect;
+    /// @brief Called when the user opens the dropdown, whether or not it has options to show; a radio group is never
+    ///        opened. A hint, such as retrying a fetch of the options that failed: a backend may not report it.
+    Action onOpen;
     /// @brief Dropdown or radio; set once.
     SelectStyle style = SelectStyle::Dropdown;
     /// @brief Read-only, required, errors and stale.
