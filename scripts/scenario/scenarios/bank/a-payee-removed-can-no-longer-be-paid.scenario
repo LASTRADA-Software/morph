@@ -10,7 +10,7 @@
 # file pays a bill, removes the payee, and then reads the history back to show
 # the record survived the beneficiary.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=ritchie password=ritchie-pass displayName="D. Ritchie"
 expect ok field message ~ "^(registered|username already taken)$"

@@ -14,7 +14,7 @@
 # scenario signs in by capturing that principal and putting it on the session,
 # with no token anywhere.
 
-model AuthModel
+model Bank_AuthModel
 client front
 
 # Registration is the only way a `users` row comes into being over the wire,
@@ -39,7 +39,7 @@ expect ok field message ~ "^(registered|username already taken)$"
 # `validate()` shadows its model's matching throw the same way. Asserted here
 # because it is the refusal a client actually has to handle.
 do RegisterUser username=ada-too-short password=abc
-expect err message == "action failed validation: AuthModel/RegisterUser"
+expect err message == "action failed validation: Bank_AuthModel/RegisterUser"
 
 # The wrong password is a failed sign-in, not an error: `AuthResult.ok` is
 # false and nothing is handed back to install.

@@ -20,7 +20,7 @@
 # behind. Tag rows outlive their bookmarks with a count of zero, which is what
 # makes the counts reproduce exactly rather than climb.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=tagmerger
 expect ok capture token=$.token

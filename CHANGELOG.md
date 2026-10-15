@@ -11,6 +11,16 @@ API surface).
 
 ### Changed
 
+- **A model or action id registered for a second type is refused.** The model
+  factory and both action registries stored registrations with
+  `insert_or_assign`, so a second type under a taken id silently replaced the
+  first, in link order. They now throw `morph::model::DuplicateRegistrationError`,
+  and the static-init helpers print it and abort; the same type registered
+  again stays harmless. The examples that shared ids in the one-process examples
+  client now namespace them: `AuthModel` is `Bank_AuthModel`,
+  `Bookmarks_AuthModel`, `Kanban_AuthModel` and `Ledger_AuthModel`, and
+  `BudgetModel` is `Bank_BudgetModel` and `Ledger_BudgetModel`.
+
 - **Opening a Choice whose options fetch failed fetches them again.** A
   Choice's options were fetched once, when its form was built; a fetch that
   failed (an action needing the screen's setup first) left the select empty for

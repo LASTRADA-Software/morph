@@ -24,7 +24,7 @@
 # with the balance they first saw and every assertion after the first deposit
 # would fail.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=cache-holder password=cache-pass displayName="Cache Holder"
 expect ok field message ~ "^(registered|username already taken)$"

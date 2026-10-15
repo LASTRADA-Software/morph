@@ -16,7 +16,7 @@
 # balance, not its balance as at `toMs`. Narrowing the window changes the
 # credits and debits and leaves the closing balance alone.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=perlis password=perlis-pass displayName="A. Perlis"
 expect ok field message ~ "^(registered|username already taken)$"
@@ -93,7 +93,7 @@ expect ok field lines ~ "\"accountId\":$busy,[^}]*\"entryCount\":0"
 # `GenerateStatement` resolves its scope through `bank::resolveOwner`, which
 # refuses any `owner` that is not the session principal — see
 # an-owner-named-outright-is-checked-against-the-session.scenario.
-client other model=AuthModel
+client other model=Bank_AuthModel
 do RegisterUser username=perlis-no-accounts password=none-pass displayName="No Accounts"
 expect ok field message ~ "^(registered|username already taken)$"
 do LoginRequest username=perlis-no-accounts password=none-pass

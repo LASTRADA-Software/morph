@@ -45,7 +45,7 @@
 # Re-runnable: every job is submitted by this file and polled by the id its
 # own submit returned.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

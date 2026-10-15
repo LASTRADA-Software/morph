@@ -22,7 +22,7 @@
 # Re-runnable: the principals `sharer` and `viewer` are used by no other file
 # here, and both delete what they created.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=sharer
 expect ok capture sharerToken=$.token

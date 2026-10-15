@@ -70,5 +70,5 @@ BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetProjectRoles, "GetP
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetMyProjects, "GetMyProjects", ::morph::model::Loggable::No)
 
-BRIDGE_REGISTER_MODEL(kanban::AuthModel, "AuthModel")
+BRIDGE_REGISTER_MODEL(kanban::AuthModel, "Kanban_AuthModel")
 BRIDGE_REGISTER_ACTION(kanban::AuthModel, kanban::Login, "Login")

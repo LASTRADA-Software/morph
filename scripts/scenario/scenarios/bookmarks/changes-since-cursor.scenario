@@ -44,7 +44,7 @@
 # cursor is captured from the reply that issued it, and the file deletes what
 # it created.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=poller
 expect ok capture token=$.token

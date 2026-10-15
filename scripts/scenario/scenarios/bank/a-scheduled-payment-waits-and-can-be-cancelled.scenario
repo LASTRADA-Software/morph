@@ -12,7 +12,7 @@
 # file asserts that standstill rather than pretending a due date makes something
 # happen, because a scenario that waited for one would be asserting on a clock.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=wilkes password=wilkes-pass displayName="M. Wilkes"
 expect ok field message ~ "^(registered|username already taken)$"

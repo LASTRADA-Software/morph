@@ -19,7 +19,7 @@
 #
 # Re-runnable: every account is opened here, so the balances are this run's.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

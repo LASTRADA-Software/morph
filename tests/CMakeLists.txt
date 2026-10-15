@@ -42,6 +42,7 @@ add_executable(morph_tests
     test_backend_extra.cpp
     test_backend_registration_surface.cpp
     test_registry_extra.cpp
+    test_registry_duplicates.cpp
     test_registration_phase.cpp
     test_registry_schema_forgery.cpp
     test_registration_qualified_types.cpp
@@ -564,6 +565,19 @@ target_link_libraries(morph_client_only_guard_links PRIVATE morph_guard_probe_de
 morph_suppress_test_dialogs(morph_client_only_guard_links)
 add_test(NAME morph_client_only_guard_links COMMAND morph_client_only_guard_links)
 set_tests_properties(morph_client_only_guard_links PROPERTIES TIMEOUT 60)
+
+# Two model types registered under one id, in two translation units: static initialisation must stop with the
+# duplicate-id message. Judged by that message, not by the exit status, so a run that died of something else, or
+# reached main, does not pass; a script judges it, since ctest fails a run killed by a signal whatever it printed.
+add_executable(morph_duplicate_model_id compile_checks/duplicate_model_id_first.cpp
+                                        compile_checks/duplicate_model_id_second.cpp)
+target_link_libraries(morph_duplicate_model_id PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_duplicate_model_id)
+add_test(NAME morph_duplicate_model_id
+         COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:morph_duplicate_model_id>
+                 "-DPASS=the model id `Dup_StaticModel` is registered for two types" "-DFAIL=REACHED MAIN"
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/expect_message.cmake)
+set_tests_properties(morph_duplicate_model_id PROPERTIES TIMEOUT 60)
 
 # The negative probe stays a configure-time try_compile(): the link failure is
 # the assertion. Its scratch project cannot link core-cpp either, so a failure

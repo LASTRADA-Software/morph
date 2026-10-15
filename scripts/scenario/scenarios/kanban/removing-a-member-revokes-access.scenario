@@ -11,7 +11,7 @@
 #
 # Re-runnable: the project is created here.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=alice
 expect ok capture aliceToken=$.token

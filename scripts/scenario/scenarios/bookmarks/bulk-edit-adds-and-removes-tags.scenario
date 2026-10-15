@@ -12,7 +12,7 @@
 #
 # Re-runnable: all three bookmarks are created here.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=alice
 expect ok capture token=$.token

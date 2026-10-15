@@ -29,7 +29,7 @@
 # Re-runnable: the project is created by this file, so its board is empty in
 # every run and every id below is captured from the reply that minted it.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=alice
 expect ok capture token=$.token

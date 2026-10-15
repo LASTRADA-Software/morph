@@ -6,6 +6,8 @@
 #include <cassert>
 #include <concepts>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <map>
@@ -15,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <typeindex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -271,6 +274,53 @@ struct ActionValidator {
         }
     }
 };
+
+/// @brief Thrown when a model id, or a model's action id, is registered for a type other than the one that already
+///        holds it.
+///
+/// Two registrations of one id would otherwise leave whichever static initialiser ran last, an order the link
+/// decides: two applications linked into one process could each reach the other's model. Registering the same type
+/// again, as every translation unit including a `BRIDGE_REGISTER_*` header does, is not a conflict. The static-init
+/// helpers report it and abort, because there is no caller to catch it before `main`.
+struct DuplicateRegistrationError : std::logic_error {
+    /// @brief Constructs the error naming the id and both types.
+    /// @param what     `model` or `action`.
+    /// @param taken    The id, `model` or `model/action`.
+    /// @param held     The type that holds it.
+    /// @param incoming The type registered again under it.
+    DuplicateRegistrationError(std::string_view what, std::string_view taken, std::type_index held,
+                               std::type_index incoming)
+        : std::logic_error("morph: the " + std::string{what} + " id `" + std::string{taken} +
+                           "` is registered for two types (" + held.name() + " and " + incoming.name() +
+                           "); give each type its own id") {}
+};
+
+namespace detail {
+
+/// @brief Records that @p name belongs to @p type, refusing it for any other type.
+/// @param types    The ids registered so far, with their types.
+/// @param what     `model` or `action`, for the message.
+/// @param name     The id.
+/// @param type     The type registering it.
+/// @throws DuplicateRegistrationError when another type holds @p name.
+template <typename Map, typename Key>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a kind, then the id; swapped, only the message reads oddly.
+void claimId(Map& types, std::string_view what, Key const& key, std::string_view name, std::type_index type) {
+    auto const [iter, inserted] = types.try_emplace(key, type);
+    if (!inserted && iter->second != type) {
+        throw DuplicateRegistrationError{what, name, iter->second, type};
+    }
+}
+
+/// @brief Ends a static-init registration that conflicts: there is no caller to catch it before `main`.
+/// @param error The conflict.
+[[noreturn]] inline void abortRegistration(DuplicateRegistrationError const& error) noexcept {
+    static_cast<void>(std::fputs(error.what(), stderr));
+    static_cast<void>(std::fputc('\n', stderr));
+    std::abort();
+}
+
+}  // namespace detail
 
 /// @brief Thrown when a decoded action fails `ActionValidator<Action>::ready(...)`
 ///        on a server-side or local execution path, before `Model::execute` runs.
@@ -734,7 +784,9 @@ public:
     ///         not be serialised or its journal entry could not be appended.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
-        ActionEntry& entry = _actions[Key{std::string{modelId}, std::string{actionId}}];
+        Key key{std::string{modelId}, std::string{actionId}};
+        detail::claimId(_actionTypes, "action", key, key.first + "/" + key.second, std::type_index{typeid(Action)});
+        ActionEntry& entry = _actions[std::move(key)];
         if constexpr (isTaskHandler<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>) {
             entry.asyncRunner = &runTaskHandler<Model, Action>;
             entry.runner = [](IModelHolder&, std::string_view) -> std::string {
@@ -1235,6 +1287,8 @@ private:
     };
 
     std::unordered_map<Key, ActionEntry, PairKeyHash, PairKeyEqual> _actions;
+    /// @brief The action type each `(model, action)` id pair was registered for.
+    std::unordered_map<Key, std::type_index, PairKeyHash, PairKeyEqual> _actionTypes;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.
@@ -1251,6 +1305,7 @@ public:
     /// @param modelId String id to register the factory under.
     template <typename Model>
     void registerModel(std::string_view modelId) {
+        detail::claimId(_types, "model", std::string{modelId}, modelId, std::type_index{typeid(Model)});
         _factories.insert_or_assign(std::string{modelId}, [] { return ModelFactory::create<Model>(); });
     }
 
@@ -1291,6 +1346,8 @@ public:
         requires std::invocable<Factory> &&
                  std::convertible_to<std::invoke_result_t<Factory>, std::unique_ptr<IModelHolder>>
     void registerModel(std::string_view modelId, Factory factory) {
+        // The same type may replace its factory: that is how a custom construction hook overrides the default.
+        detail::claimId(_types, "model", std::string{modelId}, modelId, std::type_index{typeid(Model)});
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
             // misc-static-assert fires here -- `holder` is a runtime
@@ -1350,6 +1407,8 @@ public:
 
 private:
     std::unordered_map<std::string, std::function<std::unique_ptr<IModelHolder>()>> _factories;
+    /// @brief The model type each id was registered for.
+    std::unordered_map<std::string, std::type_index> _types;
 };
 
 /// @brief Returns the process-level `ActionDispatcher` singleton.
@@ -1397,7 +1456,11 @@ inline bool registerModelOnce(std::string_view modelId) noexcept {
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
            "races their internals against concurrent lookups (see docs/spec/core/registry.md, "
            "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
-    ModelRegistryFactory::instance().registerModel<Model>(modelId);
+    try {
+        ModelRegistryFactory::instance().registerModel<Model>(modelId);
+    } catch (DuplicateRegistrationError const& error) {
+        detail::abortRegistration(error);
+    }
     return true;
 }
 
@@ -1423,7 +1486,11 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
            "races their internals against concurrent lookups (see docs/spec/core/registry.md, "
            "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
-    ActionDispatcher::instance().registerAction<Model, Action>(modelId, actionId);
+    try {
+        ActionDispatcher::instance().registerAction<Model, Action>(modelId, actionId);
+    } catch (DuplicateRegistrationError const& error) {
+        detail::abortRegistration(error);
+    }
     return true;
 }
 

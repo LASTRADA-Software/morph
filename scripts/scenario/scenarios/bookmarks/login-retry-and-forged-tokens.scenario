@@ -9,11 +9,11 @@
 # interaction there is, and examples/TESTING.md notes it appears in no
 # in-process rig, because rigs arrive already authenticated.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 # Rejected: not a valid principal. Nothing is minted.
 do Login username="not a valid principal!"
-expect err message == "action failed validation: AuthModel/Login"
+expect err message == "action failed validation: Bookmarks_AuthModel/Login"
 
 # The retry succeeds and hands back a signed bearer token.
 do Login username=alice
@@ -45,7 +45,7 @@ expect ok field tags[0] == reading
 expect ok field visibility == Private
 
 # ── Another principal's token does not reach alice's bookmark ───────────────
-client mallory model=AuthModel
+client mallory model=Bookmarks_AuthModel
 do Login username=mallory
 expect ok capture mallorytoken=$.token
 

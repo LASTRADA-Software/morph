@@ -202,6 +202,8 @@ private:
         }
     };
     std::unordered_map<Key, Executor, KeyHash, KeyEqual> _executors;
+    /// @brief The action type each `(model, action)` id pair was registered for, keyed with `void` as its sharing.
+    std::unordered_map<Key, std::type_index, KeyHash, KeyEqual> _types;
 };
 
 inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
@@ -235,7 +237,11 @@ inline bool registerActionExecutorOnce(std::string_view modelId, std::string_vie
            "registering now races their internals against concurrent lookups (see "
            "docs/spec/core/registry.md, \"Thread safety\"). Load and register plugin modules before "
            "the first dispatch.");
-    ::morph::bridge::ActionExecuteRegistry::instance().registerAction<Model, Action>(modelId, actionId);
+    try {
+        ::morph::bridge::ActionExecuteRegistry::instance().registerAction<Model, Action>(modelId, actionId);
+    } catch (::morph::model::DuplicateRegistrationError const& error) {
+        abortRegistration(error);
+    }
     return true;
 }
 
@@ -3112,6 +3118,12 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
             return completion;
         };
     };
+    ::morph::model::detail::claimId(_types, "action",
+                                    Key{.modelId = std::string{modelId},
+                                        .actionId = std::string{actionId},
+                                        .sharing = std::type_index{typeid(void)}},
+                                    std::string{modelId} + "/" + std::string{actionId},
+                                    std::type_index{typeid(Action)});
     _executors[Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(NoSharing)}}] =
         makeExecutor.template operator()<NoSharing>();
     _executors[Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(AllowShared)}}] =

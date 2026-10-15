@@ -26,7 +26,7 @@
 #
 # Re-runnable: the accounts, category and budget are all created here.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal
@@ -40,7 +40,7 @@ expect ok capture cash=$.id
 do OpenAccount ledgerId=1 name="Budgeted groceries" kind="Expense" currency="EUR"
 expect ok capture groceries=$.id
 
-client budgets model=BudgetModel
+client budgets model=Ledger_BudgetModel
 session principal=$who token=$token
 
 do CreateCategory ledgerId=1 name="Budgeted food"
@@ -124,7 +124,7 @@ do GetBudgetReport budgetId=999999 month="2026-08"
 expect err message == "GetBudgetReport: no such budget"
 
 do GetBudgetReport budgetId=$budget month="not-a-month"
-expect err message == "action failed validation: BudgetModel/GetBudgetReport"
+expect err message == "action failed validation: Ledger_BudgetModel/GetBudgetReport"
 
 # August is unchanged by either refusal.
 do GetBudgetReport budgetId=$budget month="2026-08"

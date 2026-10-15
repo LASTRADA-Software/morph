@@ -15,7 +15,7 @@
 # means a different amount of money in a JPY account than in a USD one. That is
 # exactly why the two must not be added together.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=nakamoto password=nakamoto-pass displayName="S. Nakamoto"
 expect ok field message ~ "^(registered|username already taken)$"

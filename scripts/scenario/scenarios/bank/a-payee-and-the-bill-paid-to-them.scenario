@@ -11,7 +11,7 @@
 # `CreateStandingOrder`) only write an instruction — see
 # a-scheduled-payment-waits-and-can-be-cancelled.scenario for the contrast.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=babbage password=babbage-pass displayName="C. Babbage"
 expect ok field message ~ "^(registered|username already taken)$"

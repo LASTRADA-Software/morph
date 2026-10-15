@@ -35,7 +35,7 @@ using bank::dto::ListBudgets;
 using bank::dto::SetBudget;
 using bank::dto::SpendingByKind;
 
-BRIDGE_REGISTER_MODEL(BudgetModel, "BudgetModel")
+BRIDGE_REGISTER_MODEL(BudgetModel, "Bank_BudgetModel")
 BRIDGE_REGISTER_ACTION(BudgetModel, SetBudget, "SetBudget")
 BRIDGE_REGISTER_ACTION(BudgetModel, DeleteBudget, "DeleteBudget")
 BRIDGE_REGISTER_ACTION(BudgetModel, ListBudgets, "ListBudgets", ::morph::model::Loggable::No)

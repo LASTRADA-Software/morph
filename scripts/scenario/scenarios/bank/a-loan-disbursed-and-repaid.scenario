@@ -14,7 +14,7 @@
 # assert with the number it just computed; here it is checked against the
 # account balance, which is the only place the clamp is observable.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=liskov password=liskov-pass displayName="B. Liskov"
 expect ok field message ~ "^(registered|username already taken)$"

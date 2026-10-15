@@ -33,7 +33,7 @@ server ws://127.0.0.1:8765
 # ── Sign in ────────────────────────────────────────────────────────────────
 # AuthModel is the one model an unauthenticated caller may reach. The token it
 # mints is real and server-signed; every later client installs it.
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 
 do Login username=alice
 expect ok capture token=$.token
@@ -81,7 +81,7 @@ do StoreTransaction ledgerId=1 description="unbalanced" date="2026-08-30T09:16:0
 expect err message ~ "zero"
 
 # ── Categorise, and budget the category ─────────────────────────────────────
-client budgets model=BudgetModel
+client budgets model=Ledger_BudgetModel
 session principal=$who token=$token
 
 do CreateCategory ledgerId=1 name="Drinks"

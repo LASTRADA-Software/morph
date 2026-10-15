@@ -13,7 +13,7 @@
 # Re-runnable: all three projects are created here, and every assertion is
 # anchored to a captured id.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=alice
 expect ok capture aliceToken=$.token

@@ -16,7 +16,7 @@
 # writes through and bumps that version, so the `GetAccount` afterwards is
 # reading a cache that had to notice it was stale.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=lovelace password=lovelace-pass displayName="A. Lovelace"
 expect ok field message ~ "^(registered|username already taken)$"

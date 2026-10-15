@@ -14,7 +14,7 @@
 # Re-runnable: both clients open their own accounts, and every assertion names
 # a captured id.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture aliceToken=$.token
 expect ok capture alice=$.principal

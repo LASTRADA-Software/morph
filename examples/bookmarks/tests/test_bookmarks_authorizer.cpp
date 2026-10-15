@@ -134,7 +134,7 @@ TEST_CASE(
     CHECK(authz.authorizeRegister(anonymous, "BookmarkModel"));
     CHECK(authz.authorizeRegister(anonymous, "TagModel"));
     CHECK(authz.authorizeRegister(anonymous, "SharedFeedModel"));
-    CHECK(authz.authorizeRegister(anonymous, "AuthModel"));
+    CHECK(authz.authorizeRegister(anonymous, "Bookmarks_AuthModel"));
 
     // A stamped principal changes nothing -- the decision does not key on it
     // in either direction.
@@ -218,12 +218,12 @@ TEST_CASE("BookmarksAuthorizer::authorize admits Login without a token, and noth
     const BookmarksAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
     const Context anonymous;  // no token at all, like a just-launched client
 
-    CHECK(authz.authorize(anonymous, "AuthModel", "Login"));
+    CHECK(authz.authorize(anonymous, "Bookmarks_AuthModel", "Login"));
 
     // Nothing else is reachable anonymously -- not another action on the same
     // model, not the same action name on another model, and not any real
     // domain action.
-    CHECK_FALSE(authz.authorize(anonymous, "AuthModel", "SomethingElse"));
+    CHECK_FALSE(authz.authorize(anonymous, "Bookmarks_AuthModel", "SomethingElse"));
     CHECK_FALSE(authz.authorize(anonymous, "BookmarkModel", "Login"));
     CHECK_FALSE(authz.authorize(anonymous, "BookmarkModel", "CreateBookmark"));
     CHECK_FALSE(authz.authorize(anonymous, "TagModel", "ListTags"));
@@ -235,7 +235,7 @@ TEST_CASE("BookmarksAuthorizer::authorize admits Login without a token, and noth
     forged.principal = "alice";
     forged.token = "not.a.real.token";
     CHECK_FALSE(authz.authorize(forged, "BookmarkModel", "CreateBookmark"));
-    CHECK(authz.authorize(forged, "AuthModel", "Login"));
+    CHECK(authz.authorize(forged, "Bookmarks_AuthModel", "Login"));
     CHECK_FALSE(authz.authenticate(forged).has_value());
 }
 

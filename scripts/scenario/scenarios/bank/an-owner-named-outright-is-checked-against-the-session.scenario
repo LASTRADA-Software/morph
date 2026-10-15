@@ -41,7 +41,7 @@
 # showing the notification still unread, and `OpenAccount` by a search of both
 # customers' account lists for the row it tried to create.
 
-model AuthModel
+model Bank_AuthModel
 
 client mallory-auth
 do RegisterUser username=snooper password=snooper-pass displayName="Snooper"
@@ -84,7 +84,7 @@ client q-wallet model=CardModel principal=$prey
 do IssueCard accountId=$qAcct kind=0 dailyLimitMinor=5000
 expect ok capture qCard=$.id
 
-client q-plan model=BudgetModel principal=$prey
+client q-plan model=Bank_BudgetModel principal=$prey
 do SetBudget category=quarry-secret monthlyLimitMinor=99000 currency=0
 expect ok capture qBudget=$.id
 
@@ -117,7 +117,7 @@ client s-wallet model=CardModel principal=$snoop
 do ListCards owner=$prey
 expect err message == "owner does not match the session principal"
 
-client s-plan model=BudgetModel principal=$snoop
+client s-plan model=Bank_BudgetModel principal=$snoop
 do ListBudgets owner=$prey
 expect err message == "owner does not match the session principal"
 

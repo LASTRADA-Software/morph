@@ -24,7 +24,7 @@
 # why re-creating the same two names each run reproduces the same state
 # exactly rather than accumulating.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=tagsmith
 expect ok capture token=$.token

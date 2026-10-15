@@ -18,7 +18,7 @@
 # Re-runnable: the accounts and categories are created here, and the
 # assertions name captured ids.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal
@@ -32,7 +32,7 @@ expect ok capture cash=$.id
 do OpenAccount ledgerId=1 name="Categorised coffee" kind="Expense" currency="EUR"
 expect ok capture coffee=$.id
 
-client budgets model=BudgetModel
+client budgets model=Ledger_BudgetModel
 session principal=$who token=$token
 
 # CreateCategory answers with a bare id rather than an object, so the capture

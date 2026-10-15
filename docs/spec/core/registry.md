@@ -97,6 +97,26 @@ namespace scope:
 specialisation. It performs no static-init registration (there is no singleton
 of validators; `ActionValidator` is consulted purely by template lookup).
 
+### One id, one type
+
+A model id belongs to one model type, and a `(model id, action id)` pair to one
+action type, in every registry that keys on them: `ModelRegistryFactory`,
+`ActionDispatcher` and `ActionExecuteRegistry`. Registering a different type
+under an id already held throws `DuplicateRegistrationError`, naming the id and
+both types. Without it the last registration would win, in an order the link
+decides, and two applications linked into one process could each reach the
+other's model.
+
+Registering the **same** type again is not a conflict: every translation unit
+that includes a header with `BRIDGE_REGISTER_MODEL` registers it, and
+`registerModel<Model>(id, factory)` replacing the default factory with a
+construction hook is the intended override. The static-init helpers
+(`registerModelOnce`, `registerActionOnce`, `registerActionExecutorOnce`) have
+no caller to catch the error before `main`, so they print its message to
+`stderr` and abort; `morph_duplicate_model_id` is a two-TU process that checks
+exactly that. An action id may repeat under different model ids: the pair is
+the id.
+
 ### Header placement is legal
 
 Placing a `BRIDGE_REGISTER_*` invocation in a header included by many `.cpp`

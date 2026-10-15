@@ -20,7 +20,7 @@
 # closed account is told it belongs to another owner, and never learns that it
 # is closed.
 
-model AuthModel
+model Bank_AuthModel
 
 # ── Two customers ───────────────────────────────────────────────────────────
 client mallory-auth
@@ -64,7 +64,7 @@ client vic-alerts model=NotificationModel principal=$vic
 do Notify message="Victoria's private alert" severity=1
 expect ok capture vicNote=$.id
 
-client vic-plan model=BudgetModel principal=$vic
+client vic-plan model=Bank_BudgetModel principal=$vic
 do SetBudget category=victoria-only monthlyLimitMinor=10000 currency=0
 expect ok capture vicBudget=$.id
 
@@ -122,7 +122,7 @@ client mal-alerts model=NotificationModel principal=$mal
 do MarkRead id=$vicNote
 expect err message == "notification belongs to a different owner"
 
-client mal-plan model=BudgetModel principal=$mal
+client mal-plan model=Bank_BudgetModel principal=$mal
 do DeleteBudget id=$vicBudget
 expect err message == "budget belongs to a different owner"
 
