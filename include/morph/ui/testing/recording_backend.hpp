@@ -377,6 +377,8 @@ struct Callbacks {
     std::function<void(bool)> toggle;
     /// @brief From `SelectWidget::setOnSelect`.
     std::function<void(Key)> select;
+    /// @brief From `SelectWidget::setOnOpen`.
+    Action open;
     /// @brief From `TabsWidget::setOnSelect`.
     std::function<void(std::size_t)> index;
     /// @brief From `DateTimeInputWidget::setOnChange`.
@@ -904,6 +906,10 @@ public:
     /// @brief Stores the handler `RecordingBackend::choose` calls.
     /// @param onSelect The handler.
     void setOnSelect(std::function<void(Key)> onSelect) override { callbacks().select = std::move(onSelect); }
+
+    /// @brief Stores the handler `RecordingBackend::open` calls.
+    /// @param onOpen The handler.
+    void setOnOpen(Action onOpen) override { callbacks().open = std::move(onOpen); }
 
     /// @brief Whether one of the current options has @p key.
     /// @param key The key.
@@ -1695,6 +1701,17 @@ public:
             bool const checked = prop(widgetId, "checked") != "true";
             _store->setByUser(widgetId, "checked", detail::formatBool(checked));
             invoke(record->callbacks.toggle, checked);
+        }
+    }
+
+    /// @brief Opens a dropdown select, as a user would, whether or not it has options: `onOpen` runs. Nothing is
+    ///        marked or logged.
+    /// @param widgetId The select.
+    /// @throws std::logic_error when the widget is not a select.
+    void open(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "open", {"Select"});
+        if (reachable(record) && !flagIs(record, "readonly", true)) {
+            invoke(record.callbacks.open);
         }
     }
 

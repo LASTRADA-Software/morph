@@ -196,6 +196,14 @@ void SelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) {
     });
 }
 
+void SelectImpl::setOnOpen(ui::Action onOpen) {
+    relay().on(QStringLiteral("open"), [onOpen = std::move(onOpen)](QVariant const&) {
+        if (onOpen) {
+            onOpen();
+        }
+    });
+}
+
 int SelectImpl::marked() const { return read("marked").toInt(); }
 
 std::string SelectImpl::shownText() const {

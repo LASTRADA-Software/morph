@@ -45,6 +45,10 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - **Hover.** `setOnHover(onHover)` calls `onHover` each time the pointer comes to rest over the widget. The
   default does nothing, so a backend without a pointer conforms. Hovering is a hint, such as a prefetch, never
   something a widget relies on. Qt Quick reports it through `MorphWidget`'s `HoverHandler` when a handler is set.
+- **Opening a select.** `SelectWidget::setOnOpen(onOpen)` calls `onOpen` each time the user opens a dropdown,
+  also one with no options to show. The default does nothing, and a radio group is never opened. Like hovering it
+  is a hint, used to fetch again options whose fetch failed. Qt Quick reports the combo box's popup opening; the
+  TUI reports the list opening, or the attempt to open it when there are no options.
 - **Chords.** `setKeys(chords, onChord)` declares the chords a widget handles while focus is inside
   it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
   widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
@@ -137,7 +141,7 @@ reorders children, and only through this.
 | `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder` | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
-| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)` |
+| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
 | `StackWidget` | `setGap` | — |
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)` | — |
@@ -203,7 +207,7 @@ The headless reference backend and the test double for everything above the cont
   `move Kind#id to n`, `destroy Kind#id`. Factory parameters are recorded as properties without a
   log line. Handlers are stored without a log line, except that `setDropHandler` records the
   property `drop=handler` and `setKeys` the property `keys`, the chords joined by commas. `focus()`
-  logs `focus Kind#id`, `setOnHover` keeps its handler for `hover(id)` without a log line, and `focused()` returns the id of the widget that last took focus, or 0. What a widget changes by itself — an interaction helper's effect, a
+  logs `focus Kind#id`, `setOnHover` keeps its handler for `hover(id)` and `setOnOpen` for `open(id)` without a log line, and `focused()` returns the id of the widget that last took focus, or 0. What a widget changes by itself — an interaction helper's effect, a
   Select or Table re-marking its selection — changes a property without a log line.
 - **Golden dump** (`dump()`): one line per live widget, `Kind#id name=value …`, properties in name
   order, children indented two spaces per depth, every line ending in a newline. A child whose

@@ -232,6 +232,17 @@ TEST_CASE(
     CHECK(impl.marked() == 1);
 }
 
+// Mutation: drop MorphSelect's popup Connections -> opening reports nothing.
+TEST_CASE("qt_quick widgets: a dropdown reports being opened, also with no options", "[qt_quick]") {
+    Scene scene;
+    auto select = scene.backend().createSelect(nullptr, ui::SelectStyle::Dropdown);
+    int opened = 0;
+    select->setOnOpen([&opened] { ++opened; });
+    scene.settle();
+    scene.click(Scene::controlOf(*select));
+    CHECK(opened == 1);
+}
+
 TEST_CASE("qt_quick widgets: a radio select reports a click on an option", "[qt_quick]") {
     Scene scene;
     auto select = scene.backend().createSelect(nullptr, ui::SelectStyle::Radio);

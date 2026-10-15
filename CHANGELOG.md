@@ -11,6 +11,14 @@ API surface).
 
 ### Changed
 
+- **Opening a Choice whose options fetch failed fetches them again.** A
+  Choice's options were fetched once, when its form was built; a fetch that
+  failed (an action needing the screen's setup first) left the select empty for
+  the screen's life. `ui::Select` gains `onOpen` and `ui::SelectWidget`
+  `setOnOpen`, an optional hint Qt Quick and the TUI report when the user opens a
+  dropdown, also an empty one; `formView` runs `FieldState::retryOptions()` from
+  it.
+
 - **A form's prefill keeps what the user typed into the record being edited.**
   Every non-null prefill reloaded every field, so a query's first value arriving
   after the user started typing discarded the edit. The `form` node gains an

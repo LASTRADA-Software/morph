@@ -355,6 +355,15 @@ public:
         return _spec->enumOptions;
     }
 
+    /// @brief Fetches a Choice's options again when the last fetch failed; does nothing otherwise. What opening its
+    ///        select runs, so options that could not be fetched when the form was built are fetched once the user
+    ///        asks for them.
+    void retryOptions() {
+        if (_optionsQuery != nullptr && !_optionsQuery->pending() && _optionsQuery->error() != nullptr) {
+            _optionsQuery->refetch();
+        }
+    }
+
     /// @brief Whether a Choice's options request is in flight. Tracked.
     /// @return `true` while fetching.
     [[nodiscard]] bool optionsPending() const { return _optionsQuery != nullptr && _optionsQuery->pending(); }

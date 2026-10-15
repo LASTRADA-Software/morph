@@ -42,6 +42,14 @@ MorphField {
         model: root.options
         currentIndex: -1
         onActivated: index => root.choose(index)
+
+        // Reported also with no options, so a failed fetch of them can be retried when the user asks for them.
+        Connections {
+            target: combo.popup
+            function onOpened() {
+                root.fire("open", 0)
+            }
+        }
     }
 
     Column {
