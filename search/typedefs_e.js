@@ -2,7 +2,7 @@ var searchData=
 [
   ['render_0',['Render',['../d7/d6b/classmorph_1_1forms_1_1Overrides.html#a7eed93aa94945da5b54306d89de35187',1,'morph::forms::Overrides']]],
   ['replayfunction_1',['ReplayFunction',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996',1,'morph::offline::SyncWorker']]],
-  ['result_2',['Result',['../da/ded/classmorph_1_1forms_1_1Form.html#a1433b2a0721ef05c97e31462f1f6bc75',1,'morph::forms::Form::Result'],['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a7a5c2f9c27ec8cd344a4c89d83cf3cfb',1,'morph::ui::author::QueryHandle::Result'],['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#affb02625bd14b995b936808ae5c7b056',1,'morph::ui::author::MutationHandle::Result']]],
+  ['result_2',['Result',['../da/ded/classmorph_1_1forms_1_1Form.html#a1433b2a0721ef05c97e31462f1f6bc75',1,'morph::forms::Form::Result'],['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a39fcbeb0acaa77a9cdf718318cfbc0c4',1,'morph::ui::author::QueryHandle::Result'],['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#affb02625bd14b995b936808ae5c7b056',1,'morph::ui::author::MutationHandle::Result']]],
   ['rowhook_3',['RowHook',['../de/d26/mount_8hpp.html#a6e60a69c8d3f28206e3a50b3acd7df96',1,'morph::ui::detail']]],
   ['rowid_4',['RowId',['../dd/d57/data__source_8hpp.html#af97faffd94c03b7930290a2e2b103b9a',1,'morph::table']]],
   ['rowkey_5',['RowKey',['../dd/def/query_8hpp.html#a3ee261e11b4ade0112817b39cf5d94cb',1,'morph::table']]],

@@ -37,7 +37,7 @@ var searchData=
   ['operator_20co_5fawait_34',['operator co_await',['../dd/de7/classmorph_1_1async_1_1Completion.html#a1488ba469044eff69471123f51a69e71',1,'morph::async::Completion']]],
   ['operator_20mutationref_35',['operator MutationRef',['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#acfc5fe3b880b5e50d05e9c8c6a5aca38',1,'morph::ui::author::MutationHandle']]],
   ['operator_20quantity_3c_20to_20_3e_36',['operator Quantity&lt; To &gt;',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a5252c3cebbc4708d242bcee514b55869',1,'morph::units::Quantity']]],
-  ['operator_20queryref_37',['operator QueryRef',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#adc51d7a615d6833a2bc6a1158dc0c59a',1,'morph::ui::author::QueryHandle']]],
+  ['operator_20queryref_37',['operator QueryRef',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a06f72d0c96d9677453ab108f8a2cbd4e',1,'morph::ui::author::QueryHandle']]],
   ['operator_21_38',['operator!',['../d1/dc0/author_8hpp.html#acfc13f4148ee7d37c50d68b0d8731824',1,'morph::ui::author']]],
   ['operator_26_26_39',['operator&amp;&amp;',['../d1/dc0/author_8hpp.html#a9b7617fde2a76510bb2b20af15b9f7d1',1,'morph::ui::author']]],
   ['operator_28_29_40',['operator()',['../d4/d45/classmorph_1_1table_1_1RowOrder.html#af5f84bd7fb7f8ee7c887704c207b333a',1,'morph::table::RowOrder']]],

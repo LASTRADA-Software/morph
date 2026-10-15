@@ -31,5 +31,6 @@ var searchData=
   ['drawerwidget_28',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
   ['dropzone_29',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
   ['dropzoneoptions_30',['DropZoneOptions',['../d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html',1,'morph::ui::author']]],
-  ['dropzonewidget_31',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
+  ['dropzonewidget_31',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]],
+  ['duplicateregistrationerror_32',['DuplicateRegistrationError',['../d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html',1,'morph::model']]]
 ];

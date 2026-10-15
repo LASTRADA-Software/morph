@@ -14,6 +14,7 @@ var classmorph_1_1ui_1_1author_1_1Scope =
     [ "prefetch", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#afab66b9ee091257cbc577ccb1e488967", null ],
     [ "component", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a7711978039e8b3fdeca4ab0928bb8e8b", null ],
     [ "columnsPoint", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a4e9ae4b74749332d884c21b8deff111c", null ],
+    [ "arrangePoint", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#afa40d2c24c84e7e2447bd6e8b112dba6", null ],
     [ "choicePoint", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a19efe467864108089266aed8ee82a5af", null ],
     [ "valuePoint", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a22b7935ce74b74fce9bcead6d4a9d73f", null ],
     [ "point", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a93a12f8e6915824d3b5f3245c7c6837a", null ],

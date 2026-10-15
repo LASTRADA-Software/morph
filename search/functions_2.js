@@ -8,7 +8,7 @@ var searchData=
   ['callbacks_5',['callbacks',['../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adcfb5e450c81840f3a19af86dc108b54',1,'morph::ui::testing::detail::FakeLeaf']]],
   ['callbackscope_6',['CallbackScope',['../d7/d9f/classmorph_1_1async_1_1CallbackScope.html#aaf2d4181e3e700c9e308e1a2e7959699',1,'morph::async::CallbackScope']]],
   ['callbacktoken_7',['CallbackToken',['../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a6b1406e44a24fa5f1e3a39873ca82fd4',1,'morph::async::CallbackToken']]],
-  ['can_8',['can',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#aaed6aaa4a19ae6a8e7d2758a1339727b',1,'morph::ui::author::QueryHandle::can()'],['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a0399780297f7535ea967543c746a4ee2',1,'morph::ui::author::MutationHandle::can()'],['../df/d20/classmorph_1_1ui_1_1Session.html#ac8c22206e89080c3a9dfcffd6c7c2fa3',1,'morph::ui::Session::can()']]],
+  ['can_8',['can',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a22e0f465b41eda4e8577156dba5c4e29',1,'morph::ui::author::QueryHandle::can()'],['../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a0399780297f7535ea967543c746a4ee2',1,'morph::ui::author::MutationHandle::can()'],['../df/d20/classmorph_1_1ui_1_1Session.html#ac8c22206e89080c3a9dfcffd6c7c2fa3',1,'morph::ui::Session::can()']]],
   ['canback_9',['canBack',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html#a3dc5e415fcc18ce66505ec1dd7ddbc71',1,'morph::forms::WizardSession']]],
   ['cancel_10',['cancel',['../de/d18/classmorph_1_1reactive_1_1TimerHandle.html#a9e25c2fd9ab974efe118eb1cab12b4c5',1,'morph::reactive::TimerHandle']]],
   ['cancelclose_11',['cancelClose',['../d1/dc0/author_8hpp.html#a5fe9e17755ea537e2395354c1aebe2de',1,'morph::ui::author']]],

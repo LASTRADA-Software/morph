@@ -1,13 +1,13 @@
 var classmorph_1_1ui_1_1author_1_1QueryHandle =
 [
-    [ "Result", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a7a5c2f9c27ec8cd344a4c89d83cf3cfb", null ],
-    [ "QueryHandle", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a60111939e8879769d51254bbf83cf170", null ],
-    [ "name", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#af0664b3fdaee7340a3988fb9e7cd3a56", null ],
-    [ "value", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#aee7477cc704a41c6116a3b4caa3896ef", null ],
-    [ "at", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a9c0b044dd303c54d3f6c934a866dfd69", null ],
-    [ "pending", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a3796658948f2ac63daad5ce376078a73", null ],
-    [ "error", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a421db15722f927ad0dee45991f27456d", null ],
-    [ "errorKind", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a2f70c07bace4e776ee6e74bfabd7624f", null ],
-    [ "can", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#aaed6aaa4a19ae6a8e7d2758a1339727b", null ],
-    [ "operator QueryRef", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#adc51d7a615d6833a2bc6a1158dc0c59a", null ]
+    [ "Result", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a39fcbeb0acaa77a9cdf718318cfbc0c4", null ],
+    [ "QueryHandle", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#ae7e9b28aa5ad960bf90f222098a1a602", null ],
+    [ "name", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a5d9befff757d8a0df83cd4ab5e078912", null ],
+    [ "value", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a322efa3139d79df5c256c37902bcf819", null ],
+    [ "at", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a90df482d9b09be6232bb65a321eaccb4", null ],
+    [ "pending", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a4c44773005e7ae9c54a1ceef2b8752bd", null ],
+    [ "error", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#ad4048c012626415256a62ddcb2722589", null ],
+    [ "errorKind", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#aa01493688c60ad009d3a95bde27a4d7c", null ],
+    [ "can", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a22e0f465b41eda4e8577156dba5c4e29", null ],
+    [ "operator QueryRef", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a06f72d0c96d9677453ab108f8a2cbd4e", null ]
 ];

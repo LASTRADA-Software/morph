@@ -79,6 +79,7 @@ var namespaces_dup =
             [ "kDuplicateKey", "d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#a49a7fa8ad8556852b75927e43519a403", null ]
           ] ],
           [ "AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver" ],
+          [ "ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild" ],
           [ "Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding" ],
           [ "BoundaryRuntime", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime" ],
           [ "CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry" ],
@@ -226,6 +227,10 @@ var namespaces_dup =
           [ "overlayOf", "db/d42/interpreter_8hpp.html#ac34c646d1b5ab79bd498dd6941f7b863", null ],
           [ "detachedLower", "db/d42/interpreter_8hpp.html#a592a82727ba371257d15f567a68828bb", null ],
           [ "attached", "db/d42/interpreter_8hpp.html#a0fed1819ae4aa0c2ceb4f59964efed90", null ],
+          [ "arrangedChildren", "db/d42/interpreter_8hpp.html#adfad0eeb9b56a5d22a183a623d2e84d6", null ],
+          [ "arrangedOrder", "db/d42/interpreter_8hpp.html#a1ee0bda17c563ef3efabfc716e51da80", null ],
+          [ "arrangementValue", "db/d42/interpreter_8hpp.html#aef0841894f1af9f6b34c23363dc852d0", null ],
+          [ "elementNode", "db/d42/interpreter_8hpp.html#ad37a4e5adb53712129099a147d21cab0", null ],
           [ "decimalText", "d5/d8c/message_8hpp.html#ad61b936e9681cdc20ce4cf0a5ef23878", null ],
           [ "numberOf", "d5/d8c/message_8hpp.html#a50829ec74af84f684ae23c6e64f51c49", null ],
           [ "between", "d5/d8c/message_8hpp.html#a80bd07a4e729108b0953069fae80383e", null ],

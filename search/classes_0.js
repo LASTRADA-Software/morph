@@ -26,7 +26,8 @@ var searchData=
   ['approot_23',['AppRoot',['../dd/d83/classmorph_1_1ui_1_1AppRoot.html',1,'morph::ui']]],
   ['appsource_24',['AppSource',['../d5/d3d/classmorph_1_1ui_1_1AppSource.html',1,'morph::ui']]],
   ['apptraits_25',['AppTraits',['../d9/dfd/structmorph_1_1app_1_1AppTraits.html',1,'morph::app']]],
-  ['atleastoneof_26',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
-  ['attempts_27',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline']]],
-  ['authoringerror_28',['AuthoringError',['../d3/d76/classmorph_1_1ui_1_1author_1_1AuthoringError.html',1,'morph::ui::author']]]
+  ['arrangedchild_26',['ArrangedChild',['../df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html',1,'morph::ui::detail']]],
+  ['atleastoneof_27',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
+  ['attempts_28',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline']]],
+  ['authoringerror_29',['AuthoringError',['../d3/d76/classmorph_1_1ui_1_1author_1_1AuthoringError.html',1,'morph::ui::author']]]
 ];

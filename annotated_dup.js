@@ -161,6 +161,7 @@ var annotated_dup =
         [ "ActionRecordingError", "d5/db1/classmorph_1_1model_1_1ActionRecordingError.html", "d5/db1/classmorph_1_1model_1_1ActionRecordingError" ],
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
+        [ "DuplicateRegistrationError", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError" ],
         [ "HandlerResult", "df/d19/structmorph_1_1model_1_1HandlerResult.html", "df/d19/structmorph_1_1model_1_1HandlerResult" ],
         [ "HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4" ],
         [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
@@ -449,6 +450,7 @@ var annotated_dup =
             [ "ParamsEnv", "d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html", "d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv" ]
           ] ],
           [ "AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver" ],
+          [ "ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild" ],
           [ "Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding" ],
           [ "BoundaryRuntime", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime" ],
           [ "CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry" ],

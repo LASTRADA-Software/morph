@@ -26,7 +26,7 @@ var searchData=
   ['query_2ehpp_23',['query.hpp',['../dd/def/query_8hpp.html',1,'']]],
   ['query_3c_20std_3a_3astring_2c_20std_3a_3astring_20_3e_24',['Query&lt; std::string, std::string &gt;',['../da/d9b/classmorph_1_1reactive_1_1Query.html',1,'morph::reactive']]],
   ['querydecl_25',['QueryDecl',['../da/db7/structmorph_1_1ui_1_1QueryDecl.html',1,'morph::ui']]],
-  ['queryhandle_26',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html',1,'morph::ui::author::QueryHandle&lt; Action &gt;'],['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a60111939e8879769d51254bbf83cf170',1,'morph::ui::author::QueryHandle::QueryHandle()']]],
+  ['queryhandle_26',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html',1,'morph::ui::author::QueryHandle&lt; Action, Value &gt;'],['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#ae7e9b28aa5ad960bf90f222098a1a602',1,'morph::ui::author::QueryHandle::QueryHandle()']]],
   ['querylimits_27',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
   ['queryoptions_28',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
   ['queryref_29',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author::QueryRef'],['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html#a3f66aabb923e430e10a1f2afde3bbad4',1,'morph::ui::author::QueryRef::QueryRef()']]],

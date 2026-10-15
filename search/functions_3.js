@@ -75,5 +75,6 @@ var searchData=
   ['droptargetwithoutacceptstakesall_72',['dropTargetWithoutAcceptsTakesAll',['../d8/d3e/backend__conformance_8hpp.html#aade0c877f9f6bc238ced27b017133169',1,'morph::ui::testing::detail']]],
   ['dropzone_73',['dropZone',['../d1/dc0/author_8hpp.html#af5668bd013ba890d70b869db63508b32',1,'morph::ui::author::dropZone()'],['../d8/d11/view_8hpp.html#a695bba553e54a28202c0b765fe10a0da',1,'morph::ui::dropZone()']]],
   ['dropzonetakeswholedrops_74',['dropZoneTakesWholeDrops',['../d8/d3e/backend__conformance_8hpp.html#aacdc29891eeb6afa21068e646c93256e',1,'morph::ui::testing::detail']]],
-  ['dump_75',['dump',['../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#a586c7116b15b0cde7915e67f2fb74f69',1,'morph::ui::testing::detail::RecordStore::dump()'],['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a7ccc4d60c893da18c2c9f1c0551ed0ff',1,'morph::ui::testing::RecordingBackend::dump()']]]
+  ['dump_75',['dump',['../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#a586c7116b15b0cde7915e67f2fb74f69',1,'morph::ui::testing::detail::RecordStore::dump()'],['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a7ccc4d60c893da18c2c9f1c0551ed0ff',1,'morph::ui::testing::RecordingBackend::dump()']]],
+  ['duplicateregistrationerror_76',['DuplicateRegistrationError',['../d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html#a30f9539b9d70425014ac2351c1d3039c',1,'morph::model::DuplicateRegistrationError']]]
 ];

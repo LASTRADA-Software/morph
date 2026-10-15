@@ -7,7 +7,7 @@ var classmorph_1_1ui_1_1author_1_1DeclScope =
     [ "state", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#ae0f61f5d61e2be4778515ea59b021356", null ],
     [ "let", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a504ed79b50d1335c4c95616f2c05f83a", null ],
     [ "query", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4d04e3e97deea861d318b15d0b143e1b", null ],
-    [ "evaluate", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#af82c86cde6bba10919f92bffffc26ff9", null ],
+    [ "evaluate", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#ad91b00a47c4936b4faf3bf77fd8c1106", null ],
     [ "mutation", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a0498d841433b8bd706675625c4b53ad2", null ],
     [ "watch", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a5ec9bf99f5f543818d91097e9f092370", null ],
     [ "check", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#ab20e4f514723e9f36a93c22763aecc40", null ],

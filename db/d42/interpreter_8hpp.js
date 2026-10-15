@@ -35,6 +35,7 @@ var interpreter_8hpp =
     [ "morph::ui::AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html", "dd/d83/classmorph_1_1ui_1_1AppRoot" ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", "da/d2a/classmorph_1_1ui_1_1Interpreter" ],
     [ "morph::ui::detail::DetachedLower", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower" ],
+    [ "morph::ui::detail::ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild" ],
     [ "morph::ui::Evaluator", "db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666", null ],
     [ "morph::ui::detail::Bindings", "db/d42/interpreter_8hpp.html#ac688fc48fbdd94d382ee3860b43d0907", null ],
     [ "morph::ui::detail::RunDone", "db/d42/interpreter_8hpp.html#adb1bad3b6835a38393f5c80badce05e4", null ],
@@ -82,5 +83,9 @@ var interpreter_8hpp =
     [ "morph::ui::detail::holding", "db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf", null ],
     [ "morph::ui::detail::overlayOf", "db/d42/interpreter_8hpp.html#ac34c646d1b5ab79bd498dd6941f7b863", null ],
     [ "morph::ui::detail::detachedLower", "db/d42/interpreter_8hpp.html#a592a82727ba371257d15f567a68828bb", null ],
-    [ "morph::ui::detail::attached", "db/d42/interpreter_8hpp.html#a0fed1819ae4aa0c2ceb4f59964efed90", null ]
+    [ "morph::ui::detail::attached", "db/d42/interpreter_8hpp.html#a0fed1819ae4aa0c2ceb4f59964efed90", null ],
+    [ "morph::ui::detail::arrangedChildren", "db/d42/interpreter_8hpp.html#adfad0eeb9b56a5d22a183a623d2e84d6", null ],
+    [ "morph::ui::detail::arrangedOrder", "db/d42/interpreter_8hpp.html#a1ee0bda17c563ef3efabfc716e51da80", null ],
+    [ "morph::ui::detail::arrangementValue", "db/d42/interpreter_8hpp.html#aef0841894f1af9f6b34c23363dc852d0", null ],
+    [ "morph::ui::detail::elementNode", "db/d42/interpreter_8hpp.html#ad37a4e5adb53712129099a147d21cab0", null ]
 ];

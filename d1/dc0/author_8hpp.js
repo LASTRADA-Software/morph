@@ -24,7 +24,7 @@ var author_8hpp =
     [ "morph::ui::author::Self", "d6/de4/structmorph_1_1ui_1_1author_1_1Self.html", null ],
     [ "morph::ui::author::QueryRef", "de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html", "de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef" ],
     [ "morph::ui::author::MutationRef", "d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef.html", "d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef" ],
-    [ "morph::ui::author::QueryHandle&lt; Action &gt;", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle" ],
+    [ "morph::ui::author::QueryHandle&lt; Action, Value &gt;", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle" ],
     [ "morph::ui::author::MutationHandle&lt; Action &gt;", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle" ],
     [ "morph::ui::author::BodyField&lt; Action &gt;", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField.html", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField" ],
     [ "morph::ui::author::Body&lt; Action &gt;", "df/d42/classmorph_1_1ui_1_1author_1_1Body.html", "df/d42/classmorph_1_1ui_1_1author_1_1Body" ],

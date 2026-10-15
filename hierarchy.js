@@ -409,7 +409,7 @@ var hierarchy =
     [ "morph::ui::author::PanelOptions", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html", null ],
     [ "morph::ui::author::Patch", "d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html", null ],
     [ "morph::ui::author::Point", "df/d11/classmorph_1_1ui_1_1author_1_1Point.html", null ],
-    [ "morph::ui::author::QueryHandle&lt; Action &gt;", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html", null ],
+    [ "morph::ui::author::QueryHandle&lt; Action, Value &gt;", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html", null ],
     [ "morph::ui::author::QueryOptions", "d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html", null ],
     [ "morph::ui::author::QueryRef", "de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html", null ],
     [ "morph::ui::author::RegisteredScreen", "d2/dc8/structmorph_1_1ui_1_1author_1_1RegisteredScreen.html", null ],
@@ -453,6 +453,7 @@ var hierarchy =
     [ "morph::ui::DateTimeInput", "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html", null ],
     [ "morph::ui::Decimal", "d8/d70/structmorph_1_1ui_1_1Decimal.html", null ],
     [ "morph::ui::detail::AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", null ],
+    [ "morph::ui::detail::ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", null ],
     [ "morph::ui::detail::Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", null ],
     [ "morph::ui::detail::BoundaryRuntime", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html", null ],
     [ "morph::ui::detail::CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", null ],
@@ -884,6 +885,7 @@ var hierarchy =
     [ "std::exception", null, [
       [ "std::logic_error", null, [
         [ "morph::forms::UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", null ],
+        [ "morph::model::DuplicateRegistrationError", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html", null ],
         [ "morph::ui::author::AuthoringError", "d3/d76/classmorph_1_1ui_1_1author_1_1AuthoringError.html", null ]
       ] ],
       [ "std::runtime_error", null, [
