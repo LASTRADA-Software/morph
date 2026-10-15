@@ -6,7 +6,7 @@ use the same contract, so a document does not know which one shows it. It implem
 
 | Header | What it holds |
 |---|---|
-| `include/morph/ui/host.hpp` | `ParamMap`, `MountError`, `ScreenHandle`, `ScreenHost`, `CloseGuard`, `DocumentScreenHost` |
+| `include/morph/ui/host.hpp` | `ParamMap`, `MountError`, `ScreenHandle`, `ScreenHost`, `CloseGuard`, `CloseChoice`, `DocumentScreenHost` |
 | `include/morph/ui/route.hpp` | `Route`, `routeOf`, `parseRoute` |
 
 It sits on the interpreter ([interpreter.md](interpreter.md)): `DocumentScreenHost` mounts through an `Interpreter`
@@ -27,7 +27,7 @@ and is its `InterpreterHost` for `navigate`.
 |---|---|
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
-| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`. |
+| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, and the save seam `canSave()` and `save(done)`. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -46,6 +46,7 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 | `documents` | The loaded document of a screen id, or null. A loaded bundle answers it. |
 | `backend` | The `IViewBackend` screens mount on. |
 | `guard` | The `CloseGuard` for a dirty screen without `onClose`. Empty keeps every such screen open. |
+| `saveFailed` | Called when the guard's *save and close* left the screen dirty, so the host shows the failure. Optional. |
 | `application` | The application's `InterpreterHost`, for every command but `navigate`. |
 | `diagnostics` | Called with each diagnostic the screens report. |
 
@@ -92,12 +93,37 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
    every command list `onClose` starts, such as the `onResult` of a confirm dialog it opened, so the decision is read
    when the pending work ends, not when `onClose` returns.
 2. **Without `onClose`**, a screen whose `dirty` is not `true` closes at once. A dirty one is put to the
-   `CloseGuard`, which calls `decide(true)` to close it and `decide(false)` to keep it. Without a guard it stays open.
+   `CloseGuard`, which answers once with a `CloseChoice` (below). Without a guard it stays open.
 3. `done(closed)` is called exactly once per request, **posted** to the runtime's owner, never inside the document's
    handler. A request made while one is pending joins it and gets the same answer. A request on a closed screen is
    answered `true`.
 4. **`forceClose()`** skips `onClose` and the guard, destroys the screen (which runs `onUnmount`), and answers a
    pending request with `true`.
+
+**Saving.** `canSave()` is `true` for a document screen that declares `onSave`; a host screen's handle overrides it
+with `save`. `save(done)` runs `onSave`, waits until `Screen::pending()` is `false`, and answers whether `dirty` is
+then not `true`. The answer is read in a task posted after the work settles, so a mutation's `onSuccess` has cleared
+`dirty` first. A save while one waits joins it. A screen that cannot save answers `false` at once, and a save whose
+screen closes first is never answered, so nothing calls back into a closed screen. A save never closes the screen. A host screen's handle implements `requestClose` itself, so its own close decides
+whether to offer saving; its `canSave` and `save` let a shell save any tab the same way, a document screen or not.
+
+**The three-choice guard** (spec 6 §15). The `CloseGuard` is the host's drawing, typically a dialog. It is called
+with the screen and a `choose` callback, and answers once with a `CloseChoice`:
+
+- It offers *save and close* only when `screen.canSave()`.
+- `Discard` closes the screen without running `onSave`, and `Cancel` keeps it.
+- `Save` runs `save`, then closes the screen if it is clean. Otherwise it calls the options' `saveFailed(screen)` and
+  keeps the screen open. `Save` on a screen that cannot save keeps it open.
+
+The handle carries the choice out from its own state, which it holds weakly, so a dialog that answers after its tab's
+handle was destroyed does nothing.
+
+**What a save waits for** is `Screen::pending()`, as `onClose` does: dialogs and mutation runs. A transfer that has not
+yet started its mutation is not counted, and a mutation queued offline stays pending until its replay, so a
+*save and close* made offline waits for it.
+
+The workspace's close-others, close-all and close-saved walks go through `requestClose`, so they stop at a kept
+screen as at any other veto.
 
 **What counts as pending.** `Screen::pending()` is a tracked read of the screen's `pendingWork` counter: an open
 dialog or drawer, and a mutation run in flight, in any of the screen's scopes. A dialog's content scope counts from
@@ -152,5 +178,6 @@ A catalog entry may name a `host` screen instead of a document (spec 6 §15).
 
 ## Not yet
 
-- **The guard's three-choice dialog** (§15) is the host's drawing: the shell decides through the `CloseGuard`.
+- **The guard's dialog** (§15) is the host's drawing, given as `guard`. The generic client installs none, so a dirty
+  screen without `onClose` stays open there.
 - **The Qt Quick renderer as a `ScreenHost`** (§4), exposing each screen's root item.

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <map>
@@ -80,6 +81,24 @@ public:
     /// @brief Closes the screen without asking: skips `onClose` and the close guard, runs `onUnmount`, and answers
     ///        a pending `requestClose` with `true`. For application quit.
     virtual void forceClose() = 0;
+
+    /// @brief Whether the screen can save its changes: a document screen that declares `onSave`, or a host screen
+    ///        whose handle implements `save`. A close guard offers *save and close* only when this is `true`.
+    /// @return It; `false` unless a derived handle says otherwise.
+    [[nodiscard]] virtual bool canSave() const { return false; }
+
+    /// @brief Saves the screen's changes (spec 6 §15) and answers whether it is then clean.
+    ///
+    /// A document screen runs `onSave`, waits until nothing pending is left, and answers `true` when `dirty` is then
+    /// not `true`. A save while one waits joins it. A screen that cannot save answers `false` at once. @p done is not
+    /// called when the screen closes before the save has finished.
+    /// @param done Called with whether the screen is clean.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): the base only calls it; overrides keep it.
+    virtual void save(std::function<void(bool clean)> done) {
+        if (done) {
+            done(false);
+        }
+    }
 };
 
 /// @brief What mounts screens for a host that owns its own shell; the workspace shell is one.
@@ -143,9 +162,19 @@ private:
     std::map<std::string, HostScreenFactory, std::less<>> _factories;
 };
 
-/// @brief What decides a close the document does not decide itself: a dirty screen that declares no `onClose`. It
-///        calls `decide(true)` to close the screen, `decide(false)` to keep it open, once.
-using CloseGuard = std::function<void(ScreenHandle& screen, std::function<void(bool close)> decide)>;
+/// @brief What the user chose for a dirty screen that is being closed (spec 6 §15).
+enum class CloseChoice : std::uint8_t {
+    Save,     ///< Run the screen's save, and close it only if it is then clean.
+    Discard,  ///< Close it without saving.
+    Cancel,   ///< Keep it open.
+};
+
+/// @brief What decides a close the document does not decide itself: a dirty screen that declares no `onClose`.
+///
+/// It asks the user, typically with a dialog, and calls `choose` once. It offers *save and close* only when
+/// `screen.canSave()`; `Save` on a screen that cannot save keeps it open. The handle carries the choice out, so
+/// `choose` may be called after the handle is gone, and then does nothing.
+using CloseGuard = std::function<void(ScreenHandle& screen, std::function<void(CloseChoice choice)> choose)>;
 
 /// @brief How a `DocumentScreenHost` finds documents and mounts them.
 struct DocumentScreenHostOptions {
@@ -155,6 +184,9 @@ struct DocumentScreenHostOptions {
     IViewBackend* backend = nullptr;
     /// @brief Decides the close of a dirty screen without `onClose`; empty keeps every such screen open.
     CloseGuard guard;
+    /// @brief Called when the guard's *save and close* left the screen dirty, before it is kept open, so the host
+    ///        shows the failure. Optional.
+    std::function<void(ScreenHandle& screen)> saveFailed;
     /// @brief The application's side of the commands the host does not answer itself; `nullptr` answers them "not
     ///        supported". Borrowed.
     InterpreterHost* application = nullptr;
@@ -438,7 +470,7 @@ private:
             }
             return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = std::move(reason)});
         }
-        auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard);
+        auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard, _options.saveFailed);
         adoptCall(*handle, screenId, params);
         return handle;
     }
@@ -471,8 +503,8 @@ private:
     /// handle is gone finds the screen already closed.
     class Handle final : public ScreenHandle {
     public:
-        Handle(std::unique_ptr<Screen> screen, CloseGuard guard)
-            : _state{std::make_shared<State>(std::move(screen), std::move(guard))} {
+        Handle(std::unique_ptr<Screen> screen, CloseGuard guard, std::function<void(ScreenHandle&)> saveFailed)
+            : _state{std::make_shared<State>(std::move(screen), std::move(guard), std::move(saveFailed))} {
             _state->self = this;
         }
 
@@ -496,6 +528,10 @@ private:
         void requestClose(std::function<void(bool closed)> done) override { State::request(_state, std::move(done)); }
 
         void forceClose() override { _state->finish(true); }
+
+        [[nodiscard]] bool canSave() const override { return _state->canSave(); }
+
+        void save(std::function<void(bool clean)> done) override { State::save(_state, std::move(done)); }
 
         [[nodiscard]] Widget* root() const { return _state->screen ? &_state->screen->root() : nullptr; }
 
@@ -525,10 +561,12 @@ private:
 
     private:
         struct State {
-            State(std::unique_ptr<Screen> mounted, CloseGuard closeGuard)
+            State(std::unique_ptr<Screen> mounted, CloseGuard closeGuard,
+                  std::function<void(ScreenHandle&)> onSaveFailed)
                 : screen{std::move(mounted)},
                   runtime{&screen->runtime()},
                   guard{std::move(closeGuard)},
+                  saveFailed{std::move(onSaveFailed)},
                   closed{*runtime, false},
                   title{*runtime,
                         [this] {
@@ -569,9 +607,9 @@ private:
                         state->finish(true);
                     } else if (state->guard && state->self != nullptr) {
                         std::weak_ptr<State> const weak = state;
-                        state->guard(*state->self, [weak](bool close) {
+                        state->guard(*state->self, [weak](CloseChoice choice) {
                             if (auto const held = weak.lock()) {
-                                held->decide(close);
+                                choose(held, choice);
                             }
                         });
                     } else {
@@ -580,18 +618,95 @@ private:
                     return;
                 }
                 // Closes once onClose and everything it started has ended, unless it ran cancelClose.
+                whenSettled(state, &State::settled,
+                            [cancelled](State& settledState) { settledState.decide(!*cancelled); });
+            }
+
+            /// A wait for the screen to have nothing pending; the id tells a posted task whether it is still current.
+            struct Watch {
+                /// @brief The effect that watches `pending()`; null when nothing is watched.
+                std::unique_ptr<reactive::Effect> effect;
+                /// @brief Which watch this is, among every watch the screen made.
+                std::uint64_t id = 0;
+            };
+
+            /// Runs @p then once the screen has nothing pending, in a task posted to the owner, so the commands that
+            /// settled the work (a mutation's `onSuccess`) have run. @p slot holds the watch; resetting it, or closing
+            /// the screen, cancels it.
+            static void whenSettled(std::shared_ptr<State> const& state, Watch State::* slot,
+                                    std::function<void(State&)> then) {
                 std::weak_ptr<State> const weak = state;
-                state->settled = std::make_unique<reactive::Effect>(*state->runtime, [weak, cancelled] {
+                std::uint64_t const watchId = ++state->watches;
+                Watch& watch = state.get()->*slot;
+                watch.id = watchId;
+                watch.effect =
+                    std::make_unique<reactive::Effect>(*state->runtime, [weak, slot, watchId, then = std::move(then)] {
+                        auto const held = weak.lock();
+                        if (!held || !held->screen || held->screen->pending()) {
+                            return;
+                        }
+                        held->runtime->owner().post([weak, slot, watchId, then] {
+                            auto const again = weak.lock();
+                            if (!again || !again->screen || (again.get()->*slot).id != watchId) {
+                                return;
+                            }
+                            again.get()->*slot = Watch{};
+                            then(*again);
+                        });
+                    });
+            }
+
+            /// Whether the screen is open and declares `onSave`.
+            [[nodiscard]] bool canSave() const { return screen && screen->declares("onSave"); }
+
+            /// Runs `onSave`, or joins the save in progress, and answers once nothing is pending.
+            static void save(std::shared_ptr<State> const& state, std::function<void(bool)> done) {
+                if (!state->canSave()) {
+                    if (done) {
+                        done(false);
+                    }
+                    return;
+                }
+                if (state->saved.effect) {
+                    state->saving.push_back(std::move(done));
+                    return;
+                }
+                state->screen->runLifecycle("onSave");
+                state->saving.push_back(std::move(done));
+                // Answered in the settled task itself rather than posted again, so an answer never reaches a handle
+                // that closed in between; an answer that closes the screen ends the answering.
+                whenSettled(state, &State::saved, [](State& savedState) {
+                    bool const clean = !savedState.screen->dirty();
+                    for (auto const& answer : std::exchange(savedState.saving, {})) {
+                        if (!savedState.screen) {
+                            return;
+                        }
+                        if (answer) {
+                            answer(clean);
+                        }
+                    }
+                });
+            }
+
+            /// Carries out the guard's choice for the close in progress.
+            static void choose(std::shared_ptr<State> const& state, CloseChoice choice) {
+                if (!state->closing) {
+                    return;
+                }
+                if (choice != CloseChoice::Save || !state->canSave()) {
+                    state->decide(choice == CloseChoice::Discard);
+                    return;
+                }
+                std::weak_ptr<State> const weak = state;
+                save(state, [weak](bool clean) {
                     auto const held = weak.lock();
-                    if (!held || !held->screen || held->screen->pending()) {
+                    if (!held) {
                         return;
                     }
-                    held->runtime->owner().post([weak, cancelled] {
-                        if (auto const again = weak.lock()) {
-                            again->settled.reset();
-                            again->decide(!*cancelled);
-                        }
-                    });
+                    if (!clean && held->saveFailed && held->self != nullptr) {
+                        held->saveFailed(*held->self);
+                    }
+                    held->decide(clean);
                 });
             }
 
@@ -610,7 +725,9 @@ private:
 
             /// Closes the screen now, answering every pending request with `true`.
             void finish(bool answer) {
-                settled.reset();
+                settled = {};
+                saved = {};
+                saving.clear();  // a save outlived by its screen is never answered
                 closing = false;
                 if (call) {
                     call->answer(std::nullopt);  // a no-op once `return` or `close: self` has answered
@@ -646,7 +763,11 @@ private:
             std::shared_ptr<Call> call;
             bool closing = false;
             std::vector<std::function<void(bool)>> waiting;
-            std::unique_ptr<reactive::Effect> settled;
+            std::function<void(ScreenHandle&)> saveFailed;
+            Watch settled;
+            std::vector<std::function<void(bool)>> saving;
+            Watch saved;
+            std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
             reactive::Signal<bool> closed;

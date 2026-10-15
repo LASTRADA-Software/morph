@@ -82,8 +82,9 @@ private:
         };
         made.backend = &harness.backend;
         if (guardAnswer) {
-            made.guard = [answer = *guardAnswer](ScreenHandle&, std::function<void(bool)> const& decide) {
-                decide(answer);
+            made.guard = [answer = *guardAnswer](ScreenHandle&,
+                                                 std::function<void(morph::ui::CloseChoice)> const& choose) {
+                choose(answer ? morph::ui::CloseChoice::Discard : morph::ui::CloseChoice::Cancel);
             };
         }
         return made;
