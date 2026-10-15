@@ -506,6 +506,7 @@ var hierarchy =
     ] ],
     [ "morph::ui::DocNode", "df/d0e/structmorph_1_1ui_1_1DocNode.html", null ],
     [ "morph::ui::Document", "d4/d02/structmorph_1_1ui_1_1Document.html", null ],
+    [ "morph::ui::DocumentScreenHost::Handle::State::Watch", "de/d92/structmorph_1_1ui_1_1DocumentScreenHost_1_1Handle_1_1State_1_1Watch.html", null ],
     [ "morph::ui::DocumentScreenHostOptions", "da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html", null ],
     [ "morph::ui::DownloadedFile", "d5/d44/structmorph_1_1ui_1_1DownloadedFile.html", null ],
     [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", null ],

@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['save_0',['Save',['../d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac9cc8cce247e49bae79f15173ce97354',1,'morph::ui']]],
+  ['save_0',['Save',['../dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0aac9cc8cce247e49bae79f15173ce97354',1,'Savemorph::ui'],['../d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac9cc8cce247e49bae79f15173ce97354',1,'Savemorph::ui']]],
   ['section_1',['Section',['../dd/d6c/layout_8hpp.html#a38b02484a29ea1023b3f44835f3c6406ad2c24d59e0baff4d0155fbdf62590867',1,'morph::forms']]],
   ['seq_2',['Seq',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eab28a711cf7e94ec793ef926633997529',1,'morph::ui']]],
   ['serial_3',['Serial',['../dc/dfd/control_8hpp.html#ac9b5149b64e788db3c18d8c5be3d552ca5255d3daaa0a6276b844d61401e6f493',1,'Serialmorph::reactive'],['../d1/dc0/author_8hpp.html#a09f4371b2225fd190938f0d48a377ebba5255d3daaa0a6276b844d61401e6f493',1,'Serialmorph::ui::author'],['../dd/d39/document_8hpp.html#a0876310d8741d2490f5e6df05ee936c2a5255d3daaa0a6276b844d61401e6f493',1,'Serialmorph::ui']]],

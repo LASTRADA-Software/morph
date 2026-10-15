@@ -573,7 +573,7 @@ var namespaces_dup =
         [ "ShellFactory", "de/df6/ui_2frontend_8hpp.html#aabd84f51c7dc7db8d12851c954d8b92c", null ],
         [ "ParamMap", "dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df", null ],
         [ "HostScreenFactory", "dd/d78/host_8hpp.html#a8f2ba01276e59682fed7c6ce6d5447b3", null ],
-        [ "CloseGuard", "dd/d78/host_8hpp.html#a7f7de33b3491eb2ddf4b9e8208d70276", null ],
+        [ "CloseGuard", "dd/d78/host_8hpp.html#a3f0c54da59b34eab53e2408ef84dfbdb", null ],
         [ "Evaluator", "db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666", null ],
         [ "ExchangeReply", "dd/d56/service__client_8hpp.html#aa7bd52d471710378eef6816161e39f05", null ],
         [ "Exchange", "dd/d56/service__client_8hpp.html#a96f7e4884f3c2bd61741d715df661bf2", null ],
@@ -656,6 +656,11 @@ var namespaces_dup =
           [ "OverQuota", "dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a4121488bf0ad871d8b26921ad51825b5", null ],
           [ "BadOffset", "dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793ad9e08c930c668cbf2c7710d3878a9151", null ],
           [ "Incomplete", "dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a4307e7e7986aa21a4b7c3ef2b5e948f6", null ]
+        ] ],
+        [ "CloseChoice", "dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0a", [
+          [ "Save", "dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0aac9cc8cce247e49bae79f15173ce97354", null ],
+          [ "Discard", "dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0aad94b42030b9785fd754d5c1754961269", null ],
+          [ "Cancel", "dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0aaea4788705e6873b424c65e91c2846b19", null ]
         ] ],
         [ "PluralCategory", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7", [
           [ "Zero", "d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7ad7ed4ee1df437474d005188535f74875", null ],

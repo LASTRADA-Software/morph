@@ -78,17 +78,17 @@ var NAVTREEINDEX =
 "d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html",
 "da/d54/classmorph_1_1ui_1_1Value.html#a7adbfcd9976dea4088bd83ea79df4c0f",
 "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html#a8663d52f54cace352c5e1cea44e55ca1",
-"db/d42/interpreter_8hpp.html#adfc188dc908560855854b7ac399faf1c",
-"dc/d0f/structmorph_1_1table_1_1Page.html#a9fe2a578ac35bd44b26236bb45bfa608",
-"dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#ad9af1812fe0fdc7c7e8a6f1f1bd4d7b8",
-"dd/d39/document_8hpp.html#a01ef736ee78c99bd5cccf54dd64ba889",
-"dd/d5b/structmorph_1_1ui_1_1Banner.html#ac9e3fee86bb010283e437de8c1f36b3c",
-"dd/dc1/file__store_8hpp_source.html",
-"de/d2f/structmorph_1_1ui_1_1Route.html#aae5d07215539c264d85a3573bed39364",
-"de/dcb/structmorph_1_1forms_1_1CollectionAction.html#a1f1d0f700ea59bb853255723e1c18c2f",
-"df/d0e/structmorph_1_1ui_1_1DocNode.html#a35e9a46703cf903a044c876ad8080d14",
-"df/d65/structmorph_1_1forms_1_1Choice.html#aad86eb7b349b62a0e55e2f1debb5af13",
-"functions_f.html"
+"db/d42/interpreter_8hpp.html#ad052ae1a07cb000f0d6402c23aff6e0b",
+"db/dff/structmorph_1_1ui_1_1Catalog.html#ada3a6c3914bfb018776a0cf499ad0725",
+"dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#a099c144c9b322df4777be378fcc1ee5b",
+"dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html",
+"dd/d5b/structmorph_1_1ui_1_1Banner.html#aa02b1a1e68991abb0ead8703ed67bc22",
+"dd/dc1/file__store_8hpp.html#a56429e2b515e068142bbe7f58aca9908",
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8",
+"de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html#a4bf52d2a961791d38f3d5b435de390db",
+"df/d0e/structmorph_1_1ui_1_1DocNode.html",
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html",
+"dir_d90c0bea7afa7342b7f0cc0215033638.html"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

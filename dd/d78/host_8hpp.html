@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <p>The host contract (spec 6 §4): how a host mounts UI documents and closes them, whether it owns its own shell or is the framework's workspace shell, and <span class="tt">DocumentScreenHost</span>, the framework's host over documents.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
@@ -163,6 +164,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The environment <span class="tt">identityOf</span> evaluates in: the params, and nothing else. Reading anything else marks it unknown.  <a href="../../d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHost" id="r_morph_3A_3Aui_3A_3ADocumentScreenHost"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">morph::ui::DocumentScreenHost</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The framework's <span class="tt"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html" title="What mounts screens for a host that owns its own shell; the workspace shell is one.">ScreenHost</a></span> over UI documents: it mounts them through an <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html" title="Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.">Interpreter</a></span>, closes them by the protocol of spec 6 §3, and hands a document's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span> to <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ad8dd83c3ddbad125e85d47671bdc29b6" title="A document asked to open another screen, with how (as). The default hands the screen and its params t...">onNavigate</a></span>, which the deriving host implements.  <a href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHost_3A_3AHandle_3A_3AState_3A_3AWatch" id="r_morph_3A_3Aui_3A_3ADocumentScreenHost_3A_3AHandle_3A_3AState_3A_3AWatch"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d92/structmorph_1_1ui_1_1DocumentScreenHost_1_1Handle_1_1State_1_1Watch.html">morph::ui::DocumentScreenHost::Handle::State::Watch</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A wait for the screen to have nothing pending; the id tells a posted task whether it is still current.  <a href="../../de/d92/structmorph_1_1ui_1_1DocumentScreenHost_1_1Handle_1_1State_1_1Watch.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
@@ -170,8 +173,16 @@ Typedefs</h2></td></tr>
 <tr class="memdesc:a5b073a0b5244977f291a4f30780868df"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen's params, by name.  <br /></td></tr>
 <tr class="memitem:a8f2ba01276e59682fed7c6ce6d5447b3" id="r_a8f2ba01276e59682fed7c6ce6d5447b3"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a8f2ba01276e59682fed7c6ce6d5447b3">morph::ui::HostScreenFactory</a></td></tr>
 <tr class="memdesc:a8f2ba01276e59682fed7c6ce6d5447b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted.  <br /></td></tr>
-<tr class="memitem:a7f7de33b3491eb2ddf4b9e8208d70276" id="r_a7f7de33b3491eb2ddf4b9e8208d70276"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a7f7de33b3491eb2ddf4b9e8208d70276">morph::ui::CloseGuard</a> = std::function&lt;void(<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a>&amp; screen, std::function&lt;void(bool close)&gt; decide)&gt;</td></tr>
-<tr class="memdesc:a7f7de33b3491eb2ddf4b9e8208d70276"><td class="mdescLeft">&#160;</td><td class="mdescRight">What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. It calls <span class="tt">decide(true)</span> to close the screen, <span class="tt">decide(false)</span> to keep it open, once.  <br /></td></tr>
+<tr class="memitem:a3f0c54da59b34eab53e2408ef84dfbdb" id="r_a3f0c54da59b34eab53e2408ef84dfbdb"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a3f0c54da59b34eab53e2408ef84dfbdb">morph::ui::CloseGuard</a> = std::function&lt;void(<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a>&amp; screen, std::function&lt;void(<a class="el" href="#a132a37e3f053472429b743bf0708cc0a">CloseChoice</a> choice)&gt; choose)&gt;</td></tr>
+<tr class="memdesc:a3f0c54da59b34eab53e2408ef84dfbdb"><td class="mdescLeft">&#160;</td><td class="mdescRight">What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:a132a37e3f053472429b743bf0708cc0a" id="r_a132a37e3f053472429b743bf0708cc0a"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a132a37e3f053472429b743bf0708cc0a">morph::ui::CloseChoice</a> : std::uint8_t { <a class="el" href="#a132a37e3f053472429b743bf0708cc0aac9cc8cce247e49bae79f15173ce97354">Save</a>
+, <a class="el" href="#a132a37e3f053472429b743bf0708cc0aad94b42030b9785fd754d5c1754961269">Discard</a>
+, <a class="el" href="#a132a37e3f053472429b743bf0708cc0aaea4788705e6873b424c65e91c2846b19">Cancel</a>
+ }</td></tr>
+<tr class="memdesc:a132a37e3f053472429b743bf0708cc0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the user chose for a dirty screen that is being closed (spec 6 §15).  <a href="#a132a37e3f053472429b743bf0708cc0a">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -198,7 +209,7 @@ Functions</h2></td></tr>
 
 <p>A screen's params, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,30 +227,66 @@ Functions</h2></td></tr>
 <b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;std::expected&lt;std::unique_ptr&lt;ScreenHandle&gt;, <a class="code hl_struct" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a>&gt;(</div>
 <div class="line">   <a class="code hl_typedef" href="#a5b073a0b5244977f291a4f30780868df">ParamMap</a> <span class="keyword">const</span>&amp; params, <a class="code hl_class" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a>&amp; page)&gt;</div>
 <div class="ttc" id="aclassmorph_1_1ui_1_1ContainerWidget_html"><div class="ttname"><a href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></div><div class="ttdoc">A widget with children. A factory given this container appends the new widget as its last child.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dc2/ui_2backend_8hpp_source.html#l00103">backend.hpp:103</a></div></div>
-<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00036">host.hpp:36</a></div></div>
-<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00039">host.hpp:39</a></div></div>
+<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00037">host.hpp:37</a></div></div>
+<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00040">host.hpp:40</a></div></div>
 </div><!-- fragment -->
 <p>Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a7f7de33b3491eb2ddf4b9e8208d70276" name="a7f7de33b3491eb2ddf4b9e8208d70276"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7f7de33b3491eb2ddf4b9e8208d70276">&#9670;&#160;</a></span>CloseGuard</h2>
+<a id="a3f0c54da59b34eab53e2408ef84dfbdb" name="a3f0c54da59b34eab53e2408ef84dfbdb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3f0c54da59b34eab53e2408ef84dfbdb">&#9670;&#160;</a></span>CloseGuard</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">using <a class="el" href="#a7f7de33b3491eb2ddf4b9e8208d70276">morph::ui::CloseGuard</a> = std::function&lt;void(ScreenHandle&amp; screen, std::function&lt;void(bool close)&gt; decide)&gt;</td>
+          <td class="memname">using <a class="el" href="#a3f0c54da59b34eab53e2408ef84dfbdb">morph::ui::CloseGuard</a> = std::function&lt;void(ScreenHandle&amp; screen, std::function&lt;void(CloseChoice choice)&gt; choose)&gt;</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. It calls <span class="tt">decide(true)</span> to close the screen, <span class="tt">decide(false)</span> to keep it open, once. </p>
+<p>What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. </p>
+<p>It asks the user, typically with a dialog, and calls <span class="tt">choose</span> once. It offers <em>save and close</em> only when <span class="tt">screen.canSave()</span>; <span class="tt">Save</span> on a screen that cannot save keeps it open. The handle carries the choice out, so <span class="tt">choose</span> may be called after the handle is gone, and then does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="a132a37e3f053472429b743bf0708cc0a" name="a132a37e3f053472429b743bf0708cc0a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a132a37e3f053472429b743bf0708cc0a">&#9670;&#160;</a></span>CloseChoice</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a132a37e3f053472429b743bf0708cc0a">morph::ui::CloseChoice</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What the user chose for a dirty screen that is being closed (spec 6 §15). </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a132a37e3f053472429b743bf0708cc0aac9cc8cce247e49bae79f15173ce97354" name="a132a37e3f053472429b743bf0708cc0aac9cc8cce247e49bae79f15173ce97354"></a>Save&#160;</td><td class="fielddoc"><p>Run the screen's save, and close it only if it is then clean. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a132a37e3f053472429b743bf0708cc0aad94b42030b9785fd754d5c1754961269" name="a132a37e3f053472429b743bf0708cc0aad94b42030b9785fd754d5c1754961269"></a>Discard&#160;</td><td class="fielddoc"><p>Close it without saving. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a132a37e3f053472429b743bf0708cc0aaea4788705e6873b424c65e91c2846b19" name="a132a37e3f053472429b743bf0708cc0aaea4788705e6873b424c65e91c2846b19"></a>Cancel&#160;</td><td class="fielddoc"><p>Keep it open. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +323,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A string as is, <span class="tt">null</span> as empty, anything else as its canonical JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
