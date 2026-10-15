@@ -192,6 +192,8 @@ var author_8hpp =
     [ "morph::ui::author::includes", "d1/dc0/author_8hpp.html#aee585e3ea05c82e3b9890e487a9e349e", null ],
     [ "morph::ui::author::isEmpty", "d1/dc0/author_8hpp.html#a784859d8cb8488ec77d0e37dfdd936ee", null ],
     [ "morph::ui::author::round", "d1/dc0/author_8hpp.html#aa153b94ae517e0d1980f0bea760a20da", null ],
+    [ "morph::ui::author::parseDecimal", "d1/dc0/author_8hpp.html#a92802ac6ac58f80065e4d99c547a0e10", null ],
+    [ "morph::ui::author::parseDecimal", "d1/dc0/author_8hpp.html#ae0dd0b02323c61fea1ea7aebd8f53795", null ],
     [ "morph::ui::author::quantity", "d1/dc0/author_8hpp.html#a502c6017e6f344ce47f2f2ad416780e0", null ],
     [ "morph::ui::author::quantity", "d1/dc0/author_8hpp.html#a4ffcd67572bc694572cf538e2684093b", null ],
     [ "morph::ui::author::t", "d1/dc0/author_8hpp.html#ac07fe9e9b0f1344a48ff99fe2ec0a5ec", null ],

@@ -1,5 +1,7 @@
 var NAVTREEINDEX3 =
 {
+"d1/de8/rational_8hpp.html":[4,0,0,15,2],
+"d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aabad9b3dd7a0a67346f338fe63a79bc7e":[4,0,0,15,2,8,1],
 "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e":[4,0,0,15,2,8,0],
 "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3":[4,0,0,15,2,7,2],
 "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2":[4,0,0,15,2,7,0],
@@ -247,7 +249,5 @@ var NAVTREEINDEX3 =
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a49e26794b9c47ea986af10067b1f6ae4":[3,0,0,24,0,36],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a50057a546c1896b7cff674647bc82f40":[3,0,0,24,0,29],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a5189c9b04b64393f7b3e4b10782b025b":[3,0,0,24,0,38],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a5d37f81ae2525d3e644b5aa9b6f1b041":[3,0,0,24,0,21],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a65002093b91d1c6b8b4493372e262eb3":[3,0,0,24,0,24],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a71f3217b68c15e7f336a9e177b3cd6e1":[3,0,0,24,0,3]
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a5d37f81ae2525d3e644b5aa9b6f1b041":[3,0,0,24,0,21]
 };

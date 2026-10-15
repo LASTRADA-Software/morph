@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dbb/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:a6d7703ddae3db9baab92137c174fb228" id="r_a6d7703ddae3db9baab92137c174fb228"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6d7703ddae3db9baab92137c174fb228">prefill</a></td></tr>
 <tr class="memdesc:a6d7703ddae3db9baab92137c174fb228"><td class="mdescLeft">&#160;</td><td class="mdescRight">The values the form starts from.  <br /></td></tr>
+<tr class="memitem:a3fec53e32477c202109b904ae7a819a7" id="r_a3fec53e32477c202109b904ae7a819a7"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3fec53e32477c202109b904ae7a819a7">key</a></td></tr>
+<tr class="memdesc:a3fec53e32477c202109b904ae7a819a7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The identity of the record <span class="tt"><a class="el" href="#a6d7703ddae3db9baab92137c174fb228" title="The values the form starts from.">prefill</a></span> holds: a new value of the same key keeps the fields the user changed, a new key loads every field. Without one, only the first value keeps them.  <br /></td></tr>
 <tr class="memitem:a3d216c3b252401211941310f7cd208e1" id="r_a3d216c3b252401211941310f7cd208e1"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3d216c3b252401211941310f7cd208e1">submit</a></td></tr>
 <tr class="memdesc:a3d216c3b252401211941310f7cd208e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">How it submits, such as <span class="tt">explicit</span>.  <br /></td></tr>
 <tr class="memitem:aee82ff7665420cf14650f3080eabdeb4" id="r_aee82ff7665420cf14650f3080eabdeb4"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d1/dc0/author_8hpp.html#a5b4a4ba2853d3bfe0ba8aa0a23a526dc">ShowErrors</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aee82ff7665420cf14650f3080eabdeb4">showErrors</a></td></tr>
@@ -153,7 +155,7 @@ struct morph::ui::author::FormOptions&lt; Action &gt;</div><p>Options of <span c
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03750">3750</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03765">3765</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a6d7703ddae3db9baab92137c174fb228" name="a6d7703ddae3db9baab92137c174fb228"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6d7703ddae3db9baab92137c174fb228">&#9670;&#160;</a></span>prefill</h2>
@@ -171,7 +173,27 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>The values the form starts from. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03752">3752</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03767">3767</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3fec53e32477c202109b904ae7a819a7" name="a3fec53e32477c202109b904ae7a819a7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3fec53e32477c202109b904ae7a819a7">&#9670;&#160;</a></span>key</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> <a class="el" href="../../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html">morph::ui::author::FormOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt;::key</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The identity of the record <span class="tt"><a class="el" href="#a6d7703ddae3db9baab92137c174fb228" title="The values the form starts from.">prefill</a></span> holds: a new value of the same key keeps the fields the user changed, a new key loads every field. Without one, only the first value keeps them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03770">3770</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -191,7 +213,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>How it submits, such as <span class="tt">explicit</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03754">3754</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03772">3772</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +233,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>When its errors show. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03756">3756</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03774">3774</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -231,7 +253,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>The <span class="tt"><a class="el" href="#ad43481e9a50163fdd6b9ee999a869dc0" title="The fields overlay.">fields</a></span> overlay. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03758">3758</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03776">3776</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,7 +273,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run on submit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03760">3760</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03778">3778</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +293,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run after a successful submit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03762">3762</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03780">3780</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +313,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run after a failed submit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03764">3764</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03782">3782</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

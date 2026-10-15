@@ -11,6 +11,7 @@ var classmorph_1_1forms_1_1FormSession =
     [ "body", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a72cb81d61c3a915039ef4d42076bedf1", null ],
     [ "submit", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#aba116056d49df7dc86a723f151d6ee67", null ],
     [ "prefill", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a6f6036d196b6dec1fe6f2b742471c637", null ],
+    [ "refill", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a940685a66b4561b9dba6517641457c47", null ],
     [ "assign", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a566022aa74f3dae7d51a349db68d4256", null ],
     [ "reset", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a73c567f983b84fb204fd28eaa409638e", null ],
     [ "pending", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a51370e101f88de9a4cc52cc68dc5aff8", null ],

@@ -134,6 +134,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a0f00facdacbe3c6ed1347e7776996ca6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The selected key, or none. A key outside <span class="tt"><a class="el" href="#ab1d46358f6d9413383ecb5dd1e7f0a80" title="The options, in order.">options</a></span> shows no selection.  <br /></td></tr>
 <tr class="memitem:afc5f4fc855ee5a55f7bbd361783b7be5" id="r_afc5f4fc855ee5a55f7bbd361783b7be5"><td class="memItemLeft">std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#afc5f4fc855ee5a55f7bbd361783b7be5">onSelect</a></td></tr>
 <tr class="memdesc:afc5f4fc855ee5a55f7bbd361783b7be5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the key the user chose.  <br /></td></tr>
+<tr class="memitem:a0b23982f6666b23afcb870eb9e7952cc" id="r_a0b23982f6666b23afcb870eb9e7952cc"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0b23982f6666b23afcb870eb9e7952cc">onOpen</a></td></tr>
+<tr class="memdesc:a0b23982f6666b23afcb870eb9e7952cc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called when the user opens the dropdown, whether or not it has options to show; a radio group is never opened. A hint, such as retrying a fetch of the options that failed: a backend may not report it.  <br /></td></tr>
 <tr class="memitem:a5767d68e89a3450fb7df4c1b8020dc27" id="r_a5767d68e89a3450fb7df4c1b8020dc27"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1">SelectStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5767d68e89a3450fb7df4c1b8020dc27">style</a> = <a class="el" href="../../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38">SelectStyle::Dropdown</a></td></tr>
 <tr class="memdesc:a5767d68e89a3450fb7df4c1b8020dc27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dropdown or radio; set once.  <br /></td></tr>
 <tr class="memitem:aa8fa7fe913d4af10c536cec671b54c87" id="r_aa8fa7fe913d4af10c536cec671b54c87"><td class="memItemLeft"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa8fa7fe913d4af10c536cec671b54c87">field</a> {}</td></tr>
@@ -200,6 +202,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a0b23982f6666b23afcb870eb9e7952cc" name="a0b23982f6666b23afcb870eb9e7952cc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0b23982f6666b23afcb870eb9e7952cc">&#9670;&#160;</a></span>onOpen</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> morph::ui::Select::onOpen</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called when the user opens the dropdown, whether or not it has options to show; a radio group is never opened. A hint, such as retrying a fetch of the options that failed: a backend may not report it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00465">465</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a5767d68e89a3450fb7df4c1b8020dc27" name="a5767d68e89a3450fb7df4c1b8020dc27"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5767d68e89a3450fb7df4c1b8020dc27">&#9670;&#160;</a></span>style</h2>
 
@@ -214,7 +234,7 @@ Public Attributes</h2></td></tr>
 
 <p>Dropdown or radio; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +252,7 @@ Public Attributes</h2></td></tr>
 
 <p>Read-only, required, errors and stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

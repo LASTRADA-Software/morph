@@ -171,6 +171,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a051db3d93842ecd9dc38c06747f929fe"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a rule sees of this field. Tracked.  <br /></td></tr>
 <tr class="memitem:a286720a0eeb4ca7ee5f9bd37bdae4eaf" id="r_a286720a0eeb4ca7ee5f9bd37bdae4eaf"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d5/de9/structmorph_1_1forms_1_1ChoiceOption.html">ChoiceOption</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a286720a0eeb4ca7ee5f9bd37bdae4eaf">options</a> () const</td></tr>
 <tr class="memdesc:a286720a0eeb4ca7ee5f9bd37bdae4eaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The selectable options: an Enum's from the schema, a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s as last fetched for its current parents. Tracked.  <br /></td></tr>
+<tr class="memitem:a160092d6c1408ac1e74ca3df2afcbf1a" id="r_a160092d6c1408ac1e74ca3df2afcbf1a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a160092d6c1408ac1e74ca3df2afcbf1a">retryOptions</a> ()</td></tr>
+<tr class="memdesc:a160092d6c1408ac1e74ca3df2afcbf1a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options again when the last fetch failed; does nothing otherwise. What opening its select runs, so options that could not be fetched when the form was built are fetched once the user asks for them.  <br /></td></tr>
 <tr class="memitem:a280dac63d846754dbf0fdff8ec4ebda3" id="r_a280dac63d846754dbf0fdff8ec4ebda3"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a280dac63d846754dbf0fdff8ec4ebda3">optionsPending</a> () const</td></tr>
 <tr class="memdesc:a280dac63d846754dbf0fdff8ec4ebda3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options request is in flight. Tracked.  <br /></td></tr>
 <tr class="memitem:a043ae2850ae00664b3d38a5da357e208" id="r_a043ae2850ae00664b3d38a5da357e208"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a043ae2850ae00664b3d38a5da357e208">switchUnit</a> (std::size_t index)</td></tr>
@@ -185,6 +187,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:adeab8ebef6641d2635c3e0b78d3af43d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a blank row to a collection and engages it. A user action.  <br /></td></tr>
 <tr class="memitem:ab7110f054fa59416b20873acb5b5f9db" id="r_ab7110f054fa59416b20873acb5b5f9db"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab7110f054fa59416b20873acb5b5f9db">removeRow</a> (std::uint64_t key)</td></tr>
 <tr class="memdesc:ab7110f054fa59416b20873acb5b5f9db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes a collection row by key. A user action. A holder of the row's <span class="tt">shared_ptr</span> (a mounted view) keeps its state alive until it lets go.  <br /></td></tr>
+<tr class="memitem:a6afea3f8a2b3d67adae3ce5461f20d63" id="r_a6afea3f8a2b3d67adae3ce5461f20d63"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a6afea3f8a2b3d67adae3ce5461f20d63">snapshot</a> () const</td></tr>
+<tr class="memdesc:a6afea3f8a2b3d67adae3ce5461f20d63"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the field holds, as one string: two snapshots are equal exactly when the field holds the same entry (draft, unit and engagement, and every member's and row's). Untracked.  <br /></td></tr>
 <tr class="memitem:a4106fb400b0a55f2238086fdb4f5202b" id="r_a4106fb400b0a55f2238086fdb4f5202b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4106fb400b0a55f2238086fdb4f5202b">load</a> (detail::engine::Json const *value)</td></tr>
 <tr class="memdesc:a4106fb400b0a55f2238086fdb4f5202b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the draft with the decoded wire value; null or absent is blank. Does not mark the change programmatic — the caller does, in the same batch.  <br /></td></tr>
 <tr class="memitem:a86ce70ebf447bb108613a635eb0f4012" id="r_a86ce70ebf447bb108613a635eb0f4012"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a86ce70ebf447bb108613a635eb0f4012">clear</a> ()</td></tr>
@@ -764,6 +768,35 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a160092d6c1408ac1e74ca3df2afcbf1a" name="a160092d6c1408ac1e74ca3df2afcbf1a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a160092d6c1408ac1e74ca3df2afcbf1a">&#9670;&#160;</a></span>retryOptions()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::forms::FieldState::retryOptions </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Fetches a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options again when the last fetch failed; does nothing otherwise. What opening its select runs, so options that could not be fetched when the form was built are fetched once the user asks for them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a280dac63d846754dbf0fdff8ec4ebda3" name="a280dac63d846754dbf0fdff8ec4ebda3"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a280dac63d846754dbf0fdff8ec4ebda3">&#9670;&#160;</a></span>optionsPending()</h2>
 
@@ -790,7 +823,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options request is in flight. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> while fetching. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -825,7 +858,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -855,7 +888,7 @@ Public Member Functions</h2></td></tr>
 <p>An Object's members, in <span class="tt">x-order</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The members; empty for every other kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -891,7 +924,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The member, or null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -921,7 +954,7 @@ Public Member Functions</h2></td></tr>
 <p>A collection's rows, in order. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd>The rows; empty for every other kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00395">395</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -951,7 +984,7 @@ Public Member Functions</h2></td></tr>
 <p>Appends a blank row to a collection and engages it. A user action. </p>
 <dl class="section return"><dt>Returns</dt><dd>The new row's key; 0 when the field is not a collection, or a truncated one. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -986,7 +1019,37 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00416">416</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6afea3f8a2b3d67adae3ce5461f20d63" name="a6afea3f8a2b3d67adae3ce5461f20d63"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6afea3f8a2b3d67adae3ce5461f20d63">&#9670;&#160;</a></span>snapshot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::forms::FieldState::snapshot </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What the field holds, as one string: two snapshots are equal exactly when the field holds the same entry (draft, unit and engagement, and every member's and row's). Untracked. </p>
+<dl class="section return"><dt>Returns</dt><dd>The snapshot. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00432">432</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -1021,7 +1084,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -1050,7 +1113,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Blanks the draft, the unit, the engagement, the members and the rows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -1079,7 +1142,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Starts what needs every sibling to exist: an <span class="tt">x-blankAs</span> field's engagement, a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options query, and every member's own. Called once, after the owner built all its fields. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00483">483</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>

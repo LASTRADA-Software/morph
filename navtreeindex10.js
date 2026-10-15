@@ -1,5 +1,8 @@
 var NAVTREEINDEX10 =
 {
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255":[1,0,0,1,215,1],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255":[3,0,0,25,217,1],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a7611398d3d5f52041ebb516038d673e7":[1,0,0,1,215,5],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a7611398d3d5f52041ebb516038d673e7":[3,0,0,25,217,5],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c":[1,0,0,1,215,15],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c":[3,0,0,25,217,15],
@@ -110,6 +113,8 @@ var NAVTREEINDEX10 =
 "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a0d34e0a47dcf6c6b88476cd5fa3f4eec":[3,0,0,25,169,0],
 "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a301feb38ab667c29ff68a534e4fd9486":[1,0,0,1,167,1],
 "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a301feb38ab667c29ff68a534e4fd9486":[3,0,0,25,169,1],
+"d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a3cab8ab9d264cbf24746b154df0afcfe":[1,0,0,1,167,3],
+"d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a3cab8ab9d264cbf24746b154df0afcfe":[3,0,0,25,169,3],
 "d6/da3/logger_8hpp_source.html":[4,0,0,0,11],
 "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html":[3,0,0,8,47],
 "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#a01e9408dfe3204edebbf11b8cdd2b8c1":[3,0,0,8,47,1],
@@ -244,10 +249,5 @@ var NAVTREEINDEX10 =
 "d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fbac26f15e86e3de4c398a8273272aba034":[4,0,0,14,23,8,1],
 "d6/dda/value_8hpp.html#a748ea2ca99eb85845055ba99a0259f30":[1,0,0,1,322],
 "d6/dda/value_8hpp.html#a8a6c823d6a7452936e9826d66c5a3c8b":[1,0,0,1,0,165],
-"d6/dda/value_8hpp.html#abc5f920c1bfbbdaa9a16acd19e579fe9":[1,0,0,1,0,166],
-"d6/dda/value_8hpp.html#acc5f1eed1d2fc9a76dccdbbffbda77e9":[1,0,0,1,399],
-"d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767":[1,0,0,1,239],
-"d6/dda/value_8hpp.html#ae17a8d6aeb774cdfa58e3e892d943e4f":[1,0,0,1,0,164],
-"d6/dda/value_8hpp.html#ae838472ab2151910811a39595d263557":[1,0,0,1,318],
-"d6/dda/value_8hpp.html#afad8aad98f9ce979904b43175740949c":[1,0,0,1,320]
+"d6/dda/value_8hpp.html#abc5f920c1bfbbdaa9a16acd19e579fe9":[1,0,0,1,0,166]
 };

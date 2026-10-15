@@ -1,5 +1,10 @@
 var NAVTREEINDEX11 =
 {
+"d6/dda/value_8hpp.html#acc5f1eed1d2fc9a76dccdbbffbda77e9":[1,0,0,1,399],
+"d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767":[1,0,0,1,239],
+"d6/dda/value_8hpp.html#ae17a8d6aeb774cdfa58e3e892d943e4f":[1,0,0,1,0,164],
+"d6/dda/value_8hpp.html#ae838472ab2151910811a39595d263557":[1,0,0,1,318],
+"d6/dda/value_8hpp.html#afad8aad98f9ce979904b43175740949c":[1,0,0,1,320],
 "d6/dda/value_8hpp_source.html":[4,0,0,14,23],
 "d6/ddd/widget__hints_8hpp.html":[4,0,0,2,13],
 "d6/ddd/widget__hints_8hpp_source.html":[4,0,0,2,13],
@@ -244,10 +249,5 @@ var NAVTREEINDEX11 =
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ac4ce42130e5f69b59771ae80eb9e331b":[1,0,0,1,43,1],
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ac4ce42130e5f69b59771ae80eb9e331b":[3,0,0,25,45,1],
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#af74c093674b74bb462568732d520109c":[1,0,0,1,43,0],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#af74c093674b74bb462568732d520109c":[3,0,0,25,45,0],
-"d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html":[1,0,0,1,31],
-"d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html":[3,0,0,25,33],
-"d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html#a2446344e7b9032070b405bd5956ebfb9":[1,0,0,1,31,3],
-"d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html#a2446344e7b9032070b405bd5956ebfb9":[3,0,0,25,33,3],
-"d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html#a2d6bfb7aa7357991bb1e91360b713d4a":[1,0,0,1,31,0]
+"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#af74c093674b74bb462568732d520109c":[3,0,0,25,45,0]
 };

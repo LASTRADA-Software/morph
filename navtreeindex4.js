@@ -1,5 +1,7 @@
 var NAVTREEINDEX4 =
 {
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a65002093b91d1c6b8b4493372e262eb3":[3,0,0,24,0,24],
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a71f3217b68c15e7f336a9e177b3cd6e1":[3,0,0,24,0,3],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a72d683776543bc6e1d97fc0fb736f26b":[3,0,0,24,0,33],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a73169cbc7377b8fbd2c32ae352ffd1e0":[3,0,0,24,0,15],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a760f43b0fcc21c138f6c508e421c3e90":[3,0,0,24,0,7],
@@ -247,7 +249,5 @@ var NAVTREEINDEX4 =
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a7b5dad460176aad069a334559949296f":[3,0,0,25,0,38,3],
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#ab52fc02a9ceed331efe8c99c13eb1d9c":[3,0,0,25,0,38,4],
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#ac984f5afb7104260f7aec197e3b71240":[3,0,0,25,0,38,1],
-"d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html":[1,0,0,1,108],
-"d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html":[3,0,0,25,110],
-"d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html#a03d01a1dfe0739dace8811f98bc45d3d":[1,0,0,1,108,4]
+"d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html":[1,0,0,1,108]
 };

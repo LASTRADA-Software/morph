@@ -18,6 +18,7 @@ var classmorph_1_1forms_1_1FieldState =
     [ "blank", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a917e492d410dcca26ecfd16246f4b56b", null ],
     [ "ruleOperand", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a051db3d93842ecd9dc38c06747f929fe", null ],
     [ "options", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a286720a0eeb4ca7ee5f9bd37bdae4eaf", null ],
+    [ "retryOptions", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a160092d6c1408ac1e74ca3df2afcbf1a", null ],
     [ "optionsPending", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a280dac63d846754dbf0fdff8ec4ebda3", null ],
     [ "switchUnit", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a043ae2850ae00664b3d38a5da357e208", null ],
     [ "members", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#ada2fd82ccc91e8ddbc939bb4ae8801e3", null ],
@@ -25,6 +26,7 @@ var classmorph_1_1forms_1_1FieldState =
     [ "rows", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a3758a55db261e057199c56a8439b65bc", null ],
     [ "addRow", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#adeab8ebef6641d2635c3e0b78d3af43d", null ],
     [ "removeRow", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#ab7110f054fa59416b20873acb5b5f9db", null ],
+    [ "snapshot", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a6afea3f8a2b3d67adae3ce5461f20d63", null ],
     [ "load", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a4106fb400b0a55f2238086fdb4f5202b", null ],
     [ "clear", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a86ce70ebf447bb108613a635eb0f4012", null ],
     [ "start", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#ac0c9dff0072c420a9542b7ce0333e19b", null ]

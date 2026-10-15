@@ -1,5 +1,16 @@
 var NAVTREEINDEX27 =
 {
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#a8ebd18ffd56d215ea06e22c770983bad":[1,0,0,1,49,3],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#a8ebd18ffd56d215ea06e22c770983bad":[3,0,0,25,51,3],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#a9f9b0d398fcec0f2bc64e5c4e495c9ea":[1,0,0,1,49,12],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#a9f9b0d398fcec0f2bc64e5c4e495c9ea":[3,0,0,25,51,12],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#ae34a1ac1ff941576faaf5a668c79f3e9":[1,0,0,1,49,0],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#ae34a1ac1ff941576faaf5a668c79f3e9":[3,0,0,25,51,0],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#aecba77cb28946a0dd4d8b468c535c98b":[1,0,0,1,49,6],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#aecba77cb28946a0dd4d8b468c535c98b":[3,0,0,25,51,6],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#af716169700ac8f2739bc459a0e9c1ca7":[1,0,0,1,49,2],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#af716169700ac8f2739bc459a0e9c1ca7":[3,0,0,25,51,2],
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#afaa0307e960eabc3fa2f984095c890e9":[1,0,0,1,49,8],
 "df/d0e/structmorph_1_1ui_1_1DocNode.html#afaa0307e960eabc3fa2f984095c890e9":[3,0,0,25,51,8],
 "df/d0f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBadge.html":[3,0,0,25,2,0,3],
 "df/d0f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBadge.html#a247b228d205ca193a3afdc617234197a":[3,0,0,25,2,0,3,0],
@@ -238,16 +249,5 @@ var NAVTREEINDEX27 =
 "df/d66/structmorph_1_1ui_1_1GridCell.html":[3,0,0,25,82],
 "df/d66/structmorph_1_1ui_1_1GridCell.html#a270bb61be6804d6d9e65cc8f7df9592e":[1,0,0,1,80,0],
 "df/d66/structmorph_1_1ui_1_1GridCell.html#a270bb61be6804d6d9e65cc8f7df9592e":[3,0,0,25,82,0],
-"df/d66/structmorph_1_1ui_1_1GridCell.html#a337a7545016c278640bd3f07cc19f094":[1,0,0,1,80,1],
-"df/d66/structmorph_1_1ui_1_1GridCell.html#a337a7545016c278640bd3f07cc19f094":[3,0,0,25,82,1],
-"df/d6a/attributes_8hpp_source.html":[4,0,0,16],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html":[3,0,0,8,43],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a1f706036cd6b6958191a4257c03d60f7":[3,0,0,8,43,2],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a3523c1c68b2e93909fda552a5be4f350":[3,0,0,8,43,0],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a8741b7978db26d3aa9f9bb9a3bab192d":[3,0,0,8,43,1],
-"df/d74/qt__websocket__server_8hpp_source.html":[4,0,0,6,3],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html":[3,0,0,8,11],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a09aa7e61ccbec002acf7ab1802fa515e":[3,0,0,8,11,14],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a26923b7dd468988ecdd8d37a5556d903":[3,0,0,8,11,11],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a2ccad77a02f8542f509f653d633d7dcb":[3,0,0,8,11,6]
+"df/d66/structmorph_1_1ui_1_1GridCell.html#a337a7545016c278640bd3f07cc19f094":[1,0,0,1,80,1]
 };

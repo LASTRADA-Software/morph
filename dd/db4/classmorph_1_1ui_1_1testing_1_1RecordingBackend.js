@@ -54,6 +54,7 @@ var classmorph_1_1ui_1_1testing_1_1RecordingBackend =
     [ "cursor", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a9856ad671fcd110aedd2f7f98a76c6b6", null ],
     [ "commit", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a4e3287112f60bddea92fee488d871c78", null ],
     [ "toggle", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aed5a4b59168ee53f18606d9de8c0bb08", null ],
+    [ "open", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a9ae423bc5ba2a88cd08fab65b5e54f3b", null ],
     [ "choose", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a58eadd769f03327745bef42e4deef666", null ],
     [ "chooseMenuEntry", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a5ea50755884bf10a3cccb7f45707230b", null ],
     [ "chooseIndex", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a440d5d53e594d4f1949d1b817ef35e8c", null ],

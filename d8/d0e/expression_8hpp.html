@@ -270,6 +270,8 @@ Enumerations</h2></td></tr>
 , <b>Date</b>
 , <b>DateTime</b>
 , <b>Translate</b>
+, <br />
+&#160;&#160;<b>ParseDecimal</b>
 <br />
  }</td></tr>
 <tr class="memdesc:acdf25e669057d3af5e395c162caedc32"><td class="mdescLeft">&#160;</td><td class="mdescRight">The functions of the <span class="tt">expr/1</span> library.  <a href="#acdf25e669057d3af5e395c162caedc32">More...</a><br /></td></tr>
@@ -322,8 +324,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:a904a78e57c1d4f5b33790ba34d0addad"><td class="mdescLeft">&#160;</td><td class="mdescRight">The numbers.  <br /></td></tr>
 <tr class="memitem:a36510bc5882d9dbd986570731bef4ea7" id="r_a36510bc5882d9dbd986570731bef4ea7"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#a36510bc5882d9dbd986570731bef4ea7">morph::ui::detail::kOrdered</a> = <a class="el" href="#a904a78e57c1d4f5b33790ba34d0addad">kNumeric</a> | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349aa3d5de3eac8bb00ae86fd1a1005f1500">TypeKind::Timestamp</a>) | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a27118326006d3829667a400ad23d5d98">TypeKind::String</a>)</td></tr>
 <tr class="memdesc:a36510bc5882d9dbd986570731bef4ea7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ordered kinds.  <br /></td></tr>
-<tr class="memitem:a6b1da34f749e0ca62f8df92ef584f17c" id="r_a6b1da34f749e0ca62f8df92ef584f17c"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a>, 40 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6b1da34f749e0ca62f8df92ef584f17c">morph::ui::detail::kFunctions</a></td></tr>
-<tr class="memdesc:a6b1da34f749e0ca62f8df92ef584f17c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The library, indexed by <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span>.  <br /></td></tr>
+<tr class="memitem:a536f42190ff450c8116561a747b38300" id="r_a536f42190ff450c8116561a747b38300"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a>, 41 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a536f42190ff450c8116561a747b38300">morph::ui::detail::kFunctions</a></td></tr>
+<tr class="memdesc:a536f42190ff450c8116561a747b38300"><td class="mdescLeft">&#160;</td><td class="mdescRight">The library, indexed by <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span>.  <br /></td></tr>
 <tr class="memitem:a6fd684e6821cca9ab7819f016aadb7ef" id="r_a6fd684e6821cca9ab7819f016aadb7ef"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6fd684e6821cca9ab7819f016aadb7ef">morph::ui::detail::kEnvNames</a> = {&quot;widthClass&quot;, &quot;locale&quot;, &quot;platform&quot;, &quot;online&quot;, &quot;backend&quot;}</td></tr>
 <tr class="memdesc:a6fd684e6821cca9ab7819f016aadb7ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"env": ...}</span> reads.  <br /></td></tr>
 <tr class="memitem:a0d1d95fcf12d2c7123288a5bb5d8ec14" id="r_a0d1d95fcf12d2c7123288a5bb5d8ec14"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0d1d95fcf12d2c7123288a5bb5d8ec14">morph::ui::detail::kSessionNames</a></td></tr>
@@ -349,7 +351,7 @@ Variables</h2></td></tr>
 
 <p>A shared, immutable expression node. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,7 +369,7 @@ Variables</h2></td></tr>
 
 <p>A set of type kinds, as bits. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -385,7 +387,7 @@ Variables</h2></td></tr>
 
 <p>The units a client knows, by id. A unit missing from the table is its own canonical unit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01013">1013</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01015">1015</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,7 +405,7 @@ Variables</h2></td></tr>
 
 <p>Formats a date for display: the instant already shifted to the display zone, the style (<span class="tt">short</span>, <span class="tt">medium</span> or <span class="tt">long</span>), and whether to show the time. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01017">1017</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01019">1019</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -569,7 +571,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its bit. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -605,7 +607,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its entry in <span class="tt">kFunctions</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -648,7 +650,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">name</code> is in <code class="param">names</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -684,7 +686,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The segments, or the reason the path is malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -725,7 +727,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00658">658</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00660">660</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -755,7 +757,7 @@ template&lt;std::size_t N&gt; </div>
 <p>The names of the <span class="tt">expr/1</span> library, in <span class="tt">FunctionId</span> order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The names. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00664">664</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00666">666</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -791,7 +793,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its type; <span class="tt">any</span> for <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00760">760</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -838,7 +840,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">any</span> when the path can read something, or why it cannot. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00771">771</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00773">773</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -879,7 +881,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression's static type (<span class="tt">any</span> where it cannot be known), or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00997">997</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00999">999</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -920,7 +922,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value at the path, or <span class="tt">null</span> when a segment does not exist. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01091">1091</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01093">1093</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -956,7 +958,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number, or <span class="tt">std::nullopt</span> when it is not one. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01130">1130</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1003,7 +1005,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A quantity with a unit; an <span class="tt">int</span> when integral and every operand was one; a decimal otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01148">1148</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01150">1150</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1056,7 +1058,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value in <code class="param">target</code>, its places widened by the decimal places of the conversion ratio; <span class="tt">std::nullopt</span> when the units do not convert or the result overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01165">1165</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01167">1167</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1097,7 +1099,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its display text, or the id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01215">1215</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01217">1217</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1133,7 +1135,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>0, 2 or 3. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01223">1223</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01225">1225</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1174,7 +1176,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01983">1983</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l02005">2005</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1227,7 +1229,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>Every kind. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1253,7 +1255,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The numbers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1279,12 +1281,12 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The ordered kinds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a6b1da34f749e0ca62f8df92ef584f17c" name="a6b1da34f749e0ca62f8df92ef584f17c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6b1da34f749e0ca62f8df92ef584f17c">&#9670;&#160;</a></span>kFunctions</h2>
+<a id="a536f42190ff450c8116561a747b38300" name="a536f42190ff450c8116561a747b38300"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a536f42190ff450c8116561a747b38300">&#9670;&#160;</a></span>kFunctions</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1293,7 +1295,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;FunctionSpec, 40&gt; morph::ui::detail::kFunctions</td>
+          <td class="memname">std::array&lt;FunctionSpec, 41&gt; morph::ui::detail::kFunctions</td>
         </tr>
       </table>
   </td>
@@ -1305,7 +1307,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The library, indexed by <span class="tt">FunctionId</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1331,7 +1333,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The names <span class="tt">{"env": ...}</span> reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1359,7 +1361,7 @@ template&lt;std::size_t N&gt; </div>
 </div><!-- fragment -->
 <p>The names <span class="tt">{"session": ...}</span> reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

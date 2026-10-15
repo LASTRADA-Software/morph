@@ -1,5 +1,13 @@
 var NAVTREEINDEX18 =
 {
+"da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html#ad1afa5ddacdf65af8b152bed8c8aff84":[3,0,0,25,2,0,34,2],
+"da/dcf/classmorph_1_1reactive_1_1Store.html":[1,0,0,0,14],
+"da/dcf/classmorph_1_1reactive_1_1Store.html":[3,0,0,18,15],
+"da/dcf/classmorph_1_1reactive_1_1Store.html#a7b14581d4eeddcd3aebb8d7e7529a313":[1,0,0,0,14,1],
+"da/dcf/classmorph_1_1reactive_1_1Store.html#a7b14581d4eeddcd3aebb8d7e7529a313":[3,0,0,18,15,1],
+"da/dcf/classmorph_1_1reactive_1_1Store.html#a7d4b0382c7a3aaea85a49b7e02e215a8":[1,0,0,0,14,2],
+"da/dcf/classmorph_1_1reactive_1_1Store.html#a7d4b0382c7a3aaea85a49b7e02e215a8":[3,0,0,18,15,2],
+"da/dcf/classmorph_1_1reactive_1_1Store.html#a98d63e33c0aa5a5c813172b38c3f2d81":[1,0,0,0,14,0],
 "da/dcf/classmorph_1_1reactive_1_1Store.html#a98d63e33c0aa5a5c813172b38c3f2d81":[3,0,0,18,15,0],
 "da/dcf/classmorph_1_1reactive_1_1Store.html#ab0e29ac2ea68ed3c69a25634ecada2d7":[1,0,0,0,14,3],
 "da/dcf/classmorph_1_1reactive_1_1Store.html#ab0e29ac2ea68ed3c69a25634ecada2d7":[3,0,0,18,15,3],
@@ -241,13 +249,5 @@ var NAVTREEINDEX18 =
 "db/d42/interpreter_8hpp.html#af052a28aecac55e902220ed7ab4f941d":[1,0,0,1,0,117],
 "db/d42/interpreter_8hpp.html#af362c6ceae14668623da2481f83136c9":[1,0,0,1,0,87],
 "db/d42/interpreter_8hpp.html#afb7c0abf44bfa03e0cd7b983084dcbfb":[1,0,0,1,0,98],
-"db/d42/interpreter_8hpp.html#affa0c0308a545d40dec03a4ef80e6724":[1,0,0,1,0,116],
-"db/d42/interpreter_8hpp_source.html":[4,0,0,14,12],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html":[1,0,0,1,162],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html":[3,0,0,25,164],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[1,0,0,1,162,1],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[3,0,0,25,164,1],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[1,0,0,1,162,0],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[3,0,0,25,164,0],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html":[1,0,0,1,74]
+"db/d42/interpreter_8hpp.html#affa0c0308a545d40dec03a4ef80e6724":[1,0,0,1,0,116]
 };

@@ -6,6 +6,7 @@ var structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks =
     [ "commit", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#aa3814fdc441041a7b020dfb22e7b3969", null ],
     [ "toggle", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a12d28a031352040e3c33745133327efe", null ],
     [ "select", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a3c8139c848f505e868a95c37edd026f2", null ],
+    [ "open", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ac35664e7fc5c671990caad8882a187e6", null ],
     [ "index", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ae855041cd6c69a511ec1838183e27e51", null ],
     [ "dateTime", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ac7c98cf48ab6c759f0eaa9c3c1288746", null ],
     [ "slide", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a8d4b1ccfdf7644304b097029e69f929f", null ],
