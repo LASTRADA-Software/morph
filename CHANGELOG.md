@@ -11,6 +11,28 @@ API surface).
 
 ### Changed
 
+- **An `evaluate` query's handle reads the action it evaluates.**
+  `Scope::evaluate<A>` returned a `QueryHandle<A>` whose value was typed as
+  `A`'s result, while the reply is `A`'s own body with its computed fields
+  filled, so `at(&A::computed)` did not compile and `at` on a result member
+  read a field that is not there. It now returns `QueryHandle<A, A>`;
+  `QueryHandle` takes the value's type as a second, defaulted parameter.
+
+- **An `arrange` customize point belongs to a screen.** The loader accepted it
+  only in the app document, which has no view, so its `of` named a node of no
+  document. It is now a screen-scope point whose `of` must name an element of
+  the same screen that declares children; the app document refuses one.
+
+- **A model or action id registered for a second type is refused.** The model
+  factory and both action registries stored registrations with
+  `insert_or_assign`, so a second type under a taken id silently replaced the
+  first, in link order. They now throw `morph::model::DuplicateRegistrationError`,
+  and the static-init helpers print it and abort; the same type registered
+  again stays harmless. The examples that shared ids in the one-process examples
+  client now namespace them: `AuthModel` is `Bank_AuthModel`,
+  `Bookmarks_AuthModel`, `Kanban_AuthModel` and `Ledger_AuthModel`, and
+  `BudgetModel` is `Bank_BudgetModel` and `Ledger_BudgetModel`.
+
 - **Opening a Choice whose options fetch failed fetches them again.** A
   Choice's options were fetched once, when its form was built; a fetch that
   failed (an action needing the screen's setup first) left the select empty for
@@ -247,6 +269,24 @@ API surface).
   same `morph::testkit::configureSession()`.
 
 ### Added
+
+- **An `arrange` point orders and hides a column's or row's children.** The
+  container a screen's `arrange` point names now lowers to a keyed list over its
+  children's ids: the stored `[{"id", "hidden"}]` choice orders them, hides some,
+  and leaves a child it does not name at its declared place after them, and a
+  new choice moves the widgets rather than rebuilding them. The loader requires
+  the container to be a `column` or `row` whose children all have ids, named by
+  one point only. The author builder is `Scope::arrangePoint`. A `customize`
+  node of the point is its editor: every child, hidden ones included, with a
+  checkbox that shows or hides it and buttons that move it a place; an edit
+  stores the whole arrangement and calls `preferenceChanged`.
+
+- **A bare `math::Rational` member can declare its places and be entered as one
+  decimal.** Its schema was the `{num, den, dp}` object, so a form rendered three
+  integer inputs and 12.34 was typed as 1234, 2 and 100. `FieldMeta::decimals`
+  on a `Rational` (or `std::optional<Rational>`) member is now emitted as
+  `x-decimalPlaces`, which makes the field a `Decimal`; an undeclared member is
+  unchanged.
 
 - **`parseDecimal(text, dp?)` turns typed text into a number.** A text input's
   `event` is text, and no expression turned it into a number a body could

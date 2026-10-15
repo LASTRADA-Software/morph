@@ -11,7 +11,7 @@
 # off-by-one there is invisible to any test that only tries obviously-too-much.
 # This file walks up to the boundary and steps over it.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=turing password=turing-pass displayName="Alan Turing"
 expect ok field message ~ "^(registered|username already taken)$"

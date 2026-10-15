@@ -32,7 +32,7 @@
 
 server ws://127.0.0.1:8765
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

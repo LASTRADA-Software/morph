@@ -13,7 +13,7 @@
 # into an account a previous run had left money in could only ever assert
 # "more than before".
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=knuth password=knuth-pass displayName="Don Knuth"
 expect ok field message ~ "^(registered|username already taken)$"

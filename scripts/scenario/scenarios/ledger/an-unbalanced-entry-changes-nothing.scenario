@@ -24,7 +24,7 @@
 # So the first account's id is spent as the run's nonce and stamped into every
 # CSV row's description.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

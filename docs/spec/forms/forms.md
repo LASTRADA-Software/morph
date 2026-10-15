@@ -598,6 +598,10 @@ struct RecordDensity {
   cannot decode that object. `x-displayDecimals` keeps the JSON-number encoding
   and only tells the renderer how many fraction digits to show and accept. It
   is read only for a `"number"` property with no `x-decimalPlaces`.
+- **On a bare `math::Rational` member `decimals` is emitted as
+  `x-decimalPlaces`**: the member already travels as `{num,den,dp}`, so the
+  exact key fits, and the field is entered as one decimal rather than as three
+  integers (see [Plain number fields](#plain-number-fields--type-number)).
 - **Both are ignored on a `Quantity` member**, whose unit and declared
   precision are part of its type and already emitted; a second declaration
   could only disagree with the first. A `decimals` above `kMaxDecimalPlaces`
@@ -842,7 +846,7 @@ this dual read.
 |---|---|---|---|
 | `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
-| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). A model serving one *instance* of an action may overwrite this with a value from data — see [Per-instance constraints](#per-instance-constraints--values-that-live-in-data); `x-instanceConstraints` (below) says when it did. |
+| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it; or a bare `math::Rational` member's `FieldMeta::decimals`, which is not rounded to on dispatch). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). A model serving one *instance* of an action may overwrite this with a value from data — see [Per-instance constraints](#per-instance-constraints--values-that-live-in-data); `x-instanceConstraints` (below) says when it did. |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
 | ↳ `id` | alternative entry | string | Stable ascii id of the alternative unit (`UnitMeta::id`). |
 | ↳ `display` | alternative entry | string | Human display text of the alternative unit (`UnitMeta::display`). |
@@ -1107,10 +1111,15 @@ still matters, because a *decorated* schema can put `x-decimalPlaces` on a
 property whose type is `"number"` — a precise field spelled the plain way. The
 declared precision wins there, and the field keeps the exact encoding.
 
-A bare `math::Rational` member is **not** in this family: its schema is an
-inline object of `num`/`den`/`dp` with no `x-decimalPlaces`, so it is
-encoded as an object of `num`/`den`/`dp` rather than as decimal text — the one
-object-typed member whose C++ declaration looks scalar.
+A bare `math::Rational` member joins this family only when it declares its
+places: `FieldMeta::decimals` on it is emitted as `x-decimalPlaces` (not
+`x-displayDecimals`, as for a `double`), and the field is then a `Decimal`,
+entered as one number at those places and encoded as `{num, den, dp}` — the
+encoding a `Rational` has anyway. Undeclared, its schema is an inline object of
+`num`/`den`/`dp` with no `x-decimalPlaces`, so it is entered and encoded as that
+object — the one object-typed member whose C++ declaration looks scalar.
+The declared places govern entry only: unlike a `Quantity`'s, they are not
+rounded to on dispatch, so a model that needs the precision checks it.
 
 ### Nullable fields whose type is a `$ref` — `anyOf`
 

@@ -297,14 +297,18 @@ struct FieldMeta {
     // NOLINTNEXTLINE(readability-redundant-member-init)
     std::string_view unit{};
 
-    /// @brief Display and entry precision for a plain `double`/`float` member;
-    ///        emitted as `x-displayDecimals`. Disengaged emits nothing.
+    /// @brief Display and entry precision: for a plain `double`/`float` member
+    ///        emitted as `x-displayDecimals`, for a bare `math::Rational` member
+    ///        as `x-decimalPlaces`. Disengaged emits nothing.
     ///
-    /// Deliberately not `x-decimalPlaces`: that key hands a property the exact
-    /// `{num,den,dp}` encoding, which a `double` cannot decode. This one keeps
-    /// the plain JSON-number encoding and only tells a renderer how many
-    /// fraction digits to show and accept. **Ignored on a `Quantity` member**
-    /// (its `x-decimalPlaces` is authoritative) and when it exceeds
+    /// A `double` gets `x-displayDecimals`, not `x-decimalPlaces`: the latter
+    /// hands a property the exact `{num,den,dp}` encoding, which a `double`
+    /// cannot decode, while the former keeps the plain JSON-number encoding and
+    /// only tells a renderer how many fraction digits to show and accept. A
+    /// `Rational` already travels as `{num,den,dp}`, so it gets
+    /// `x-decimalPlaces` and is entered as one decimal number at those places
+    /// rather than as three integers. **Ignored on a `Quantity` member** (its
+    /// `x-decimalPlaces` is authoritative) and when it exceeds
     /// `morph::math::kMaxDecimalPlaces`.
     // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::optional<::morph::math::DecimalPlaces> decimals{};
@@ -2268,9 +2272,17 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
     }
 }
 
+/// @brief Whether a member is a bare `math::Rational`, or an optional one.
+/// @tparam T The member's static type.
+template <typename T>
+inline constexpr bool isRationalMember = std::is_same_v<std::remove_cvref_t<T>, ::morph::math::Rational>;
+// An optional member is a `Rational` member when its value is.
+template <typename T>
+inline constexpr bool isRationalMember<std::optional<T>> = isRationalMember<T>;
+
 /// @brief Stamps @p meta's display `unit` (as `ExtUnits`) and `decimals` (as
-///        `x-displayDecimals`) onto @p property, unless @p Member is a
-///        `Quantity`.
+///        `x-displayDecimals`, or `x-decimalPlaces` on a bare `Rational`) onto
+///        @p property, unless @p Member is a `Quantity`.
 ///
 /// `ExtUnits` is the key a `Quantity` already carries, so every reader of a
 /// unit -- a renderer's suffix label, a slot chosen by unit, a view column --
@@ -2291,7 +2303,9 @@ void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
             property["ExtUnits"] = std::move(units);
         }
         if (meta.decimals.has_value() && meta.decimals->value <= ::morph::math::kMaxDecimalPlaces) {
-            property["x-displayDecimals"] = std::uint64_t{meta.decimals->value};
+            // A Rational's wire object is the exact encoding x-decimalPlaces declares; a double's is a number.
+            property[isRationalMember<Member> ? "x-decimalPlaces" : "x-displayDecimals"] =
+                std::uint64_t{meta.decimals->value};
         }
     }
 }

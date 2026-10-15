@@ -11,7 +11,7 @@
 # Re-runnable: both bookmarks are created here, and every listing assertion is
 # anchored to a captured id rather than to a count.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=alice
 expect ok capture token=$.token

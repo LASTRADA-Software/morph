@@ -27,7 +27,7 @@
 # Re-runnable: the project is created here, and the activity feed is scoped to
 # that project's own board.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=alice
 expect ok capture aliceToken=$.token

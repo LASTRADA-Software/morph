@@ -30,7 +30,7 @@
 # Every listing assertion narrows by that same nonce, so pagination cannot
 # reach them either.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=importer
 expect ok capture token=$.token

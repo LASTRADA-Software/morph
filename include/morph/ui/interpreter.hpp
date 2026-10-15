@@ -1938,6 +1938,11 @@ private:
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
+    [[nodiscard]] std::string arrangedBy(std::string const& elementId) const;
+    Node lowerArranged(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::string const& point,
+                       Axis axis, int gap);
+    Node lowerArrangeEditor(DocNode const& node, LowerCtx const& ctx, std::string const& point,
+                            CustomizePoint const& spec, std::function<void(Value)> const& choose);
     void wireForm(ElementState& element);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     [[nodiscard]] forms::Submitter aliasCalls(ModelAlias* alias);
@@ -4638,6 +4643,10 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "column" || kind == "row") {
         int const gap = static_cast<int>(onceInt("gap", 0));
+        if (std::string const arrangement = arrangedBy(node.id); !arrangement.empty()) {
+            return lowerArranged(node, ctx, element, arrangement, kind == "column" ? Axis::Vertical : Axis::Horizontal,
+                                 gap);
+        }
         if (kind == "column") {
             Column spec{.children = children("children"), .gap = gap};
             commonOf(node, ctx, element, spec.common);
@@ -5553,6 +5562,206 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     return ui::custom(std::move(spec));
 }
 
+/// @brief One child of an arranged container, as the user's choice places it.
+struct ArrangedChild {
+    /// @brief The child's id.
+    std::string id;
+    /// @brief Whether the choice hides it.
+    bool hidden = false;
+};
+
+/// @brief A container's children in the order a stored `arrange` choice gives, each marked shown or hidden.
+///
+/// A child the choice does not name keeps its declared place after the named ones, shown, and an entry that names no
+/// child, names one twice or is not a `{"id", "hidden"}` record is skipped, so a new document version survives an old
+/// choice (spec 5 §12b). A choice that is not a list leaves the declared order. Only `"hidden": true` hides.
+/// @param stored   The point's current choice.
+/// @param declared The container's children, in document order.
+/// @return Every child, in order.
+[[nodiscard]] inline std::vector<ArrangedChild> arrangedChildren(Value const& stored,
+                                                                 std::span<DocNode const* const> declared) {
+    auto const isDeclared = [declared](std::string const& childId) {
+        return std::ranges::find(declared, childId, &DocNode::id) != declared.end();
+    };
+    std::vector<ArrangedChild> out;
+    std::set<std::string, std::less<>> placed;
+    if (ValueList const* const entries = stored.asList()) {
+        for (Value const& entry : *entries) {
+            Value const* const named = entry.field("id");
+            std::string const* const name = named == nullptr ? nullptr : named->asString();
+            if (name == nullptr || !isDeclared(*name) || !placed.insert(*name).second) {
+                continue;
+            }
+            Value const* const hidden = entry.field("hidden");
+            bool const* const flag = hidden == nullptr ? nullptr : hidden->asBool();
+            out.push_back(ArrangedChild{.id = *name, .hidden = flag != nullptr && *flag});
+        }
+    }
+    for (DocNode const* const child : declared) {
+        if (!placed.contains(child->id)) {
+            out.push_back(ArrangedChild{.id = child->id});
+        }
+    }
+    return out;
+}
+
+/// @brief The ids of the children an `arrange` choice shows, in its order (`arrangedChildren`, without the hidden).
+/// @param stored   The point's current choice.
+/// @param declared The container's children, in document order.
+/// @return The ids to show, in order.
+[[nodiscard]] inline std::vector<Value> arrangedOrder(Value const& stored, std::span<DocNode const* const> declared) {
+    std::vector<Value> order;
+    for (ArrangedChild const& child : arrangedChildren(stored, declared)) {
+        if (!child.hidden) {
+            order.emplace_back(child.id);
+        }
+    }
+    return order;
+}
+
+/// @brief An arrangement as the choice an `arrange` point stores.
+/// @param children Every child, in order.
+/// @return `[{"id", "hidden"}, …]`.
+[[nodiscard]] inline Value arrangementValue(std::vector<ArrangedChild> const& children) {
+    ValueList entries;
+    entries.reserve(children.size());
+    for (ArrangedChild const& child : children) {
+        entries.emplace_back(ValueRecord{{"id", Value{child.id}}, {"hidden", Value{child.hidden}}});
+    }
+    return Value{std::move(entries)};
+}
+
+/// @brief The element of a document tree with @p elementId.
+/// @param node The subtree.
+/// @param elementId The element's id.
+/// @return The element, or `nullptr` when the subtree has none with that id.
+// NOLINTNEXTLINE(misc-no-recursion): one level per level of the document tree.
+[[nodiscard]] inline DocNode const* elementNode(DocNode const& node, std::string_view elementId) {
+    if (node.id == elementId) {
+        return &node;
+    }
+    for (auto const* const groups : {&node.children, &node.parts}) {
+        for (auto const& [slot, nodes] : *groups) {
+            static_cast<void>(slot);
+            for (DocNodePtr const& child : nodes) {
+                if (DocNode const* const found = elementNode(*child, elementId)) {
+                    return found;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+inline std::string ScreenCore::arrangedBy(std::string const& elementId) const {
+    if (elementId.empty()) {
+        return {};
+    }
+    for (auto const& [name, point] : _doc->customize) {
+        if (point.kind == "arrange" && point.of == elementId) {
+            return name;
+        }
+    }
+    return {};
+}
+
+// A keyed list over the children's ids rather than a stack, so a new choice moves the shown widgets, keeping their
+// state and focus, and mounts or unmounts only what it shows or hides. A child is lowered in the container's own
+// scope: arranging changes where it is, not what it reads.
+inline Node ScreenCore::lowerArranged(DocNode const& node, LowerCtx const& ctx, ElementState* element,
+                                      std::string const& point, Axis axis, int gap) {
+    std::vector<DocNode const*> declared;
+    for (DocNodePtr const& child : node.nodes("children")) {
+        declared.push_back(child.get());
+    }
+    auto order = [this, point, declared] { return arrangedOrder(prefs.get().at(point), declared); };
+    auto key = [](Value const& childId) { return keyOf(childId); };
+    auto view = [this, ctx, declared](reactive::Signal<Value> const& row) -> Node {
+        // The order lists only declared ids, so the lookup always finds the child.
+        auto const found = std::ranges::find(declared, textOf(row.peek(), session.formatting()), &DocNode::id);
+        return lower(**found, ctx);
+    };
+    ForEach spec{
+        .model = std::make_shared<TypedForEach<Value> const>(std::move(order), std::move(key), std::move(view)),
+        .axis = axis,
+        .gap = gap};
+    commonOf(node, ctx, element, spec.common);
+    return makeNode(std::move(spec));
+}
+
+// One row per child of the arranged container, hidden ones included: a checkbox shows or hides it, and two buttons
+// move it a place. Each edit stores the whole arrangement, so the stored list always names every child.
+inline Node ScreenCore::lowerArrangeEditor(DocNode const& node, LowerCtx const& ctx, std::string const& point,
+                                           CustomizePoint const& spec, std::function<void(Value)> const& choose) {
+    // The loader checked that `of` names a column or row of this screen.
+    DocNode const* const container = elementNode(*_doc->view, spec.of);
+    std::vector<DocNode const*> declared;
+    for (DocNodePtr const& child : container->nodes("children")) {
+        declared.push_back(child.get());
+    }
+    auto const current = [this, point, declared] { return arrangedChildren(prefs.get().at(point), declared); };
+    auto const place = [current](std::string const& childId) {
+        auto const children = current();
+        return static_cast<std::size_t>(std::ranges::find(children, childId, &ArrangedChild::id) - children.begin());
+    };
+    // Applies an edit to the arrangement as it stands, read untracked: the edit is a transition, not a binding.
+    auto const edit = [this, current, choose](std::string const& childId, auto const& change) {
+        auto children = runtime().untracked(current);
+        auto const found = std::ranges::find(children, childId, &ArrangedChild::id);
+        change(children, static_cast<std::size_t>(found - children.begin()));
+        choose(arrangementValue(children));
+    };
+    auto rows = [current] {
+        std::vector<Value> ids;
+        for (ArrangedChild const& child : current()) {
+            ids.emplace_back(child.id);
+        }
+        return ids;
+    };
+    auto key = [](Value const& childId) { return keyOf(childId); };
+    auto view = [this, current, place, edit](reactive::Signal<Value> const& row) -> Node {
+        std::string const childId = textOf(row.peek(), session.formatting());
+        Checkbox shown{.label = childId};
+        shown.checked = slotProp<bool>([current, childId] {
+            auto const children = current();
+            return !std::ranges::find(children, childId, &ArrangedChild::id)->hidden;
+        });
+        shown.onToggle = [edit, childId](bool checked) {
+            edit(childId, [checked](std::vector<ArrangedChild>& children, std::size_t index) {
+                children.at(index).hidden = !checked;
+            });
+        };
+        Button moveUp{.label = std::string{"\xE2\x86\x91"}};
+        moveUp.onClick = [edit, childId] {
+            // Clamped rather than refused: at the edge the child swaps with itself, which stores the same order.
+            edit(childId, [](std::vector<ArrangedChild>& children, std::size_t index) {
+                std::swap(children.at(index), children.at(std::max(index, std::size_t{1}) - 1));
+            });
+        };
+        moveUp.common.enabled = slotProp<bool>([place, childId] { return place(childId) > 0; });
+        moveUp.common.a11y.name = "Move " + childId + " up";
+        moveUp.common.testId = "arrange-up-" + childId;
+        Button moveDown{.label = std::string{"\xE2\x86\x93"}};
+        moveDown.onClick = [edit, childId] {
+            edit(childId, [](std::vector<ArrangedChild>& children, std::size_t index) {
+                std::swap(children.at(index), children.at(std::min(index + 1, children.size() - 1)));
+            });
+        };
+        moveDown.common.enabled =
+            slotProp<bool>([current, place, childId] { return place(childId) + 1 < current().size(); });
+        moveDown.common.a11y.name = "Move " + childId + " down";
+        moveDown.common.testId = "arrange-down-" + childId;
+        shown.common.testId = "arrange-shown-" + childId;
+        return ui::row(Row{.children = {ui::checkbox(std::move(shown)), ui::button(std::move(moveUp)),
+                                        ui::button(std::move(moveDown))},
+                           .gap = 4});
+    };
+    ForEach editor{.model =
+                       std::make_shared<TypedForEach<Value> const>(std::move(rows), std::move(key), std::move(view))};
+    commonOf(node, ctx, nullptr, editor.common);
+    return makeNode(std::move(editor));
+}
+
 inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
     std::string const point{node.name("point")};
     // A loaded document's customize node names a declared point, and every point has a choice in `prefs`.
@@ -5567,6 +5776,9 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
             host->preferenceChanged(_doc->id, point, value);
         }
     };
+    if (spec.kind == "arrange") {
+        return lowerArrangeEditor(node, ctx, point, spec, choose);
+    }
     if (spec.kind == "choice") {
         Select select;
         std::vector<SelectOption> options;

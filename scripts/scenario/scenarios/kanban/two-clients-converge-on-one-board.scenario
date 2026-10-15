@@ -18,7 +18,7 @@
 # Re-runnable: the project is created here, and both clients are given
 # Manager-equivalent access through an explicit role grant.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=alice
 expect ok capture aliceToken=$.token

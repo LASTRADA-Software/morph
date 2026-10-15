@@ -36,7 +36,7 @@
 # third shape: unlike their sibling `PayBill` they have no empty-owner guard at
 # all, so an anonymous caller is turned away by the ownership comparison instead.
 
-model AuthModel
+model Bank_AuthModel
 
 # ── An anonymous client can get itself a principal, and nothing else ────────
 client nobody
@@ -99,7 +99,7 @@ expect err message == "no session principal"
 do ListLoans
 expect err message == "no session principal"
 
-client anon-plan model=BudgetModel
+client anon-plan model=Bank_BudgetModel
 do SetBudget category=anonymous monthlyLimitMinor=100 currency=0
 expect err message == "no session principal"
 

@@ -10,7 +10,7 @@
 # the other account as its counterparty. Driving it from outside the process is
 # the only way to see that as one call rather than as two the caller sequenced.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=hopper password=hopper-pass displayName="Hopper"
 expect ok field message ~ "^(registered|username already taken)$"

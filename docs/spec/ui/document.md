@@ -216,7 +216,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   with an integer `version`, prop types from `string`, `bool`, `int`, `exact`, `number`, `json`, and
   a fallback. A `customize` node names a declared point; a `columns` point names a table; a `choice`
   lists its options and defaults to one of them; a `value` point declares its type and its default
-  has it; `pins` and `arrange` belong to the app document.
+  has it; an `arrange` point's `of` names a `column` or `row` of the same screen whose children
+  all have ids, no other `arrange` point names the same container, and the app document, which has no view,
+  may not declare one; `pins` belong to the app document.
 - **Prefetch.** Each name is a screen query whose body reads nothing but the screen's params.
 
 ## The catalog

@@ -46,7 +46,7 @@
 # carry it. No randomness and no clock, and each run's rule points at each
 # run's own category.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal
@@ -61,7 +61,7 @@ expect ok capture cash=$.id
 do OpenAccount ledgerId=1 name="Ruled spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
-client budgets model=BudgetModel
+client budgets model=Ledger_BudgetModel
 session principal=$who token=$token
 
 do CreateCategory ledgerId=1 name="Ruled groceries $cash"

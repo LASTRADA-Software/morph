@@ -20,7 +20,7 @@
 # earlier run had -- an opId is spent permanently, so a fixed one would be a
 # no-op on the second run and the first assertion would fail.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

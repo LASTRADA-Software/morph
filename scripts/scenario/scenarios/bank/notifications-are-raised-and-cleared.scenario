@@ -14,7 +14,7 @@
 # The file finishes by marking everything read, so a second pass over the same
 # database starts from the same clean slate this one did.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=clarke password=clarke-pass displayName="E. Clarke"
 expect ok field message ~ "^(registered|username already taken)$"

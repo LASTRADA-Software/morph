@@ -133,13 +133,13 @@ TEST_CASE("LedgerAuthorizer::authorize admits Login without a token, and nothing
     const LedgerAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
     const Context anonymous;  // no token at all, like a just-launched client
 
-    CHECK(authz.authorize(anonymous, "AuthModel", "Login"));
+    CHECK(authz.authorize(anonymous, "Ledger_AuthModel", "Login"));
 
     // Nothing else is reachable anonymously.
-    CHECK_FALSE(authz.authorize(anonymous, "AuthModel", "SomethingElse"));
+    CHECK_FALSE(authz.authorize(anonymous, "Ledger_AuthModel", "SomethingElse"));
     CHECK_FALSE(authz.authorize(anonymous, "LedgerModel", "Login"));
     CHECK_FALSE(authz.authorize(anonymous, "LedgerModel", "OpenAccount"));
-    CHECK_FALSE(authz.authorize(anonymous, "BudgetModel", "CreateCategory"));
+    CHECK_FALSE(authz.authorize(anonymous, "Ledger_BudgetModel", "CreateCategory"));
     CHECK_FALSE(authz.authorize(anonymous, "RuleModel", "CreateRule"));
 }
 

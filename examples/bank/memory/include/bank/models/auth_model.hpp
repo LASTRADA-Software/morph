@@ -31,7 +31,7 @@ using bank::dto::LoginRequest;
 using bank::dto::RegisterUser;
 using bank::dto::WhoAmI;
 
-BRIDGE_REGISTER_MODEL(AuthModel, "AuthModel")
+BRIDGE_REGISTER_MODEL(AuthModel, "Bank_AuthModel")
 BRIDGE_REGISTER_ACTION(AuthModel, RegisterUser, "RegisterUser")
 BRIDGE_REGISTER_ACTION(AuthModel, LoginRequest, "LoginRequest")
 BRIDGE_REGISTER_ACTION(AuthModel, ChangePassword, "ChangePassword")

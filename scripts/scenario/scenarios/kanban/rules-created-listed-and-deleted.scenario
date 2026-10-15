@@ -26,7 +26,7 @@
 #
 # Re-runnable: the project is created here, so it starts with no rules.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

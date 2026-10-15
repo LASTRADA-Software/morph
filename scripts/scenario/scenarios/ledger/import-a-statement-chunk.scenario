@@ -37,7 +37,7 @@
 # the run's nonce and stamped into every description as well as into every
 # opId, which an opId needs anyway: an opId is consumed permanently.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

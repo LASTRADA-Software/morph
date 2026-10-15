@@ -14,7 +14,7 @@
 # figures rather than "at least": a report over an account a previous run had
 # also spent from could only ever be asserted loosely.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=goldberg password=goldberg-pass displayName="A. Goldberg"
 expect ok field message ~ "^(registered|username already taken)$"
@@ -62,7 +62,7 @@ do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=50000
 expect ok field outstandingMinor == 150000
 
 # ── The budget the report is read against ───────────────────────────────────
-client plan model=BudgetModel principal=$who
+client plan model=Bank_BudgetModel principal=$who
 do SetBudget category=everything monthlyLimitMinor=100000 currency=0
 expect ok capture budget=$.id
 expect ok field monthlyLimitMinor == 100000

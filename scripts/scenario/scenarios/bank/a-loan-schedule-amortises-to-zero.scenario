@@ -15,7 +15,7 @@
 # `rateBps=0` every instalment is pure principal, so the arithmetic is exactly
 # predictable and a schedule that quietly charged interest anyway would show up.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=hamilton password=hamilton-pass displayName="M. Hamilton"
 expect ok field message ~ "^(registered|username already taken)$"

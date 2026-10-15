@@ -188,8 +188,9 @@ file to its replacement. App-specific decisions:
   where its `computedFields` suffice; the calculated concentration shown stale while in flight; and
   a write-through capture that patches the row. Its forms are `form` nodes.
 - **forms demo:** `LabApp` is the app shell — forms, the intake wizard, and `SamplesView` as a
-  `collection`. `--typed` builds the same screens from `forms::Form<A>` in local mode. The CLI
-  (`--schemas`, REPL, `--emit-html`) is unchanged.
+  `collection` — on server-defined screens, like every other application: the generic client
+  renders a `form` node from the served schema, and `forms::Form<A>` keeps its own tests rather
+  than a second, typed client. The CLI (`--schemas`, REPL, `--emit-html`) is unchanged.
 
 ## 6. Build and gating
 

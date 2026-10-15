@@ -15,7 +15,7 @@
 # step some client remembered to apply. A client-side projection that exposed
 # the full number would undo that property, which is one reason none exists.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=thompson password=thompson-pass displayName="K. Thompson"
 expect ok field message ~ "^(registered|username already taken)$"

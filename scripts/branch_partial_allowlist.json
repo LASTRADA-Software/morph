@@ -109,7 +109,7 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 2204,
+      "line": 2210,
       "source": "if (_executeDeadline.count() <= 0 || !_timeoutScheduler) {",
       "reason": "The `!_timeoutScheduler` disjunct is unreachable by construction. `setExecuteDeadline` is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and it creates `_timeoutScheduler` in the same call that makes `_executeDeadline` positive; nothing resets `_timeoutScheduler` to null afterwards (setting the deadline back to 0 only stops new calls from arming it, per that method's doc comment). So `_executeDeadline > 0 && !_timeoutScheduler` cannot hold once any positive deadline has been set."
     },
@@ -128,21 +128,21 @@
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 1838,
+      "line": 1842,
       "source": "default:",
       "context": "case Shape::Keys:",
       "reason": "The default arm is unreachable: the switch names every enumerator of detail::Shape, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentParser::entry's switch over a key's shape."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 2751,
+      "line": 2780,
       "source": "default:",
       "context": "if (cmd.value) {",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentValidator::checkCommand's switch."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 2945,
+      "line": 2974,
       "source": "default: {",
       "reason": "The default arm is unreachable: the switch names every enumerator of NameCategory, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ScopeResolver::ref's switch over what a name declares."
     },

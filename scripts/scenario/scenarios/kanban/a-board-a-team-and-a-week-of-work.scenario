@@ -16,7 +16,7 @@
 #
 # Re-runnable: the project is created here, and every id is captured.
 
-client auth model=AuthModel
+client auth model=Kanban_AuthModel
 
 do Login username=manager
 expect ok capture managerToken=$.token

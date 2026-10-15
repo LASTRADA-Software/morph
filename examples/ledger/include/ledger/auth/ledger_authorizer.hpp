@@ -105,7 +105,7 @@ public:
     using SigningAuthorizer::SigningAuthorizer;
 
     /// @brief Model type id of the one model a tokenless caller may execute on.
-    static constexpr std::string_view kAnonymousModelType = "AuthModel";
+    static constexpr std::string_view kAnonymousModelType = "Ledger_AuthModel";
     /// @brief Action type id of the one action a tokenless caller may execute.
     static constexpr std::string_view kAnonymousActionType = "Login";
 

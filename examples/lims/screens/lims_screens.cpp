@@ -2,6 +2,7 @@
 
 #include "lims_screens.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <expected>
 #include <memory>
@@ -149,6 +150,18 @@ ui::Screen resultsScreen() {
             {.when = opened, .refreshOn = sample.actions<CaptureConcentration, VerifyResult>()});
         auto const conflicts = screen.query<ListConflicts>("conflicts", sample, {}, {.when = opened});
         auto const analyses = screen.query<ListAnalyses>("analyses", catalog);
+        // The capture's reported concentration while it is typed: the server evaluates the form's fields as the
+        // action it will run, without running it.
+        auto const capture = ui::element("capture");
+        auto const field = [&capture](std::string const& name) { return capture.get(name + ".value"); };
+        auto const reported = screen.evaluate<CaptureConcentration>(
+            "reported", sample,
+            {{&CaptureConcentration::analysisVersionId, field("analysisVersionId")},
+             {&CaptureConcentration::value, field("value")},
+             {&CaptureConcentration::qualifier, field("qualifier")},
+             {&CaptureConcentration::dilution, field("dilution")},
+             {&CaptureConcentration::dilutionFactor, field("dilutionFactor")}},
+            {.when = opened, .debounce = std::chrono::milliseconds{300}});
 
         screen.title(ui::format("Results {0}", {sampleId}));
         screen.identity(sampleId);
@@ -159,7 +172,14 @@ ui::Screen resultsScreen() {
             {ui::text(
                  {.text = ui::format("{0} analyses", {ui::count(analyses.value().at(&ListAnalysesResult::analyses))})})
                  .testId("analyses"),
-             ui::form<CaptureConcentration>(sample).id(ui::element("capture")).testId("capture"),
+             ui::form<CaptureConcentration>(sample,
+                                            {.fields = {{&CaptureConcentration::reportedValue, {.omit = true}}}})
+                 .id(capture)
+                 .testId("capture"),
+             ui::text({.text = ui::format("Reported {0} mg/L",
+                                          {reported.value().at(&CaptureConcentration::reportedValue)})})
+                 .stale(reported.pending())
+                 .testId("reported"),
              ui::table(results.value().at(&ListResultsResult::results),
                        {.key = ui::row(&ResultView::id),
                         .columns = {{.name = "analysis",

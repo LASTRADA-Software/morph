@@ -14,7 +14,7 @@
 # directory, the tag names are unique to it, and every assertion is anchored
 # to a captured id rather than a count or a position.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=sifter
 expect ok capture token=$.token

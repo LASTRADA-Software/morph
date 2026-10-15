@@ -827,7 +827,7 @@ expect err message == "too many models"
 # ── The cap is on the server, not on the model type ────────────────────
 # A different type is refused too: `maxLiveModels` counts every live model
 # this RemoteServer holds, across all callers and all types.
-send register typeId=AuthModel
+send register typeId=Bookmarks_AuthModel
 expect err message == "too many models"
 
 send register typeId=TagModel

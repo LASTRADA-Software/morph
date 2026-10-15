@@ -14,7 +14,7 @@
 #
 # Re-runnable: the accounts and categories are created here.
 
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 
 # ── The reserved namespace ─────────────────────────────────────────────
 # Its own message, distinct from ordinary validation: the namespace is
@@ -26,7 +26,7 @@ do Login username="system:anything-at-all"
 expect err message == "Login: the 'system:' principal namespace is reserved"
 
 do Login username=""
-expect err message == "action failed validation: AuthModel/Login"
+expect err message == "action failed validation: Ledger_AuthModel/Login"
 
 # ── A real sign-in ─────────────────────────────────────────────────────
 do Login username=accountant
@@ -40,7 +40,7 @@ client books model=LedgerModel
 do OpenAccount ledgerId=1 name="Authorised cash" kind="Asset" currency="EUR"
 expect err message == "unauthorized"
 
-client budgets model=BudgetModel
+client budgets model=Ledger_BudgetModel
 
 do CreateCategory ledgerId=1 name="Authorised category"
 expect err message == "unauthorized"

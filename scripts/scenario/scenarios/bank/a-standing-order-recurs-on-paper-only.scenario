@@ -10,7 +10,7 @@
 # component that acts on either claim, so what is genuinely testable here is
 # the record and its lifecycle, and that is all this file asserts.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=dijkstra password=dijkstra-pass displayName="E. Dijkstra"
 expect ok field message ~ "^(registered|username already taken)$"

@@ -29,7 +29,7 @@ void BudgetModel::logAction(const Action& action, const Result& result, std::str
         return;
     }
     ::morph::journal::LogEntry entry;
-    entry.modelType = "BudgetModel";
+    entry.modelType = "Ledger_BudgetModel";
     entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
@@ -58,7 +58,7 @@ void BudgetModel::logFailure(const Action& action, const std::string& error) con
         return;
     }
     ::morph::journal::LogEntry entry;
-    entry.modelType = "BudgetModel";
+    entry.modelType = "Ledger_BudgetModel";
     entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);

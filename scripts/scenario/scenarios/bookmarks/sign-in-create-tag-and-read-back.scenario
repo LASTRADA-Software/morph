@@ -28,7 +28,7 @@
 # the id its own create returned, so nothing depends on the database being
 # empty or on any listing position.
 
-client auth model=AuthModel
+client auth model=Bookmarks_AuthModel
 
 do Login username=alice
 expect ok capture token=$.token

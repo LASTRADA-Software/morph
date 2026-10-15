@@ -53,7 +53,7 @@
 #     integer for an enum.
 
 # ── Sign in ────────────────────────────────────────────────────────────────
-client auth model=AuthModel
+client auth model=Ledger_AuthModel
 do Login username=alice
 expect ok capture token=$.token
 expect ok capture who=$.principal

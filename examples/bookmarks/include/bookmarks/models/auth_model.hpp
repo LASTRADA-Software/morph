@@ -34,7 +34,7 @@ public:
 
 }  // namespace bookmarks
 
-BRIDGE_REGISTER_MODEL(bookmarks::AuthModel, "AuthModel")
+BRIDGE_REGISTER_MODEL(bookmarks::AuthModel, "Bookmarks_AuthModel")
 // Loggable::No: the action's JSON body is the caller's claimed identity and
 // its result carries a live bearer token — neither belongs in a durable,
 // replayable action log.

@@ -13,7 +13,7 @@
 # Being an upsert is also what makes this file re-runnable: a second pass over
 # the same database re-sets the same categories rather than colliding with them.
 
-model AuthModel
+model Bank_AuthModel
 client front
 do RegisterUser username=wing password=wing-pass displayName="J. Wing"
 expect ok field message ~ "^(registered|username already taken)$"
@@ -21,7 +21,7 @@ do LoginRequest username=wing password=wing-pass
 expect ok capture who=$.principal
 expect ok field ok == true
 
-client plan model=BudgetModel principal=$who
+client plan model=Bank_BudgetModel principal=$who
 
 # ── Setting one ─────────────────────────────────────────────────────────────
 do SetBudget category=groceries monthlyLimitMinor=60000 currency=0
@@ -60,11 +60,11 @@ expect ok capture takeaway=$.id
 expect ok field monthlyLimitMinor == 0
 
 do SetBudget category=impossible monthlyLimitMinor=-1 currency=0
-expect err message == "action failed validation: BudgetModel/SetBudget"
+expect err message == "action failed validation: Bank_BudgetModel/SetBudget"
 
 # A category is required — an unnamed limit belongs to nothing.
 do SetBudget category="" monthlyLimitMinor=1000 currency=0
-expect err message == "action failed validation: BudgetModel/SetBudget"
+expect err message == "action failed validation: Bank_BudgetModel/SetBudget"
 
 # The refused pair added nothing.
 do ListBudgets owner=$who

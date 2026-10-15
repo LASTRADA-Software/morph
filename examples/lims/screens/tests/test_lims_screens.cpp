@@ -7,6 +7,7 @@
 #include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <morph/session/session_auth.hpp>
@@ -195,5 +196,55 @@ TEST_CASE("lims screens: signing in to a server opens sample registration", "[li
     }
     INFO("error: " << harness.text("error").value_or(""));
     CHECK(opened);
+    CHECK(harness.problems().empty());
+}
+
+// Mutations: keep the model's product out of the computed field (the preview stays empty), or ignore the dilution in
+// it (the diluted reading previews undiluted).
+TEST_CASE("lims screens: the results screen previews the reported concentration while it is typed", "[lims-screens]") {
+    DbFixture fixture;
+    std::int64_t sampleId = 0;
+    {
+        lims::test::ScopedPrincipal const principal{"tech"};
+        lims::SampleModel model;
+        auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-3"});
+        model.execute(lims::ReceiveSample{});
+        model.execute(lims::StartWork{});
+        sampleId = *sample.id;
+    }
+    ScreenHarness harness{limsApp(), std::string{lims::screens::kResults}, RigMode::Local, sampleParams(sampleId),
+                          LocalSetup{.db = {}, .user = "tech"}};
+    REQUIRE(harness.waitFor([&harness] { return harness.text("analyses").has_value(); }));
+    // The preview waits out its debounce on the harness's manual clock, so the clock moves while it is awaited.
+    auto const previews = [&harness](std::string_view expected) {
+        return harness.waitFor([&harness, expected] {
+            harness.advance(std::chrono::milliseconds{300});
+            return harness.text("reported") == expected;
+        });
+    };
+    harness.editField("capture", "value", "1.25");
+    bool const neat = previews("Reported 1.250 mg/L");
+    INFO("reported: " << harness.text("reported").value_or("<none>"));
+    CHECK(neat);
+
+    auto const dilution = harness.findIn("capture", "Select", "field_dilution");
+    REQUIRE(dilution);
+    REQUIRE(harness.waitFor(
+        [&harness, &dilution] { return harness.backend().prop(*dilution, "options").contains("diluted"); }));
+    harness.chooseField("capture", "dilution", R"("diluted")");
+    // The factor is shown only once the choice reaches the form, and a hidden field takes no typing.
+    auto const factor = harness.findIn("capture", "TextInput", "field_dilutionFactor");
+    auto const form = harness.find("Column", "capture");
+    REQUIRE(factor);
+    REQUIRE(form);
+    REQUIRE(harness.waitFor([&] { return harness.shownUnder(*form, *factor); }));
+    harness.editField("capture", "dilutionFactor", "4");
+    bool const diluted = previews("Reported 5.000 mg/L");
+    INFO("reported: " << harness.text("reported").value_or("<none>"));
+    CHECK(diluted);
+    for (std::string const& problem : harness.problems()) {
+        UNSCOPED_INFO(problem);
+    }
     CHECK(harness.problems().empty());
 }

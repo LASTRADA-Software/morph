@@ -78,7 +78,7 @@ private:
 
 }  // namespace ledger
 
-BRIDGE_REGISTER_MODEL(ledger::BudgetModel, "BudgetModel")
+BRIDGE_REGISTER_MODEL(ledger::BudgetModel, "Ledger_BudgetModel")
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::CreateCategory, "CreateCategory")
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::LinkAccountToCategory, "LinkAccountToCategory")
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::CreateBudget, "CreateBudget")

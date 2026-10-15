@@ -52,7 +52,7 @@ TEST_CASE("gallery: the screen registers, validated, and the bundle builds", "[g
 }
 
 // Mutation: drop a node kind from the screen — the missing kind is named here.
-TEST_CASE("gallery: uses every node kind of ui/1 but the forms engine's, which wait for it", "[gallery]") {
+TEST_CASE("gallery: uses every node kind of ui/1", "[gallery]") {
     auto emitted = gallery::homeScreen().write();
     REQUIRE(emitted.has_value());
     std::set<std::string> used;
@@ -60,12 +60,10 @@ TEST_CASE("gallery: uses every node kind of ui/1 but the forms engine's, which w
     auto const& document = std::get<morph::ui::Json::object_t>(emitted->json.data);
     collectKinds(document.at("view"), used);
     collectKinds(document.at("components"), used);
-    std::vector<std::string_view> const pending = gallery::pendingKinds();
     std::vector<std::string_view> const kinds = morph::ui::nodeKinds();
     for (std::string_view const kind : kinds) {
-        bool const waits = std::ranges::find(pending, kind) != pending.end();
         INFO("kind " << kind);
-        CHECK(used.contains(std::string{kind}) != waits);
+        CHECK(used.contains(std::string{kind}));
     }
     for (std::string const& kind : used) {
         INFO("kind " << kind);

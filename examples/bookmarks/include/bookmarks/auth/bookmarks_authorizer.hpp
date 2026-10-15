@@ -124,7 +124,7 @@ public:
     using SigningAuthorizer::SigningAuthorizer;
 
     /// @brief Model type id of the one model a tokenless caller may execute on.
-    static constexpr std::string_view kAnonymousModelType = "AuthModel";
+    static constexpr std::string_view kAnonymousModelType = "Bookmarks_AuthModel";
     /// @brief Action type id of the one action a tokenless caller may execute.
     static constexpr std::string_view kAnonymousActionType = "Login";
 
@@ -200,7 +200,7 @@ public:
     /// inherited `SigningAuthorizer::authorize()`, which requires a validly
     /// signed, unexpired token, and then through the model's own
     /// `session::current()->principal` scoping. The `modelType` parameter
-    /// stays in the signature (and the `"AuthModel"` mention stays in this
+    /// stays in the signature (and the `"Bookmarks_AuthModel"` mention stays in this
     /// comment) because the *type*-keyed half of this hook — refusing a
     /// model type outright — remains available if this rung ever needs it;
     /// the identity-keyed half is a choice not to gate, not an inability to.
