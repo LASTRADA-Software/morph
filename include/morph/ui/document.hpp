@@ -760,15 +760,16 @@ inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-inline constexpr std::array<KeySpec, 9> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
-                                                      {"action", Shape::Text, {}, kRequired},
-                                                      {"prefill", Shape::Expr},
-                                                      {"submit", Shape::Text},
-                                                      {"showErrors", Shape::Text},
-                                                      {"fields", Shape::ExprRecord, "fields"},
-                                                      {"onSubmit", Shape::Commands},
-                                                      {"onSuccess", Shape::Commands},
-                                                      {"onError", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 10> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+                                                       {"action", Shape::Text, {}, kRequired},
+                                                       {"prefill", Shape::Expr},
+                                                       {"key", Shape::Expr},
+                                                       {"submit", Shape::Text},
+                                                       {"showErrors", Shape::Text},
+                                                       {"fields", Shape::ExprRecord, "fields"},
+                                                       {"onSubmit", Shape::Commands},
+                                                       {"onSuccess", Shape::Commands},
+                                                       {"onError", Shape::Commands}}};
 /// @brief The keys of `collection` and `wizard`.
 inline constexpr std::array<KeySpec, 2> kCollectionKeys = {
     {{"model", Shape::Name, {}, kRequired}, {"action", Shape::Text, {}, kRequired}}};

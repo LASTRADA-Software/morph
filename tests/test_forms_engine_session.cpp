@@ -114,6 +114,34 @@ TEST_CASE("FormSession: prefilling a complete payload never submits; the next us
     CHECK(harness.server.lastBody() == R"({"a":9,"b":7})");
 }
 
+// Mutation: make refill load every field (as prefill does) -> the typed "9" is replaced by the record's 1.
+TEST_CASE("FormSession: refill keeps the fields the user changed since the last load, and loads the rest",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    harness.type(*form, "a", "9");
+    form->refill(R"({"a":1,"b":2})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "9");
+    CHECK(form->field("b").text().peek() == "2");
+    // A field it loaded counts as loaded, so the next value of the record loads it again.
+    form->refill(R"({"a":1,"b":3})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "9");
+    CHECK(form->field("b").text().peek() == "3");
+    // A programmatic value is not an edit.
+    form->assign("a", "4");
+    form->refill(R"({"a":5,"b":3})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "5");
+    // prefill loads every field, edited or not.
+    harness.type(*form, "b", "8");
+    form->prefill(R"({"a":6,"b":7})");
+    harness.settle();
+    CHECK(form->field("b").text().peek() == "7");
+    CHECK(harness.server.submits().size() == 1);  // the typed "8" on a ready form; no load submitted
+}
+
 TEST_CASE("FormSession: reset clears every draft and does not submit a form that stays ready",
           "[forms-engine][session]") {
     Harness harness;

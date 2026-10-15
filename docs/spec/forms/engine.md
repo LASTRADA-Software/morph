@@ -180,8 +180,14 @@ it. A view mounted on it is destroyed first.
   `lastError()` and `successCount()`, which ticks once per success. In automatic mode an Effect submits whenever
   the form becomes ready with a body it has not sent; in explicit mode only `submit()` does. A form already ready
   when it is built submits once in automatic mode.
-- **Programmatic changes** — `prefill(bodyJson)`, `assign(path, json)`, `reset()`, and clearing a stale Choice
-  selection — record the body they produce as already seen, so they never submit; the next user edit does.
+- **Programmatic changes** — `prefill(bodyJson)`, `refill(bodyJson)`, `assign(path, json)`, `reset()`, and
+  clearing a stale Choice selection — record the body they produce as already seen, so they never submit; the
+  next user edit does.
+- **Edits since the last load.** The session keeps each top-level field's snapshot (its draft, unit and
+  engagement, and its members' and rows') as `prefill`, `reset` or `assign` last left it, and as it was built.
+  `refill(bodyJson)` loads like `prefill`, except that a top-level field whose snapshot differs (the user changed
+  it since) keeps what was entered. It is for a later value of the record already being edited; `prefill` is for
+  another record.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no

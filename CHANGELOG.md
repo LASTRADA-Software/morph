@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **A form's prefill keeps what the user typed into the record being edited.**
+  Every non-null prefill reloaded every field, so a query's first value arriving
+  after the user started typing discarded the edit. The `form` node gains an
+  optional `key`: a value under the same key, and the first value, keep the
+  fields the user changed (`forms::FormSession::refill`); a new key, or a later
+  value of a form without one, reloads every field.
+
 - **A serial mutation's `serialKey` reads the run's body as `body`.** The key
   could read nothing a run carries, so per-item serialization (one queue per
   task) could not be declared. `{"ref": "body.taskId"}` now keys each run by its

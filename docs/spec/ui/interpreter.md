@@ -233,7 +233,9 @@ applies to the width.
   `auto`) chooses over `x-submitMode`; every submission and options fetch goes through the `model`
   alias's channel, bound for its instance when the call is made (a Choice whose options action belongs to
   another model therefore fails its fetch); `prefill` is followed, each non-null
-  value loading the form as a programmatic change. It lowers to `forms::formView` inside a column that
+  value loading the form as a programmatic change: the first value, and a value whose `key` equals the
+  previous one's, `refill` the form, so a field the user changed keeps what they entered; a new `key`,
+  or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
   carries the node's common properties. `onSubmit`, `onSuccess` and `onError` run once per attempt,
   success and failure, with the body, the reply and the error text as `event`. Its element values
   are `ready`, `body` (the record it would submit, `null` while not ready), `submitted`, `pending`

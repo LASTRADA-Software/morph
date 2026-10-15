@@ -3765,6 +3765,9 @@ template <typename Action>
 struct FormOptions {
     /// @brief The values the form starts from.
     AnyHandle prefill;
+    /// @brief The identity of the record `prefill` holds: a new value of the same key keeps the fields the user
+    ///        changed, a new key loads every field. Without one, only the first value keeps them.
+    AnyHandle key;
     /// @brief How it submits, such as `explicit`.
     std::string submit;
     /// @brief When its errors show.
@@ -3795,6 +3798,7 @@ template <typename Action, typename Model>
     node.text("model", model.alias())
         .text("action", std::string{::morph::model::ActionTraits<Action>::typeId()})
         .put("prefill", options.prefill)
+        .put("key", options.key)
         .text("submit", options.submit);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));
