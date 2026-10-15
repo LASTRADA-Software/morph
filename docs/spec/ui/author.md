@@ -161,7 +161,7 @@ input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)`
 ## Registration
 
 `Screen` is an id and a builder function from `Scope&` to the view; `screen<"id">(fn)` and
-`screen("id", fn)` make one. `Screen::emit()` runs the builder and writes the document; a builder
+`screen("id", fn)` make one. `Screen::write()` runs the builder and writes the document; a builder
 that throws — `AuthoringError` or anything else — is a refusal at the document's root with the
 exception's text.
 

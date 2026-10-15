@@ -4025,7 +4025,7 @@ public:
 
     /// @brief Runs the builder and writes the document.
     /// @return The document, or a refusal at the root naming what the builder could not write.
-    [[nodiscard]] std::expected<Emitted, Refusal> emit() const {
+    [[nodiscard]] std::expected<Emitted, Refusal> write() const {
         try {
             Scope scope;
             Node const view = _builder(scope);
@@ -4094,7 +4094,7 @@ public:
             return std::unexpected(
                 Refusal{.document = screen.id(), .path = "/id", .reason = "a screen with this id is registered"});
         }
-        auto emitted = screen.emit();
+        auto emitted = screen.write();
         if (!emitted) {
             return std::unexpected(std::move(emitted.error()));
         }

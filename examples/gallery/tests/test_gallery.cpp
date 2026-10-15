@@ -53,7 +53,7 @@ TEST_CASE("gallery: the screen registers, validated, and the bundle builds", "[g
 
 // Mutation: drop a node kind from the screen — the missing kind is named here.
 TEST_CASE("gallery: uses every node kind of ui/1 but the forms engine's, which wait for it", "[gallery]") {
-    auto emitted = gallery::homeScreen().emit();
+    auto emitted = gallery::homeScreen().write();
     REQUIRE(emitted.has_value());
     std::set<std::string> used;
     // The view, and the components' fallbacks; elsewhere `kind` names a customization point's kind.
