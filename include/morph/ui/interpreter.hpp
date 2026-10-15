@@ -4941,15 +4941,32 @@ inline void ScreenCore::wireForm(ElementState& element) {
     element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), aliasSubmits(alias->model),
                                                         aliasCalls(alias->model), engineOptions());
     if (ExprPtr const prefill = node.prop("prefill")) {
-        // A prefill follows its expression: a query's row arriving, or another record chosen, loads the form again.
+        // A prefill follows its expression. A value of the record being edited (the first value, or one under the
+        // same `key`) keeps the fields the user changed; another record, a new `key`, or any later value of a form
+        // without one, loads every field.
         forms::FormSession* const form = element.form.get();
-        scope.nodes.effect([this, &scope, prefill, form] {
+        struct Followed {
+            bool loaded = false;
+            Value key;
+        };
+        auto const followed = std::make_shared<Followed>();
+        scope.nodes.effect([this, &scope, prefill, key = node.prop("key"), form, followed] {
             Value const value = evalIn(scope, nullptr, prefill);
             if (value.isNull()) {
                 return;
             }
-            std::string const json = glz::write_json(valueToJson(value)).value_or(std::string{});
-            runtime().untracked([&] { form->prefill(json); });
+            runtime().untracked([&] {
+                Value const current = key ? evalIn(scope, nullptr, key) : Value{};
+                bool const same = !followed->loaded || (key && current == followed->key);
+                followed->loaded = true;
+                followed->key = current;
+                std::string const json = glz::write_json(valueToJson(value)).value_or(std::string{});
+                if (same) {
+                    form->refill(json);
+                } else {
+                    form->prefill(json);
+                }
+            });
         });
     }
 }

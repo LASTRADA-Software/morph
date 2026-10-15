@@ -146,7 +146,7 @@ input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)`
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).
-- **`form<A>(model, {.prefill, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError})`**:
+- **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError})`**:
   the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit, ...}}`.
 - **`collection<View>(model)` and `wizard<Wizard>(model)`** (`ui/author_forms.hpp`) take a view
   descriptor or a `flows::Wizard` instead of an action. The node names the view's `v-query` or the

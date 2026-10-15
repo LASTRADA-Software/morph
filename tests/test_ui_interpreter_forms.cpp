@@ -285,3 +285,58 @@ TEST_CASE("form, collection and wizard nodes: a submit that succeeds refetches t
         CHECK(h.dispatcher.count("Lims_ListResults") == 2);
     }
 }
+
+namespace {
+
+// A form prefilled from a query of the record chosen by state `id`; KEY is the form's `key`, or nothing.
+std::string followed(std::string_view key) {
+    return std::string{R"({
+  "vocab": "ui/1", "id": "followed",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "id": { "init": 1 } },
+  "queries": { "rec": { "model": "sample", "action": "Lims_ListResults", "body": { "obj": { "id": { "ref": "id" } } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "textInput", "testId": "pick", "onChange": [ { "set": "id", "value": { "ref": "event" } } ] },
+    { "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration", "submit": "explicit",
+      "prefill": { "query": "rec" })"} +
+           std::string{key} + " } ] } }";
+}
+
+}  // namespace
+
+// Mutation: make the prefill effect always call FormSession::prefill -> the late first value discards "typed".
+TEST_CASE("form node: a value of the record being edited keeps what the user typed; another record loads every field",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto const note = [&h] { return h.backend.prop(h.byTestId("TextInput", "field_note"), "text"); };
+    auto const row = [&h] { return h.backend.prop(h.byTestId("TextInput", "field_rowIndex"), "text"); };
+    SECTION("with a key: the same key keeps the edit, a new key reloads") {
+        auto const screen = h.mount(followed(R"(, "key": { "ref": "id" })"));
+        h.backend.edit(h.byTestId("TextInput", "field_note"), "typed");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"note":"stored","rowIndex":1})");
+        CHECK(note() == "typed");
+        CHECK(row() == "1");
+        h.session.backendChanged("primary");  // a refetch of the same record
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"note":"stored again","rowIndex":2})");
+        CHECK(note() == "typed");
+        CHECK(row() == "2");
+        h.backend.edit(h.byTestId("TextInput", "pick"), "2");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":2,"note":"other","rowIndex":3})");
+        CHECK(note() == "other");
+        CHECK(row() == "3");
+    }
+    SECTION("without a key: only the first value keeps the edit") {
+        auto const screen = h.mount(followed(""));
+        h.backend.edit(h.byTestId("TextInput", "field_note"), "typed");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"note":"stored","rowIndex":1})");
+        CHECK(note() == "typed");
+        h.session.backendChanged("primary");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"note":"stored again","rowIndex":2})");
+        CHECK(note() == "stored again");
+    }
+}

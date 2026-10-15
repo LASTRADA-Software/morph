@@ -417,6 +417,15 @@ public:
         _rows.mutate([&](auto& rows) { std::erase_if(rows, [&](auto const& row) { return row->key() == key; }); });
     }
 
+    /// @brief What the field holds, as one string: two snapshots are equal exactly when the field holds the same
+    ///        entry (draft, unit and engagement, and every member's and row's). Untracked.
+    /// @return The snapshot.
+    [[nodiscard]] std::string snapshot() const {
+        std::string out;
+        appendSnapshot(out);
+        return out;
+    }
+
     /// @brief Replaces the draft with the decoded wire value; null or absent is blank. Does not
     ///        mark the change programmatic — the caller does, in the same batch.
     /// @param value The wire value, or null.
@@ -506,6 +515,27 @@ public:
     }
 
 private:
+    // Each draft is written with its length first, so no draft can be read as the end of another.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's cells are fields.
+    void appendSnapshot(std::string& out) const {
+        std::string const& text = _text.peek();
+        out += std::to_string(text.size());
+        out += ':';
+        out += text;
+        out += std::to_string(_unit.peek());
+        out += _engaged.peek() ? '+' : '-';
+        for (auto const& entry : _members) {
+            entry->appendSnapshot(out);
+        }
+        for (auto const& row : _rows.peek()) {
+            out += '#';
+            for (auto const& cell : row->fields()) {
+                cell->appendSnapshot(out);
+            }
+        }
+        out += ';';
+    }
+
     [[nodiscard]] std::string resolveSlot(i18n::FieldSlot slot, std::string const& literal) const {
         auto const& translations = _core->options().translations;
         std::string_view const locale = _core->options().bcp47;
@@ -759,6 +789,7 @@ public:
         for (auto const& field : _fields) {
             field->start();
         }
+        markLoaded();
         _autoSubmit = std::make_unique<reactive::Effect>(runtime, [this] { autoSubmit(); });
     }
 
@@ -890,6 +921,33 @@ public:
             }
             _core->markProgrammatic();
         });
+        markLoaded();
+    }
+
+    /// @brief Loads a stored payload like `prefill`, except that a top-level field the user changed since the form
+    ///        was last loaded keeps what they entered: a later value of the record being edited, such as its first
+    ///        value arriving after the user started typing, or a refetch, does not discard the edit. Nothing is
+    ///        submitted. Text that is not a JSON object changes nothing.
+    /// @param bodyJson The payload.
+    void refill(std::string_view bodyJson) {
+        auto const dom = detail::engine::parseJson(bodyJson);
+        if (!dom || !dom->is_object()) {
+            return;
+        }
+        std::vector<std::size_t> loaded;
+        runtime().batch([&] {
+            for (std::size_t index = 0; index < _fields.size(); ++index) {
+                FieldState& field = *_fields.at(index);
+                if (field.snapshot() == _loaded.at(index)) {
+                    field.load(detail::engine::member(*dom, field.spec().name));
+                    loaded.push_back(index);
+                }
+            }
+            _core->markProgrammatic();
+        });
+        for (std::size_t const index : loaded) {
+            _loaded.at(index) = _fields.at(index)->snapshot();
+        }
     }
 
     /// @brief Sets one field from a JSON value, programmatically (nothing is submitted).
@@ -907,6 +965,14 @@ public:
             target.load(&*dom);
             _core->markProgrammatic();
         });
+        // A programmatic value is not an edit: the top-level field holding the target counts as loaded.
+        for (std::size_t index = 0; index < _fields.size(); ++index) {
+            std::string const& name = _fields.at(index)->spec().name;
+            if (path.starts_with(name) &&
+                (path.size() == name.size() || path.at(name.size()) == '.' || path.at(name.size()) == '[')) {
+                _loaded.at(index) = _fields.at(index)->snapshot();
+            }
+        }
     }
 
     /// @brief Blanks every field, programmatically (nothing is submitted).
@@ -917,6 +983,7 @@ public:
             }
             _core->markProgrammatic();
         });
+        markLoaded();
     }
 
     /// @brief Whether a submission is in flight. Tracked.
@@ -967,6 +1034,13 @@ public:
     }
 
 private:
+    void markLoaded() {
+        _loaded.clear();
+        for (auto const& field : _fields) {
+            _loaded.push_back(field->snapshot());
+        }
+    }
+
     [[nodiscard]] std::optional<std::string> assemble() const {
         std::string json = "{";
         bool first = true;
@@ -1035,6 +1109,8 @@ private:
     reactive::Mutation<std::string, std::string> _mutation;
     reactive::Signal<std::uint64_t> _attempts;
     std::optional<std::string> _lastSubmitted;
+    /// @brief Each top-level field's snapshot as last loaded; a field whose snapshot differs was edited since.
+    std::vector<std::string> _loaded;
     std::unique_ptr<reactive::Effect> _autoSubmit;
 };
 
