@@ -11,6 +11,11 @@ API surface).
 
 ### Changed
 
+- **An `arrange` customize point belongs to a screen.** The loader accepted it
+  only in the app document, which has no view, so its `of` named a node of no
+  document. It is now a screen-scope point whose `of` must name an element of
+  the same screen that declares children; the app document refuses one.
+
 - **A model or action id registered for a second type is refused.** The model
   factory and both action registries stored registrations with
   `insert_or_assign`, so a second type under a taken id silently replaced the

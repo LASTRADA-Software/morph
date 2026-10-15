@@ -340,7 +340,7 @@ into those pages through `DocumentScreenHost::mountInto`.
 ## 8. Preferences and catalog
 
 **Application-scope customization.** Spec 5 §12b's `customize` block may appear on the app document
-as well as on a screen. Two point kinds are added:
+as well as on a screen. Two point kinds are added: `pins` on the app document, `arrange` on a screen:
 
 | Kind | Holds |
 |---|---|
@@ -351,11 +351,10 @@ as well as on a screen. Two point kinds are added:
 the ids. It orders and hides what the document declares and never positions or sizes anything, so
 free layout editing stays out of scope (spec 5 §15).
 
-**Open: where `arrange` is declared.** The app document has no view, so an app-scope `arrange`
-point's `of` names a node of no document, while the container it orders is the overview screen's.
-Either `arrange` is a screen-scope kind, declared by the overview screen and checked like `columns`,
-or its `of` names the screen as well as the node. Until that is decided, `arrange` is parsed and
-stored like any point and not applied.
+**Where `arrange` is declared.** `arrange` is a screen-scope kind: the overview screen declares it
+beside its own view, its `of` names one of that screen's containers, and the loader checks it, as it
+checks a `columns` point's table. The app document has no view, so an `arrange` point there is
+refused.
 
 **Storage seam.**
 

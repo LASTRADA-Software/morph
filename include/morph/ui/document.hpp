@@ -436,7 +436,7 @@ struct CustomizePoint {
     std::string name;
     /// @brief The declaration's JSON Pointer.
     std::string path;
-    /// @brief `columns`, `choice`, `value`, `layout`, `saved`, and in the app document `pins` and `arrange`.
+    /// @brief `columns`, `choice`, `value`, `layout`, `saved`, `arrange`, and in the app document `pins`.
     std::string kind;
     /// @brief The element a `columns` or `arrange` point adjusts.
     std::string of;
@@ -1642,8 +1642,12 @@ private:
         if (!listed(kPointKinds, decl.kind)) {
             refuse(pointerAppend(path, "kind"), "`" + decl.kind + "` is not a kind of customization point");
         }
-        if ((decl.kind == "pins" || decl.kind == "arrange") && !appDocument) {
-            refuse(pointerAppend(path, "kind"), "a `" + decl.kind + "` point belongs to the app document");
+        if (decl.kind == "pins" && !appDocument) {
+            refuse(pointerAppend(path, "kind"), "a `pins` point belongs to the app document");
+        }
+        // The container an `arrange` point orders is a screen's, and the app document has no view.
+        if (decl.kind == "arrange" && appDocument) {
+            refuse(pointerAppend(path, "kind"), "an `arrange` point belongs to the screen whose container it orders");
         }
         decl.of = text(fields, "of", path, decl.kind == "columns" || decl.kind == "arrange");
         Json const* const fallback = member(fields, "default");
@@ -2518,13 +2522,19 @@ private:
     void checkCustomizePoints() {
         for (auto const& [name, point] : _doc->customize) {
             static_cast<void>(name);
-            if (point.kind != "columns" || !_doc->view) {
-                continue;
+            if (point.kind == "columns" && _doc->view) {
+                auto const found = _elements.find(point.of);
+                if (found == _elements.end() || found->second->kind != "table") {
+                    refuse(pointerAppend(point.path, "of"),
+                           "a `columns` point names a table; `" + point.of + "` is not one");
+                }
             }
-            auto const found = _elements.find(point.of);
-            if (found == _elements.end() || found->second->kind != "table") {
-                refuse(pointerAppend(point.path, "of"),
-                       "a `columns` point names a table; `" + point.of + "` is not one");
+            if (point.kind == "arrange") {
+                auto const found = _elements.find(point.of);
+                if (found == _elements.end() || found->second->nodes("children").empty()) {
+                    refuse(pointerAppend(point.path, "of"),
+                           "an `arrange` point names a container of this screen; `" + point.of + "` is not one");
+                }
             }
         }
     }
