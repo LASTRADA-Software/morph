@@ -315,7 +315,8 @@ fetcher that goes through the cache.
 - `concurrency` decides what a run does while another is in flight:
   - `exclusive` (default): the run is refused. Elements bound to `{"pending": "capture"}` disable.
   - `serial`: runs are queued and sent in order; `serialKey` (an expression, valid only with
-    `serial`) makes one queue per key.
+    `serial`) makes one queue per key. It reads the run's body as `body`, so `{"ref": "body.taskId"}`
+    serializes per task whichever command started the run.
   - `latest`: every run is sent; only the newest reply is applied.
   - `parallel`: every run is sent; replies are applied as they arrive.
 - `invalidates` refetches the named queries after a success, in one batch with the result, so the

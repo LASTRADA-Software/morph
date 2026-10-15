@@ -2747,7 +2747,10 @@ inline void MutationRuntime::run(Value body, std::shared_ptr<Bindings const> bin
     _inFlight.set(_inFlight.peek() + 1);
     _core->addPending(1);
     if (_decl->concurrency == Concurrency::Serial) {
-        Value const key = evalIn(*_scope, run->bindings.get(), _decl->serialKey);
+        // The key reads the run's body, so a run keys the same whichever command started it.
+        Bindings withBody = *run->bindings;
+        withBody.push_back(Binding{.name = "body", .read = [body = run->body] { return body; }});
+        Value const key = evalIn(*_scope, &withBody, _decl->serialKey);
         run->serialKey = key.isNull() ? std::string{} : canonicalJson(key);
         if (_busy.contains(run->serialKey)) {
             _queues[run->serialKey].push_back(run);
