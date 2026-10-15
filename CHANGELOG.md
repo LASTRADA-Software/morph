@@ -279,6 +279,14 @@ API surface).
   offer saving. A guard written as `decide(true)`/`decide(false)` becomes
   `choose(CloseChoice::Discard)`/`choose(CloseChoice::Cancel)`.
 
+- **Route history** (spec 3 §10). `ui::RouteHistory` keeps the route of the
+  screen a shell shows in an `ui::IHistory`, such as the browser's: the first
+  screen replaces the starting entry, later ones push, and a move back or
+  forward reopens the entry's route, or the start screen for one the session
+  cannot open. `initial()` is the route a reloaded page or a shared link holds.
+  `fragmentOf`/`routeOfFragment` write and read the `#/<route>` fragment, and
+  `ui::testing::MemoryHistory` is the tests' history.
+
 - **An `arrange` point orders and hides a column's or row's children.** The
   container a screen's `arrange` point names now lowers to a keyed list over its
   children's ids: the stored `[{"id", "hidden"}]` choice orders them, hides some,
