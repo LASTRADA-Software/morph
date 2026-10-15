@@ -354,6 +354,20 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::Point{"filter"}.pref("text")) == R"({"pref":"filter.text"})");
 }
 
+TEST_CASE("an arrange point names the column whose children it orders, and the screen validates", "[ui][author]") {
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.arrange", [](ui::Scope& screen) {
+        auto const board = ui::element("board");
+        static_cast<void>(screen.arrangePoint("tiles", board));
+        return ui::column({ui::text({.text = "sales"}).id(ui::element("sales")),
+                           ui::text({.text = "stock"}).id(ui::element("stock"))})
+            .id(board);
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    REQUIRE(added.has_value());
+    CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
+}
+
 TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     ui::QueryHandle<ListResults> const results{"results"};
     CHECK(text(results.pending()) == R"({"pending":"results"})");

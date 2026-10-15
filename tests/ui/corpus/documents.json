@@ -216,6 +216,13 @@
                  { "kind": "text", "id": "sales", "text": "sales" }, { "kind": "text", "id": "stock", "text": "stock" } ] } }
     },
     {
+      "name": "an overview screen arranges the children of a row",
+      "doc": { "vocab": "ui/1", "id": "toolbar",
+               "customize": { "tools": { "kind": "arrange", "of": "strip" } },
+               "view": { "kind": "row", "id": "strip", "children": [
+                 { "kind": "text", "id": "cut", "text": "cut" }, { "kind": "text", "id": "copy", "text": "copy" } ] } }
+    },
+    {
       "name": "a watch chain without a cycle",
       "doc": { "vocab": "ui/1", "id": "t",
                "state": { "a": { "init": 1 }, "b": { "init": 1 }, "c": { "init": 1 } },
@@ -469,8 +476,12 @@
     { "name": "an unknown point kind", "doc": { "customize": { "p": { "kind": "colour" } } }, "at": "/customize/p/kind", "reason": "is not a kind of customization point" },
     { "name": "pins in a screen", "doc": { "customize": { "p": { "kind": "pins" } } }, "at": "/customize/p/kind", "reason": "belongs to the app document" },
     { "name": "arrange in the app document", "doc": { "id": "app", "customize": { "p": { "kind": "arrange", "of": "x" } } }, "omit": ["view"], "at": "/customize/p/kind", "reason": "belongs to the screen whose container it orders" },
-    { "name": "an arrange point of a node without children", "doc": { "customize": { "p": { "kind": "arrange", "of": "x" } }, "view": { "kind": "text", "id": "x" } }, "at": "/customize/p/of", "reason": "names a container of this screen" },
-    { "name": "an arrange point of no element", "doc": { "customize": { "p": { "kind": "arrange", "of": "nowhere" } }, "view": { "kind": "column", "children": [] } }, "at": "/customize/p/of", "reason": "names a container of this screen" },
+    { "name": "an arrange point of a node without children", "doc": { "customize": { "p": { "kind": "arrange", "of": "x" } }, "view": { "kind": "text", "id": "x" } }, "at": "/customize/p/of", "reason": "names a column or row of this screen" },
+    { "name": "an arrange point of no element", "doc": { "customize": { "p": { "kind": "arrange", "of": "nowhere" } }, "view": { "kind": "column", "children": [] } }, "at": "/customize/p/of", "reason": "names a column or row of this screen" },
+    { "name": "an arrange point of a column without children", "doc": { "customize": { "p": { "kind": "arrange", "of": "c" } }, "view": { "kind": "column", "id": "c", "children": [] } }, "at": "/customize/p/of", "reason": "names a column or row of this screen" },
+    { "name": "an arrange point of a grid", "doc": { "customize": { "p": { "kind": "arrange", "of": "g" } }, "view": { "kind": "grid", "id": "g", "children": [ { "kind": "text", "id": "a", "text": "a" } ] } }, "at": "/customize/p/of", "reason": "names a column or row of this screen" },
+    { "name": "an arranged child without an id", "doc": { "customize": { "p": { "kind": "arrange", "of": "c" } }, "view": { "kind": "column", "id": "c", "children": [ { "kind": "text", "id": "a", "text": "a" }, { "kind": "text", "text": "b" } ] } }, "at": "/customize/p/of", "reason": "a child of `c` has none" },
+    { "name": "two arrange points of one container", "doc": { "customize": { "p": { "kind": "arrange", "of": "c" }, "q": { "kind": "arrange", "of": "c" } }, "view": { "kind": "column", "id": "c", "children": [ { "kind": "text", "id": "a", "text": "a" } ] } }, "at": "/customize/q/of", "reason": "is arranged by another point" },
     { "name": "a choice without options", "doc": { "customize": { "p": { "kind": "choice" } } }, "at": "/customize/p", "reason": "lists its `options`" },
     { "name": "a choice default that is not an option", "doc": { "customize": { "p": { "kind": "choice", "options": ["a"], "default": "b" } } }, "at": "/customize/p/default", "reason": "is one of its options" },
     { "name": "a choice default that is not a string", "doc": { "customize": { "p": { "kind": "choice", "options": ["a"], "default": 1 } } }, "at": "/customize/p/default", "reason": "is one of its options" },

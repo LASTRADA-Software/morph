@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <string_view>
 
 #include "ui_interpreter_support.hpp"
 
@@ -150,6 +151,109 @@ TEST_CASE("interpreter permissions: customization points read the user's choice,
     h.settle();
     CHECK(h.text("filter") == "-");
     CHECK(h.host.log.back() == "resetPrefs prefs all");
+}
+
+namespace {
+
+constexpr char const* kArranged = R"({
+  "vocab": "ui/1", "id": "overview",
+  "customize": { "tiles": { "kind": "arrange", "of": "board" }, "tools": { "kind": "arrange", "of": "strip" } },
+  "view": { "kind": "column", "id": "page", "children": [
+    { "kind": "column", "id": "board", "testId": "board", "children": [
+      { "kind": "text", "id": "sales", "text": "sales" },
+      { "kind": "text", "id": "stock", "text": "stock" },
+      { "kind": "text", "id": "staff", "text": "staff" } ] },
+    { "kind": "row", "id": "strip", "testId": "strip", "children": [
+      { "kind": "text", "id": "cut", "text": "cut" },
+      { "kind": "text", "id": "copy", "text": "copy" } ] },
+    { "kind": "customize", "testId": "edit-tiles", "point": "tiles" },
+    { "kind": "customize", "testId": "edit-tools", "point": "tools" } ] } })";
+
+// The texts of a container's children, in its order.
+std::string arrangement(Harness const& h, std::string_view kind = "Column", std::string_view testId = "board") {
+    std::string out;
+    for (int const child : h.backend.children(h.byTestId(kind, testId))) {
+        out += (out.empty() ? "" : " ") + h.backend.prop(child, "text");
+    }
+    return out;
+}
+
+ui::Value tile(std::string id, bool hidden = false) {
+    return ui::Value{ui::ValueRecord{{"id", ui::Value{std::move(id)}}, {"hidden", ui::Value{hidden}}}};
+}
+
+}  // namespace
+
+// Mutations: lower an arranged container as a plain stack (the stored order is never applied), or rebuild it on a
+// new choice (a kept child's widget changes).
+TEST_CASE("interpreter permissions: an arrange point orders and hides its container's children", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kArranged);
+    CHECK(arrangement(h) == "sales stock staff");
+    int const sales = h.backend.children(h.byTestId("Column", "board")).front();
+
+    CHECK(screen->setPreference("tiles", ui::Value{ui::ValueList{tile("staff"), tile("stock", true), tile("sales")}}));
+    h.settle();
+    CHECK(arrangement(h) == "staff sales");
+    CHECK(h.backend.children(h.byTestId("Column", "board")).back() == sales);
+
+    // An entry naming no child, a repeated one and a malformed one are skipped; an unnamed child keeps its place
+    // after the named ones.
+    screen->setPreference(
+        "tiles", ui::Value{ui::ValueList{tile("gone"), tile("stock"), tile("stock", true), ui::Value{"sales"}}});
+    h.settle();
+    CHECK(arrangement(h) == "stock sales staff");
+
+    // `hidden` may be left out, and only `true` hides.
+    screen->setPreference("tiles", ui::Value{ui::ValueList{ui::Value{ui::ValueRecord{{"id", ui::Value{"staff"}}}},
+                                                           ui::Value{ui::ValueRecord{{"id", ui::Value{"sales"}},
+                                                                                     {"hidden", ui::Value{"yes"}}}}}});
+    h.settle();
+    CHECK(arrangement(h) == "staff sales stock");
+
+    screen->setPreference("tiles", ui::Value{"not a list"});
+    h.settle();
+    CHECK(arrangement(h) == "sales stock staff");
+
+    // A row is arranged along its own axis.
+    CHECK(arrangement(h, "Row", "strip") == "cut copy");
+    screen->setPreference("tools", ui::Value{ui::ValueList{tile("copy")}});
+    h.settle();
+    CHECK(arrangement(h, "Row", "strip") == "copy cut");
+}
+
+// Mutations: leave hidden children out of the editor (stock's row disappears once hidden), or swap the wrong way (up
+// moves staff down).
+TEST_CASE("interpreter permissions: an arrange point's editor moves and hides children and stores every one",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kArranged);
+    CHECK(h.backend.prop(h.byTestId("Button", "arrange-up-sales"), "enabled") == "false");
+    CHECK(h.backend.prop(h.byTestId("Button", "arrange-down-staff"), "enabled") == "false");
+
+    h.backend.click(h.byTestId("Button", "arrange-up-staff"));
+    h.settle();
+    CHECK(arrangement(h) == "sales staff stock");
+    h.backend.toggle(h.byTestId("Checkbox", "arrange-shown-stock"));
+    h.settle();
+    CHECK(arrangement(h) == "sales staff");
+    // A hidden child keeps its row, so it can be shown again.
+    CHECK(h.backend.prop(h.byTestId("Checkbox", "arrange-shown-stock"), "checked") == "false");
+    CHECK(
+        h.host.log.back() ==
+        R"(pref overview tiles [{"hidden":false,"id":"sales"},{"hidden":false,"id":"staff"},{"hidden":true,"id":"stock"}])");
+
+    h.backend.click(h.byTestId("Button", "arrange-down-sales"));
+    h.settle();
+    CHECK(arrangement(h) == "staff sales");
+    h.backend.toggle(h.byTestId("Checkbox", "arrange-shown-stock"));
+    h.settle();
+    CHECK(arrangement(h) == "staff sales stock");
+
+    // The row's editor finds its container past the column's.
+    h.backend.click(h.byTestId("Button", "arrange-up-copy"));
+    h.settle();
+    CHECK(arrangement(h, "Row", "strip") == "copy cut");
 }
 
 TEST_CASE("interpreter permissions: env, session and host values follow the session", "[ui][interpreter]") {

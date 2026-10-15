@@ -2303,6 +2303,18 @@ public:
         return addPoint(name, std::move(decl));
     }
 
+    /// @brief An `arrange` point: the user reorders and hides the children of a column or row, each of which has an
+    ///        id.
+    /// @param name      The point's name.
+    /// @param container The column or row.
+    /// @return The point.
+    Point arrangePoint(std::string const& name, Element const& container) {
+        Json decl = Json::object_t{};
+        detail::put(decl, "kind", std::string{"arrange"});
+        detail::put(decl, "of", container.name());
+        return addPoint(name, std::move(decl));
+    }
+
     /// @brief A `choice` point: one of a list of options.
     /// @param name     The point's name.
     /// @param options  The options.

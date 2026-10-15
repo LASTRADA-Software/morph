@@ -270,6 +270,17 @@ API surface).
 
 ### Added
 
+- **An `arrange` point orders and hides a column's or row's children.** The
+  container a screen's `arrange` point names now lowers to a keyed list over its
+  children's ids: the stored `[{"id", "hidden"}]` choice orders them, hides some,
+  and leaves a child it does not name at its declared place after them, and a
+  new choice moves the widgets rather than rebuilding them. The loader requires
+  the container to be a `column` or `row` whose children all have ids, named by
+  one point only. The author builder is `Scope::arrangePoint`. A `customize`
+  node of the point is its editor: every child, hidden ones included, with a
+  checkbox that shows or hides it and buttons that move it a place; an edit
+  stores the whole arrangement and calls `preferenceChanged`.
+
 - **A bare `math::Rational` member can declare its places and be entered as one
   decimal.** Its schema was the `{num, den, dp}` object, so a form rendered three
   integer inputs and 12.34 was typed as 1234, 2 and 100. `FieldMeta::decimals`

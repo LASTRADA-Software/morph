@@ -125,9 +125,6 @@ owner, where their replies arrive.
 
 - **App-scope points.** `pins` and the `app` scope wait for the app root scope (spec 6 §5), which nothing mounts
   yet, and for a settings screen that can name an app point (spec 6 §19).
-- **`arrange` is checked, not applied.** It is a screen-scope point whose `of` names a container of that screen,
-  and the loader checks that. The interpreter does not yet reorder or hide the container's children by the stored
-  list, as it does not yet fit `columns`.
 - **Offline.** Spec 5 §12b keeps choices locally while offline and writes them on reconnect; that is the backend
   switch's (spec 6 §9).
 - **The fit of `columns`, `layout` and `saved`.** Their stored shapes are their editors', and the interpreter

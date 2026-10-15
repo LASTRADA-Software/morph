@@ -216,10 +216,18 @@ applies to the width.
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,
   `boundary.error` is the first failure's text.
-- **`customize`** lowers a `choice` point to a select and a string `value` point to a text input, each
-  writing the screen's preference and calling `preferenceChanged`; other points show the point's name.
+- **`customize`** lowers a `choice` point to a select, a string `value` point to a text input, and an `arrange`
+  point to one row per child of its container, hidden ones included: a checkbox shows or hides the child and two
+  buttons move it a place, disabled at the ends. Each writes the screen's preference and calls
+  `preferenceChanged`; an `arrange` edit stores the whole arrangement, every child named. Other points show the
+  point's name.
   Storing the choices, and loading them back on mount, is `PreferenceSync`'s
   ([`preferences.md`](preferences.md)).
+- **An arranged `column` or `row`**, one an `arrange` point names, lowers to a keyed `ForEach` over its children's
+  ids instead of a stack, so a new choice moves the shown widgets, keeping their state and focus. The choice is a
+  list of `{"id": child, "hidden": bool}`: the named children come first in its order, a hidden one is not mounted,
+  and a child it does not name keeps its declared place after them. An entry naming no child, naming one twice, or
+  not of that shape is skipped, and a choice that is not a list leaves the declared order.
 - **`custom`** lowers to `ui::custom` with every prop its component declares, a missing one as its type's empty
   value, and the component's host `version` as `minVersion`. `string` crosses as its formatted text, `int` and `exact` as
   plain decimal text (an exact value with its declared places, a quantity with its unit), `json` as its JSON text,

@@ -785,9 +785,9 @@ places, none of which changes the document:
     typed setting, readable in expressions as `{"pref": "density"}`; `layout` lets the user collapse
     panels and choose the default tab of a `tabs` node; `saved` keeps named sets of `value` points,
     such as saved filters.
-  - The app document may declare a `customize` block as well, with two more kinds: `pins` (an ordered,
-    optionally grouped list of catalog ids) and `arrange` (an ordered list of the declared children
-    of a container node, each enabled or hidden; it orders and hides, and never positions or sizes).
+  - Two more kinds: `pins` on the app document (an ordered, optionally grouped list of catalog ids)
+    and `arrange` on a screen (an ordered list of the declared children of one of its containers,
+    each enabled or hidden; it orders and hides, and never positions or sizes; spec 6 §8).
   - The client stores each choice through an `IPreferencesStore` (spec 6 §8), by default a framework
     preferences model on the server, keyed by the person the server derives from the verified
     principal, the application, the screen (or `app`) and the point id, so a user's choices follow

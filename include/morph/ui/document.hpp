@@ -2520,6 +2520,7 @@ private:
     }
 
     void checkCustomizePoints() {
+        std::set<std::string, std::less<>> arranged;
         for (auto const& [name, point] : _doc->customize) {
             static_cast<void>(name);
             if (point.kind == "columns" && _doc->view) {
@@ -2530,12 +2531,30 @@ private:
                 }
             }
             if (point.kind == "arrange") {
-                auto const found = _elements.find(point.of);
-                if (found == _elements.end() || found->second->nodes("children").empty()) {
-                    refuse(pointerAppend(point.path, "of"),
-                           "an `arrange` point names a container of this screen; `" + point.of + "` is not one");
-                }
+                checkArranged(point, arranged);
             }
+        }
+    }
+
+    // The stored order names children by id, so the container is a stack whose every child has one, and one point
+    // orders it: two would each claim the order.
+    void checkArranged(CustomizePoint const& point, std::set<std::string, std::less<>>& arranged) {
+        auto const found = _elements.find(point.of);
+        if (found == _elements.end() || (found->second->kind != "column" && found->second->kind != "row") ||
+            found->second->nodes("children").empty()) {
+            refuse(pointerAppend(point.path, "of"),
+                   "an `arrange` point names a column or row of this screen that has children; `" + point.of +
+                       "` is not one");
+        }
+        for (DocNodePtr const& child : found->second->nodes("children")) {
+            if (child->id.empty()) {
+                refuse(pointerAppend(point.path, "of"),
+                       "an `arrange` point orders its container's children by id; a child of `" + point.of +
+                           "` has none");
+            }
+        }
+        if (!arranged.insert(point.of).second) {
+            refuse(pointerAppend(point.path, "of"), "`" + point.of + "` is arranged by another point");
         }
     }
 

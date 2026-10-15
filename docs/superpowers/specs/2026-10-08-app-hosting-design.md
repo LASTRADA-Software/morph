@@ -352,9 +352,10 @@ the ids. It orders and hides what the document declares and never positions or s
 free layout editing stays out of scope (spec 5 §15).
 
 **Where `arrange` is declared.** `arrange` is a screen-scope kind: the overview screen declares it
-beside its own view, its `of` names one of that screen's containers, and the loader checks it, as it
-checks a `columns` point's table. The app document has no view, so an `arrange` point there is
-refused.
+beside its own view, its `of` names one of that screen's columns or rows, and the loader checks it, as
+it checks a `columns` point's table. Every child of the container has an id, which the stored list
+names: `[{"id": "sales", "hidden": false}, …]`. The app document has no view, so an `arrange` point
+there is refused.
 
 **Storage seam.**
 
