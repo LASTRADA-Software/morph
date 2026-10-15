@@ -372,7 +372,7 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
 }
 
 TEST_CASE("the reference screen of spec 5 section 11 matches its golden", "[ui][author][golden]") {
-    auto emitted = resultsScreen().emit();
+    auto emitted = resultsScreen().write();
     REQUIRE(emitted.has_value());
     checkGolden("results", emitted->json);
     ui::ScreenRegistry registry;
@@ -754,7 +754,7 @@ ui::Screen commandsScreen() {
 }  // namespace
 
 TEST_CASE("declarations, lifecycle keys, components and points match their golden", "[ui][author][golden]") {
-    auto emitted = declarationsScreen().emit();
+    auto emitted = declarationsScreen().write();
     REQUIRE(emitted.has_value());
     checkGolden("declarations", emitted->json);
     auto const refusal = refusalOf(declarationsScreen());
@@ -764,7 +764,7 @@ TEST_CASE("declarations, lifecycle keys, components and points match their golde
 }
 
 TEST_CASE("every node kind matches its golden", "[ui][author][golden]") {
-    auto emitted = paletteScreen().emit();
+    auto emitted = paletteScreen().write();
     REQUIRE(emitted.has_value());
     checkGolden("palette", emitted->json);
     auto const refusal = refusalOf(paletteScreen());
@@ -774,7 +774,7 @@ TEST_CASE("every node kind matches its golden", "[ui][author][golden]") {
 }
 
 TEST_CASE("every command matches its golden", "[ui][author][golden]") {
-    auto emitted = commandsScreen().emit();
+    auto emitted = commandsScreen().write();
     REQUIRE(emitted.has_value());
     checkGolden("commands", emitted->json);
     auto const refusal = refusalOf(commandsScreen());
@@ -1094,7 +1094,7 @@ TEST_CASE("a scope that declares one kind of thing writes it", "[ui][author]") {
                                                 ui::dialog(ui::element("b"), {.title = "B"}, withQuery),
                                                 ui::dialog(ui::element("c"), {.title = "C"}, withMutation),
                                                 ui::dialog(ui::element("d"), {.title = "D"}, withCheck)});
-                         }).emit();
+                         }).write();
     REQUIRE(emitted.has_value());
     CHECK(emitted->text.contains(R"("scope":{"let":{"doubled")"));
     CHECK(emitted->text.contains(R"("scope":{"queries":{"inner")"));

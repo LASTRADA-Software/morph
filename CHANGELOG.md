@@ -11,6 +11,12 @@ API surface).
 
 ### Changed
 
+- **`morph::ui::author::Screen::emit()` is `write()`.** Qt defines `emit` as a
+  keyword macro, so a Qt server — which is where screens are written — could not
+  include the builders after a Qt header. `tests/qt/test_qt_keywords.cpp`
+  includes `<QObject>` first and keeps it so. Pre-1.0, per
+  `docs/spec/VERSIONING.md`.
+
 - **`ui::Workspace`, the workspace shell** (spec 6 §7, §15): tabs over screens mounted through
   `DocumentScreenHost::mountInto`. Opening an identity that is open focuses its tab, a singleton screen has one tab,
   and a `reuseEmpty` placeholder is replaced in place. `close`, `closeOthers`, `closeAll` and `closeSaved` run each
