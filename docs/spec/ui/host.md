@@ -183,6 +183,15 @@ entry. The first back then reopens the same screen.
 
 `MemoryHistory` holds the entries in memory, with `back()`, `forward()` and `follow(route)` for a typed address.
 
+**`qt_quick::BrowserHistory`**, built on WebAssembly only, is the page's history. `push` and `replace` call
+`history.pushState` and `history.replaceState` with the route's fragment, which change the fragment without a
+`hashchange`. A move back or forward, or an edited address, is found by reading `location.hash` on a 100 ms `QTimer`.
+The callback therefore runs on the Qt event loop, never inside a JavaScript handler, and no JavaScript function is
+bound to C++. `push` and `replace` are skipped while the address holds a move the timer has not reported yet. The user's move wins,
+and the next tick reports it. The generic client passes one in its WebAssembly build. An explicit `--screen` there
+wins over the route the history holds. A move made while a sign-in reloads the catalog, and the link the page was
+opened with, are opened once the reload ends, before any navigation the sign-in asked for.
+
 ## Design decisions
 
 | Decision | Choice | Why |

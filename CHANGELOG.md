@@ -285,7 +285,8 @@ API surface).
   forward reopens the entry's route, or the start screen for one the session
   cannot open. `initial()` is the route a reloaded page or a shared link holds.
   `fragmentOf`/`routeOfFragment` write and read the `#/<route>` fragment, and
-  `ui::testing::MemoryHistory` is the tests' history.
+  `ui::testing::MemoryHistory` is the tests' history, and on WebAssembly
+  `qt_quick::BrowserHistory` is the page's, which the generic client uses.
 
 - **An `arrange` point orders and hides a column's or row's children.** The
   container a screen's `arrange` point names now lowers to a keyed list over its

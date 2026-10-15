@@ -22,6 +22,9 @@
 
 #if MORPH_CLIENT_HAS_QT_QUICK
 #include <morph/qt_quick/frontend.hpp>
+#ifdef __EMSCRIPTEN__
+#include <morph/qt_quick/browser_history.hpp>
+#endif
 #endif
 #if MORPH_CLIENT_HAS_TUI
 #include <morph/tui/frontend.hpp>
@@ -54,6 +57,12 @@ struct ShellFactory {
                     }
                 },
             .onMounted = {}};
+#if MORPH_CLIENT_HAS_QT_QUICK && defined(__EMSCRIPTEN__)
+        // The page's history, made once the frontend's event loop exists. It is never destroyed, so its timer never
+        // outlives the event loop; a page's runtime does not exit.
+        static auto* const history = new morph::qt_quick::BrowserHistory{};  // NOLINT(cppcoreguidelines-owning-memory)
+        options.history = history;
+#endif
         if (args->exitAfterMount) {
             options.onMounted = [&context, problems, mounted](std::string const& /*screenId*/) {
                 *mounted = true;
