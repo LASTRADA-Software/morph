@@ -18,6 +18,7 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
     [ "navigator.hpp", "da/d0b/navigator_8hpp.html", "da/d0b/navigator_8hpp" ],
     [ "preference_sync.hpp", "df/db0/preference__sync_8hpp.html", "df/db0/preference__sync_8hpp" ],
     [ "preferences.hpp", "df/d07/preferences_8hpp.html", "df/d07/preferences_8hpp" ],
+    [ "queueing_dispatcher.hpp", "d2/de0/queueing__dispatcher_8hpp.html", "d2/de0/queueing__dispatcher_8hpp" ],
     [ "route.hpp", "d4/d2f/route_8hpp.html", "d4/d2f/route_8hpp" ],
     [ "service.hpp", "d3/d31/service_8hpp.html", "d3/d31/service_8hpp" ],
     [ "service_client.hpp", "dd/d56/service__client_8hpp.html", "dd/d56/service__client_8hpp" ],

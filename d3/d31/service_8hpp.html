@@ -180,6 +180,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:ad9e64f82f50f869f0a17e7dd6365a259"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a catalog entry's own fields.  <br /></td></tr>
 <tr class="memitem:a61f10b6fe342beea9342254a1633dbc8" id="r_a61f10b6fe342beea9342254a1633dbc8"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a61f10b6fe342beea9342254a1633dbc8">morph::ui::detail::permitsAll</a> (<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, std::vector&lt; <a class="el" href="../../dd/d95/structmorph_1_1ui_1_1ActionRef.html">ActionRef</a> &gt; const &amp;refs)</td></tr>
 <tr class="memdesc:a61f10b6fe342beea9342254a1633dbc8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal of <code class="param">session</code> may run every action of <code class="param">refs</code>.  <br /></td></tr>
+<tr class="memitem:ad69b07175bd3a612103673995ff06c20" id="r_ad69b07175bd3a612103673995ff06c20"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ad69b07175bd3a612103673995ff06c20">morph::ui::isUiServiceRead</a> (std::string_view modelType, std::string_view actionType) noexcept</td></tr>
+<tr class="memdesc:ad69b07175bd3a612103673995ff06c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The server side of the UI service (spec 5 §12, §12b, §13): <span class="tt">UiRegistry</span> collects an application's screens and files and builds a <span class="tt">ServedBundle</span>; <span class="tt">UiService</span> answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from it as a <span class="tt">RemoteServer</span> envelope service. </p>
@@ -303,6 +305,47 @@ Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>Whether it may run all of them; <span class="tt">true</span> for none. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad69b07175bd3a612103673995ff06c20" name="ad69b07175bd3a612103673995ff06c20"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad69b07175bd3a612103673995ff06c20">&#9670;&#160;</a></span>isUiServiceRead()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::isUiServiceRead </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>modelType</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>. </p>
+<p>An application that serves a login screen admits these for a session with no principal yet, so a client can greet the service, read the catalog and fetch the login screen. Admitting them discloses no other screen: <span class="tt">ui-catalog</span> lists, and <span class="tt">ui-fetch</span> serves, a non-public screen only to a principal who may run its queries, which the authoriser still decides. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">modelType</td><td>The model type asked about. </td></tr>
+    <tr><td class="paramname">actionType</td><td>The action asked about. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it is one of those reads. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00668">668</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

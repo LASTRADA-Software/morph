@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: Member List</title>
+<title>morph: morph/ui/queueing_dispatcher.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de0/queueing__dispatcher_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,23 +117,46 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/da2/classmo
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">queueing_dispatcher.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
+<div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;deque&gt;</code><br />
+<code>#include &lt;exception&gt;</code><br />
+<code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;string&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
+<code>#include &quot;../attributes.hpp&quot;</code><br />
+<code>#include &quot;../core/backend.hpp&quot;</code><br />
+<code>#include &quot;../core/completion.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>&quot;</code><br />
+</div>
+<p><a href="../../d2/de0/queueing__dispatcher_8hpp_source.html">Go to the source code of this file.</a></p>
+<table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AQueueingDispatcher" id="r_morph_3A_3Aui_3A_3AQueueingDispatcher"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html">morph::ui::QueueingDispatcher</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html" title="The interpreter&#39;s view of the bridge: binds a model by its type id, privately or to a shared instance...">Dispatcher</a></span> that holds a queued call the server cannot be reached for, and replays it on reconnect.  <a href="../../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html#details">More...</a><br /></td></tr>
+</table>
+<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>The client's offline queue for a document's mutations (spec 5 §5, <span class="tt">"offline": "queue"</span>): a <span class="tt">Dispatcher</span> that holds a call that cannot reach the server and settles it when its replay does. </p>
 
-<p>This is the complete list of members for <a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a>, including all inherited members.</p>
-<table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html#ac57e60ee81c40f692f84b9fa6250e073">fetchOptions</a>(const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html#af78b2e4af13ef54619eeb5e57bd435e8">MultiModelFormsControllerCore</a>(std::string schemasJson)</td><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">explicit</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html#ac0f3b0e5e8bb71fc0a1f9089fe49864e">MultiModelFormsControllerCore</a>(::morph::bridge::Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec, std::string schemasJson)</td><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html#a48b8ba292e0d2063923cd228a77c58ef">schemasJson</a>() const noexcept</td><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html#a5aa46d67bdd9f4ef64e0a3dea95755fd">submitIfValid</a>(const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td><td class="entry"><a class="el" href="../../d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html">morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-</table></div><!-- contents -->
+<p class="definition">Definition in file <a class="el" href="../../d2/de0/queueing__dispatcher_8hpp_source.html">queueing_dispatcher.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
+<div id="page-nav" class="page-nav-panel">
+<div id="page-nav-resize-handle"></div>
+<div id="page-nav-tree">
+<div id="page-nav-contents">
+</div><!-- page-nav-contents -->
+</div><!-- page-nav-tree -->
+</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>ui</b></li><li class="navelem"><a href="../../d2/de0/queueing__dispatcher_8hpp.html">queueing_dispatcher.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

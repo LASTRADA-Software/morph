@@ -20,7 +20,7 @@ var searchData=
   ['beginshutdown_17',['beginShutdown',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9ea8ed30f49ff089f677e09210ffc486',1,'morph::backend::RemoteServer']]],
   ['between_18',['between',['../d5/d8c/message_8hpp.html#a80bd07a4e729108b0953069fae80383e',1,'morph::ui::detail']]],
   ['binary_19',['binary',['../d1/dc0/author_8hpp.html#a99f8d5d3a0168fd774c17e8635a91547',1,'morph::ui::author::detail']]],
-  ['bind_20',['bind',['../d5/d80/classmorph_1_1ui_1_1Dispatcher.html#a9766e5fd803e097af301ec552cef981a',1,'morph::ui::Dispatcher::bind()'],['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html#aa50537ce153bbd86ab5be94d08b59f2b',1,'morph::ui::BridgeDispatcher::bind()']]],
+  ['bind_20',['bind',['../d5/d80/classmorph_1_1ui_1_1Dispatcher.html#a9766e5fd803e097af301ec552cef981a',1,'morph::ui::Dispatcher::bind()'],['../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html#aa50537ce153bbd86ab5be94d08b59f2b',1,'morph::ui::BridgeDispatcher::bind()'],['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html#aa16caf2cef35aeba99f5c506e909a099',1,'morph::ui::QueueingDispatcher::bind()']]],
   ['bindbytype_21',['bindByType',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a25e9a30690f6d5cbbbe78c216355c3e5',1,'morph::bridge::Bridge']]],
   ['binding_22',['binding',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087',1,'morph::bridge::BridgeHandler::binding()'],['../db/d73/classmorph_1_1ui_1_1Prop.html#a5b614d51eb953400676b9376a794a2a9',1,'morph::ui::Prop::binding()']]],
   ['bindingprimary_23',['bindingPrimary',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a783a5885f3041a222751ef842ef0118e',1,'morph::bridge::Bridge']]],

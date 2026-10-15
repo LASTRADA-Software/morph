@@ -12,5 +12,6 @@ var service_8hpp =
     [ "morph::ui::UiService", "d1/d38/classmorph_1_1ui_1_1UiService.html", "d1/d38/classmorph_1_1ui_1_1UiService" ],
     [ "morph::ui::detail::checkServable", "d3/d31/service_8hpp.html#acab995b09a00bc773a70a72f080437eb", null ],
     [ "morph::ui::detail::checkEntry", "d3/d31/service_8hpp.html#ad9e64f82f50f869f0a17e7dd6365a259", null ],
-    [ "morph::ui::detail::permitsAll", "d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8", null ]
+    [ "morph::ui::detail::permitsAll", "d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8", null ],
+    [ "morph::ui::isUiServiceRead", "d3/d31/service_8hpp.html#ad69b07175bd3a612103673995ff06c20", null ]
 ];

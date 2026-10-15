@@ -98,7 +98,7 @@ var searchData=
   ['repair_95',['repair',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a4563b35857b43289bb2545c59b794f3c',1,'morph::table::detail::JobInput']]],
   ['repaired_96',['repaired',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#afef142673ef7b526b3722c1bbea87f57',1,'morph::table::detail::JobResult']]],
   ['repairs_97',['repairs',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a7ce94b667674a7f33869740ea298181d',1,'morph::table::EngineStats']]],
-  ['replay_98',['replay',['../index.html#offline--connectivity--replay',1,'&lt;span class=&quot;tt&quot;&gt;offline/&lt;/span&gt; — connectivity + replay'],['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b',1,'morph::offline::ReconnectCoordinator::Deps::replay']]],
+  ['replay_98',['replay',['../index.html#offline--connectivity--replay',1,'&lt;span class=&quot;tt&quot;&gt;offline/&lt;/span&gt; — connectivity + replay'],['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b',1,'morph::offline::ReconnectCoordinator::Deps::replay'],['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html#a929059a2e9ada890ae15707756e71386',1,'morph::ui::QueueingDispatcher::replay()']]],
   ['replayable_20action_20log_99',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
   ['replayfunction_100',['ReplayFunction',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996',1,'morph::offline::SyncWorker']]],
   ['reply_5frouter_2ehpp_101',['reply_router.hpp',['../d6/d41/reply__router_8hpp.html',1,'']]],

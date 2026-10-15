@@ -31,8 +31,10 @@ var searchData=
   ['queryoptions_28',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
   ['queryref_29',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author::QueryRef'],['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html#a3f66aabb923e430e10a1f2afde3bbad4',1,'morph::ui::author::QueryRef::QueryRef()']]],
   ['queryruntime_30',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail::QueryRuntime'],['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a6730b678581e1071579ff5d97257e021',1,'morph::ui::detail::QueryRuntime::QueryRuntime()']]],
-  ['queueitem_31',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]],
-  ['queueoffline_32',['queueOffline',['../df/dd1/structmorph_1_1ui_1_1CallOptions.html#a360fe8bc334291e1df3e62947febca5b',1,'morph::ui::CallOptions']]],
-  ['quick_20renderer_20headers_20include_20morph_20qt_5fquick_20sources_20in_20src_20qt_5fquick_33',['Qt Quick renderer headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt_quick/&lt;/span&gt;, sources in &lt;span class=&quot;tt&quot;&gt;src/qt_quick/&lt;/span&gt;)',['../index.html#qt-quick-renderer-headers-includemorphqt_quick-sources-in-srcqt_quick',1,'']]],
-  ['quit_34',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
+  ['queueing_5fdispatcher_2ehpp_31',['queueing_dispatcher.hpp',['../d2/de0/queueing__dispatcher_8hpp.html',1,'']]],
+  ['queueingdispatcher_32',['QueueingDispatcher',['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html',1,'morph::ui::QueueingDispatcher'],['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html#ad52821e6d32df257af7ff7fbad0dd9c1',1,'morph::ui::QueueingDispatcher::QueueingDispatcher()']]],
+  ['queueitem_33',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]],
+  ['queueoffline_34',['queueOffline',['../df/dd1/structmorph_1_1ui_1_1CallOptions.html#a360fe8bc334291e1df3e62947febca5b',1,'morph::ui::CallOptions']]],
+  ['quick_20renderer_20headers_20include_20morph_20qt_5fquick_20sources_20in_20src_20qt_5fquick_35',['Qt Quick renderer headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt_quick/&lt;/span&gt;, sources in &lt;span class=&quot;tt&quot;&gt;src/qt_quick/&lt;/span&gt;)',['../index.html#qt-quick-renderer-headers-includemorphqt_quick-sources-in-srcqt_quick',1,'']]],
+  ['quit_36',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
 ];

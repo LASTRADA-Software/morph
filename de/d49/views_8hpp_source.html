@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d49/views_8
 <div class="line"><a id="l00497" name="l00497"></a><span class="lineno">  497</span> </div>
 <div class="line"><a id="l00498" name="l00498"></a><span class="lineno">  498</span>    <span class="comment">// The row element type is the query result itself when it is a</span></div>
 <div class="line"><a id="l00499" name="l00499"></a><span class="lineno">  499</span>    <span class="comment">// std::vector&lt;...&gt;, else its first array-valued member, in declaration</span></div>
-<div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>    <span class="comment">// order — the same two shapes Choice&#39;s optionRows reads (DynamicForm.qml).</span></div>
+<div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>    <span class="comment">// order — the same two shapes a Choice reads its option rows from.</span></div>
 <div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>    std::string columnsJson = <span class="stringliteral">&quot;[]&quot;</span>;</div>
 <div class="line"><a id="l00502" name="l00502"></a><span class="lineno">  502</span>    <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (isStdVector&lt;Result&gt;) {</div>
 <div class="line"><a id="l00503" name="l00503"></a><span class="lineno">  503</span>        <span class="keyword">using </span><a class="code hl_enumvalue" href="../../d4/db6/collection_8hpp.html#ab793459efd58cfa40b89c78ad469feb5aa70367aa7cb74e510f4f9413ccf059d3">Row</a> = <span class="keyword">typename</span> std::remove_cvref_t&lt;Result&gt;::value_type;</div>

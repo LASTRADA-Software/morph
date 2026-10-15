@@ -204,17 +204,6 @@ var annotated_dup =
         [ "SyncWorker", "d3/d55/classmorph_1_1offline_1_1SyncWorker.html", "d3/d55/classmorph_1_1offline_1_1SyncWorker" ]
       ] ],
       [ "qt", null, [
-        [ "bridge", null, [
-          [ "detail", null, [
-            [ "OwnedLocalBridge", "d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html", "d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge" ]
-          ] ],
-          [ "GenericModelBridgeCore", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore" ],
-          [ "MultiModelBridgeCore", "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html", "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore" ]
-        ] ],
-        [ "forms", null, [
-          [ "FormsControllerCore", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore" ],
-          [ "MultiModelFormsControllerCore", "d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html", "d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore" ]
-        ] ],
         [ "QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", "d4/d30/classmorph_1_1qt_1_1QtExecutor" ],
         [ "QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend" ],
         [ "QtWebSocketBackendConfig", "d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html", "d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig" ],
@@ -703,6 +692,7 @@ var annotated_dup =
         [ "Prop", "db/d73/classmorph_1_1ui_1_1Prop.html", "db/d73/classmorph_1_1ui_1_1Prop" ],
         [ "Quantity", "d8/d23/structmorph_1_1ui_1_1Quantity.html", "d8/d23/structmorph_1_1ui_1_1Quantity" ],
         [ "QueryDecl", "da/db7/structmorph_1_1ui_1_1QueryDecl.html", "da/db7/structmorph_1_1ui_1_1QueryDecl" ],
+        [ "QueueingDispatcher", "de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html", "de/d20/classmorph_1_1ui_1_1QueueingDispatcher" ],
         [ "Refusal", "de/d52/structmorph_1_1ui_1_1Refusal.html", "de/d52/structmorph_1_1ui_1_1Refusal" ],
         [ "Rgba", "d9/d7c/structmorph_1_1ui_1_1Rgba.html", "d9/d7c/structmorph_1_1ui_1_1Rgba" ],
         [ "Route", "de/d2f/structmorph_1_1ui_1_1Route.html", "de/d2f/structmorph_1_1ui_1_1Route" ],

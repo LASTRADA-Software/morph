@@ -626,7 +626,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text. </p>
-<p>Drops <span class="tt">NumericLocale::groupSeparator</span> where it is correctly placed, replaces every occurrence of <span class="tt">NumericLocale::decimalSeparator</span> with <span class="tt">.</span>, and rewrites the locale's digits as ASCII ones. A default-constructed <span class="tt">NumericLocale</span> is the identity transform (the locale-free behavior). Malformed input (a second decimal separator, a sign anywhere but the leading position of the <em>output</em>, two digit families in one entry, or any character that is not a digit) yields <span class="tt">std::nullopt</span> rather than a best-effort guess. The decimal point counts as output, so a sign placed straight after the separator ("`,-5`" in a de-DE locale) is rejected &ndash; matching the QML mirror in <span class="tt">src/qt/forms/qml/DynamicForm.qml</span>, which rejects it too.</p>
+<p>Drops <span class="tt">NumericLocale::groupSeparator</span> where it is correctly placed, replaces every occurrence of <span class="tt">NumericLocale::decimalSeparator</span> with <span class="tt">.</span>, and rewrites the locale's digits as ASCII ones. A default-constructed <span class="tt">NumericLocale</span> is the identity transform (the locale-free behavior). Malformed input (a second decimal separator, a sign anywhere but the leading position of the <em>output</em>, two digit families in one entry, or any character that is not a digit) yields <span class="tt">std::nullopt</span> rather than a best-effort guess. The decimal point counts as output, so a sign placed straight after the separator ("`,-5`" in a de-DE locale) is rejected.</p>
 <dl class="section user"><dt>Grouping is validated, not stripped</dt><dd>A group separator is only dropped where a group separator can legally be: preceded by one to three digits, followed by exactly three more, and never after the decimal separator. Anything else is malformed and reported as such. Stripping unconditionally instead yields a wrong <em>value</em>, not a rejected one, and nothing downstream can tell: a de-DE user typing the US form <span class="tt">"1.5"</span> into a price field would submit <span class="tt">15</span> &ndash; a perfectly valid number, ten times too large. <span class="tt">"1.50"</span> would give <span class="tt">150</span>, <span class="tt">"1.2.3.4"</span> would give <span class="tt">1234</span>, and the en-US mirror image <span class="tt">"1,5"</span> would give <span class="tt">15</span>.</dd></dl>
 <dl class="section user"><dt>The two separators must differ</dt><dd>When <span class="tt">groupSeparator</span> is non-empty and equal to <span class="tt">decimalSeparator</span> the entry is rejected: with one string in both roles there is no reading of <span class="tt">"1.5"</span> the function could defend. This is a caller (locale-configuration) error rather than a user one, but it is reported through the return value like any other malformed entry, deliberately not through an assertion &ndash; an assertion would make the two build configurations behave differently at a control edge, and would be untestable in the one where it fires.</dd></dl>
 <p>The result is <span class="tt">.</span>-decimal and digit-only, but is <b>not</b> narrowed to <span class="tt">-?[0-9]+(\.[0-9]+)?</span>: a bare "`.`", a leading "`.5`" and a trailing "`5.`" are passed through, exactly as that same QML mirror passes them. Tightening one side alone would put the two control edges out of step, so the shape is documented here rather than narrowed.</p>
@@ -649,7 +649,7 @@ character is malformed" arm, and an explicitly-positive entry is rejected in eve
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The canonical <span class="tt">.</span>-decimal text, or <span class="tt">std::nullopt</span> when malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -694,7 +694,7 @@ character is malformed" arm, and an explicitly-positive entry is rejected in eve
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The locale-formatted display text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00709">709</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -741,7 +741,7 @@ character is malformed" arm, and an explicitly-positive entry is rejected in eve
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact value, or <span class="tt">std::nullopt</span> for malformed, over-precise or unrepresentable text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00759">759</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>

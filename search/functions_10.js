@@ -12,5 +12,6 @@ var searchData=
   ['queryhandle_9',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#a60111939e8879769d51254bbf83cf170',1,'morph::ui::author::QueryHandle']]],
   ['queryref_10',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html#a3f66aabb923e430e10a1f2afde3bbad4',1,'morph::ui::author::QueryRef']]],
   ['queryruntime_11',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a6730b678581e1071579ff5d97257e021',1,'morph::ui::detail::QueryRuntime']]],
-  ['quit_12',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
+  ['queueingdispatcher_12',['QueueingDispatcher',['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html#ad52821e6d32df257af7ff7fbad0dd9c1',1,'morph::ui::QueueingDispatcher']]],
+  ['quit_13',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
 ];

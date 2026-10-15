@@ -115,14 +115,13 @@ var searchData=
   ['formkeys_112',['FormKeys',['../d8/ddc/structmorph_1_1ui_1_1detail_1_1ExprParser_1_1FormKeys.html',1,'morph::ui::detail::ExprParser']]],
   ['formmodel_113',['FormModel',['../d5/dbe/classmorph_1_1forms_1_1FormModel.html',1,'morph::forms']]],
   ['formoptions_114',['FormOptions',['../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html',1,'morph::ui::author']]],
-  ['formscontrollercore_115',['FormsControllerCore',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html',1,'morph::qt::forms']]],
-  ['formscreen_116',['FormScreen',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html',1,'morph::app']]],
-  ['formsession_117',['FormSession',['../dc/dd2/classmorph_1_1forms_1_1FormSession.html',1,'morph::forms']]],
-  ['formsessionoptions_118',['FormSessionOptions',['../dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html',1,'morph::forms']]],
-  ['formviewoptions_119',['FormViewOptions',['../de/d99/structmorph_1_1forms_1_1FormViewOptions.html',1,'morph::forms']]],
-  ['frontend_120',['Frontend',['../d0/d8a/classmorph_1_1qt__quick_1_1Frontend.html',1,'morph::qt_quick::Frontend'],['../dc/d4f/classmorph_1_1tui_1_1Frontend.html',1,'morph::tui::Frontend'],['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui::Frontend']]],
-  ['frontendconfig_121',['FrontendConfig',['../df/de8/structmorph_1_1qt__quick_1_1FrontendConfig.html',1,'morph::qt_quick::FrontendConfig'],['../d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html',1,'morph::tui::FrontendConfig']]],
-  ['frontenderror_122',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
-  ['frontendoption_123',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]],
-  ['functionspec_124',['FunctionSpec',['../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html',1,'morph::ui::detail']]]
+  ['formscreen_115',['FormScreen',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html',1,'morph::app']]],
+  ['formsession_116',['FormSession',['../dc/dd2/classmorph_1_1forms_1_1FormSession.html',1,'morph::forms']]],
+  ['formsessionoptions_117',['FormSessionOptions',['../dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html',1,'morph::forms']]],
+  ['formviewoptions_118',['FormViewOptions',['../de/d99/structmorph_1_1forms_1_1FormViewOptions.html',1,'morph::forms']]],
+  ['frontend_119',['Frontend',['../d0/d8a/classmorph_1_1qt__quick_1_1Frontend.html',1,'morph::qt_quick::Frontend'],['../dc/d4f/classmorph_1_1tui_1_1Frontend.html',1,'morph::tui::Frontend'],['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui::Frontend']]],
+  ['frontendconfig_120',['FrontendConfig',['../df/de8/structmorph_1_1qt__quick_1_1FrontendConfig.html',1,'morph::qt_quick::FrontendConfig'],['../d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html',1,'morph::tui::FrontendConfig']]],
+  ['frontenderror_121',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
+  ['frontendoption_122',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]],
+  ['functionspec_123',['FunctionSpec',['../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html',1,'morph::ui::detail']]]
 ];

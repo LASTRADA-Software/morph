@@ -19,5 +19,6 @@ var searchData=
   ['queryoptions_16',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
   ['queryref_17',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author']]],
   ['queryruntime_18',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
-  ['queueitem_19',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['queueingdispatcher_19',['QueueingDispatcher',['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html',1,'morph::ui']]],
+  ['queueitem_20',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

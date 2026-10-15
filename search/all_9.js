@@ -129,13 +129,14 @@ var searchData=
   ['istask_126',['isTask',['../df/d19/structmorph_1_1model_1_1HandlerResult.html#aeafb0b916920f6a7f96b4753b3ab9c2d',1,'morph::model::HandlerResult::isTask'],['../d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html#a22c9f56829837fd82875b7e6a3e82ef4',1,'morph::model::HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;::isTask']]],
   ['istaskhandler_127',['isTaskHandler',['../d9/d37/task__handler_8hpp.html#abe5ef353e6a2b4b74680daa92ef2efc5',1,'morph::model']]],
   ['isthemeindex_128',['isThemeIndex',['../d9/df6/ui_2theme_8hpp.html#a34c53e9088bed9e87763083bb600fa17',1,'morph::ui']]],
-  ['isvector_129',['IsVector',['../de/db8/structmorph_1_1ui_1_1author_1_1detail_1_1IsVector.html',1,'morph::ui::author::detail']]],
-  ['isvector_3c_20std_3a_3avector_3c_20t_2c_20alloc_20_3e_20_3e_130',['IsVector&lt; std::vector&lt; T, Alloc &gt; &gt;',['../d5/d8d/structmorph_1_1ui_1_1author_1_1detail_1_1IsVector_3_01std_1_1vector_3_01T_00_01Alloc_01_4_01_4.html',1,'morph::ui::author::detail']]],
-  ['iszero_131',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
-  ['it_20exists_132',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
-  ['italianplural_133',['italianPlural',['../d5/d8c/message_8hpp.html#a75f7d7144a615220a650074aabf7ff47',1,'morph::ui::detail']]],
-  ['itemof_134',['itemOf',['../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a0918e493863c2201b5cd06d80a42dbf7',1,'morph::qt_quick::Backend']]],
-  ['items_135',['items',['../d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html#a0d4cd63e37f2963c642dd13d200cd52a',1,'morph::ui::author::MenuItem::items'],['../d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7846e1d06f96fdad2f34c906bfe1790c',1,'morph::ui::MenuEntry::items'],['../d4/dac/structmorph_1_1ui_1_1MenuItem.html#a7c52df5b1b6cdb87dc72740486c0de68',1,'morph::ui::MenuItem::items'],['../de/dce/structmorph_1_1ui_1_1Menu.html#a57f3e1d56521ea2d8411fa07d75057c4',1,'morph::ui::Menu::items'],['../d8/d3b/structmorph_1_1ui_1_1Steps.html#a13406355a78abe8ba1c5eb5ed5550cef',1,'morph::ui::Steps::items'],['../dc/df0/structmorph_1_1ui_1_1KeyValue.html#affb47bf3744c0487e30db6e088e5344a',1,'morph::ui::KeyValue::items']]],
-  ['itemtype_136',['itemType',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a3a964fa707f7629b8904946e1b672f09',1,'morph::forms::FieldSpec']]],
-  ['iviewbackend_137',['IViewBackend',['../df/dae/classmorph_1_1ui_1_1IViewBackend.html',1,'morph::ui']]]
+  ['isuiserviceread_129',['isUiServiceRead',['../d3/d31/service_8hpp.html#ad69b07175bd3a612103673995ff06c20',1,'morph::ui']]],
+  ['isvector_130',['IsVector',['../de/db8/structmorph_1_1ui_1_1author_1_1detail_1_1IsVector.html',1,'morph::ui::author::detail']]],
+  ['isvector_3c_20std_3a_3avector_3c_20t_2c_20alloc_20_3e_20_3e_131',['IsVector&lt; std::vector&lt; T, Alloc &gt; &gt;',['../d5/d8d/structmorph_1_1ui_1_1author_1_1detail_1_1IsVector_3_01std_1_1vector_3_01T_00_01Alloc_01_4_01_4.html',1,'morph::ui::author::detail']]],
+  ['iszero_132',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
+  ['it_20exists_133',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
+  ['italianplural_134',['italianPlural',['../d5/d8c/message_8hpp.html#a75f7d7144a615220a650074aabf7ff47',1,'morph::ui::detail']]],
+  ['itemof_135',['itemOf',['../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a0918e493863c2201b5cd06d80a42dbf7',1,'morph::qt_quick::Backend']]],
+  ['items_136',['items',['../d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html#a0d4cd63e37f2963c642dd13d200cd52a',1,'morph::ui::author::MenuItem::items'],['../d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7846e1d06f96fdad2f34c906bfe1790c',1,'morph::ui::MenuEntry::items'],['../d4/dac/structmorph_1_1ui_1_1MenuItem.html#a7c52df5b1b6cdb87dc72740486c0de68',1,'morph::ui::MenuItem::items'],['../de/dce/structmorph_1_1ui_1_1Menu.html#a57f3e1d56521ea2d8411fa07d75057c4',1,'morph::ui::Menu::items'],['../d8/d3b/structmorph_1_1ui_1_1Steps.html#a13406355a78abe8ba1c5eb5ed5550cef',1,'morph::ui::Steps::items'],['../dc/df0/structmorph_1_1ui_1_1KeyValue.html#affb47bf3744c0487e30db6e088e5344a',1,'morph::ui::KeyValue::items']]],
+  ['itemtype_137',['itemType',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a3a964fa707f7629b8904946e1b672f09',1,'morph::forms::FieldSpec']]],
+  ['iviewbackend_138',['IViewBackend',['../df/dae/classmorph_1_1ui_1_1IViewBackend.html',1,'morph::ui']]]
 ];

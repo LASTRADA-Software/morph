@@ -171,11 +171,6 @@ var hierarchy =
     [ "morph::offline::ReconnectCoordinatorConfig", "d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html", null ],
     [ "morph::offline::SyncResult", "de/d6e/structmorph_1_1offline_1_1SyncResult.html", null ],
     [ "morph::offline::SyncWorker", "d3/d55/classmorph_1_1offline_1_1SyncWorker.html", null ],
-    [ "morph::qt::bridge::detail::OwnedLocalBridge", "d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html", null ],
-    [ "morph::qt::bridge::GenericModelBridgeCore&lt; Model, Sharing &gt;", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html", null ],
-    [ "morph::qt::bridge::MultiModelBridgeCore&lt; Sharing, Model &gt;", "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html", null ],
-    [ "morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html", null ],
-    [ "morph::qt::forms::MultiModelFormsControllerCore&lt; Sharing, Model &gt;", "d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html", null ],
     [ "morph::qt::QtWebSocketBackendConfig", "d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html", null ],
     [ "morph::qt::QtWebSocketServer", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html", null ],
     [ "morph::qt::QtWebSocketServerConfig", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html", null ],
@@ -505,7 +500,8 @@ var hierarchy =
     [ "morph::ui::detail::TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", null ],
     [ "morph::ui::Dialog", "d2/dc0/structmorph_1_1ui_1_1Dialog.html", null ],
     [ "morph::ui::Dispatcher", "d5/d80/classmorph_1_1ui_1_1Dispatcher.html", [
-      [ "morph::ui::BridgeDispatcher", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html", null ]
+      [ "morph::ui::BridgeDispatcher", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html", null ],
+      [ "morph::ui::QueueingDispatcher", "de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html", null ]
     ] ],
     [ "morph::ui::DocNode", "df/d0e/structmorph_1_1ui_1_1DocNode.html", null ],
     [ "morph::ui::Document", "d4/d02/structmorph_1_1ui_1_1Document.html", null ],
