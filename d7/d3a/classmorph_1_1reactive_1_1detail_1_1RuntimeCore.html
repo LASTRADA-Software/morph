@@ -143,12 +143,28 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a913d6a8016754b03d159b0a7df244af5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the calling thread is on the owner, reporting <span class="tt"><a class="el" href="../../d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#a3e2c9c3f1c2f2f1946a285102be90083" title="An operation ran off the Runtime&#39;s owner; it is dropped.">site::kOffOwner</a></span> when it is not.  <br /></td></tr>
 <tr class="memitem:aef1396a64612103c09cc870dc953b9ce" id="r_aef1396a64612103c09cc870dc953b9ce"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aef1396a64612103c09cc870dc953b9ce">report</a> (char const *where) const noexcept</td></tr>
 <tr class="memdesc:aef1396a64612103c09cc870dc953b9ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports a misuse: asserts in a debug build, or hands it to an installed owner probe.  <br /></td></tr>
+<tr class="memitem:a89cb075395c298ff7769ceb67606d037" id="r_a89cb075395c298ff7769ceb67606d037"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#a89cb075395c298ff7769ceb67606d037">misuses</a> () const noexcept</td></tr>
+<tr class="memdesc:a89cb075395c298ff7769ceb67606d037"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many misuses have been reported.  <br /></td></tr>
+<tr class="memitem:a3c42cf89ff244e7c5b15dae3f6ca31da" id="r_a3c42cf89ff244e7c5b15dae3f6ca31da"><td class="memItemLeft">std::vector&lt; char const * &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3c42cf89ff244e7c5b15dae3f6ca31da">recentMisuses</a> () const</td></tr>
+<tr class="memdesc:a3c42cf89ff244e7c5b15dae3f6ca31da"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sites of the latest misuses, oldest first, at most <span class="tt"><a class="el" href="../../d9/de9/graph_8hpp.html#a365428dd69063eae903b8c358eb36e88" title="How many of the latest misuses a runtime keeps the site of.">kRecentMisuses</a></span>.  <br /></td></tr>
 <tr class="memitem:afd2eaf630cfb75bc026bc6341fe4048e" id="r_afd2eaf630cfb75bc026bc6341fe4048e"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#afd2eaf630cfb75bc026bc6341fe4048e">owner</a> () const noexcept</td></tr>
 <tr class="memdesc:afd2eaf630cfb75bc026bc6341fe4048e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The owner executor.  <br /></td></tr>
 <tr class="memitem:a25d5150e01ee50dc07ccbc87df9c05b3" id="r_a25d5150e01ee50dc07ccbc87df9c05b3"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a25d5150e01ee50dc07ccbc87df9c05b3">configure</a> (<a class="el" href="../../d3/d22/structmorph_1_1reactive_1_1detail_1_1FlushBounds.html">FlushBounds</a> bounds, std::function&lt; void()&gt; afterFlush)</td></tr>
 <tr class="memdesc:a25d5150e01ee50dc07ccbc87df9c05b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the flush bounds and the after-flush hook.  <br /></td></tr>
 <tr class="memitem:a697201311461f96131442221513d4d6b" id="r_a697201311461f96131442221513d4d6b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a697201311461f96131442221513d4d6b">beginBatch</a> () noexcept</td></tr>
-<tr class="memdesc:a697201311461f96131442221513d4d6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a batch; batches nest.  <br /></td></tr>
+<tr class="memdesc:a697201311461f96131442221513d4d6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a batch; batches nest. Opening the outermost one numbers it.  <br /></td></tr>
+<tr class="memitem:af8ddae3ea81311fbb5bd53d367414cea" id="r_af8ddae3ea81311fbb5bd53d367414cea"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#af8ddae3ea81311fbb5bd53d367414cea">currentBatch</a> () const noexcept</td></tr>
+<tr class="memdesc:af8ddae3ea81311fbb5bd53d367414cea"><td class="mdescLeft">&#160;</td><td class="mdescRight">The number of the batch open now: how many outermost batches had been opened when it was.  <br /></td></tr>
+<tr class="memitem:ab702c468dcc68145d774f0afd048398b" id="r_ab702c468dcc68145d774f0afd048398b"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#ab702c468dcc68145d774f0afd048398b">batches</a> () const noexcept</td></tr>
+<tr class="memdesc:ab702c468dcc68145d774f0afd048398b"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many outermost batches have been opened.  <br /></td></tr>
+<tr class="memitem:ac11ca85154568778db152a27564951d8" id="r_ac11ca85154568778db152a27564951d8"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#ac11ca85154568778db152a27564951d8">flushes</a> () const noexcept</td></tr>
+<tr class="memdesc:ac11ca85154568778db152a27564951d8"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many flushes ran at least one queued <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a>.  <br /></td></tr>
+<tr class="memitem:aa824ed198e5a8d07a7c56d0c76661013" id="r_aa824ed198e5a8d07a7c56d0c76661013"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#aa824ed198e5a8d07a7c56d0c76661013">effectsRun</a> () const noexcept</td></tr>
+<tr class="memdesc:aa824ed198e5a8d07a7c56d0c76661013"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many queued Effects the flushes processed, in all.  <br /></td></tr>
+<tr class="memitem:ae8e166a60e2e816bec99baaf09be5c39" id="r_ae8e166a60e2e816bec99baaf09be5c39"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#ae8e166a60e2e816bec99baaf09be5c39">lastFlushEffects</a> () const noexcept</td></tr>
+<tr class="memdesc:ae8e166a60e2e816bec99baaf09be5c39"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many queued Effects the latest flush processed.  <br /></td></tr>
+<tr class="memitem:a48b6da0df0a946711d947432c8f1840e" id="r_a48b6da0df0a946711d947432c8f1840e"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#a48b6da0df0a946711d947432c8f1840e">maxFlushEffects</a> () const noexcept</td></tr>
+<tr class="memdesc:a48b6da0df0a946711d947432c8f1840e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most queued Effects one flush has processed.  <br /></td></tr>
 <tr class="memitem:a07e2c63092fab12323b6bf4ec5db5829" id="r_a07e2c63092fab12323b6bf4ec5db5829"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a07e2c63092fab12323b6bf4ec5db5829">endBatch</a> ()</td></tr>
 <tr class="memdesc:a07e2c63092fab12323b6bf4ec5db5829"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes a batch; closing the outermost one requests a flush when effects are queued.  <br /></td></tr>
 <tr class="memitem:a4a6c24f3c92f5bc7a63d72df366b09e3" id="r_a4a6c24f3c92f5bc7a63d72df366b09e3"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4a6c24f3c92f5bc7a63d72df366b09e3">enqueue</a> (<a class="el" href="../../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html">Node</a> &amp;effect)</td></tr>
@@ -192,7 +208,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>State shared by one <span class="tt"><a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a></span> and every node made from it. </p>
 <p>Nodes hold it by <span class="tt">shared_ptr</span>, so a node that outlives its <span class="tt"><a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a></span> (a reported misuse) still has a valid core. The posted flush holds it weakly and checks <span class="tt"><a class="el" href="#a33654340525bc203018277e0e0b3288c" title="Marks the Runtime as gone: flushes do nothing from now on.">detach()</a></span>, so a flush after the <span class="tt"><a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a></span> is gone does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aa8dfbfbb23563274fac377e88935c46a" name="aa8dfbfbb23563274fac377e88935c46a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa8dfbfbb23563274fac377e88935c46a">&#9670;&#160;</a></span>RuntimeCore()</h2>
@@ -223,7 +239,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +270,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the calling thread is on the owner, without reporting anything. </p>
 <dl class="section return"><dt>Returns</dt><dd>What <span class="tt"><a class="el" href="#a913d6a8016754b03d159b0a7df244af5" title="Whether the calling thread is on the owner, reporting site::kOffOwner when it is not.">checkOwner()</a></span> returns, minus the report. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +300,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the calling thread is on the owner, reporting <span class="tt"><a class="el" href="../../d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#a3e2c9c3f1c2f2f1946a285102be90083" title="An operation ran off the Runtime&#39;s owner; it is dropped.">site::kOffOwner</a></span> when it is not. </p>
 <dl class="section return"><dt>Returns</dt><dd>True on the owner: inside one of its tasks, or anywhere on the thread that built the <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a> when that thread was running no executor's task at the time (a Qt slot, <span class="tt">main()</span>, a test body). That second half is a per-thread check: on that thread a task of another executor passes too, so running a different executor's tasks there is not detected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,7 +335,67 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a89cb075395c298ff7769ceb67606d037" name="a89cb075395c298ff7769ceb67606d037"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a89cb075395c298ff7769ceb67606d037">&#9670;&#160;</a></span>misuses()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::misuses </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many misuses have been reported. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3c42cf89ff244e7c5b15dae3f6ca31da" name="a3c42cf89ff244e7c5b15dae3f6ca31da"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3c42cf89ff244e7c5b15dae3f6ca31da">&#9670;&#160;</a></span>recentMisuses()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; char const  * &gt; morph::reactive::detail::RuntimeCore::recentMisuses </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The sites of the latest misuses, oldest first, at most <span class="tt"><a class="el" href="../../d9/de9/graph_8hpp.html#a365428dd69063eae903b8c358eb36e88" title="How many of the latest misuses a runtime keeps the site of.">kRecentMisuses</a></span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>The <span class="tt"><a class="el" href="../../d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html" title="The site names a misuse is reported under through exec::detail::noteOwner.">site</a>::</span> constants. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +425,7 @@ Public Member Functions</h2></td></tr>
 <p>The owner executor. </p>
 <dl class="section return"><dt>Returns</dt><dd>The executor passed at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -389,7 +465,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -416,9 +492,189 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Opens a batch; batches nest. </p>
+<p>Opens a batch; batches nest. Opening the outermost one numbers it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af8ddae3ea81311fbb5bd53d367414cea" name="af8ddae3ea81311fbb5bd53d367414cea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af8ddae3ea81311fbb5bd53d367414cea">&#9670;&#160;</a></span>currentBatch()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::currentBatch </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The number of the batch open now: how many outermost batches had been opened when it was. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, or 0 outside every batch. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab702c468dcc68145d774f0afd048398b" name="ab702c468dcc68145d774f0afd048398b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab702c468dcc68145d774f0afd048398b">&#9670;&#160;</a></span>batches()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::batches </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many outermost batches have been opened. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac11ca85154568778db152a27564951d8" name="ac11ca85154568778db152a27564951d8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac11ca85154568778db152a27564951d8">&#9670;&#160;</a></span>flushes()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::flushes </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many flushes ran at least one queued <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a>. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa824ed198e5a8d07a7c56d0c76661013" name="aa824ed198e5a8d07a7c56d0c76661013"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa824ed198e5a8d07a7c56d0c76661013">&#9670;&#160;</a></span>effectsRun()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::effectsRun </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many queued Effects the flushes processed, in all. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae8e166a60e2e816bec99baaf09be5c39" name="ae8e166a60e2e816bec99baaf09be5c39"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae8e166a60e2e816bec99baaf09be5c39">&#9670;&#160;</a></span>lastFlushEffects()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::lastFlushEffects </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many queued Effects the latest flush processed. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a48b6da0df0a946711d947432c8f1840e" name="a48b6da0df0a946711d947432c8f1840e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a48b6da0df0a946711d947432c8f1840e">&#9670;&#160;</a></span>maxFlushEffects()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::reactive::detail::RuntimeCore::maxFlushEffects </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The most queued Effects one flush has processed. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -448,7 +704,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes a batch; closing the outermost one requests a flush when effects are queued. </p>
 <p>The outermost batch closing outside a flush is a write from outside the graph, which starts a new count of the re-posts after a throwing <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -483,7 +739,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00675">675</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -512,7 +768,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Posts one flush to the owner, unless one is already requested or running, nothing is queued, or the <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a> is gone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -541,7 +797,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Runs every queued <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> that a source change really affects. Defined below <span class="tt"><a class="el" href="../../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html" title="A graph node: a source (Signal), an observer (Effect), or both (Computed).">Node</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00685">685</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00747">747</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -576,7 +832,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00805">805</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -606,7 +862,7 @@ Public Member Functions</h2></td></tr>
 <p>The innermost tracking frame, or null outside every tracked run. </p>
 <dl class="section return"><dt>Returns</dt><dd>The frame reads register with. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -641,7 +897,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -671,7 +927,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> is computing on this runtime. </p>
 <dl class="section return"><dt>Returns</dt><dd>True between <span class="tt"><a class="el" href="#aa3696dc7bf4535de75da02ce96a9d604" title="Marks a Computed as computing.">enterComputed()</a></span> and the matching <span class="tt"><a class="el" href="#abfc48c6677c15d1586bb1b603ccf7543" title="Marks a Computed as done computing.">leaveComputed()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -700,7 +956,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks a <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> as computing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -729,7 +985,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks a <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> as done computing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -758,7 +1014,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks the start of a widget callback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -787,7 +1043,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks the end of a widget callback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -817,7 +1073,7 @@ Public Member Functions</h2></td></tr>
 <p>How deeply batches are nested on the owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>Zero outside every batch. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -847,7 +1103,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a widget callback is running on the owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>True between <span class="tt"><a class="el" href="#aba1b30ccd756aa09bc98073dc9629842" title="Marks the start of a widget callback.">enterWidgetEvent()</a></span> and the matching <span class="tt"><a class="el" href="#a2fc1539eaa3d86f5c4da03001398dd24" title="Marks the end of a widget callback.">leaveWidgetEvent()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -877,7 +1133,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a flush is posted and has not run yet. </p>
 <dl class="section return"><dt>Returns</dt><dd>The coalescing flag. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -906,7 +1162,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Marks the <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a> as gone: flushes do nothing from now on. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00319">319</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -936,7 +1192,7 @@ Public Member Functions</h2></td></tr>
 <p>Counts a node made from this runtime. </p>
 <dl class="section return"><dt>Returns</dt><dd>The node's creation order: greater than that of every node made from this runtime before it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -965,7 +1221,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Counts a node destroyed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -995,7 +1251,7 @@ Public Member Functions</h2></td></tr>
 <p>How many nodes made from this runtime are alive. </p>
 <dl class="section return"><dt>Returns</dt><dd>The live-node count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>

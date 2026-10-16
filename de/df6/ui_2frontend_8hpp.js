@@ -9,7 +9,7 @@ var ui_2frontend_8hpp =
     [ "morph::ui::FrontendOption", "da/d01/structmorph_1_1ui_1_1FrontendOption.html", "da/d01/structmorph_1_1ui_1_1FrontendOption" ],
     [ "morph::ui::FrontendError", "d6/d90/structmorph_1_1ui_1_1FrontendError.html", "d6/d90/structmorph_1_1ui_1_1FrontendError" ],
     [ "morph::ui::detail::CommandLineChoice", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice" ],
-    [ "morph::ui::MountedShell", "d9/d90/classmorph_1_1ui_1_1MountedShell.html", null ],
+    [ "morph::ui::MountedShell", "d9/d90/classmorph_1_1ui_1_1MountedShell.html", "d9/d90/classmorph_1_1ui_1_1MountedShell" ],
     [ "morph::ui::Scheduler", "de/df6/ui_2frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4", null ],
     [ "morph::ui::TimerHandle", "de/df6/ui_2frontend_8hpp.html#a5d25296274c03a7180c76be3b6277fab", null ],
     [ "morph::ui::EnvironmentReader", "de/df6/ui_2frontend_8hpp.html#a51ad713a37ae34b0e4030a01831755d8", null ],

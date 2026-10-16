@@ -22,13 +22,14 @@ var searchData=
   ['hexdigit_19',['hexDigit',['../d4/d2f/route_8hpp.html#ab46fe03afb94efe56cb59be59149c207',1,'morph::ui::detail::route']]],
   ['hiddencellkeepsitscolumn_20',['hiddenCellKeepsItsColumn',['../d8/d3e/backend__conformance_8hpp.html#a495fb9c0d997bfe2f36be0c76fd7a139',1,'morph::ui::testing::detail']]],
   ['hiddenchordrunsnothing_21',['hiddenChordRunsNothing',['../d8/d3e/backend__conformance_8hpp.html#a17d70b159529b91e31a4631dcac6cf20',1,'morph::ui::testing::detail']]],
-  ['hmacsha256_22',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
-  ['hmacsha256raw_23',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
-  ['holding_24',['holding',['../db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf',1,'morph::ui::detail']]],
-  ['holdsalias_25',['holdsAlias',['../d9/df6/ui_2theme_8hpp.html#a4b507ea6bdcfded23b19ecbbaeac252c',1,'morph::ui::detail']]],
-  ['host_26',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
-  ['hostcommand_27',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
-  ['hostcommandrunner_28',['hostCommandRunner',['../df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84',1,'morph::ui::Session']]],
-  ['hostvalue_29',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
-  ['hover_30',['hover',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend']]]
+  ['hide_22',['hide',['../dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#acab09ecf06a1ffac866b2418a6bdb90b',1,'morph::qt_quick::InspectorWindow']]],
+  ['hmacsha256_23',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
+  ['hmacsha256raw_24',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
+  ['holding_25',['holding',['../db/d42/interpreter_8hpp.html#a17bae40c8e45535e198e55dbe93b77bf',1,'morph::ui::detail']]],
+  ['holdsalias_26',['holdsAlias',['../d9/df6/ui_2theme_8hpp.html#a4b507ea6bdcfded23b19ecbbaeac252c',1,'morph::ui::detail']]],
+  ['host_27',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
+  ['hostcommand_28',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
+  ['hostcommandrunner_29',['hostCommandRunner',['../df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84',1,'morph::ui::Session']]],
+  ['hostvalue_30',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
+  ['hover_31',['hover',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend']]]
 ];

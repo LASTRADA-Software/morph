@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d97/classmo
 Public Types</h2></td></tr>
 <tr class="memitem:a929ca25ac4e2d0e4f19b00bf33c0d694" id="r_a929ca25ac4e2d0e4f19b00bf33c0d694"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a929ca25ac4e2d0e4f19b00bf33c0d694">Done</a> = std::function&lt;void(std::expected&lt;<a class="el" href="../../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html">LoadedBundle</a>, <a class="el" href="../../d8/dcd/structmorph_1_1ui_1_1ConnectError.html">ConnectError</a>&gt;)&gt;</td></tr>
 <tr class="memdesc:a929ca25ac4e2d0e4f19b00bf33c0d694"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> delivers.  <br /></td></tr>
+<tr class="memitem:a90a8d6dbe81d4ed3034b1a00b18107c3" id="r_a90a8d6dbe81d4ed3034b1a00b18107c3"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a90a8d6dbe81d4ed3034b1a00b18107c3">PollDone</a> = std::function&lt;void(std::expected&lt;std::optional&lt;<a class="el" href="../../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html">LoadedBundle</a>&gt;, <a class="el" href="../../d8/dcd/structmorph_1_1ui_1_1ConnectError.html">ConnectError</a>&gt;)&gt;</td></tr>
+<tr class="memdesc:a90a8d6dbe81d4ed3034b1a00b18107c3"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt"><a class="el" href="#abf453da1ed705e58067dd3620363aa97" title="One step of a development client&#39;s reload (spec 5 §12): sends ui-hello, and when the manifest digest ...">poll</a></span> delivers: the changed bundle, nothing when the digest is the one already held, or why there is none.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -137,6 +139,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:af2d208978c59bd6d349f1101fb13700d"><td class="mdescLeft">&#160;</td><td class="mdescRight">A client.  <br /></td></tr>
 <tr class="memitem:aad5da9bef541aa8dbed66a9e32bd8765" id="r_aad5da9bef541aa8dbed66a9e32bd8765"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765">open</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="#a929ca25ac4e2d0e4f19b00bf33c0d694">Done</a> done) const</td></tr>
 <tr class="memdesc:aad5da9bef541aa8dbed66a9e32bd8765"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the bundle. <code class="param">done</code> is called once, from whichever thread the exchange calls back on; a synchronous exchange calls it before <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> returns.  <br /></td></tr>
+<tr class="memitem:abf453da1ed705e58067dd3620363aa97" id="r_abf453da1ed705e58067dd3620363aa97"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abf453da1ed705e58067dd3620363aa97">poll</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, std::string knownDigest, <a class="el" href="#a90a8d6dbe81d4ed3034b1a00b18107c3">PollDone</a> done) const</td></tr>
+<tr class="memdesc:abf453da1ed705e58067dd3620363aa97"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of a development client's reload (spec 5 §12): sends <span class="tt">ui-hello</span>, and when the manifest digest differs from <code class="param">knownDigest</code>, opens the changed bundle as <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> does, fetching only what the cache does not hold. <code class="param">done</code> is called once, as <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span>'s is.  <br /></td></tr>
 <tr class="memitem:a979fb3ee086fcedf73933c1e9c815a36" id="r_a979fb3ee086fcedf73933c1e9c815a36"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html">LoadedBundle</a>, <a class="el" href="../../d8/dcd/structmorph_1_1ui_1_1ConnectError.html">ConnectError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a979fb3ee086fcedf73933c1e9c815a36">openOffline</a> (std::string_view application) const</td></tr>
 <tr class="memdesc:a979fb3ee086fcedf73933c1e9c815a36"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rebuilds the last bundle this store verified for <code class="param">application</code>, without a connection. Files the store no longer holds, or that no longer verify, are left out; the catalog is empty.  <br /></td></tr>
 </table>
@@ -161,6 +165,24 @@ Public Member Functions</h2></td></tr>
 <p>What <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> delivers. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a90a8d6dbe81d4ed3034b1a00b18107c3" name="a90a8d6dbe81d4ed3034b1a00b18107c3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a90a8d6dbe81d4ed3034b1a00b18107c3">&#9670;&#160;</a></span>PollDone</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a90a8d6dbe81d4ed3034b1a00b18107c3">morph::ui::UiClient::PollDone</a> = std::function&lt;void(std::expected&lt;std::optional&lt;<a class="el" href="../../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html">LoadedBundle</a>&gt;, <a class="el" href="../../d8/dcd/structmorph_1_1ui_1_1ConnectError.html">ConnectError</a>&gt;)&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What <span class="tt"><a class="el" href="#abf453da1ed705e58067dd3620363aa97" title="One step of a development client&#39;s reload (spec 5 §12): sends ui-hello, and when the manifest digest ...">poll</a></span> delivers: the changed bundle, nothing when the digest is the one already held, or why there is none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,6 +280,52 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="abf453da1ed705e58067dd3620363aa97" name="abf453da1ed705e58067dd3620363aa97"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abf453da1ed705e58067dd3620363aa97">&#9670;&#160;</a></span>poll()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::UiClient::poll </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a></td>          <td class="paramname"><span class="paramname"><em>session</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>knownDigest</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#a90a8d6dbe81d4ed3034b1a00b18107c3">PollDone</a></td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>One step of a development client's reload (spec 5 §12): sends <span class="tt">ui-hello</span>, and when the manifest digest differs from <code class="param">knownDigest</code>, opens the changed bundle as <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> does, fetching only what the cache does not hold. <code class="param">done</code> is called once, as <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span>'s is. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">session</td><td>The session every request carries. </td></tr>
+    <tr><td class="paramname">knownDigest</td><td>The digest of the bundle the client has, as <span class="tt"><a class="el" href="../../d3/d85/structmorph_1_1ui_1_1HelloReply.html#a93826f4eedc22abd9b7c3d8ad9afbfd5" title="The manifest&#39;s content hash.">HelloReply::digest</a></span> spells it. </td></tr>
+    <tr><td class="paramname">done</td><td>Called with the changed bundle, with nothing when the digest is unchanged, or with why the poll failed. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a979fb3ee086fcedf73933c1e9c815a36" name="a979fb3ee086fcedf73933c1e9c815a36"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a979fb3ee086fcedf73933c1e9c815a36">&#9670;&#160;</a></span>openOffline()</h2>
 
@@ -290,7 +358,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The bundle, or <span class="tt">Unreachable</span> when no verified manifest is cached. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00277">277</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00303">303</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

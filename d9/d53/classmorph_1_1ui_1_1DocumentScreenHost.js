@@ -9,5 +9,6 @@ var classmorph_1_1ui_1_1DocumentScreenHost =
     [ "parseRoute", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#abc132d7755ad40f67a3750ff7b66698d", null ],
     [ "onNavigate", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ad8dd83c3ddbad125e85d47671bdc29b6", null ],
     [ "onScreenClosed", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a1863293949cffb6da4e6e5181c787342", null ],
+    [ "remount", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#afaec515e8d9cdba197778305f38fc6df", null ],
     [ "onNavigate", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a97a76e639a650226c814b0d39f15ed42", null ]
 ];

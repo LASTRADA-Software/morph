@@ -156,6 +156,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ad8dd83c3ddbad125e85d47671bdc29b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">A document asked to open another screen, with how (<span class="tt">as</span>). The default hands the screen and its params to <span class="tt">onNavigate(screenId, params)</span>; a host that shows dialogs, drawers or windows overrides this one.  <br /></td></tr>
 <tr class="memitem:a1863293949cffb6da4e6e5181c787342" id="r_a1863293949cffb6da4e6e5181c787342"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a1863293949cffb6da4e6e5181c787342">onScreenClosed</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;screen)</td></tr>
 <tr class="memdesc:a1863293949cffb6da4e6e5181c787342"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen this host mounted closed itself, by <span class="tt">return</span> or <span class="tt">close: self</span> (spec 6 §16). Called after the screen is closed, posted to the owner; the host drops its tab or dialog. The default does nothing.  <br /></td></tr>
+<tr class="memitem:afaec515e8d9cdba197778305f38fc6df" id="r_afaec515e8d9cdba197778305f38fc6df"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df">remount</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle, std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt; document)</td></tr>
+<tr class="memdesc:afaec515e8d9cdba197778305f38fc6df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload).  <br /></td></tr>
 <tr class="memitem:a97a76e639a650226c814b0d39f15ed42" id="r_a97a76e639a650226c814b0d39f15ed42"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a97a76e639a650226c814b0d39f15ed42">onNavigate</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params)=0</td></tr>
 <tr class="memdesc:a97a76e639a650226c814b0d39f15ed42"><td class="mdescLeft">&#160;</td><td class="mdescRight">A document asked to open another screen. The host decides whether that is a new tab, a focus or a dialog. Implemented by the host.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ScreenHost"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html">morph::ui::ScreenHost</a></td></tr>
@@ -170,6 +172,8 @@ ScreenHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHost
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a844e396fdd2abf685b93e9ea0b29822b" id="r_a844e396fdd2abf685b93e9ea0b29822b"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a844e396fdd2abf685b93e9ea0b29822b">inspector</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
+<tr class="memdesc:a844e396fdd2abf685b93e9ea0b29822b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window reads. It hands out no access to the screen beyond the inspector's own read-only view and its <span class="tt">refetch</span> command.  <br /></td></tr>
 <tr class="memitem:a467d4ac1ec375b631da0a35f89e3da86" id="r_a467d4ac1ec375b631da0a35f89e3da86"><td class="memItemLeft">static <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a467d4ac1ec375b631da0a35f89e3da86">rootOf</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
 <tr class="memdesc:a467d4ac1ec375b631da0a35f89e3da86"><td class="mdescLeft">&#160;</td><td class="mdescRight">The root widget of a handle this host mounted, which a host places in its own layout.  <br /></td></tr>
 </table>
@@ -177,7 +181,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The framework's <span class="tt"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html" title="What mounts screens for a host that owns its own shell; the workspace shell is one.">ScreenHost</a></span> over UI documents: it mounts them through an <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html" title="Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.">Interpreter</a></span>, closes them by the protocol of spec 6 §3, and hands a document's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span> to <span class="tt"><a class="el" href="#ad8dd83c3ddbad125e85d47671bdc29b6" title="A document asked to open another screen, with how (as). The default hands the screen and its params t...">onNavigate</a></span>, which the deriving host implements. </p>
 <p>It is the interpreter's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html" title="What the application answers for the commands a document cannot carry out alone (spec 6)....">InterpreterHost</a></span> for <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span>; every other command goes to the application's host, if one was given. Everything runs on the runtime's owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a51c4224debcf787015d0d83ef863a34f" name="a51c4224debcf787015d0d83ef863a34f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a51c4224debcf787015d0d83ef863a34f">&#9670;&#160;</a></span>DocumentScreenHost()</h2>
@@ -227,7 +231,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +275,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a590ee6f22dd29005a07be8ab5e6df4e2">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +322,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, or why it could not be mounted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +365,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a74baa68354c22a07a32a4f271c08289d">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +405,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00355">355</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -442,7 +446,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The route, or why it has none: an unknown screen, or a param with no route form. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00390">390</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -478,7 +482,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen and its params, or why the route is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -513,7 +517,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00407">407</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -548,7 +552,84 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afaec515e8d9cdba197778305f38fc6df" name="afaec515e8d9cdba197778305f38fc6df"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afaec515e8d9cdba197778305f38fc6df">&#9670;&#160;</a></span>remount()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::DocumentScreenHost::remount </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>document</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload). </p>
+<p>The new screen is mounted with the same params in the same place, and each state of its own scope starts from the old screen's value of the state of the same name and type; any other state starts from its init. The old screen is then destroyed, which runs its <span class="tt">onUnmount</span>, and the handle shows the new one: its <span class="tt">title</span>, <span class="tt">dirty</span> and <span class="tt">identity</span> follow it, and a pending call stays tied to it. A refused mount keeps the old screen. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
+    <tr><td class="paramname">document</td><td>The changed document of the same screen, loaded. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or the interpreter's refusal of the new document. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a844e396fdd2abf685b93e9ea0b29822b" name="a844e396fdd2abf685b93e9ea0b29822b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a844e396fdd2abf685b93e9ea0b29822b">&#9670;&#160;</a></span>inspector()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &gt; morph::ui::DocumentScreenHost::inspector </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window reads. It hands out no access to the screen beyond the inspector's own read-only view and its <span class="tt">refetch</span> command. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -584,7 +665,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its root widget, or <span class="tt">nullptr</span> for a closed or foreign handle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

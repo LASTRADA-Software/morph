@@ -139,7 +139,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>A transfer's share of its screen's pending count. </p>
 <p>A transfer is pending from the host accepting it to its settle: its completion carries on the command list that started it, which the close protocol and save-and-close wait for. The count is taken once the host accepts, so a refused transfer never counts, and a host that settles before it returns leaves nothing taken. It is given back once, also when the transfer settles after its scope is gone, but not after the screen itself is gone, since the count went with it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04064">4064</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04257">4257</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad5ecdb58d876c4e4b64bd812d76a460e" name="ad5ecdb58d876c4e4b64bd812d76a460e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad5ecdb58d876c4e4b64bd812d76a460e">&#9670;&#160;</a></span>TransferHold()</h2>
@@ -177,7 +177,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04069">4069</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04262">4262</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -207,7 +207,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Counts the transfer, unless it has already settled. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04072">4072</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04265">4265</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +236,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Gives the count back, if one was taken and the screen is still there; the transfer counts no more. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04080">4080</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04273">4273</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

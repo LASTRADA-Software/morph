@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['inner_0',['Inner',['../d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html#af9845bcfb674fd14a040784424904acf',1,'morph::model::PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;']]]
+  ['inner_0',['Inner',['../d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html#af9845bcfb674fd14a040784424904acf',1,'morph::model::PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;']]],
+  ['inspectfocused_1',['InspectFocused',['../d2/df5/qt__quick_2inspector_8hpp.html#ad8060a68d18710c709961547fe1b63b3',1,'morph::qt_quick']]]
 ];

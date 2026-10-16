@@ -136,12 +136,50 @@ MountedShell &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (MountedS
 &#160;</td><td class="memItemRight"><b>MountedShell</b> (MountedShell &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a6e39ae7809e3f8b6f53a2b4f44162bf7" id="r_a6e39ae7809e3f8b6f53a2b4f44162bf7"><td class="memItemLeft"><a id="a6e39ae7809e3f8b6f53a2b4f44162bf7" name="a6e39ae7809e3f8b6f53a2b4f44162bf7"></a>
 MountedShell &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (MountedShell &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a28752287fc9967690fdf37d50ec7753a" id="r_a28752287fc9967690fdf37d50ec7753a"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a28752287fc9967690fdf37d50ec7753a">inspectFocused</a> (std::function&lt; void(<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &amp;inspector)&gt; const &amp;visit)</td></tr>
+<tr class="memdesc:a28752287fc9967690fdf37d50ec7753a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hands the development inspector over the focused screen to <code class="param">visit</code>, before returning (spec 6 §21). A frontend's inspector window calls it each time it shows the screen. The default has no screen to inspect and calls nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a frontend mounts once its source is open: the app shell and its screens, or a view of why the source did not open. Destroying it unmounts all of it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
-</div><hr/>The documentation for this class was generated from the following file:<ul>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a28752287fc9967690fdf37d50ec7753a" name="a28752287fc9967690fdf37d50ec7753a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a28752287fc9967690fdf37d50ec7753a">&#9670;&#160;</a></span>inspectFocused()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::MountedShell::inspectFocused </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &amp;inspector)&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>visit</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Hands the development inspector over the focused screen to <code class="param">visit</code>, before returning (spec 6 §21). A frontend's inspector window calls it each time it shows the screen. The default has no screen to inspect and calls nothing. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">visit</td><td>Called at most once, with the inspector; it must not keep it past the call. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00390">390</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+
+</div>
+</div>
+<hr/>The documentation for this class was generated from the following file:<ul>
 <li>morph/ui/<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a></li>
 </ul>
 </div><!-- contents -->

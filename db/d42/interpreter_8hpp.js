@@ -14,6 +14,8 @@ var interpreter_8hpp =
     [ "morph::ui::HostCommands", "dd/d6a/structmorph_1_1ui_1_1HostCommands.html", "dd/d6a/structmorph_1_1ui_1_1HostCommands" ],
     [ "morph::ui::Session", "df/d20/classmorph_1_1ui_1_1Session.html", "df/d20/classmorph_1_1ui_1_1Session" ],
     [ "morph::ui::BorrowedModel", "d0/df1/structmorph_1_1ui_1_1BorrowedModel.html", "d0/df1/structmorph_1_1ui_1_1BorrowedModel" ],
+    [ "morph::ui::LoggedCommand", "d8/d58/structmorph_1_1ui_1_1LoggedCommand.html", "d8/d58/structmorph_1_1ui_1_1LoggedCommand" ],
+    [ "morph::ui::CommandLogEntry", "d7/db0/structmorph_1_1ui_1_1CommandLogEntry.html", "d7/db0/structmorph_1_1ui_1_1CommandLogEntry" ],
     [ "morph::ui::MountOptions", "d3/d5c/structmorph_1_1ui_1_1MountOptions.html", "d3/d5c/structmorph_1_1ui_1_1MountOptions" ],
     [ "morph::ui::detail::Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding" ],
     [ "morph::ui::detail::StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot" ],
@@ -31,6 +33,8 @@ var interpreter_8hpp =
     [ "morph::ui::detail::CommandCtx", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx" ],
     [ "morph::ui::detail::LowerCtx", "d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html", "d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx" ],
     [ "morph::ui::detail::ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore" ],
+    [ "morph::ui::detail::ScreenCore::KeptState", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState" ],
+    [ "morph::ui::detail::ScreenCore::LoweredNode", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode" ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],
     [ "morph::ui::AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html", "dd/d83/classmorph_1_1ui_1_1AppRoot" ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", "da/d2a/classmorph_1_1ui_1_1Interpreter" ],
@@ -64,6 +68,7 @@ var interpreter_8hpp =
     [ "morph::ui::detail::detached", "db/d42/interpreter_8hpp.html#afb7c0abf44bfa03e0cd7b983084dcbfb", null ],
     [ "morph::ui::detail::keySpec", "db/d42/interpreter_8hpp.html#a662f9404d02589d2803929713d51b316", null ],
     [ "morph::ui::detail::statefulKind", "db/d42/interpreter_8hpp.html#a3b6cee308a312a248e16e15f594283cb", null ],
+    [ "morph::ui::detail::commandKey", "db/d42/interpreter_8hpp.html#a790665efc77ecf0dc5aeb978ecd8a0e7", null ],
     [ "morph::ui::detail::instanceKeyText", "db/d42/interpreter_8hpp.html#a512ad9339b874dd9447cc24fb7b2f4fc", null ],
     [ "morph::ui::detail::channelOf", "db/d42/interpreter_8hpp.html#a58b1b9c8265dbd62a39a0bd8cf207338", null ],
     [ "morph::ui::detail::elementFor", "db/d42/interpreter_8hpp.html#a1a3128b17df8e5bb0bf04b3b4390766f", null ],
@@ -93,5 +98,7 @@ var interpreter_8hpp =
     [ "morph::ui::detail::arrangedChildren", "db/d42/interpreter_8hpp.html#adfad0eeb9b56a5d22a183a623d2e84d6", null ],
     [ "morph::ui::detail::arrangedOrder", "db/d42/interpreter_8hpp.html#a1ee0bda17c563ef3efabfc716e51da80", null ],
     [ "morph::ui::detail::arrangementValue", "db/d42/interpreter_8hpp.html#aef0841894f1af9f6b34c23363dc852d0", null ],
-    [ "morph::ui::detail::elementNode", "db/d42/interpreter_8hpp.html#ad37a4e5adb53712129099a147d21cab0", null ]
+    [ "morph::ui::detail::elementNode", "db/d42/interpreter_8hpp.html#ad37a4e5adb53712129099a147d21cab0", null ],
+    [ "morph::ui::detail::kCommandLogSize", "db/d42/interpreter_8hpp.html#aa145390415cb3c86f0cef9a63320ee34", null ],
+    [ "morph::ui::detail::kPruneLoweredAt", "db/d42/interpreter_8hpp.html#aa2de76267a8222a91458a4530b03c49e", null ]
 ];

@@ -29,5 +29,6 @@ var graph_8hpp =
     [ "morph::reactive::detail::site::kRuntimeOutlived", "d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#a38f2012abb892d04a4775a7325861d1a", null ],
     [ "morph::reactive::detail::site::kHandlerExecutor", "d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#a6d69e0cdc67903719d1a2ae93f850c2e", null ],
     [ "morph::reactive::detail::kDefaultMaxEffectRunsPerFlush", "d9/de9/graph_8hpp.html#ab890fc2344753d11008b888473cfb6dc", null ],
-    [ "morph::reactive::detail::kDefaultMaxThrowReposts", "d9/de9/graph_8hpp.html#ac942662b11422f43b1d9daa4d593abc3", null ]
+    [ "morph::reactive::detail::kDefaultMaxThrowReposts", "d9/de9/graph_8hpp.html#ac942662b11422f43b1d9daa4d593abc3", null ],
+    [ "morph::reactive::detail::kRecentMisuses", "d9/de9/graph_8hpp.html#a365428dd69063eae903b8c358eb36e88", null ]
 ];

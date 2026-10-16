@@ -138,7 +138,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How a <span class="tt"><a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a></span> bounds and reports its flushes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00022">22</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a6cdb3a7a48cae1010efb85c145ac468a" name="a6cdb3a7a48cae1010efb85c145ac468a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6cdb3a7a48cae1010efb85c145ac468a">&#9670;&#160;</a></span>maxEffectRunsPerFlush</h2>
@@ -154,7 +154,7 @@ Public Attributes</h2></td></tr>
 
 <p>How many times one <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> may run in a single flush before the flush is treated as a write cycle, reported, and stopped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>How many flushes in a row are re-posted after an <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> threw. Each re-post runs what is still queued, so a defect does not stall it until the next write; past the bound it waits for that write, so an <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> that throws on every run cannot loop for ever. A write from outside a flush starts a new count. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +190,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called on the owner after every flush that processed a queued <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a>; a frontend schedules its redraw here. May be empty. An exception it throws is reported (<span class="tt"><a class="el" href="../../d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#ab10247af40beb8ab3dbc0174ec7b72f9" title="An exception escaped RuntimeOptions::afterFlush; it is dropped.">detail::site::kAfterFlushThrew</a></span>) and dropped, so it never reaches the owner executor. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/df9/runtime_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../d0/df9/runtime_8hpp_source.html">runtime.hpp</a>.</p>
 
 </div>
 </div>

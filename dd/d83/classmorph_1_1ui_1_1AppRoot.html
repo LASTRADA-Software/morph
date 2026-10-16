@@ -147,7 +147,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <div class="textblock"><p>The app document mounted as the root scope every screen of the session shares (spec 6 §5). </p>
 <p>Its state, lets, queries and mutations live once for the session. A screen reads them as <span class="tt">{"ref": "app.name"}</span>, a binding on one updates, and <span class="tt">{"set": "app.name", …}</span> writes the app document's state. A query of the app document runs once however many screens read it. Destroying the root runs its <span class="tt">onUnmount</span>, takes its scope off the session and releases its model instances; a host does that before it clears the session on sign-out. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02234">2234</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02417">2417</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a2dce5dfc7a952c55087cd60b5627f81c" name="a2dce5dfc7a952c55087cd60b5627f81c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2dce5dfc7a952c55087cd60b5627f81c">&#9670;&#160;</a></span>~AppRoot()</h2>
@@ -174,7 +174,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 
 <p>Runs <span class="tt">onUnmount</span>, takes the scope off the session, and releases everything. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02242">2242</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02425">2425</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +211,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">null</span> for an expression that does not parse. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02256">2256</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02439">2439</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +241,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <p>The diagnostics reported so far. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02266">2266</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02449">2449</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

@@ -7,5 +7,6 @@ var classmorph_1_1reactive_1_1Runtime =
     [ "untracked", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ab885f39c3928d3bf72081f601806f612", null ],
     [ "owner", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#a98fe127c9f0fdbf520ce7ff7057167a3", null ],
     [ "isFlushRequested", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ae18a0b47187640c844105fd95adbf4f6", null ],
+    [ "stats", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ae855d712d0e975ed14f92e14de0cd788", null ],
     [ "core", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#aedc1f3815952ea822b017158922dddb1", null ]
 ];

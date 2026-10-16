@@ -172,7 +172,7 @@ Variables</h2></td></tr>
 
 <p>An operation ran off the <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a>'s owner; it is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -198,7 +198,7 @@ Variables</h2></td></tr>
 
 <p>An exception escaped an <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a>; the flush stops. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +224,7 @@ Variables</h2></td></tr>
 
 <p>An <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> re-ran more than <span class="tt">maxEffectRunsPerFlush</span> times in one flush; the flush stops. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +250,7 @@ Variables</h2></td></tr>
 
 <p>A signal was written while a <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> was computing; the write is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +276,7 @@ Variables</h2></td></tr>
 
 <p>A <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> read itself; the read throws <span class="tt">std::logic_error</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -302,7 +302,7 @@ Variables</h2></td></tr>
 
 <p><span class="tt"><a class="el" href="../../da/dcf/classmorph_1_1reactive_1_1Store.html#a7d4b0382c7a3aaea85a49b7e02e215a8" title="Applies msg in one batch. Refused off the owner, and inside an update.">Store::send</a></span> was called from inside an update; the message is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +330,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p><span class="tt"><a class="el" href="../../da/d9b/classmorph_1_1reactive_1_1Query.html#a1682ae152095ef970860ebf894732563" title="Re-issues the current key under a new generation, ending a debounce wait; idle stays idle....">Query::refetch</a></span> or <span class="tt"><a class="el" href="../../d3/d3a/classmorph_1_1reactive_1_1Mutation.html#a88ac6f55de93442e29732b97d4d6f56a" title="Issues, queues or refuses action, as MutationOptions::concurrency says. Refused, and reported,...">Mutation::run</a></span> was called while a <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html" title="A derived value: computed lazily on first read, cached, and recomputed only after a source it read re...">Computed</a> was computing; nothing is issued. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +356,7 @@ Variables</h2></td></tr>
 
 <p>An exception escaped <span class="tt"><a class="el" href="../../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html#a01c46e5a6853c49959e4a0a1e97c9d0a" title="Called on the owner after every flush that processed a queued Effect; a frontend schedules its redraw...">RuntimeOptions::afterFlush</a></span>; it is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +382,7 @@ Variables</h2></td></tr>
 
 <p>A <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a> was destroyed while nodes made from it were alive. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +408,7 @@ Variables</h2></td></tr>
 
 <p>A control node was built over a handler whose callbacks are not delivered on the <a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html" title="The owner of a signal graph: every node takes one, and every operation runs on its owner.">Runtime</a>'s owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>

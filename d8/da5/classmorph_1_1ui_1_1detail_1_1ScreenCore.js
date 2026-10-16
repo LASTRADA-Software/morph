@@ -1,5 +1,7 @@
 var classmorph_1_1ui_1_1detail_1_1ScreenCore =
 [
+    [ "KeptState", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState" ],
+    [ "LoweredNode", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode" ],
     [ "ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa", null ],
     [ "~ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af885c2ccb1e563db0c786de88bc0ec50", null ],
     [ "runLifecycleOf", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afa9e8d5bc626f0a212411a2735cceffe", null ],
@@ -17,6 +19,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "lower", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0e0356595c888ecda8e3182d524de57", null ],
     [ "lowerAll", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afc9b26ecab4c765cb138847d08f2dc48", null ],
     [ "addPending", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a12be639fee87a3b69d74343ce8e3ef6d", null ],
+    [ "keptState", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afa32d34a659b02ceca7434b510be769a", null ],
     [ "session", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a24031478a39d21194a9a2d696df75bf5", null ],
     [ "dispatcher", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0c39ee4bd369def8a48484adaef1263", null ],
     [ "host", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a275559bda77cd6b29bf442fe456b8aa9", null ],
@@ -30,5 +33,10 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "prefDefaults", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a3f5c473f0727a869fe9688e9b925b241", null ],
     [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ],
     [ "pendingWork", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af58663974e48a36f839f7b35aff5f6cf", null ],
-    [ "rootScope", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a5637f1b8da5f4f5dfd3792f7d991c704", null ]
+    [ "rootScope", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a5637f1b8da5f4f5dfd3792f7d991c704", null ],
+    [ "keptStates", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af2dbc9bafee49235fd38c86cbfee16ec", null ],
+    [ "loweredNodes", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a8d4b5902967aebb4442efb52597ddf98", null ],
+    [ "scopes", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afb7ac4dff69d4899d13602cb752af377", null ],
+    [ "commandLog", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#abd1b8f6c0018b8073d825ac0732ceee0", null ],
+    [ "inspecting", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ac0ce4188565fc11f730fe9bd999066be", null ]
 ];

@@ -15,6 +15,8 @@ var searchData=
   ['loadoptions_12',['LoadOptions',['../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html',1,'morph::ui']]],
   ['localbackend_13',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
   ['logentry_14',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
-  ['loopexecutor_15',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
-  ['lowerctx_16',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]]
+  ['loggedcommand_15',['LoggedCommand',['../d8/d58/structmorph_1_1ui_1_1LoggedCommand.html',1,'morph::ui']]],
+  ['loopexecutor_16',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
+  ['lowerctx_17',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]],
+  ['lowerednode_18',['LoweredNode',['../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html',1,'morph::ui::detail::ScreenCore']]]
 ];

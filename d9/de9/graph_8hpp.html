@@ -124,6 +124,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/de9/graph_8
 <p>The reactive graph's internals: node colours and links, the tracking frame, batching and the flush queue.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
+<code>#include &lt;array&gt;</code><br />
+<code>#include &lt;atomic&gt;</code><br />
 <code>#include &lt;concepts&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
@@ -216,6 +218,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:ab890fc2344753d11008b888473cfb6dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many times one <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> may run in a single flush unless <span class="tt"><a class="el" href="../../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html" title="How a Runtime bounds and reports its flushes.">RuntimeOptions</a></span> says otherwise.  <br /></td></tr>
 <tr class="memitem:ac942662b11422f43b1d9daa4d593abc3" id="r_ac942662b11422f43b1d9daa4d593abc3"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac942662b11422f43b1d9daa4d593abc3">morph::reactive::detail::kDefaultMaxThrowReposts</a> = 3</td></tr>
 <tr class="memdesc:ac942662b11422f43b1d9daa4d593abc3"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many flushes in a row are re-posted after an <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> threw, unless <span class="tt"><a class="el" href="../../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html" title="How a Runtime bounds and reports its flushes.">RuntimeOptions</a></span> says otherwise.  <br /></td></tr>
+<tr class="memitem:a365428dd69063eae903b8c358eb36e88" id="r_a365428dd69063eae903b8c358eb36e88"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a365428dd69063eae903b8c358eb36e88">morph::reactive::detail::kRecentMisuses</a> = 16</td></tr>
+<tr class="memdesc:a365428dd69063eae903b8c358eb36e88"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many of the latest misuses a runtime keeps the site of.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The reactive graph's internals: node colours and links, the tracking frame, batching and the flush queue. </p>
@@ -253,7 +257,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -295,7 +299,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">lhs</code> runs after <code class="param">rhs</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00673">673</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00735">735</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -322,7 +326,7 @@ Variables</h2></td></tr>
 
 <p>How many times one Effect may run in a single flush unless <span class="tt">RuntimeOptions</span> says otherwise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,7 +352,33 @@ Variables</h2></td></tr>
 
 <p>How many flushes in a row are re-posted after an Effect threw, unless <span class="tt">RuntimeOptions</span> says otherwise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a365428dd69063eae903b8c358eb36e88" name="a365428dd69063eae903b8c358eb36e88"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a365428dd69063eae903b8c358eb36e88">&#9670;&#160;</a></span>kRecentMisuses</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::reactive::detail::kRecentMisuses = 16</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many of the latest misuses a runtime keeps the site of. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/de9/graph_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d9/de9/graph_8hpp_source.html">graph.hpp</a>.</p>
 
 </div>
 </div>
