@@ -21,6 +21,7 @@ Read this before changing what a mounted document does. What a document may say 
 - [Commands](#commands)
 - [Lowering](#lowering)
 - [Diagnostics](#diagnostics)
+- [Development tools](#development-tools)
 - [Lifetimes](#lifetimes)
 - [Design decisions](#design-decisions)
 - [Not yet lowered](#not-yet-lowered)
@@ -275,6 +276,13 @@ applies to the width.
   left out, inside a column that carries the node's common properties. They have no element values
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
+
+## Development tools
+
+In a build with `MORPH_UI_DEV_TOOLS`, a screen also records what the development inspector reads
+([`inspector.md`](inspector.md)): each node as it is lowered, with its scope and bindings held weakly; each live
+scope; and each command list `runList` runs, with the batch it ran in. `Screen` befriends `Inspector`, which reads
+them and the scopes' queries and mutations, and returns copies. A build without the switch has none of these members.
 
 ## Diagnostics
 

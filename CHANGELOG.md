@@ -302,6 +302,22 @@ API surface).
 
 ### Added
 
+- **The development inspector** (spec 6 §21). In a build with
+  `MORPH_UI_DEV_TOOLS`, `ui::Inspector` is a read-only view of a mounted
+  screen: `nodes()` lists every mounted node with its kind, `id`, `testId`
+  and evaluated properties; `queries()` every query and mutation with its
+  cache key, state (`idle`, `pending`, `fresh`, `stale`, `error`), age, last
+  error and action; `commandLog()` the latest command lists the screen ran,
+  with their batch; `counters()` the reactive runtime's counters. Its one
+  action, `refetch(query)`, runs the document's `refetch` command as a user
+  event. `DocumentScreenHost::inspector(handle)` hands it out instead of the
+  screen, and `MountedShell::inspectFocused(visit)` reaches the focused
+  screen. On Qt Quick, `qt_quick::InspectorWindow` shows it, and Ctrl+Shift+I
+  opens it when `FrontendConfig::devTools` is set (the generic client's
+  `--dev`). A build without the switch contains none of it.
+  `reactive::Runtime::stats()` (`RuntimeStats`) counts flushes, Effects per
+  flush, batches and misuses in every build.
+
 - **Development reload** (spec 5 §12, spec 6 §21). The generic client started
   with `--dev`, or `MORPH_UI_DEV=1`, re-sends `ui-hello` every second and, when
   the manifest digest changed, remounts the shown screen on its changed

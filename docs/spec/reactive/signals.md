@@ -19,6 +19,7 @@ node type. [`store.md`](store.md) builds user-intent state on these nodes, and
 - [A Computed that fails](#a-computed-that-fails)
 - [Misuse: reported, then refused](#misuse-reported-then-refused)
 - [Off the owner, operation by operation](#off-the-owner-operation-by-operation)
+- [Counters](#counters)
 - [Lifetimes](#lifetimes)
 - [`Scope`](#scope)
 - [Relation to the bridge](#relation-to-the-bridge)
@@ -243,6 +244,23 @@ does next depends on what refusing can mean for it:
 | `Store::send`, `Query::refetch`, `Mutation::run`, a reply or publish delivered to a `Query`, `Mutation` or `Subscription`, a timed-refresh tick | Dropped ([`store.md`](store.md), [`control.md`](control.md)). |
 
 `Scope` itself checks nothing: only the nodes it makes do ([below](#scope)).
+
+## Counters
+
+`Runtime::stats()` returns a `RuntimeStats`: what the runtime has counted since it was made. The development inspector
+shows it ([`../ui/inspector.md`](../ui/inspector.md)), and it is kept in every build.
+
+| Field | Counts |
+|---|---|
+| `flushes` | Flushes that ran at least one queued Effect; a flush with an empty queue, and one deferred by a widget event, are not counted |
+| `effectsRun` | Queued Effects the flushes took off the queue, in all |
+| `lastFlushEffects`, `maxFlushEffects` | The same, for the latest flush, and the most in one flush |
+| `batches` | Outermost batches opened. `RuntimeCore::currentBatch()` is the number of the open one, 0 outside every batch |
+| `misuses` | Misuses reported through `RuntimeCore::report`, on the owner or off it |
+| `recentMisuses` | The sites of the latest `detail::kRecentMisuses` (16), oldest first |
+
+The misuse count and the recent sites are atomics, since a misuse off the owner is reported from another thread. The
+rest is read and written on the owner only.
 
 ## Lifetimes
 

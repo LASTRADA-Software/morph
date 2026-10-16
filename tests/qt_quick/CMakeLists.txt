@@ -20,6 +20,7 @@ add_executable(morph_qt_quick_tests
     test_qt_quick_scheduler.cpp
     test_qt_quick_theme.cpp
     test_qt_quick_automation.cpp
+    test_qt_quick_inspector.cpp
 )
 target_link_libraries(morph_qt_quick_tests
     PRIVATE

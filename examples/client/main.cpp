@@ -20,6 +20,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "local_apps.hpp"
@@ -118,10 +119,12 @@ int run(int argc, char** argv) {
     ShellFactory const factory{.source = source->get(), .args = &*clientArgs};
     std::vector<ui::FrontendOption> built;
 #if MORPH_CLIENT_HAS_QT_QUICK
-    built.push_back(morph::qt_quick::frontendOption(
-        argc, argv,
-        morph::qt_quick::FrontendConfig{
-            .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}}));
+    morph::qt_quick::FrontendConfig qtConfig{
+        .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}};
+#if MORPH_UI_DEV_TOOLS
+    qtConfig.devTools = clientArgs->dev;
+#endif
+    built.push_back(morph::qt_quick::frontendOption(argc, argv, std::move(qtConfig)));
 #endif
 #if MORPH_CLIENT_HAS_TUI
     built.push_back(morph::tui::frontendOption(morph::tui::FrontendConfig{

@@ -39,6 +39,7 @@
 #include "../reactive/scope.hpp"
 #include "../reactive/signal.hpp"
 #include "../ui/backend.hpp"
+#include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
 #include "message.hpp"
@@ -1043,6 +1044,31 @@ struct BorrowedModel {
 
 class Screen;
 
+#if MORPH_UI_DEV_TOOLS
+class Inspector;
+
+/// @brief One command of a command list the inspector's log shows (spec 6 §21).
+struct LoggedCommand {
+    /// @brief The command's key: `set`, `run`, `refetch`, …
+    std::string kind;
+    /// @brief The name it acts on (`Command::target`); empty for a command that names none.
+    std::string target;
+    /// @brief The command's JSON Pointer in the document.
+    std::string path;
+};
+
+/// @brief One command list as it ran: the event that ran it, its commands, and the reactive batch they ran in.
+struct CommandLogEntry {
+    /// @brief The JSON Pointer of the list: the event, lifecycle key or step that holds it.
+    std::string event;
+    /// @brief Its commands, in order.
+    std::vector<LoggedCommand> commands;
+    /// @brief The number of the reactive batch it ran in (`reactive::detail::RuntimeCore::currentBatch`); 0 outside
+    ///        every batch.
+    std::uint64_t batch = 0;
+};
+#endif
+
 /// @brief What `Interpreter::mount` is given beside the document.
 struct MountOptions {
     /// @brief The container the screen's root widget is appended to; `nullptr` makes a backend root.
@@ -1763,6 +1789,70 @@ struct LowerCtx {
     return listed(kStateful, kind);
 }
 
+#if MORPH_UI_DEV_TOOLS
+/// @brief How many command lists the inspector's log keeps.
+inline constexpr std::size_t kCommandLogSize = 256;
+
+/// @brief How often, in lowered nodes, the inspector's node list drops the nodes whose scope is gone.
+inline constexpr std::size_t kPruneLoweredAt = 256;
+
+/// @brief The key a command is written with.
+/// @param kind The command's kind.
+/// @return Its key, such as `refetch`.
+[[nodiscard]] inline std::string commandKey(CommandKind kind) {
+    switch (kind) {
+        case CommandKind::Set:
+            return "set";
+        case CommandKind::Reset:
+            return "reset";
+        case CommandKind::Run:
+            return "run";
+        case CommandKind::Refetch:
+            return "refetch";
+        case CommandKind::Open:
+            return "open";
+        case CommandKind::Close:
+            return "close";
+        case CommandKind::Navigate:
+            return "navigate";
+        case CommandKind::Return:
+            return "return";
+        case CommandKind::Focus:
+            return "focus";
+        case CommandKind::Host:
+            return "host";
+        case CommandKind::SwitchBackend:
+            return "switchBackend";
+        case CommandKind::ResetPrefs:
+            return "resetPrefs";
+        case CommandKind::SetLocale:
+            return "setLocale";
+        case CommandKind::Notify:
+            return "notify";
+        case CommandKind::Seq:
+            return "seq";
+        case CommandKind::All:
+            return "all";
+        case CommandKind::If:
+            return "if";
+        case CommandKind::CancelClose:
+            return "cancelClose";
+        case CommandKind::Retry:
+            return "retry";
+        case CommandKind::SignIn:
+            return "signIn";
+        case CommandKind::SignOut:
+            return "signOut";
+        case CommandKind::Upload:
+            return "upload";
+        case CommandKind::Download:
+            return "download";
+        default:
+            return "unknown";
+    }
+}
+#endif
+
 /// @brief One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that
 ///        declares scopes, lowers nodes and runs commands.
 class ScreenCore {
@@ -1828,6 +1918,11 @@ public:
     /// @param path   Where.
     /// @param reason What.
     void report(std::string_view path, std::string_view reason) {
+#if MORPH_UI_DEV_TOOLS
+        if (inspecting) {
+            return;
+        }
+#endif
         std::string key = std::string{path} + '\x1f' + std::string{reason};
         if (!reported.insert(std::move(key)).second) {
             return;
@@ -1981,6 +2076,25 @@ public:
     };
     /// @brief The states of the own scope of the screen this one replaces, by name (`MountOptions::keepStateOf`).
     std::map<std::string, KeptState, std::less<>> keptStates;
+#if MORPH_UI_DEV_TOOLS
+    /// @brief A node as it was lowered, which the inspector lists while its scope lives.
+    struct LoweredNode {
+        /// @brief The node.
+        DocNode const* node = nullptr;
+        /// @brief The scope it was lowered in.
+        std::weak_ptr<RtScope> scope;
+        /// @brief The names bound where it was lowered.
+        std::weak_ptr<Bindings const> bindings;
+    };
+    /// @brief Every node lowered, in lowering order; an entry whose scope is gone is pruned as more are added.
+    std::vector<LoweredNode> loweredNodes;
+    /// @brief The screen's live scopes, in creation order.
+    std::vector<RtScope*> scopes;
+    /// @brief The latest command lists run, oldest first, at most `kCommandLogSize`.
+    std::deque<CommandLogEntry> commandLog;
+    /// @brief Set while the inspector evaluates, so that an expression error it meets is not reported.
+    bool inspecting = false;
+#endif
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     /// @brief The value a state of the screen's own scope keeps from the screen it replaces: that screen's value of
@@ -2072,6 +2186,23 @@ private:
     [[nodiscard]] Value once(LowerCtx const& ctx, ExprPtr const& expr) const {
         return runtime().untracked([&] { return evalIn(*ctx.scope, ctx.bindings.get(), expr); });
     }
+
+#if MORPH_UI_DEV_TOOLS
+    /// @brief Keeps a command list in the inspector's log.
+    void logList(Commands const& commands) {
+        CommandLogEntry entry{.event = {}, .commands = {}, .batch = runtime().core()->currentBatch()};
+        std::string_view const first = commands.front().path;
+        entry.event = std::string{first.substr(0, first.rfind('/') == std::string_view::npos ? 0 : first.rfind('/'))};
+        for (Command const& command : commands) {
+            entry.commands.push_back(
+                LoggedCommand{.kind = commandKey(command.kind), .target = command.target, .path = command.path});
+        }
+        if (commandLog.size() == kCommandLogSize) {
+            commandLog.pop_front();
+        }
+        commandLog.push_back(std::move(entry));
+    }
+#endif
 
     std::shared_ptr<Document const> _doc;
     SlotId _slots = 1;
@@ -2220,6 +2351,9 @@ public:
 
 private:
     friend class Interpreter;
+#if MORPH_UI_DEV_TOOLS
+    friend class Inspector;
+#endif
 
     Screen() = default;
 
@@ -2465,9 +2599,16 @@ namespace detail {
 
 inline RtScope::RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, reactive::Signal<Value> const* current,
                         std::size_t depth)
-    : core{screen}, parent{std::move(enclosing)}, row{current}, nodes{screen.runtime(), depth} {}
+    : core{screen}, parent{std::move(enclosing)}, row{current}, nodes{screen.runtime(), depth} {
+#if MORPH_UI_DEV_TOOLS
+    core.scopes.push_back(this);
+#endif
+}
 
 inline RtScope::~RtScope() {
+#if MORPH_UI_DEV_TOOLS
+    std::erase(core.scopes, this);
+#endif
     if (owner != nullptr) {
         core.addPending(-1);
         if (owner->inner.peek() == this) {
@@ -3642,6 +3783,9 @@ inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx,
         bool ok = true;
         Done done;
     };
+#if MORPH_UI_DEV_TOOLS
+    logList(commands);
+#endif
     auto join = std::make_shared<Join>(Join{.left = commands.size() + 1, .ok = true, .done = std::move(done)});
     auto finish = [join](bool succeeded) {
         join->ok = join->ok && succeeded;
@@ -4477,6 +4621,12 @@ namespace detail {
 
 // NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
 inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
+#if MORPH_UI_DEV_TOOLS
+    if (loweredNodes.size() >= kPruneLoweredAt && loweredNodes.size() % kPruneLoweredAt == 0) {
+        std::erase_if(loweredNodes, [](LoweredNode const& entry) { return entry.scope.expired(); });
+    }
+    loweredNodes.push_back(LoweredNode{.node = &node, .scope = ctx.scope, .bindings = ctx.bindings});
+#endif
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
 }
 

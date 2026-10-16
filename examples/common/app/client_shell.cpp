@@ -17,6 +17,7 @@
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/route_history.hpp>
@@ -269,6 +270,17 @@ public:
         }
 #endif
     }
+
+#if MORPH_UI_DEV_TOOLS
+    void inspectFocused(std::function<void(ui::Inspector&)> const& visit) override {
+        if (!_current || !visit) {
+            return;
+        }
+        if (std::optional<ui::Inspector> inspector = ui::DocumentScreenHost::inspector(*_current)) {
+            visit(*inspector);
+        }
+    }
+#endif
 
     /// Shows @p text in place of any screen, and reports it.
     void show(std::string const& text) {

@@ -19,8 +19,10 @@
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
+#include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
+#include "inspector.hpp"
 #include "interpreter.hpp"
 #include "route.hpp"
 #include "value.hpp"
@@ -436,6 +438,22 @@ public:
         return own->remount(_interpreter, std::move(document), *_options.backend);
     }
 
+#if MORPH_UI_DEV_TOOLS
+    /// @brief The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window
+    ///        reads. It hands out no access to the screen beyond the inspector's own read-only view and its
+    ///        `refetch` command.
+    /// @param handle A handle this host mounted.
+    /// @return The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle.
+    [[nodiscard]] static std::optional<Inspector> inspector(ScreenHandle& handle) {
+        auto const* const own = dynamic_cast<Handle const*>(&handle);
+        Screen* const screen = own == nullptr ? nullptr : own->screen();
+        if (screen == nullptr) {
+            return std::nullopt;
+        }
+        return Inspector{*screen};
+    }
+#endif
+
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.
     /// @return Its root widget, or `nullptr` for a closed or foreign handle.
@@ -560,6 +578,9 @@ private:
         void save(std::function<void(bool clean)> done) override { State::save(_state, std::move(done)); }
 
         [[nodiscard]] Widget* root() const { return _state->screen ? &_state->screen->root() : nullptr; }
+
+        /// The screen while it is open; null once it closed.
+        [[nodiscard]] Screen* screen() const { return _state->screen.get(); }
 
         /// Records what the screen was mounted with, so a remount mounts the same instance in the same place.
         void placed(ParamMap params, ContainerWidget* parent) {
