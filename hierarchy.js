@@ -552,6 +552,9 @@ var hierarchy =
     [ "morph::ui::IFileStore", "d6/d37/classmorph_1_1ui_1_1IFileStore.html", [
       [ "morph::ui::MemoryFileStore", "d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html", null ]
     ] ],
+    [ "morph::ui::IHistory", "d6/d55/classmorph_1_1ui_1_1IHistory.html", [
+      [ "morph::ui::testing::MemoryHistory", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory.html", null ]
+    ] ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", null ],
     [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", [
       [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
@@ -619,6 +622,7 @@ var hierarchy =
     [ "morph::ui::Refusal", "de/d52/structmorph_1_1ui_1_1Refusal.html", null ],
     [ "morph::ui::Rgba", "d9/d7c/structmorph_1_1ui_1_1Rgba.html", null ],
     [ "morph::ui::Route", "de/d2f/structmorph_1_1ui_1_1Route.html", null ],
+    [ "morph::ui::RouteHistory", "d2/d82/classmorph_1_1ui_1_1RouteHistory.html", null ],
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", null ],
     [ "morph::ui::ScopeDecl", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html", null ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", null ],

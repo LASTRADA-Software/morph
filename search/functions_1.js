@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['back_0',['back',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html#a975e483cdc7a0f3f50f42aec42379d88',1,'morph::forms::WizardSession::back()'],['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a29dd07a64f9bdb1ad3e537db4e1d30f7',1,'morph::flows::FlowSession::back()']]],
+  ['back_0',['back',['../d4/df2/classmorph_1_1forms_1_1WizardSession.html#a975e483cdc7a0f3f50f42aec42379d88',1,'morph::forms::WizardSession::back()'],['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a29dd07a64f9bdb1ad3e537db4e1d30f7',1,'morph::flows::FlowSession::back()'],['../d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory.html#a6609ec0b3da5493eaf11d9a3770ab26e',1,'morph::ui::testing::MemoryHistory::back()']]],
   ['backend_1',['Backend',['../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a7b31dc5725321a729acd704ffd1c009b',1,'morph::qt_quick::Backend::Backend()'],['../d2/d8e/classmorph_1_1tui_1_1Backend.html#aa2f5d25aa29f4fc9a3bf9a7ecc869995',1,'morph::tui::Backend::Backend()']]],
   ['backend_2',['backend',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a3ce5ac62ebd304294599ba1696be87ce',1,'morph::ui::testing::ConformanceProbe']]],
   ['backendchanged_3',['backendChanged',['../df/d20/classmorph_1_1ui_1_1Session.html#aeefff92eac995b68a0009bd381c37f22',1,'morph::ui::Session']]],

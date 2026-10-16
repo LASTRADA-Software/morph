@@ -540,6 +540,7 @@ var annotated_dup =
           ] ],
           [ "ConformanceCase", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase" ],
           [ "ConformanceProbe", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe" ],
+          [ "MemoryHistory", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory.html", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory" ],
           [ "RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend" ]
         ] ],
         [ "Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", "d9/d03/structmorph_1_1ui_1_1Accessibility" ],
@@ -633,6 +634,7 @@ var annotated_dup =
         [ "HostVocabulary", "d0/db2/classmorph_1_1ui_1_1HostVocabulary.html", "d0/db2/classmorph_1_1ui_1_1HostVocabulary" ],
         [ "IBundleStore", "d2/df7/classmorph_1_1ui_1_1IBundleStore.html", "d2/df7/classmorph_1_1ui_1_1IBundleStore" ],
         [ "IFileStore", "d6/d37/classmorph_1_1ui_1_1IFileStore.html", "d6/d37/classmorph_1_1ui_1_1IFileStore" ],
+        [ "IHistory", "d6/d55/classmorph_1_1ui_1_1IHistory.html", "d6/d55/classmorph_1_1ui_1_1IHistory" ],
         [ "Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", "da/d2a/classmorph_1_1ui_1_1Interpreter" ],
         [ "InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost" ],
         [ "InterpreterOptions", "d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html", "d5/d55/structmorph_1_1ui_1_1InterpreterOptions" ],
@@ -698,6 +700,7 @@ var annotated_dup =
         [ "Refusal", "de/d52/structmorph_1_1ui_1_1Refusal.html", "de/d52/structmorph_1_1ui_1_1Refusal" ],
         [ "Rgba", "d9/d7c/structmorph_1_1ui_1_1Rgba.html", "d9/d7c/structmorph_1_1ui_1_1Rgba" ],
         [ "Route", "de/d2f/structmorph_1_1ui_1_1Route.html", "de/d2f/structmorph_1_1ui_1_1Route" ],
+        [ "RouteHistory", "d2/d82/classmorph_1_1ui_1_1RouteHistory.html", "d2/d82/classmorph_1_1ui_1_1RouteHistory" ],
         [ "Row", "d7/da8/structmorph_1_1ui_1_1Row.html", "d7/da8/structmorph_1_1ui_1_1Row" ],
         [ "ScopeDecl", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl" ],
         [ "Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],

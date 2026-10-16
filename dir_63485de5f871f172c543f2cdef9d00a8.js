@@ -20,6 +20,7 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
     [ "preferences.hpp", "df/d07/preferences_8hpp.html", "df/d07/preferences_8hpp" ],
     [ "queueing_dispatcher.hpp", "d2/de0/queueing__dispatcher_8hpp.html", "d2/de0/queueing__dispatcher_8hpp" ],
     [ "route.hpp", "d4/d2f/route_8hpp.html", "d4/d2f/route_8hpp" ],
+    [ "route_history.hpp", "de/df5/route__history_8hpp.html", "de/df5/route__history_8hpp" ],
     [ "service.hpp", "d3/d31/service_8hpp.html", "d3/d31/service_8hpp" ],
     [ "service_client.hpp", "dd/d56/service__client_8hpp.html", "dd/d56/service__client_8hpp" ],
     [ "theme.hpp", "d9/df6/ui_2theme_8hpp.html", "d9/df6/ui_2theme_8hpp" ],

@@ -5,6 +5,7 @@ var searchData=
   ['reflected_5fmember_2ehpp_2',['reflected_member.hpp',['../df/d31/reflected__member_8hpp.html',1,'']]],
   ['reply_5frouter_2ehpp_3',['reply_router.hpp',['../d6/d41/reply__router_8hpp.html',1,'']]],
   ['route_2ehpp_4',['route.hpp',['../d4/d2f/route_8hpp.html',1,'']]],
-  ['rules_2ehpp_5',['rules.hpp',['../d8/d26/rules_8hpp.html',1,'']]],
-  ['runtime_2ehpp_6',['runtime.hpp',['../d0/df9/runtime_8hpp.html',1,'']]]
+  ['route_5fhistory_2ehpp_5',['route_history.hpp',['../de/df5/route__history_8hpp.html',1,'']]],
+  ['rules_2ehpp_6',['rules.hpp',['../d8/d26/rules_8hpp.html',1,'']]],
+  ['runtime_2ehpp_7',['runtime.hpp',['../d0/df9/runtime_8hpp.html',1,'']]]
 ];
