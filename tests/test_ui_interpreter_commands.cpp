@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -516,4 +517,39 @@ TEST_CASE("interpreter commands: optional parts of nodes fall back to their defa
     REQUIRE((*screen)->diagnostics().size() == 2);
     CHECK((*screen)->diagnostics().at(0).reason == "`set` writes a value that is not a int");
     CHECK((*screen)->diagnostics().at(1).reason == "the dialog's `open` is bound to an expression");
+}
+
+// Mutations: leave out the label fallback (every unnamed field reads empty); let the label overwrite an explicit
+// `a11y.name` (the "Explicit" checks fail); skip the fallback when an `a11y` part carries only a role.
+TEST_CASE("interpreter commands: a field's label is its accessible name unless `a11y.name` gives one",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "named",
+      "state": { "unit": { "init": "Mass" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "textInput", "testId": "text", "label": { "ref": "unit" } },
+        { "kind": "select", "testId": "select", "label": "Unit", "options": { "lit": [ "g", "kg" ] } },
+        { "kind": "slider", "testId": "slider", "label": "Dilution" },
+        { "kind": "dateTimeInput", "testId": "when", "label": "Since" },
+        { "kind": "filePicker", "testId": "file", "label": "Report" },
+        { "kind": "textInput", "testId": "explicitText", "label": "Label", "a11y": { "name": "Explicit" } },
+        { "kind": "select", "testId": "explicitSelect", "label": "Label", "a11y": { "name": "Explicit" } },
+        { "kind": "textInput", "testId": "roleOnly", "label": "Note", "a11y": { "role": "textbox" } },
+        { "kind": "button", "testId": "rename", "label": "rename",
+          "onClick": [ { "set": "unit", "value": "Volume" } ] } ] } })");
+    auto name = [&](std::string_view kind, std::string_view testId) {
+        return h.backend.prop(h.byTestId(kind, testId), "a11yName");
+    };
+    CHECK(name("TextInput", "text") == "Mass");
+    CHECK(name("Select", "select") == "Unit");
+    CHECK(name("Slider", "slider") == "Dilution");
+    CHECK(name("DateTimeInput", "when") == "Since");
+    CHECK(name("FilePicker", "file") == "Report");
+    CHECK(name("TextInput", "explicitText") == "Explicit");
+    CHECK(name("Select", "explicitSelect") == "Explicit");
+    CHECK(name("TextInput", "roleOnly") == "Note");
+    h.backend.click(h.byTestId("Button", "rename"));
+    h.settle();
+    CHECK(name("TextInput", "text") == "Volume");
 }

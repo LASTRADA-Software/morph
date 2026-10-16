@@ -2972,7 +2972,7 @@ struct SelectOptions {
     AnyHandle options;
     /// @brief The selected key.
     AnyHandle selected;
-    /// @brief The label.
+    /// @brief The label: the accessible name.
     AnyHandle label;
     /// @brief The presentation, such as `radio`.
     AnyHandle style;
@@ -3514,7 +3514,7 @@ template <typename Action, typename Model>
 struct SliderOptions {
     /// @brief The value.
     AnyHandle value;
-    /// @brief The label.
+    /// @brief The label: the accessible name.
     AnyHandle label;
     /// @brief The minimum.
     AnyHandle min;
@@ -3545,7 +3545,7 @@ struct SliderOptions {
 
 /// @brief Options of `filePicker`.
 struct FilePickerOptions {
-    /// @brief The label.
+    /// @brief The label: the accessible name.
     AnyHandle label;
     /// @brief The accepted types.
     AnyHandle accept;

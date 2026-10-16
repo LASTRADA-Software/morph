@@ -979,6 +979,12 @@ API surface).
 
 ### Fixed
 
+- **A field's `label` is its accessible name.** A document's `textInput`,
+  `select`, `slider`, `dateTimeInput` and `filePicker` accepted a `label`, and
+  registration counted it as naming the field, but the interpreter dropped it,
+  so the field reached assistive technology unnamed. The label now binds
+  `Common::a11y.name`; an `a11y` part's own `name` still wins over it.
+
 - **A form's, collection's or wizard's submit triggers `refreshOn`.** Only a
   `mutation`'s success refetched the queries whose `refreshOn` named its action;
   the same action submitted through a `form` node refetched nothing, so a screen
