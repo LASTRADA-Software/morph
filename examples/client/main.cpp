@@ -3,19 +3,23 @@
 // The generic client (spec 4 §3): renders any application's screens, fetched from a server (`--server URL`) or linked
 // in-process (`--app NAME`), on the frontend `ui::selectFrontend` picks (`--ui=qt|tui`, `MORPH_UI`, or the first
 // usable). `--screen ID` picks the first screen; `--exit-after-mount` quits once it mounted, with 0 when it mounted
-// without a problem and 1 otherwise.
+// without a problem and 1 otherwise. `--dev`, or `MORPH_UI_DEV=1`, reloads the screens when the server's documents
+// change, in a client built with the development tools (spec 6 §21).
 
 #include <app/app_source.hpp>
 #include <app/client_shell.hpp>
 #include <cstddef>
+#include <cstdlib>
 #include <exception>
 #include <expected>
 #include <iostream>
 #include <memory>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/frontend.hpp>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "local_apps.hpp"
@@ -57,6 +61,7 @@ struct ShellFactory {
                     }
                 },
             .onMounted = {}};
+        options.dev = args->dev;
 #if MORPH_CLIENT_HAS_QT_QUICK && defined(__EMSCRIPTEN__)
         // The page's history, made once the frontend's event loop exists. It is never destroyed, so its timer never
         // outlives the event loop; a page's runtime does not exit.
@@ -94,6 +99,17 @@ int run(int argc, char** argv) {
         std::cerr << "client: " << clientArgs.error() << '\n';
         return 2;
     }
+    // Read once, at start, before any thread that could change the environment exists.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    if (char const* const dev = std::getenv("MORPH_UI_DEV"); dev != nullptr && std::string_view{dev} == "1") {
+        clientArgs->dev = true;
+    }
+#if !MORPH_UI_DEV_TOOLS
+    if (clientArgs->dev) {
+        std::cerr << "client: development mode is not built into this client (MORPH_UI_DEV_TOOLS is off)\n";
+        clientArgs->dev = false;
+    }
+#endif
     auto source = examples::makeSource(*clientArgs, examples::client::localApps());
     if (!source) {
         std::cerr << "client: " << source.error() << '\n';

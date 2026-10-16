@@ -10,6 +10,7 @@
 #include <morph/ui/host.hpp>
 #include <morph/ui/route_history.hpp>
 #include <string>
+#include <vector>
 
 #include "app/app_source.hpp"
 
@@ -38,6 +39,12 @@ struct ClientShellOptions {
     ///        open the route of the entry moved to, and the route it holds at start is opened once the session has
     ///        the screen. Borrowed: it outlives the shell; null keeps no history.
     ui::IHistory* history = nullptr;
+    /// @brief Development mode (spec 5 §12): every second the shell polls the source's `ui-hello` digest, and when it
+    ///        changed, remounts the shown screen on its changed document, keeping its state. A shell built without
+    ///        the development tools never polls. A production client leaves it off: the digest is then read once.
+    bool dev = false;
+    /// @brief Called after each development reload with the ids of the screens it remounted; empty ignores it.
+    std::function<void(std::vector<std::string> const& remounted)> onReloaded;
 };
 
 /// @brief Mounts the client's shell for what @p source delivered.

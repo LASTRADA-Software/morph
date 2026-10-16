@@ -60,6 +60,16 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - **`mountInto(screenId, params, parent)`** mounts as `mount` does, with the screen's root widget appended to the
   host's own container instead of made a backend root: a tab's page, a pane. The container outlives the handle. A
   refused mount leaves the container as it was.
+- **`remount(handle, document)`** mounts a changed document of a screen it mounted, with the same params in the
+  same place, and replaces the screen behind the same handle (spec 5 §12, development reload;
+  [`service.md`](service.md#development-reload)).
+  - Each state of the new screen's own scope declared under the same name and type starts from the old screen's
+    value; every other state starts from its init.
+  - The old screen is destroyed after the new one mounted, so its `onUnmount` runs and the root widget is never
+    missing. `title`, `dirty` and `identity` then follow the new screen, and a call the screen answers stays tied
+    to it.
+  - A foreign or closed handle, a close or save in progress, and the interpreter's refusal of the new document are
+    `MountError`, and the old screen stays.
 - **`identityOf`** evaluates the document's `identity` over the params alone, without mounting, and answers its
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,
   the session), and one whose identity is `null` answer `std::nullopt`: their identity is known only once mounted,

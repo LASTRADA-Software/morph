@@ -751,10 +751,12 @@ MORPH_REGISTER_SCREEN(screen);
   client speaks.
 - **Development reload.** A client started in development mode re-sends `ui-hello` every second. When
   the manifest digest changes, it fetches the changed entries and remounts the mounted screens whose
-  documents changed, keeping each scope's state where the new document still declares it under the
-  same name and type, and the screen's identity. A remount that fails validation keeps the old
-  document and reports the refusal. Production clients do not poll: the digest is read once per
-  connection.
+  documents changed, keeping the screen scope's state where the new document still declares it under
+  the same name and type, and the screen's identity. A nested scope (a dialog's or drawer's content, a
+  switch case, a row) starts again from its inits when it next mounts: matching it to the old one would
+  need the two documents compared node by node, where the screen scope's state is matched by name. A
+  remount that fails validation keeps the old document and reports the refusal. Production clients do
+  not poll: the digest is read once per connection.
 
 ## 12b. Permissions and per-user customization
 

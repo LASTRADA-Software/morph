@@ -216,6 +216,43 @@ TEST_CASE("UiClient fetches nothing for an unchanged manifest", "[ui-service][cl
     REQUIRE(harness.sent == std::vector<std::string>{"ui-hello", "ui-catalog"});
 }
 
+// Mutation: skip the digest comparison in onHello — the unchanged poll opens the bundle (catalog sent, a value
+// delivered).
+TEST_CASE("UiClient::poll sends only ui-hello while the digest is unchanged, and opens a changed bundle",
+          "[ui-service][client][dev-reload]") {
+    Harness harness;
+    OpenResult const opened = Harness::open(harness.client(), as("tech"));
+    REQUIRE(opened);
+    harness.sent.clear();
+
+    using Polled = std::expected<std::optional<LoadedBundle>, ConnectError>;
+    std::optional<Polled> unchanged;
+    harness.client().poll(as("tech"), opened->hello.digest,
+                          [&unchanged](Polled polled) { unchanged = std::move(polled); });
+    REQUIRE(unchanged.has_value());
+    REQUIRE(unchanged->has_value());
+    CHECK_FALSE(unchanged->value().has_value());
+    CHECK(harness.sent == std::vector<std::string>{"ui-hello"});
+
+    harness.sent.clear();
+    std::optional<Polled> changed;
+    harness.client().poll(as("tech"), "sha256:" + std::string(64, '0'),
+                          [&changed](Polled polled) { changed = std::move(polled); });
+    REQUIRE(changed.has_value());
+    REQUIRE(changed->has_value());
+    REQUIRE(changed->value().has_value());
+    CHECK(changed->value()->hello.digest == uiservice::bundle()->digest);
+    CHECK(changed->value()->bundle.documents.at("lims.results") == uiservice::kResults);
+    CHECK(harness.sent == std::vector<std::string>{"ui-hello", "ui-catalog"});  // the cache holds every file
+
+    harness.unreachable = true;
+    std::optional<Polled> failed;
+    harness.client().poll(as("tech"), opened->hello.digest, [&failed](Polled polled) { failed = std::move(polled); });
+    REQUIRE(failed.has_value());
+    REQUIRE_FALSE(failed->has_value());
+    CHECK(failed->error().kind == ConnectError::Kind::Unreachable);
+}
+
 TEST_CASE("UiClient fetches what a principal newly may, and keeps the rest", "[ui-service][client]") {
     Harness harness;
     REQUIRE(Harness::open(harness.client(), as("tech")));

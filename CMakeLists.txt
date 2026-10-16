@@ -117,6 +117,24 @@ option(MORPH_CLIENT_ONLY
     OFF
 )
 
+# The UI development tools (spec 6 §21): the generic client's reload poll and
+# the inspector. A release build contains none of them, so the default is OFF
+# for Release, MinSizeRel and RelWithDebInfo and ON otherwise; turning it on
+# compiles them in, and a client still enables them at run time with --dev or
+# MORPH_UI_DEV=1. On the INTERFACE of the morph target, as MORPH_CLIENT_ONLY
+# is: the macro adds members to the interpreter's screen, so every translation
+# unit has to agree on it.
+if(CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel|RelWithDebInfo)$")
+    set(_morph_ui_dev_tools_default OFF)
+else()
+    set(_morph_ui_dev_tools_default ON)
+endif()
+option(MORPH_UI_DEV_TOOLS
+    "Build the UI development tools (document reload and the inspector) into clients; OFF by default in release build types"
+    ${_morph_ui_dev_tools_default}
+)
+unset(_morph_ui_dev_tools_default)
+
 # Both Qt consumers (the WebSocket backend and the Qt Quick frontend) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
 if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_QT_QUICK))
@@ -423,6 +441,11 @@ endif()
 if(MORPH_CLIENT_ONLY)
     target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)
 endif()
+if(MORPH_UI_DEV_TOOLS)
+    target_compile_definitions(morph INTERFACE MORPH_UI_DEV_TOOLS=1)
+else()
+    target_compile_definitions(morph INTERFACE MORPH_UI_DEV_TOOLS=0)
+endif()
 if(MORPH_ENABLE_TRACY)
     target_compile_definitions(morph INTERFACE MORPH_TRACY_ENABLED)
     target_link_libraries(morph INTERFACE Tracy::TracyClient)
@@ -499,6 +522,8 @@ target_sources(morph
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
+        include/morph/ui/dev_reload.hpp
+        include/morph/ui/dev_tools.hpp
         include/morph/ui/workspace.hpp
         include/morph/ui/navigator.hpp
         include/morph/ui/route.hpp

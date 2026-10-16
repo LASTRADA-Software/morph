@@ -302,6 +302,23 @@ API surface).
 
 ### Added
 
+- **Development reload** (spec 5 §12, spec 6 §21). The generic client started
+  with `--dev`, or `MORPH_UI_DEV=1`, re-sends `ui-hello` every second and, when
+  the manifest digest changed, remounts the shown screen on its changed
+  document; a client without it reads the digest once per connection. The
+  library pieces a downstream client would otherwise copy:
+  `UiClient::poll(session, knownDigest, done)` is the poll step, which sends
+  only `ui-hello` while the digest is unchanged; `changedDocuments(before,
+  after)` names the documents two manifests differ in; `reloadDocuments(...)`
+  loads them and remounts the mounted screens that show them;
+  `DocumentScreenHost::remount(handle, document)` remounts one screen in
+  place, keeping its handle, params and identity. A remount keeps each state
+  of the screen's own scope that the new document declares under the same
+  name and type (`MountOptions::keepStateOf`); a new document that does not
+  load, or that the interpreter refuses, keeps the old one and is reported.
+  The CMake option `MORPH_UI_DEV_TOOLS`, off by default in release build
+  types, decides whether the client's poll is built at all.
+
 - **The close guard's three choices** (spec 6 §15). A `CloseGuard` now
   answers with a `CloseChoice` instead of a bool: *save and close* runs the
   screen's `onSave`, waits for the work it started, and closes only a screen it

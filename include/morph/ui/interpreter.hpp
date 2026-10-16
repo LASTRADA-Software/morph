@@ -1041,6 +1041,8 @@ struct BorrowedModel {
     std::string token;
 };
 
+class Screen;
+
 /// @brief What `Interpreter::mount` is given beside the document.
 struct MountOptions {
     /// @brief The container the screen's root widget is appended to; `nullptr` makes a backend root.
@@ -1049,6 +1051,10 @@ struct MountOptions {
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The reactive scope depth of the screen's own scope.
     std::size_t depth = 0;
+    /// @brief The screen this mount replaces, such as one whose document changed; `nullptr` for a fresh mount. Each
+    ///        state of the new screen's own scope starts from that screen's value of the state of the same name and
+    ///        type, instead of from its init. Borrowed for the call.
+    Screen const* keepStateOf = nullptr;
 };
 
 namespace detail {
@@ -1854,6 +1860,10 @@ public:
         if (slot.value || slot.initializing) {
             return;
         }
+        if (std::optional<Value> keptValue = keptState(scope, *slot.decl)) {
+            slot.value = std::make_unique<reactive::Signal<Value>>(runtime(), std::move(*keptValue));
+            return;
+        }
         slot.initializing = true;
         Value init = runtime().untracked([&] { return evalIn(scope, nullptr, slot.decl->init); });
         slot.value = std::make_unique<reactive::Signal<Value>>(runtime(), std::move(init));
@@ -1962,7 +1972,33 @@ public:
     void addPending(int delta) { pendingWork.set(pendingWork.peek() + delta); }
     /// @brief The document's own scope, once mounted.
     std::weak_ptr<RtScope> rootScope;
+    /// @brief A state of the screen this one replaces: its declared type's name and its value.
+    struct KeptState {
+        /// @brief The declared type's name.
+        std::string type;
+        /// @brief The value.
+        Value value;
+    };
+    /// @brief The states of the own scope of the screen this one replaces, by name (`MountOptions::keepStateOf`).
+    std::map<std::string, KeptState, std::less<>> keptStates;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    /// @brief The value a state of the screen's own scope keeps from the screen it replaces: that screen's value of
+    ///        the state of the same name, when its declared type is the same and admits it.
+    /// @param scope The scope that declares the state.
+    /// @param decl  The declaration.
+    /// @return The value, or nothing for a state that starts from its init.
+    [[nodiscard]] std::optional<Value> keptState(RtScope const& scope, StateDecl const& decl) const {
+        if (keptStates.empty() || rootScope.lock().get() != &scope) {
+            return std::nullopt;
+        }
+        auto const found = keptStates.find(decl.name);
+        if (found == keptStates.end() || found->second.type != decl.type.name() ||
+            !decl.type.admits(found->second.value)) {
+            return std::nullopt;
+        }
+        return found->second.value;
+    }
 
 private:
     void wireElement(ElementState& element);
@@ -2186,6 +2222,19 @@ private:
     friend class Interpreter;
 
     Screen() = default;
+
+    /// The states of the screen's own scope that have a value, by name: what a screen that replaces it keeps.
+    [[nodiscard]] std::map<std::string, detail::ScreenCore::KeptState, std::less<>> ownState() const {
+        std::map<std::string, detail::ScreenCore::KeptState, std::less<>> states;
+        for (auto const& slot : _scope->states) {
+            if (slot->value) {
+                states.insert_or_assign(
+                    slot->decl->name,
+                    detail::ScreenCore::KeptState{.type = slot->decl->type.name(), .value = slot->value->peek()});
+            }
+        }
+        return states;
+    }
 
     [[nodiscard]] Commands const* lifecycleList(std::string_view key) const {
         auto const found = _core->doc().lifecycle.find(key);
@@ -5961,6 +6010,9 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
     std::unique_ptr<Screen> screen{new Screen{}};
     screen->_core = std::make_unique<detail::ScreenCore>(doc, *_session, *_dispatcher, _options, options);
     detail::ScreenCore& core = *screen->_core;
+    if (options.keepStateOf != nullptr) {
+        core.keptStates = options.keepStateOf->ownState();
+    }
     screen->_scope = std::make_shared<detail::RtScope>(core, nullptr, nullptr, options.depth);
     core.rootScope = screen->_scope;
     detail::RtScope& scope = *screen->_scope;

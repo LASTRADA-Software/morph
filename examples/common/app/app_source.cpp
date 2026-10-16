@@ -14,6 +14,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/file_store.hpp>
 #include <morph/ui/service.hpp>
@@ -51,9 +52,40 @@ std::array<ValueOption, 5> const& valueOptions() {
 }
 
 constexpr std::string_view kExitAfterMount = "--exit-after-mount";
+constexpr std::string_view kDev = "--dev";
 
 // How often the offline queue is retried while it holds a call.
 constexpr std::chrono::seconds kReplayEvery{2};
+
+/// What reading one argument as a value option did: how many arguments it used, or why it is refused.
+struct OptionRead {
+    std::size_t used = 0;
+    std::string error;
+};
+
+// Reads `args[index]` as a value option, `--name value` or `--name=value`, into @p read. It uses no argument when
+// `args[index]` is no value option.
+OptionRead readValueOption(std::vector<std::string> const& args, std::size_t index, ClientArgs& read) {
+    std::string_view const arg = args.at(index);
+    for (ValueOption const& option : valueOptions()) {
+        if (arg == option.name) {
+            if (index + 1 >= args.size() || std::string_view{args.at(index + 1)}.starts_with("--")) {
+                return OptionRead{.used = 0, .error = std::string{option.name} + " needs a value"};
+            }
+            option.store(read, args.at(index + 1));
+            return OptionRead{.used = 2, .error = {}};
+        }
+        if (arg.starts_with(option.name) && arg.size() > option.name.size() && arg.at(option.name.size()) == '=') {
+            std::string value{arg.substr(option.name.size() + 1)};
+            if (value.empty()) {
+                return OptionRead{.used = 0, .error = std::string{option.name} + " needs a value"};
+            }
+            option.store(read, std::move(value));
+            return OptionRead{.used = 1, .error = {}};
+        }
+    }
+    return OptionRead{};
+}
 
 }  // namespace
 
@@ -65,31 +97,20 @@ std::expected<ClientArgs, std::string> readClientArgs(std::vector<std::string>& 
         if (arg == "--") {
             break;
         }
-        if (arg == kExitAfterMount) {
-            read.exitAfterMount = true;
+        if (arg == kExitAfterMount || arg == kDev) {
+            (arg == kDev ? read.dev : read.exitAfterMount) = true;
             used.push_back(index);
             continue;
         }
-        for (ValueOption const& option : valueOptions()) {
-            if (arg == option.name) {
-                if (index + 1 >= args.size() || std::string_view{args.at(index + 1)}.starts_with("--")) {
-                    return std::unexpected(std::string{option.name} + " needs a value");
-                }
-                option.store(read, args.at(index + 1));
-                used.push_back(index);
-                used.push_back(index + 1);
-                ++index;
-                break;
-            }
-            if (arg.starts_with(option.name) && arg.size() > option.name.size() && arg.at(option.name.size()) == '=') {
-                std::string value{arg.substr(option.name.size() + 1)};
-                if (value.empty()) {
-                    return std::unexpected(std::string{option.name} + " needs a value");
-                }
-                option.store(read, std::move(value));
-                used.push_back(index);
-                break;
-            }
+        OptionRead const option = readValueOption(args, index, read);
+        if (!option.error.empty()) {
+            return std::unexpected(option.error);
+        }
+        for (std::size_t offset = 0; offset < option.used; ++offset) {
+            used.push_back(index + offset);
+        }
+        if (option.used > 1) {
+            index += option.used - 1;
         }
     }
     if (read.server.has_value() == read.app.has_value()) {
@@ -327,6 +348,38 @@ void ClientSource::reload(std::shared_ptr<bool> const& alive,
         });
     });
 }
+
+#if MORPH_UI_DEV_TOOLS
+void ClientSource::poll(std::function<void(std::vector<std::string> changed)> changed) {
+    if (!_exchange || !_loaded || !_alive || _polling) {
+        return;
+    }
+    _polling = true;
+    ui::HelloRequest hello;
+    hello.vocabularies = clientVocabularies();
+    ui::UiClient const client{_exchange, std::move(hello), _store};
+    client.poll(_session, _loaded->hello.digest,
+                [this, alive = _alive, changed = std::move(changed)](
+                    std::expected<std::optional<ui::LoadedBundle>, ui::ConnectError> polled) mutable {
+                    if (!*alive) {
+                        return;
+                    }
+                    _polling = false;
+                    // An unreachable server and an unchanged digest are both tried again by the next poll.
+                    if (!polled || !polled->has_value()) {
+                        return;
+                    }
+                    std::vector<std::string> ids = ui::changedDocuments(_loaded->manifest, (*polled)->manifest);
+                    _loaded = std::move(**polled);
+                    loadSchemas(alive, [this, alive, ids = std::move(ids), changed = std::move(changed)] {
+                        if (*alive) {
+                            *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                            changed(ids);
+                        }
+                    });
+                });
+}
+#endif
 
 void ClientSource::signIn(std::string principal, std::string token, std::function<void(bool)> done) {
     _session.principal = std::move(principal);
