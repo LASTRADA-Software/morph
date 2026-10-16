@@ -222,6 +222,7 @@ add_executable(morph_tests
     test_ui_dev_reload.cpp
     test_ui_inspector.cpp
     test_ui_interpreter_detail.cpp
+    test_async_ask_defaults.cpp
     test_ui_route_history.cpp
     test_ui_preferences.cpp
     test_ui_preference_sync.cpp

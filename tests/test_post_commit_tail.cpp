@@ -229,3 +229,14 @@ TEST_CASE("A value-returning handler falls back to its committed state when the 
     CHECK(model.committed == 7);
     CHECK(captured.lines().size() == 1);
 }
+
+// Mutation: let the value-returning overload rethrow a non-std exception (the caller loses the committed result).
+TEST_CASE("runPostCommitTail returns the committed result when the tail throws a non-std exception",
+          "[model][post_commit_tail]") {
+    const CapturedLog captured;
+    const std::string result =
+        runPostCommitTail([]() -> std::string { throw NotAStdException{}; }, std::string{"committed"}, "Handler");
+    CHECK(result == "committed");
+    REQUIRE(captured.lines().size() == 1);
+    CHECK(captured.lines().front().second == "Handler committed, but its post-commit tail threw a non-std::exception");
+}
