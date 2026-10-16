@@ -3,11 +3,13 @@
 // Automation conformance (spec 6 §12): a generated screen, mounted by the interpreter on the Qt Quick backend in a
 // shown window, read back the way an automation driver reads it, through QAccessible, never through the QML items'
 // properties. It checks what spec 6 §6 promises: the document's `a11y` name and role, a button's `button` role and
-// press action, a read-only value named "<caption>: <value>", and `testId` as the node's identity.
+// press action, a read-only value named "<caption>: <value>", `testId` as the node's identity, and every input kind
+// as one node found by its name and role that a driver focuses and types into or sets.
 
 #include <QAccessible>
 #include <QAccessibleActionInterface>
 #include <QAccessibleInterface>
+#include <QAccessibleValueInterface>
 #include <QObject>
 #include <QString>
 #include <QtGlobal>
@@ -150,6 +152,29 @@ constexpr char const* kScreen = R"({
     { "kind": "text", "testId": "status", "text": "Ready", "a11y": { "role": "status" } },
     { "kind": "text", "testId": "count", "text": { "fn": "format", "args": [ "{0}", { "ref": "count" } ] } } ] } })";
 
+// One of each input kind, named by the document, except the check box, which its label names; and a drop-down in a
+// role the document names.
+constexpr char const* kInputs = R"({
+  "vocab": "ui/1", "id": "inputs",
+  "view": { "kind": "column", "testId": "inputs", "children": [
+    { "kind": "textInput", "testId": "line", "a11y": { "name": "Line" } },
+    { "kind": "textInput", "testId": "notes", "mode": "multiline", "a11y": { "name": "Notes" } },
+    { "kind": "select", "testId": "drop", "options": { "lit": [ "a", "b" ] }, "a11y": { "name": "Drop" } },
+    { "kind": "select", "testId": "radios", "style": "radio", "options": { "lit": [ "x", "y" ] },
+      "a11y": { "name": "Radios" } },
+    { "kind": "checkbox", "testId": "agree", "label": "I agree" },
+    { "kind": "slider", "testId": "level", "min": 0, "max": 10, "a11y": { "name": "Level" } },
+    { "kind": "dateTimeInput", "testId": "when", "a11y": { "name": "When" } },
+    { "kind": "filePicker", "testId": "file", "a11y": { "name": "File" } },
+    { "kind": "select", "testId": "pick", "options": { "lit": [ "c" ] }, "a11y": { "name": "Pick", "role": "list" } } ] } })";
+
+/// An input as a driver looks it up: its accessible name, its role and its test id.
+struct Input {
+    QString name;
+    QAccessible::Role role = QAccessible::NoRole;
+    QString testId;
+};
+
 }  // namespace
 
 // Mutation: drop `Accessible.role`'s binding from MorphWidget.qml (every node takes Qt's default role).
@@ -208,4 +233,79 @@ TEST_CASE("qt_quick automation: testId identifies the node", "[qt_quick][automat
     }
     CHECK(m.node(u"title"_s).name == u"Accounts"_s);
     CHECK(m.node(u"close"_s).role == QAccessible::Button);
+}
+
+// Mutation: drop the name or the test id from one input's control, or the combo box's role binding (the document's
+// role no longer reaches it), and that input's case fails; let an input's root present itself again, and its name
+// names two nodes.
+TEST_CASE("qt_quick automation: each input kind is one node, found by its name and role", "[qt_quick][automation]") {
+    Mounted m{kInputs};
+    std::vector<Seen> const tree = m.tree();
+    for (Input const& input : {Input{.name = u"Line"_s, .role = QAccessible::EditableText, .testId = u"line"_s},
+                               Input{.name = u"Notes"_s, .role = QAccessible::EditableText, .testId = u"notes"_s},
+                               Input{.name = u"Drop"_s, .role = QAccessible::ComboBox, .testId = u"drop"_s},
+                               Input{.name = u"Radios"_s, .role = QAccessible::Grouping, .testId = u"radios"_s},
+                               Input{.name = u"I agree"_s, .role = QAccessible::CheckBox, .testId = u"agree"_s},
+                               Input{.name = u"Level"_s, .role = QAccessible::Slider, .testId = u"level"_s},
+                               Input{.name = u"When"_s, .role = QAccessible::EditableText, .testId = u"when"_s},
+                               Input{.name = u"File"_s, .role = QAccessible::EditableText, .testId = u"file"_s},
+                               Input{.name = u"Pick"_s, .role = QAccessible::List, .testId = u"pick"_s}}) {
+        INFO(input.name.toStdString());
+        std::vector<Seen> const found = byNameAndRole(tree, input.name, input.role);
+        CHECK(found.size() == 1);
+        // The name names nothing else: the widget's root is not a second node.
+        CHECK(byName(tree, input.name).size() == 1);
+        // The test id leads to the same node.
+        std::vector<Seen> const identified = byTestId(tree, input.testId);
+        CHECK(identified.size() == 1);
+        if (found.size() == 1 && identified.size() == 1) {
+            CHECK(identified.front().node == found.front().node);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+            CHECK(found.front().identifier == input.testId);
+#endif
+        }
+    }
+}
+
+// Mutation: leave the text input's field without the widget's name (no node to focus and type into).
+TEST_CASE("qt_quick automation: a driver focuses a text input by its name and role and types into it",
+          "[qt_quick][automation]") {
+    Mounted m{kInputs};
+    std::vector<Seen> const found = byNameAndRole(m.tree(), u"Line"_s, QAccessible::EditableText);
+    REQUIRE(found.size() == 1);
+    QAccessibleActionInterface* const actions = found.front().node->actionInterface();
+    REQUIRE(actions != nullptr);
+    REQUIRE(actions->actionNames().contains(QAccessibleActionInterface::setFocusAction()));
+    actions->doAction(QAccessibleActionInterface::setFocusAction());
+    m.scene.settle();
+    CHECK(found.front().node->state().focused);
+    m.scene.type(u"abc"_s);
+    CHECK(found.front().node->text(QAccessible::Value) == u"abc"_s);
+}
+
+// Mutation: leave the slider without its role (no node with a value to set).
+TEST_CASE("qt_quick automation: a driver sets a slider found by its name and role", "[qt_quick][automation]") {
+    Mounted m{kInputs};
+    std::vector<Seen> const found = byNameAndRole(m.tree(), u"Level"_s, QAccessible::Slider);
+    REQUIRE(found.size() == 1);
+    QAccessibleValueInterface* const value = found.front().node->valueInterface();
+    REQUIRE(value != nullptr);
+    value->setCurrentValue(7);
+    m.scene.settle();
+    CHECK(value->currentValue().toInt() == 7);
+}
+
+// Mutation: leave the radio buttons without their role (no option to press).
+TEST_CASE("qt_quick automation: a radio select's options are radio buttons named by their labels",
+          "[qt_quick][automation]") {
+    Mounted m{kInputs};
+    std::vector<Seen> const tree = m.tree();
+    std::vector<Seen> const option = byNameAndRole(tree, u"y"_s, QAccessible::RadioButton);
+    REQUIRE(option.size() == 1);
+    CHECK(byNameAndRole(tree, u"x"_s, QAccessible::RadioButton).size() == 1);
+    // A drop-down's hidden radio buttons are no nodes.
+    CHECK(byNameAndRole(tree, u"a"_s, QAccessible::RadioButton).empty());
+    QAccessibleActionInterface const* const actions = option.front().node->actionInterface();
+    REQUIRE(actions != nullptr);
+    CHECK(actions->actionNames().contains(QAccessibleActionInterface::pressAction()));
 }

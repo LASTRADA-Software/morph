@@ -20,19 +20,29 @@ MorphField {
     }
 
     control: row
+    accessibleItem: pathField
+    defaultRole: Accessible.EditableText
 
     RowLayout {
         id: row
         width: root.controlWidth
 
+        // The path is the widget's node, declared as the text input's field declares it; the button beside it
+        // is a node of its own.
         TextField {
+            id: pathField
             Layout.fillWidth: true
             readOnly: true
             text: root.path
+            Accessible.role: root.accessibleRole
+            Accessible.name: root.accessibleName
+            Accessible.description: root.accessibleDescription
         }
 
         Button {
             text: root.save ? qsTr("Save as…") : qsTr("Browse…")
+            Accessible.role: Accessible.Button
+            Accessible.name: text
             enabled: !root.readOnly
             onClicked: dialog.open()
         }

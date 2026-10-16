@@ -22,6 +22,8 @@ MorphField {
     }
 
     control: area
+    accessibleItem: area
+    defaultRole: Accessible.EditableText
 
     TextArea {
         id: area
@@ -29,6 +31,10 @@ MorphField {
         readOnly: root.readOnly
         placeholderText: root.placeholder
         wrapMode: TextEdit.Wrap
+        // Declared, as the text input's field declares them.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
         onTextChanged: {
             if (root.assigning || root.readOnly)
                 return

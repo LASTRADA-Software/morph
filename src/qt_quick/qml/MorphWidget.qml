@@ -25,6 +25,12 @@ Item {
     // What assistive technology reads when the document names no name or role: a kind's own text and role.
     property string defaultName: ""
     property int defaultRole: Accessible.Client
+    readonly property string accessibleName: a11yName !== "" ? a11yName : defaultName
+    readonly property int accessibleRole: a11yRole !== 0 ? a11yRole : defaultRole
+    // The item that is the widget's one accessible node when the root is not: an input's control, which carries
+    // the name, the role, the test id and the text or value a driver types into or sets. The control binds
+    // `accessibleName` and `accessibleRole` itself, and the root then presents no node of its own.
+    property Item accessibleItem: null
     property string surface: ""
     // A drag key as text (`i:<int64>` or `s:<text>`); empty when the widget cannot be dragged.
     property string dragKey: ""
@@ -50,8 +56,9 @@ Item {
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
     Layout.columnSpan: columnSpan
 
-    Accessible.name: a11yName !== "" ? a11yName : defaultName
-    Accessible.role: a11yRole !== 0 ? a11yRole : defaultRole
+    Accessible.name: accessibleName
+    Accessible.role: accessibleRole
+    Accessible.ignored: accessibleItem !== null
 
     ToolTip.text: tooltip
     ToolTip.visible: tooltip !== "" && hover.hovered

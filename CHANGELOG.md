@@ -11,6 +11,17 @@ API surface).
 
 ### Changed
 
+- **A Qt Quick input is one accessible node, found by its name and role.**
+  Every input kind showed as two nodes: the widget's item carried the name
+  and the test id but read as a plain item with no text or value, and the
+  control inside it carried the role and the text but no name. A driver
+  looking an input up by name and role found nothing, and on Qt 6.8 with no
+  accessibility bridge most controls were no node at all. The control of a
+  text input, text area, date input, select, check box, slider and file
+  picker is now the node: it carries the widget's name, role, messages and
+  test id, and the item around it is ignored. A radio select is a named group
+  whose options are radio buttons named by their labels.
+
 - **An upload or download in flight holds a close open.** `Screen::pending()`
   counted dialogs and mutation runs only, so an `onClose` whose work was an
   upload closed the screen at once and its mutation never ran, and a *save and

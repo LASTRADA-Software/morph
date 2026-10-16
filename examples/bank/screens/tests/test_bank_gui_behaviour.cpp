@@ -118,14 +118,14 @@ auto testIdIs(QString testId) {
     return [testId = std::move(testId)](Node const& node) { return node.testId == testId; };
 }
 
-/// Looks a node up by its role.
-auto roleIs(QAccessible::Role role) {
-    return [role](Node const& node) { return node.role == role; };
+/// Looks a node up by its test id and its role.
+auto testIdAndRoleAre(QString testId, QAccessible::Role role) {
+    return [testId = std::move(testId), role](Node const& node) { return node.testId == testId && node.role == role; };
 }
 
-/// Looks a node up by its accessible name.
-auto nameIs(QString name) {
-    return [name = std::move(name)](Node const& node) { return node.name == name; };
+/// Looks a node up by its accessible name and its role, the primary route.
+auto nameAndRoleAre(QString name, QAccessible::Role role) {
+    return [name = std::move(name), role](Node const& node) { return node.name == name && node.role == role; };
 }
 
 /// Turns the accessibility machinery on, as an assistive technology connecting does: Qt Quick Controls fill in
@@ -327,8 +327,10 @@ TEST_CASE("bank GUI: Move money's picker keeps naming the account the next depos
     AutomatedScreen screen{std::string{bank::screens::kMove}, user};
     INFO(screen.dump());
 
-    // The picker: the combo box inside the node with test id `account`.
-    auto const picker = [&screen] { return screen.within(u"account"_s, roleIs(QAccessible::ComboBox)); };
+    // The picker: the combo box with test id `account`, named by the option it shows.
+    auto const picker = [&screen] {
+        return single(screen.tree(), testIdAndRoleAre(u"account"_s, QAccessible::ComboBox));
+    };
     auto const balance = [&screen] {
         std::optional<Node> const node = screen.byTestId(u"balance"_s);
         return node ? node->name : QString{};
@@ -347,13 +349,12 @@ TEST_CASE("bank GUI: Move money's picker keeps naming the account the next depos
     REQUIRE(second != first);
     REQUIRE_FALSE(second.isEmpty());
 
-    // A deposit through the deposit form: its amount field by name, its submit button by test id.
+    // A deposit through the deposit form: its amount field by name and role, its submit button by test id.
     auto const deposit = [&screen](QString const& cents) {
-        std::optional<Node> const amount = screen.within(u"depositForm"_s, nameIs(u"Amount (cents)"_s));
+        std::optional<Node> const amount =
+            screen.within(u"depositForm"_s, nameAndRoleAre(u"Amount (cents)"_s, QAccessible::EditableText));
         REQUIRE(amount.has_value());
-        std::optional<Node> const field = single(under(amount->iface), roleIs(QAccessible::EditableText));
-        REQUIRE(field.has_value());
-        screen.focus(*field);
+        screen.focus(*amount);
         screen.selectAll();
         screen.type(cents);
         std::optional<Node> const submit = screen.within(u"depositForm"_s, testIdIs(u"form_submit"_s));

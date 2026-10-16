@@ -14,6 +14,8 @@ MorphField {
     property bool edited: false
 
     control: field
+    accessibleItem: field
+    defaultRole: Accessible.EditableText
 
     TextField {
         id: field
@@ -21,8 +23,12 @@ MorphField {
         readOnly: root.readOnly
         placeholderText: root.placeholder
         echoMode: root.password ? TextInput.Password : TextInput.Normal
-        // Declared, not left to Qt Quick Controls, so the field is a node whether or not accessibility is active.
-        Accessible.role: Accessible.EditableText
+        // Declared on the control, which Qt Quick Controls makes an accessible node of its own accord only while the
+        // platform's accessibility is active: with a name declared the field is the widget's node either way, in
+        // the role the document names or else its own.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
         onTextEdited: {
             root.edited = true
             root.fire("change", text)

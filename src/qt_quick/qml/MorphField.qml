@@ -15,12 +15,14 @@ MorphWidget {
     // The control the kind shows; the field lays it out above its messages.
     property Item control: null
     readonly property real controlWidth: width - (required ? marker.implicitWidth : 0)
+    // What assistive technology reads as the field's description: its messages.
+    readonly property string accessibleDescription: errors.join("\n")
 
     focusTarget: control ? control : root
     implicitWidth: (control ? control.implicitWidth : 0) + (required ? marker.implicitWidth : 0)
     implicitHeight: (control ? control.implicitHeight : 0) + (messages.visible ? messages.implicitHeight : 0)
     opacity: stale ? Theme.staleOpacity : 1.0
-    Accessible.description: errors.join("\n")
+    Accessible.description: accessibleDescription
 
     Label {
         id: marker
