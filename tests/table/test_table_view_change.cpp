@@ -148,3 +148,17 @@ TEST_CASE("table: a change over the threshold is one reset", "[table][viewchange
     CHECK(diff(full, sparse, {}, 10).isReset());
     CHECK(diff(sparse, full, {}, 10).isReset());
 }
+
+TEST_CASE("table: a changed identity past the views is not reported", "[table][viewchange]") {
+    Ids const rows{0, 1, 2};
+    auto const change = diffViews(rows, rows, Ids{1, 7}, 3, 5000);
+    REQUIRE(change.ops.size() == 1);
+    CHECK(change.ops[0] == ViewOp{.kind = Kind::Changed, .first = 1, .count = 1, .to = 0});
+}
+
+TEST_CASE("table: changes alone over the threshold are one reset", "[table][viewchange]") {
+    Ids const rows{0, 1, 2, 3};
+    auto const change = diff(rows, rows, Ids{0, 2}, 1);
+    CHECK(change.isReset());
+    CHECK(replay(rows, change, rows) == rows);
+}

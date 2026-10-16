@@ -6,7 +6,9 @@
 //
 // Each case names the mutation it was seen to fail on.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <compare>
 #include <cstdint>
@@ -14,8 +16,11 @@
 #include <memory>
 #include <morph/table/edits.hpp>
 #include <morph/table/engine.hpp>
+#include <random>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -405,4 +410,418 @@ TEST_CASE("table: a service that throws on the worker reports through onError", 
     CHECK(errors[0].code == TableErrorCode::ServiceFailed);
     CHECK(engine.sort().empty());
     CHECK(engine.rowIdAt(0) == key(0));
+}
+
+// An exception that is not a std::exception ends the job like any other.
+TEST_CASE("table: a service that throws a non-standard exception fails the sort", "[table][pending]") {
+    auto const armed = std::make_shared<bool>(true);
+    EngineOptions options;
+    options.services.comparators.emplace("byValue", [armed](Cell const& left, Cell const& right) {
+        if (*armed) {
+            throw 42;  // NOLINT(hicpp-exception-baseclass) -- the case is an exception that is not a std::exception
+        }
+        return std::get<std::int64_t>(left) <=> std::get<std::int64_t>(right);
+    });
+    Engine engine{customColumn(10), options};
+    auto const result = engine.setSort({{.column = "c", .dir = kAsc}});
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == TableErrorCode::ServiceFailed);
+    CHECK(result.error().message.contains("unknown exception"));
+    CHECK(engine.sort().empty());
+}
+
+namespace {
+
+// Folds by lowering ASCII, and throws while `armed` is set: a std::exception,
+// or anything else when `standard` is false.
+class ThrowingCollator final : public TextCollator {
+public:
+    ThrowingCollator(std::shared_ptr<bool const> armed, bool standard)
+        : _armed{std::move(armed)}, _standard{standard} {}
+    [[nodiscard]] std::string sortKey(std::string_view text) const override { return fold(text); }
+    [[nodiscard]] std::string fold(std::string_view text) const override {
+        if (*_armed) {
+            if (_standard) {
+                throw std::runtime_error{"collator down"};
+            }
+            throw 7;  // NOLINT(hicpp-exception-baseclass) -- the case is an exception that is not a std::exception
+        }
+        std::string out{text};
+        for (auto& ch : out) {
+            if (ch >= 'A' && ch <= 'Z') {
+                ch = static_cast<char>(ch - 'A' + 'a');
+            }
+        }
+        return out;
+    }
+
+private:
+    std::shared_ptr<bool const> _armed;
+    bool _standard;
+};
+
+}  // namespace
+
+// Mutation: Engine::compile without its try/catch: a collator that throws
+// while a text filter's value is folded escapes setFilter.
+TEST_CASE("table: a collator that throws while a filter compiles fails setFilter", "[table][pending]") {
+    auto const standard = GENERATE(true, false);
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options;
+    options.services.collator = std::make_shared<ThrowingCollator>(armed, standard);
+    Engine engine{tabletest::column(ColumnKind::Text, {std::string{"Ab"}, std::string{"cd"}}), options};
+    *armed = true;
+    FilterSpec spec;
+    spec.columns["c"].include.push_back(FilterEntry{.contains = "A"});
+    auto const result = engine.setFilter(spec);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == TableErrorCode::ServiceFailed);
+    CHECK(result.error().message.contains(standard ? "collator down" : "unknown exception"));
+    CHECK(engine.filter().empty());
+    *armed = false;
+    REQUIRE(engine.setFilter(spec).has_value());
+    CHECK(viewKeys(engine) == keys({0}));
+}
+
+// Mutation: Engine::flushChanges dropping schedule()'s error: a repair that
+// fails inside the change notification is reported nowhere.
+TEST_CASE("table: a repair that fails inside the notification reports through onError", "[table][pending]") {
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options;
+    options.services.comparators.emplace("byValue", throwingComparator(armed));
+    auto const source = customColumn(10);
+    Engine engine{source, options};
+    std::vector<TableError> errors;
+    engine.onError([&](TableError const& error) { errors.push_back(error); });
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());
+    auto const before = viewKeys(engine);
+
+    *armed = true;
+    source->updateRow(0, {Cell{std::int64_t{0}}});
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].code == TableErrorCode::ServiceFailed);
+    CHECK(viewKeys(engine) == before);
+    CHECK(engine.sort() == SortChain{{.column = "c", .dir = kAsc}});
+
+    // The failed repair handed its row back: the next one repairs both.
+    *armed = false;
+    source->updateRow(1, {Cell{std::int64_t{100}}});
+    Engine reference{source, options};
+    REQUIRE(reference.setSort({{.column = "c", .dir = kAsc}}).has_value());
+    CHECK(viewKeys(engine) == viewKeys(reference));
+    CHECK(engine.rowIdAt(0) == key(0));
+    CHECK(engine.rowIdAt(9) == key(1));
+}
+
+// Mutation: Engine::fitToColumns leaving group columns that vanished, or
+// keeping a filter entry that no longer compiles for its column's new kind.
+TEST_CASE("table: a reset trims group columns and drops a filter its columns no longer take", "[table][pending]") {
+    auto const source =
+        tabletest::makeSource({col("a", ColumnKind::Integer), col("b", ColumnKind::Text), col("c", ColumnKind::Text)},
+                              {{Cell{std::int64_t{1}}, Cell{std::string{"x"}}, Cell{std::string{"-"}}},
+                               {Cell{std::int64_t{2}}, Cell{std::string{"-"}}, Cell{std::string{"x"}}},
+                               {Cell{std::int64_t{-3}}, Cell{std::string{"x"}}, Cell{std::string{"-"}}}});
+    Engine engine{source};
+    FilterSpec spec;
+    spec.columns["a"].include.push_back(FilterEntry{.gt = "0"});
+    spec.groups.push_back(
+        GroupFilter{.columns = {"b", "c"}, .combine = {}, .include = {FilterEntry{.contains = "x"}}});
+    REQUIRE(engine.setFilter(spec).has_value());
+    CHECK(viewKeys(engine) == keys({0, 1}));
+
+    auto const rows = [] {
+        return std::vector<std::vector<Cell>>{{Cell{std::int64_t{1}}, Cell{std::string{"x"}}},
+                                              {Cell{std::int64_t{2}}, Cell{std::string{"-"}}},
+                                              {Cell{std::int64_t{-3}}, Cell{std::string{"x"}}}};
+    };
+    source->setRows(keys({0, 1, 2}), rows(),
+                    std::vector<ColumnInfo>{col("a", ColumnKind::Integer), col("b", ColumnKind::Text)});
+    REQUIRE(engine.filter().groups.size() == 1);
+    CHECK(engine.filter().groups[0].columns == std::vector<std::string>{"b"});
+    CHECK(viewKeys(engine) == keys({0}));
+
+    // `a` becomes a Bool column, where `gt` is not defined: the filter goes.
+    source->setRows(keys({0, 1, 2}), rows(),
+                    std::vector<ColumnInfo>{col("a", ColumnKind::Bool), col("b", ColumnKind::Text)});
+    CHECK(engine.filter().empty());
+    CHECK(viewKeys(engine) == keys({0, 1, 2}));
+}
+
+// Mutation: Engine::revert not fitting the restored sort to columns that
+// changed meanwhile: the sort keeps a key for a column that is gone.
+TEST_CASE("table: a failed job after a column change restores a sort fitted to the new columns", "[table][pending]") {
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options;
+    options.services.comparators.emplace("byValue", throwingComparator(armed));
+    auto const source = tabletest::makeSource(
+        {col("c", ColumnKind::Custom, "byValue"), col("d", ColumnKind::Integer)},
+        {{Cell{std::int64_t{2}}, Cell{std::int64_t{0}}}, {Cell{std::int64_t{1}}, Cell{std::int64_t{0}}}});
+    Engine engine{source, options};
+    std::vector<TableError> errors;
+    engine.onError([&](TableError const& error) { errors.push_back(error); });
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}, {.column = "d", .dir = kAsc}}).has_value());
+
+    *armed = true;
+    source->setRows(keys({0, 1}),
+                    {{Cell{std::int64_t{2}}, Cell{std::int64_t{0}}}, {Cell{std::int64_t{1}}, Cell{std::int64_t{0}}}},
+                    std::vector<ColumnInfo>{col("c", ColumnKind::Custom, "byValue"), col("e", ColumnKind::Integer)});
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].code == TableErrorCode::ServiceFailed);
+    CHECK(engine.sort() == SortChain{{.column = "c", .dir = kAsc}});
+    REQUIRE(engine.columns().size() == 2);
+    CHECK(engine.columns()[1].id == "d");  // the view shown is still the old one
+
+    *armed = false;
+    REQUIRE(engine.setSort({{.column = "c", .dir = kDesc}}).has_value());
+    CHECK(engine.columns()[1].id == "e");
+    CHECK(viewKeys(engine) == keys({0, 1}));
+}
+
+// Mutation: Engine::ownerStep not reporting progress: a frame-budgeted job
+// without a worker tells the sink nothing.
+TEST_CASE("table: a progress sink hears from every owner step", "[table][pending]") {
+    struct Recorder final : ProgressSink {
+        std::vector<std::pair<std::size_t, std::size_t>> calls;
+        void progress(std::size_t done, std::size_t total) override { calls.emplace_back(done, total); }
+    };
+    auto const recorder = std::make_shared<Recorder>();
+    ManualExecutor owner;
+    Services services;
+    services.progress = recorder;
+    Engine engine{
+        tabletest::syntheticSource(3000, 61),
+        EngineOptions{
+            .owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}, .services = services}};
+    REQUIRE(engine.setSort({{"name", kAsc}}).has_value());
+    drain(owner);
+    CHECK_FALSE(engine.pending());
+    // One report per step; applying the result counts as one more owner step.
+    REQUIRE(recorder->calls.size() + 1 == engine.stats().ownerSteps);
+    REQUIRE(recorder->calls.size() > 1);
+    CHECK(std::ranges::is_sorted(recorder->calls));
+    CHECK(recorder->calls.back() == std::pair<std::size_t, std::size_t>{3, 3});
+}
+
+// Mutation: Engine::afterJob dropping the error of the work it started: a job
+// dropped for a reset that shrank the table recomputes inside afterJob, and
+// that recompute's failure is reported nowhere.
+TEST_CASE("table: work started after a dropped job reports its failure", "[table][pending]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options{.owner = &owner, .worker = &worker};
+    options.services.comparators.emplace("byValue", throwingComparator(armed));
+    auto const source = customColumn(3000);
+    Engine engine{source, options};
+    std::vector<TableError> errors;
+    engine.onError([&](TableError const& error) { errors.push_back(error); });
+    std::vector<bool> pendingSeen;
+    engine.onPending([&](bool pending) { pendingSeen.push_back(pending); });
+
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());  // a job on the worker
+    std::vector<std::vector<Cell>> small;
+    small.reserve(10);
+    for (std::int64_t i = 0; i < 10; ++i) {
+        small.push_back({Cell{10 - i}});
+    }
+    source->setRows(keys({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}), std::move(small));
+    owner.runAll();  // the flush stops the job: its rows are gone
+    *armed = true;
+    drain(owner, &worker);
+
+    CHECK(engine.stats().dropped == 1);
+    CHECK_FALSE(engine.pending());
+    CHECK(pendingSeen == std::vector<bool>{true, false});
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].code == TableErrorCode::ServiceFailed);
+    CHECK(engine.sort().empty());
+    CHECK(engine.sourceRowCount() == 3000);
+}
+
+// Mutation: Engine::afterJob laying out released holds only after a
+// successful job: a release made while a job ran that then failed is never
+// shown, and the released row stays at its old place.
+TEST_CASE("table: holds released while a job runs are laid out when it fails", "[table][pending]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options{.owner = &owner,
+                          .worker = &worker,
+                          .reorder = ReorderPolicy::Deferred,
+                          .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}};
+    options.services.comparators.emplace("byValue", throwingComparator(armed));
+    std::vector<std::vector<Cell>> cells;
+    cells.reserve(3000);
+    for (std::int64_t i = 0; i < 3000; ++i) {
+        cells.push_back({Cell{i * 10}, Cell{3000 - i}});
+    }
+    auto const source = tabletest::makeSource({col("n", ColumnKind::Integer), col("c", ColumnKind::Custom, "byValue")},
+                                              std::move(cells));
+    Engine engine{source, options};
+    FollowingModel const model{engine};
+    std::vector<TableError> errors;
+    engine.onError([&](TableError const& error) { errors.push_back(error); });
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    drain(owner, &worker);
+    source->updateRow(0, {Cell{std::int64_t{999'999}}, Cell{std::int64_t{0}}});
+    drain(owner, &worker);
+    REQUIRE(held(engine, 0));
+    REQUIRE(engine.rowIdAt(0) == key(0));
+
+    *armed = true;
+    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    REQUIRE(engine.pending());
+    engine.settleNow();  // waits for the job
+    CHECK(engine.rowIdAt(0) == key(0));
+    drain(owner, &worker);
+
+    REQUIRE(errors.size() == 1);
+    CHECK_FALSE(engine.pending());
+    CHECK(engine.sort() == SortChain{{"n", kAsc}});
+    CHECK(engine.heldRows().empty());
+    CHECK(engine.rowIdAt(2999) == key(0));
+    CHECK(model.check());
+}
+
+// A release made while a job runs that is then superseded waits for the job
+// that replaces it, and is laid out with that job's result.
+TEST_CASE("table: holds released while a superseded job runs are laid out with the next job", "[table][pending]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const source = numbered(3000);
+    Engine engine{source,
+                  EngineOptions{.owner = &owner,
+                                .worker = &worker,
+                                .reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    FollowingModel const model{engine};
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    drain(owner, &worker);
+    source->updateRow(0, numberedRow(99'999, "last"));
+    drain(owner, &worker);
+    REQUIRE(held(engine, 0));
+
+    REQUIRE(engine.setFilter(nAtLeast("10")).has_value());
+    engine.settleNow();                                     // waits for the filter job
+    REQUIRE(engine.setFilter(nAtLeast("20")).has_value());  // which this one supersedes
+    drain(owner, &worker);
+    CHECK_FALSE(engine.pending());
+    CHECK(engine.stats().dropped == 1);
+    CHECK(engine.heldRows().empty());
+    CHECK(engine.rowIdAt(engine.viewRowCount() - 1) == key(0));
+    CHECK(engine.rowIdAt(0) == key(2));
+    CHECK(model.check());
+}
+
+// Mutation: Engine::reportError calling the error handler without checking it is
+// set: the empty std::function throws std::bad_function_call.
+TEST_CASE("table: a failure with no error handler still ends pending", "[table][pending]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const armed = std::make_shared<bool>(true);
+    EngineOptions options{.owner = &owner, .worker = &worker};
+    options.services.comparators.emplace("byValue", throwingComparator(armed));
+    Engine engine{customColumn(3000), options};
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());
+    drain(owner, &worker);
+    CHECK_FALSE(engine.pending());
+    CHECK(engine.sort().empty());
+}
+
+// Mutation: Engine::deliver arming the settle timer without a scheduler:
+// calling the empty std::function throws std::bad_function_call.
+TEST_CASE("table: deferred reorder without a settle scheduler waits for settleNow", "[table][pending]") {
+    ManualExecutor owner;
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{10}, std::int64_t{20}, std::int64_t{30}});
+    Engine engine{source, EngineOptions{.owner = &owner, .reorder = ReorderPolicy::Deferred}};
+    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    source->updateRow(0, {Cell{std::int64_t{99}}});
+    drain(owner);
+    CHECK(viewKeys(engine) == keys({0, 1, 2}));
+    CHECK(held(engine, 0));
+    engine.settleNow();
+    CHECK(viewKeys(engine) == keys({1, 2, 0}));
+}
+
+// Only rows the view showed are held: a row an update brings into the filter
+// has no place to keep, and goes where the sort puts it.
+TEST_CASE("table: a row an update brings into the view is placed, not held", "[table][pending]") {
+    ManualExecutor owner;
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{10}, std::int64_t{20}, std::int64_t{30}});
+    Engine engine{source,
+                  EngineOptions{.owner = &owner,
+                                .reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    FollowingModel const model{engine};
+    FilterSpec below25;
+    below25.columns["c"].include.push_back(FilterEntry{.lt = "25"});
+    REQUIRE(engine.setFilter(below25).has_value());
+    REQUIRE(engine.setSort({{"c", kDesc}}).has_value());
+    REQUIRE(viewKeys(engine) == keys({1, 0}));
+    source->updateRow(2, {Cell{std::int64_t{5}}});
+    drain(owner);
+    CHECK(viewKeys(engine) == keys({1, 0, 2}));
+    CHECK(engine.heldRows().empty());
+    CHECK(model.check());
+}
+
+// A full job that inherits a dropped repair's rows patches the keys it has
+// and builds the ones it lacks across owner steps; the patched keys serve a
+// later sort without a rebuild.
+TEST_CASE("table: a dropped repair's rows are patched once by the job that follows", "[table][pending]") {
+    ManualExecutor owner;
+    auto const source = tabletest::syntheticSource(20000, 71);
+    Engine engine{source,
+                  EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
+    FollowingModel const model{engine};
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    drain(owner);
+    std::mt19937 rng{72};  // NOLINT(cert-msc32-c,cert-msc51-cpp) -- a fixed seed keeps the case reproducible
+    source->updateRow(5, tabletest::syntheticRow(5, rng));
+    owner.runAll();                                         // the flush starts the repair
+    REQUIRE(engine.setSort({{"name", kAsc}}).has_value());  // and this stops it
+    drain(owner);
+
+    CHECK(engine.stats().dropped == 1);
+    CHECK(engine.stats().keyBuilds == 2);  // n's keys were patched, not rebuilt
+    CHECK(model.check());
+    Engine byName{source};
+    REQUIRE(byName.setSort({{"name", kAsc}}).has_value());
+    CHECK(viewKeys(engine) == viewKeys(byName));
+
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    drain(owner);
+    Engine byN{source};
+    REQUIRE(byN.setSort({{"n", kAsc}}).has_value());
+    CHECK(viewKeys(engine) == viewKeys(byN));
+}
+
+// Mutation: Engine::canRepair ignoring the epoch: an update absorbed after a
+// structural change, while the view still shows the old rows, would be
+// repaired into an order of row indices that no longer exist.
+TEST_CASE("table: updates after an unapplied structural change recompute in full", "[table][pending]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const source = numbered(3000);
+    Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
+    FollowingModel const model{engine};
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    drain(owner, &worker);
+
+    source->updateRow(5, numberedRow(-5, "moved"));
+    owner.runAll();  // the repair starts
+    source->insertRow(0, key(100'000), numberedRow(1'000'000, "inserted"));
+    owner.runAll();  // the flush stops the repair
+    source->updateRow(20, numberedRow(-20, "moved"));
+    owner.runAll();  // an update while the stopped job is still out
+    drain(owner, &worker);
+
+    CHECK_FALSE(engine.pending());
+    CHECK(engine.stats().dropped == 1);
+    CHECK(engine.stats().repairs == 0);
+    CHECK(model.check());
+    Engine reference{source};
+    REQUIRE(reference.setSort({{"n", kAsc}}).has_value());
+    CHECK(viewKeys(engine) == viewKeys(reference));
+    CHECK(engine.rowIdAt(0) == key(19));
 }

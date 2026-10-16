@@ -12,12 +12,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
 #include <memory>
 #include <morph/table/data_source.hpp>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -222,4 +226,127 @@ constexpr bool kHasGlazeMeta = requires { glz::meta<T>::value; };
 TEST_CASE("table: the error code's JSON names come with the type", "[table][source]") {
     CHECK(kHasGlazeMeta<TableErrorCode>);
     CHECK(kHasGlazeMeta<ColumnKind>);
+}
+
+TEST_CASE("table: the default collator lowers only a whole Latin-1 capital", "[table][source]") {
+    CodePointCollator const collator;
+    CHECK(collator.fold("A\xC3") == "a\xC3");  // a lead byte at the end is copied
+    CHECK(collator.fold("\xC3"
+                        "A") ==
+          "\xC3"
+          "a");                                                      // so is one before an ASCII byte
+    CHECK(collator.fold("\xC3\x9E\xC3\x9F") == "\xC3\xBE\xC3\x9F");  // THORN lowers, sharp s has no capital
+    CHECK(displayText(Cell{false}) == "false");
+}
+
+TEST_CASE("table: the default date parser refuses a non-digit in any field", "[table][source]") {
+    IsoDateParser const parser;
+    CHECK(parser.parseDate("2024-01x01", {}) == std::nullopt);
+    CHECK(parser.parseDate("20a4-01-01", {}) == std::nullopt);
+    CHECK(parser.parseDate("2024-0/-01", {}) == std::nullopt);
+    CHECK(parser.parseDate("2024-01-0a", {}) == std::nullopt);
+    CHECK(parser.parseDate("2024-01-01", {}).has_value());
+}
+
+namespace {
+
+// A date parser that reads every date as day 7, and hands each task a copy of itself.
+class CloningDates final : public DateParser {
+public:
+    explicit CloningDates(std::shared_ptr<int> clones) : _clones{std::move(clones)} {}
+    [[nodiscard]] std::optional<std::int64_t> parseDate(std::string_view /*text*/,
+                                                        std::string_view /*format*/) const override {
+        return 7;
+    }
+    [[nodiscard]] std::optional<std::int64_t> parseDateTime(std::string_view /*text*/,
+                                                            std::string_view /*format*/) const override {
+        return 7 * 86400;
+    }
+    [[nodiscard]] std::shared_ptr<DateParser const> cloneForTask() const override {
+        ++*_clones;
+        return std::make_shared<CloningDates>(_clones);
+    }
+
+private:
+    std::shared_ptr<int> _clones;
+};
+
+}  // namespace
+
+TEST_CASE("table: a task gets its own copy of a date parser that is not safe to share", "[table][source]") {
+    auto const clones = std::make_shared<int>(0);
+    Services services;
+    services.dates = std::make_shared<CloningDates>(clones);
+    CHECK(services.datesOrDefault() == services.dates);
+    auto const task = services.forTask();
+    CHECK(*clones == 1);
+    REQUIRE(task.dates != nullptr);
+    CHECK(task.dates != services.dates);
+    CHECK(task.dates->parseDate("any", {}) == 7);
+}
+
+namespace {
+
+// A snapshot that keeps no cells: cell (row, column) is row * 10 + column,
+// and it reads columns through RowSnapshot's default, one cell at a time.
+class ComputedSnapshot final : public RowSnapshot {
+public:
+    explicit ComputedSnapshot(std::size_t rows) : _rows{rows} {}
+    [[nodiscard]] std::size_t rowCount() const override { return _rows; }
+    [[nodiscard]] RowId rowId(std::size_t row) const override { return RowId{static_cast<std::int64_t>(row)}; }
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
+        return Cell{static_cast<std::int64_t>((row * 10) + column)};
+    }
+
+private:
+    std::size_t _rows;
+};
+
+struct RunCollector final : ColumnSink {
+    std::vector<std::pair<std::size_t, std::vector<Cell>>> runs;
+    void cells(std::size_t firstRow, std::span<Cell const> cells) override {
+        runs.emplace_back(firstRow, std::vector<Cell>(cells.begin(), cells.end()));
+    }
+};
+
+}  // namespace
+
+TEST_CASE("table: a snapshot's default readColumn hands one cell per row", "[table][source]") {
+    ComputedSnapshot const snapshot{4};
+    RunCollector sink;
+    snapshot.readColumn(1, sink, 1, 3);
+    REQUIRE(sink.runs.size() == 2);
+    CHECK(sink.runs[0].first == 1);
+    REQUIRE(sink.runs[0].second.size() == 1);
+    CHECK(std::get<std::int64_t>(sink.runs[0].second[0]) == 11);
+    CHECK(sink.runs[1].first == 2);
+    REQUIRE(sink.runs[1].second.size() == 1);
+    CHECK(std::get<std::int64_t>(sink.runs[1].second[0]) == 21);
+
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(3));
+    CHECK(source->tableSnapshot()->columnCount() == 2);
+}
+
+TEST_CASE("table: a source destroyed by a listener ends the notification", "[table][source]") {
+    struct Hook final : ChangeListener {
+        std::function<void()> onChange;
+        int calls = 0;
+        void rowsChanged(RowChange const& /*change*/) override {
+            ++calls;
+            if (onChange) {
+                onChange();
+            }
+        }
+    };
+    std::shared_ptr<VectorSource> source = tabletest::makeSource(twoColumns(), numberedRows(2));
+    Hook first;
+    Hook second;
+    source->subscribe(first);
+    source->subscribe(second);
+    first.onChange = [&] { source.reset(); };
+    auto* const raw = source.get();
+    raw->updateRow(0, {Cell{std::int64_t{5}}, Cell{}});
+    CHECK(source == nullptr);
+    CHECK(first.calls == 1);
+    CHECK(second.calls == 0);
 }

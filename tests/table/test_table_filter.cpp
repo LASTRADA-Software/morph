@@ -12,6 +12,7 @@
 //    row" fails.
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <limits>
@@ -283,4 +284,95 @@ TEST_CASE("table: a filter run yields at a deadline and keeps candidate order", 
     REQUIRE(rows.size() == 5000);
     CHECK(rows.front() == 9999U);
     CHECK(rows.back() == 5000U);
+}
+
+TEST_CASE("table: Key, Number and Bool columns parse their operands", "[table][filter]") {
+    auto const source = tabletest::makeSource(
+        {tabletest::col("id", ColumnKind::Key), tabletest::col("x", ColumnKind::Number),
+         tabletest::col("ok", ColumnKind::Bool)},
+        {{std::int64_t{10}, 1.5, true}, {std::int64_t{20}, 2.5, false}, {std::int64_t{30}, 3.5, false}});
+    Filtered const f{.source = source, .services = {}};
+    CHECK(f.by(on("id", {ge("20")})) == Rows{1, 2});
+    CHECK(f.by(on("ok", {eq("false")})) == Rows{1, 2});
+    CHECK(f.by(on("ok", {ne("false")})) == Rows{0});
+    CHECK(f.by(on("x", {gt("abc")})).error().code == TableErrorCode::InvalidValue);
+    CHECK(f.by(on("ok", {eq("yes")})).error().code == TableErrorCode::InvalidValue);
+    CHECK(f.by(on("ok", {gt("true")})).error().code == TableErrorCode::UnsupportedOperator);
+}
+
+TEST_CASE("table: an exclude entry that does not parse is an error", "[table][filter]") {
+    auto const source = tabletest::column(ColumnKind::Decimal, {dec("1")}, "mass");
+    Filtered const f{.source = source, .services = {}};
+    auto const bad = f.by(on("mass", {}, Combine::Any, {gt("1,5")}));
+    REQUIRE_FALSE(bad.has_value());
+    CHECK(bad.error().code == TableErrorCode::InvalidValue);
+    CHECK(bad.error().column == "mass");
+}
+
+TEST_CASE("table: a group refuses an unknown column and a malformed entry", "[table][filter]") {
+    auto const source = tabletest::column(ColumnKind::Text, {std::string{"a"}}, "name");
+    Filtered const f{.source = source, .services = {}};
+    FilterSpec unknown;
+    unknown.groups.push_back(GroupFilter{.columns = {"name", "nope"}, .combine = {}, .include = {contains("a")}});
+    auto const missing = f.by(unknown);
+    REQUIRE_FALSE(missing.has_value());
+    CHECK(missing.error().code == TableErrorCode::UnknownColumn);
+    CHECK(missing.error().column == "nope");
+    FilterSpec malformed;
+    malformed.groups.push_back(GroupFilter{.columns = {"name"}, .combine = {}, .include = {FilterEntry{}}});
+    CHECK(f.by(malformed).error().code == TableErrorCode::InvalidSpec);
+}
+
+TEST_CASE("table: an all-group uses only the columns that evaluate every entry", "[table][filter]") {
+    auto const source = tabletest::makeSource(
+        {tabletest::col("analysis", ColumnKind::Text), tabletest::col("analyst", ColumnKind::Text),
+         tabletest::col("mass", ColumnKind::Decimal)},
+        {{std::string{"pH"}, std::string{"Anna"}, dec("2")},
+         {std::string{"Lead"}, std::string{"Phil"}, dec("20")},
+         {std::string{"Iron"}, std::string{"Bob"}, dec("3")},
+         {std::string{"pH"}, std::string{"Bob"}, dec("30")}});
+    Filtered const f{.source = source, .services = {}};
+    FilterSpec spec;
+    spec.groups.push_back(GroupFilter{.columns = {"analysis", "analyst", "mass"},
+                                      .combine = Combine::All,
+                                      .include = {startsWith("p"), endsWith("h")}});
+    // A column matches when it meets both entries; "Phil" starts with p but does not end with h.
+    CHECK(f.by(spec) == Rows{0, 3});
+    spec.groups[0].combine = Combine::Any;
+    CHECK(f.by(spec) == Rows{0, 1, 3});
+}
+
+TEST_CASE("table: filters with no entries compile to nothing and pass every row", "[table][filter]") {
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{1}, std::int64_t{2}});
+    Filtered const f{.source = source, .services = {}};
+    FilterSpec spec = on("c", {});
+    spec.groups.push_back(GroupFilter{.columns = {"c"}, .combine = {}, .include = {}});
+    CHECK_FALSE(spec.empty());
+    auto const compiled = compileFilter(spec, source->columns(), {});
+    REQUIRE(compiled.has_value());
+    CHECK(compiled->columns().empty());
+    CHECK(compiled->groups().empty());
+    CHECK(f.by(spec) == Rows{0, 1});
+
+    FilterSpec groupOnly;
+    groupOnly.groups.push_back(GroupFilter{});
+    CHECK_FALSE(groupOnly.empty());
+    CHECK(FilterSpec{}.empty());
+}
+
+TEST_CASE("table: a filter run yields between stages at a passed deadline", "[table][filter]") {
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{1}, std::int64_t{5}, std::int64_t{9}});
+    Services const services;
+    auto spec = on("c", {gt("2")});
+    spec.groups.push_back(GroupFilter{.columns = {"c"}, .combine = {}, .include = {lt("7")}});
+    auto const compiled = compileFilter(spec, source->columns(), services);
+    REQUIRE(compiled.has_value());
+    auto keys = KeyColumn::forColumn(source->columns()[0], services, 3);
+    buildKeys(*source->snapshot(), 0, source->columns()[0], services, 0, 3, keys);
+    FilterRun run{*compiled, {&keys}, Rows{0, 1, 2}};
+    auto const passed = std::chrono::steady_clock::now() - std::chrono::seconds{1};
+    CHECK_FALSE(run.run(passed, ::core::async::StopToken{}));  // the column stage ran; the group waits
+    CHECK(run.run(kNoDeadline, ::core::async::StopToken{}));
+    auto const rows = std::move(run).take();
+    CHECK(rows == Rows{1});
 }
