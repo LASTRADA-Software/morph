@@ -241,6 +241,11 @@ The wire gains its first server-initiated message.
   connection id. It gains a third parameter, `ConnectionFacts&`, with a default overload forwarding to today's
   two-parameter form. `RemoteServer` passes the facts of the envelope's `cid`. The UI service sets
   `facts.events = true` when it accepts the offer. Core reads the flag at fan-out. Core never parses a `ui-*` body.
+  - A message handled without a connection (`handle(msg, reply)`, `cid` 0) gets throwaway facts with
+    `events = false`.
+  - `IEnvelopeService` keeps its two-parameter `handle` pure. The three-parameter one is a non-pure virtual whose
+    default calls it. A service that overrides the new one adds `using IEnvelopeService::handle;`, as the
+    `-Woverloaded-virtual` build requires.
 - **The envelope.** `kind: "event"`, `callId: 0`, `body: {topic, payload}`. For this design the topic is
   `changes`. A client routes it by kind before reply matching, so an event is never taken for an orphaned reply.
 - **Writing to a connection.** `RemoteServer` gains `setConnectionWriter(cid, write)`, the transport's writer for a
@@ -336,16 +341,21 @@ A client watches the topics its cache holds, so the server sends each connection
       generic client's shell.
     - **The `watch` verb.** `Session` owns the cache, so it does the topic reference counting, and it needs its own
       route to the server: `SessionOptions` gains a `watcher`, a functor `(body) -> Completion<std::string>`. The
-      shell builds it with a new `watcherOver(exchange, currentSession, cbExec)`, alongside `evaluatorOver`. Unlike
-      the evaluator, whose session is fixed when it is built, it takes `currentSession`, a function returning the
-      source's session **now**. A `watch` is sent with whatever session the user is signed in with at that moment.
+      remote source builds it with a new `watcherOver(exchange, currentSession, cbExec)`, as it builds the evaluator,
+      because the source holds the exchange. The shell sets `sessionOptions.watcher = source.watcher()`. The watcher
+      takes `currentSession`, a function returning the source's session **now**, rather than a session fixed when it
+      is built.
+      - When `SessionOptions::watcher` is unset, as for a local source with no `RemoteServer`, the session still
+        counts topics and sends nothing. Local mode is covered by the effects every reply applies (§9). A `watch` is sent with whatever session the user is signed in with at that moment.
       Requests through the exchange are not stamped with the backend's session, so an unsigned `watch` would be
       refused (§12). `Dispatcher` is unchanged, so its test doubles need nothing.
     - The Qt WebSocket backend already fires `setConnectHandler`. The `net` `SocketBackend` does not override it
       today; part 2 adds the override, fired from `onConnected()` on its loop, the first connect included.
   - **What happens on each connect,** on the owner:
-    1. the remote source's own listener sends `ui-hello` again, so the new connection negotiates `events`, then
-       calls the other listeners, `Session::reconnected()` among them;
+    1. on a **reconnect** (not the first connect, whose `ui-hello` `open()` has already filed), the remote source's
+       own listener sends `ui-hello` again, so the new connection negotiates `events`, then calls the other
+       listeners, `Session::reconnected()` among them. It sends only the `ui-hello` handshake, not a bundle reload:
+       the documents did not change because the connection dropped;
     2. `reconnected()` sends the whole watch set;
     3. `reconnected()` marks every entry stale, as spec 6 §9 already does for a backend switch. Entries with a fetch in flight get
        `refetchAfter`.
@@ -609,7 +619,7 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 |---|---|---|---|---|
 | 1 | **Records and effects.** `BRIDGE_REGISTER_RECORD`, raw and wrapped keys, `keyless`, `derivedFrom`, `privateKeys`; `BRIDGE_REGISTER_EFFECTS` as a registrar; the result walker in the action registration; matching when the phase closes; `records(A)` with paths; deriving changes from a result | core | none | `core/registry.md` |
 | 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, write, backlog, onDrained)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired in `onConnected()` after the held requests are flushed and before the reconnect handler is posted; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
-| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`, and `ConnectionFacts` on `IEnvelopeService::handle`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
+| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`, and `ConnectionFacts` on `IEnvelopeService::handle`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes, `remote.hpp` `ConnectionFacts`) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
 | 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `SessionOptions::watcher`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
 | 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
@@ -620,7 +630,7 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 **Ready now: parts 1 and 2.** They are independent. Part 1 is `registry.hpp` and a new records header. Part 2 is
 `wire.hpp`'s event kind, `remote.hpp`'s writer and `post`, `backend.hpp` and the transports.
 
-**Then part 3,** after part 2, because both change `wire.hpp`. **Then parts 4 and 5 side by side, with part 6
+**Then part 3,** after part 2, because both change `wire.hpp` and `remote.hpp`. **Then parts 4 and 5 side by side, with part 6
 beside them.**
 - They share only the shapes part 3 defines.
 - Part 4 is in `remote.hpp`; part 5 is in the interpreter and the offline glue.
