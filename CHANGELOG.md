@@ -11,6 +11,26 @@ API surface).
 
 ### Changed
 
+- **An upload or download in flight holds a close open.** `Screen::pending()`
+  counted dialogs and mutation runs only, so an `onClose` whose work was an
+  upload closed the screen at once and its mutation never ran, and a *save and
+  close* whose `onSave` uploaded judged `dirty` before the upload had ended. A
+  transfer now counts as pending from the host accepting it to its settle; an
+  upload's mutation takes its own count before the transfer gives its count
+  back. A transfer the host refuses never counts.
+
+- **A `patch` or `optimistic` write reaches the list inside a record value.**
+  A list action that answers a record holding its rows
+  (`{"results": [...]}`) could never be patched: the interpreter patched only
+  a query value that was itself a list, and dropped every other patch without
+  a word. A patch now takes an optional `"at": "<member>"` naming the record
+  member that holds the list (`ui::Patch::at` in the C++ builders). A patch
+  whose query has a value but finds no list there is reported through the
+  screen's `diagnostics()`. `ActionInfo::listFields` carries a record result's
+  list members, which the builders reflect from the action's result type, and
+  with it the loader refuses a patch of a record result without `at`, or with
+  an `at` that is not one of them.
+
 - **An `evaluate` query's handle reads the action it evaluates.**
   `Scope::evaluate<A>` returned a `QueryHandle<A>` whose value was typed as
   `A`'s result, while the reply is `A`'s own body with its computed fields

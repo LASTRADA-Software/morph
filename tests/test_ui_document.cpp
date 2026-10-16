@@ -64,6 +64,9 @@ LoadOptions catalogOptions() {
         info.calculatedFields = stringsOf(optionalMember(*entry, "calculated"));
         info.secretFields = stringsOf(optionalMember(*entry, "secret"));
         info.credential = optionalMember(*entry, "credential") != nullptr;
+        if (Json const* const lists = optionalMember(*entry, "lists")) {
+            info.listFields = stringsOf(lists);
+        }
         return info;
     };
     return options;

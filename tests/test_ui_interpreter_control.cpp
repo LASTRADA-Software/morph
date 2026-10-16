@@ -6,7 +6,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
 #include <string>
+#include <string_view>
 
 #include "ui_interpreter_support.hpp"
 
@@ -406,6 +408,86 @@ TEST_CASE("interpreter control: an optimistic write shows before the reply and r
         h.reply(second - 1, "{}");
         h.fail(second);
         CHECK(rowTexts(h) == std::vector<std::string>{"1:10", "2:30"});
+    }
+}
+
+namespace {
+
+// The rows of `results` live in the record member its `at` names, as a list action that answers
+// `{"results": [...]}` gives them. AT is replaced with the `at` member of both patches, or with nothing.
+constexpr char const* kRecordRows = R"({
+  "vocab": "ui/1", "id": "recordrows",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "queries": { "results": { "model": "sample", "action": "Lims_ListResults" } },
+  "mutations": {
+    "capture": { "model": "sample", "action": "Lims_CaptureConcentration", "concurrency": "parallel",
+                 "patch": { "query": "results", AT "key": { "ref": "result.id" }, "with": { "ref": "result" } } },
+    "guess": { "model": "sample", "action": "Lims_Save", "concurrency": "parallel",
+               "optimistic": { "query": "results", AT "key": { "ref": "body.id" },
+                               "with": { "obj": { "mass": { "ref": "body.mass" } } } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "textInput", "testId": "capture", "onSubmit": { "run": "capture", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } },
+    { "kind": "textInput", "testId": "guess", "onSubmit": { "run": "guess", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } } ] } })";
+
+std::string recordRows(std::string_view at) {
+    std::string text = kRecordRows;
+    for (std::size_t found = text.find("AT"); found != std::string::npos; found = text.find("AT", found)) {
+        text.replace(found, 2, at);
+        found += at.size();
+    }
+    return text;
+}
+
+constexpr char const* kRecordReply = R"({"results":[{"id":1,"mass":10},{"id":2,"mass":20}]})";
+
+}  // namespace
+
+TEST_CASE("interpreter control: a patch with `at` replaces a row of the list inside the query's record",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(recordRows(R"("at": "results",)"));
+    h.reply(0, kRecordReply);
+
+    SECTION("patch") {
+        h.backend.submit(h.byTestId("TextInput", "capture"), "25");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"id":2,"mass":25})");
+        CHECK(readJson(*screen, R"({"ref": "results"})") == R"({"results":[{"id":1,"mass":10},{"id":2,"mass":25}]})");
+        CHECK(h.dispatcher.count("Lims_ListResults") == 1);
+    }
+    SECTION("optimistic, then rolled back on failure") {
+        h.backend.submit(h.byTestId("TextInput", "guess"), "30");
+        h.settle();
+        CHECK(readJson(*screen, R"({"ref": "results"})") ==
+              R"({"results":[{"id":1,"mass":10},{"id":2,"mass":"30"}]})");
+        h.fail(h.dispatcher.last("Lims_Save"));
+        CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
+    }
+    CHECK(h.diagnostics.empty());
+}
+
+TEST_CASE("interpreter control: a patch that finds no list in the query's value is reported", "[ui][interpreter]") {
+    Harness h;
+    SECTION("a record value and no `at`") {
+        auto const screen = h.mount(recordRows(""));
+        h.reply(0, kRecordReply);
+        h.backend.submit(h.byTestId("TextInput", "capture"), "25");
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"id":2,"mass":25})");
+        CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().path == "/mutations/capture/patch");
+        CHECK(h.diagnostics.front().reason.contains("not a list"));
+    }
+    SECTION("an `at` the record does not have") {
+        auto const screen = h.mount(recordRows(R"("at": "rows",)"));
+        h.reply(0, kRecordReply);
+        h.backend.submit(h.byTestId("TextInput", "guess"), "30");
+        h.settle();
+        CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().path == "/mutations/guess/optimistic");
+        CHECK(h.diagnostics.front().reason.contains("`rows`"));
     }
 }
 

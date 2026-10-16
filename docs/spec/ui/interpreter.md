@@ -35,7 +35,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
 | `Session` | What screens of one client session share: the query cache, `refreshOn` bookkeeping, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
-| `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, or a mutation run in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
+| `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, a mutation run, or an upload or download in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
 
 `SessionOptions` carries the `Scheduler` (`debounce`, `refreshEvery`, cache eviction), the clock
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
@@ -138,6 +138,13 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   `permissionsStale`.
 - **`patch` and `optimistic`** replace the row of the query's list whose `id` field equals `key`; a
   record `with` is merged over a record row (its fields replace the row's), anything else replaces it.
+  The list is the query's value itself, or, with `at`, the member of that record value `at` names; the
+  rest of the record is kept. A key no row has changes nothing and is not a fault: the row is not
+  loaded. A patch whose query has a value but finds no list there — the value is not a list and there
+  is no `at`, or the value has no list at `at` — changes nothing and is reported once through
+  `diagnostics()` at the mutation's `/patch` or `/optimistic` path, since it can never apply. An
+  `optimistic` write is checked when the run starts, a `patch` when its reply arrives; before the query
+  has a value there is nothing to miss.
 
 ## Relations
 

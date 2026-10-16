@@ -55,6 +55,10 @@ struct ActionInfo {
     std::vector<std::string> secretFields;
     /// @brief Whether the action sends a credential.
     bool credential = false;
+    /// @brief When the action's result is a record, the names of its members that hold a list: what a `patch` or
+    ///        `optimistic` of a query of the action may name as its `at`. Empty when the catalog does not say, or the
+    ///        result is not a record.
+    std::optional<std::vector<std::string>> listFields;
 };
 
 /// @brief The facts load-time validation needs from the application's catalog. Local mode answers them from the
@@ -187,6 +191,8 @@ enum class Concurrency : std::uint8_t {
 struct PatchDecl {
     /// @brief The query whose cached list it patches.
     std::string query;
+    /// @brief The member of the query's record value that holds the list; empty when the value is the list itself.
+    std::string at;
     /// @brief The row key to replace.
     ExprPtr key;
     /// @brief The new row.
@@ -1221,14 +1227,19 @@ private:
     }
 
     [[nodiscard]] static PatchDecl patch(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, R"(a patch is {"query": q, "key": e, "with": e})");
+        auto const& fields = objectOf(json, path, R"(a patch is {"query": q, "at"?: m, "key": e, "with": e})");
         refuseMustUnderstand(fields, path);
         Json const* const key = member(fields, "key");
         Json const* const with = member(fields, "with");
         if (key == nullptr || with == nullptr) {
-            refuse(path, R"(a patch is {"query": q, "key": e, "with": e})");
+            refuse(path, R"(a patch is {"query": q, "at"?: m, "key": e, "with": e})");
+        }
+        std::string listMember = text(fields, "at", path, false);
+        if (member(fields, "at") != nullptr && listMember.empty()) {
+            refuse(pointerAppend(path, "at"), "`at` names the member of the query's record that holds the list");
         }
         return PatchDecl{.query = text(fields, "query", path, true),
+                         .at = std::move(listMember),
                          .key = expr(*key, pointerAppend(path, "key")),
                          .with = expr(*with, pointerAppend(path, "with"))};
     }
@@ -2450,6 +2461,7 @@ private:
             bodyContext.bindings.emplace_back(std::string{bound}, Type::any());
             checkExpr(*decl.key, bodyContext);
             checkExpr(*decl.with, bodyContext);
+            checkPatchAt(decl, *target->second, path);
             return target->second;
         };
         if (mutation.patch) {
@@ -2467,6 +2479,27 @@ private:
         }
         checkCommands(mutation.onSuccess, context);
         checkCommands(mutation.onError, context);
+    }
+
+    // Only a catalog that knows the result is a record can say a patch misses its list; otherwise the interpreter
+    // reports the miss when the patch runs.
+    void checkPatchAt(PatchDecl const& decl, QueryDecl const& query, std::string const& path) {
+        if (!_options->catalog.action) {
+            return;
+        }
+        auto const info = _options->catalog.action(query.action);
+        if (!info || !info->listFields) {
+            return;
+        }
+        if (decl.at.empty()) {
+            refuse(path, std::format("`{}` answers a record, so a patch of `{}` names the member holding its list "
+                                     "with `at`",
+                                     query.action, decl.query));
+        }
+        if (std::ranges::find(*info->listFields, decl.at) == info->listFields->end()) {
+            refuse(pointerAppend(path, "at"),
+                   std::format("the result of `{}` has no list member `{}`", query.action, decl.at));
+        }
     }
 
     void checkOptimistic(PatchDecl const& decl, QueryDecl const& query) {

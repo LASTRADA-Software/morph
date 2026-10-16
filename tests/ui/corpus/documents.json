@@ -15,6 +15,7 @@
       "Lims_HeaderSection": { "model": "Lims_SampleModel" },
       "Lims_ListProjects": { "model": "Lims_SampleModel" },
       "Lims_ListClients": { "model": "Lims_ClientModel" },
+      "Lims_ListSamples": { "model": "Lims_SampleModel", "lists": ["samples", "notes"] },
       "Auth_Login": { "model": "Auth_SessionModel", "credential": true },
       "Auth_Token": { "model": "Auth_SessionModel", "secret": ["token"] }
     }
@@ -241,6 +242,15 @@
       "doc": { "vocab": "ui/1", "id": "t", "models": { "m": { "type": "Unknown_Model", "instance": { "lit": 1 } } },
                "queries": { "q": { "model": "m", "action": "Unknown_Action", "refreshOn": ["Other_Action"] } },
                "view": { "kind": "text", "text": "x" } }
+    },
+    {
+      "name": "a patch and an optimistic write name the list inside a record result with at",
+      "doc": { "vocab": "ui/1", "id": "t", "models": { "m": { "type": "Lims_SampleModel", "instance": { "lit": 1 } } },
+               "queries": { "q": { "model": "m", "action": "Lims_ListSamples" } },
+               "mutations": { "c": { "model": "m", "action": "Lims_Save",
+                                     "patch": { "query": "q", "at": "samples", "key": { "ref": "result.id" }, "with": { "ref": "result" } },
+                                     "optimistic": { "query": "q", "at": "notes", "key": 1, "with": { "obj": { "a": 1 } } } } },
+               "view": { "kind": "text", "text": "x" } }
     }
   ],
   "invalid": [
@@ -422,6 +432,9 @@
     { "name": "an action of another model", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "queries": { "q": { "model": "m", "action": "Lims_GetLimits" } } }, "at": "/queries/q", "reason": "belongs to `Lims_CatalogModel`, not `Lims_SampleModel`" },
     { "name": "refreshOn across model types", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "queries": { "q": { "model": "m", "action": "Lims_ListResults", "refreshOn": ["Lims_GetLimits"] } } }, "at": "/queries/q/refreshOn/0", "reason": "`refreshOn` names actions of the query's model type" },
     { "name": "refreshOn of an unknown action", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "queries": { "q": { "model": "m", "action": "Lims_ListResults", "refreshOn": ["Nope"] } } }, "at": "/queries/q/refreshOn/0", "reason": "`refreshOn` names actions" },
+    { "name": "a patch with an empty at", "doc": { "models": { "x": { "type": "T" } }, "queries": { "q": { "model": "x", "action": "A" } }, "mutations": { "m": { "model": "x", "action": "A", "patch": { "query": "q", "at": "", "key": 1, "with": 1 } } } }, "at": "/mutations/m/patch/at", "reason": "`at` names the member of the query's record" },
+    { "name": "a patch of a record result without at", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel", "instance": { "lit": 1 } } }, "queries": { "q": { "model": "m", "action": "Lims_ListSamples" } }, "mutations": { "c": { "model": "m", "action": "Lims_Save", "patch": { "query": "q", "key": 1, "with": { "ref": "result" } } } } }, "at": "/mutations/c/patch", "reason": "`Lims_ListSamples` answers a record" },
+    { "name": "an optimistic write at a member the result does not hold as a list", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel", "instance": { "lit": 1 } } }, "queries": { "q": { "model": "m", "action": "Lims_ListSamples" } }, "mutations": { "c": { "model": "m", "action": "Lims_Save", "optimistic": { "query": "q", "at": "rows", "key": 1, "with": { "obj": { "a": 1 } } } } } }, "at": "/mutations/c/optimistic/at", "reason": "has no list member `rows`" },
     { "name": "an optimistic write to a calculated field", "catalog": true, "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "queries": { "q": { "model": "m", "action": "Lims_ListResults" } }, "mutations": { "c": { "model": "m", "action": "Lims_CaptureConcentration", "optimistic": { "query": "q", "key": 1, "with": { "obj": { "mass": 1, "concentration": 2 } } } } } }, "at": "/mutations/c/optimistic/with/obj/concentration", "reason": "`concentration` is calculated by the server" },
     { "name": "a credential-bearing mutation queued offline", "catalog": true, "doc": { "models": { "a": { "type": "Auth_SessionModel" } }, "mutations": { "login": { "model": "a", "action": "Auth_Login", "offline": "queue" } } }, "at": "/mutations/login/offline", "reason": "never queued offline" },
     { "name": "a secret-returning mutation queued offline", "catalog": true, "doc": { "models": { "a": { "type": "Auth_SessionModel" } }, "mutations": { "token": { "model": "a", "action": "Auth_Token", "offline": "queue" } } }, "at": "/mutations/token/offline", "reason": "never queued offline" },

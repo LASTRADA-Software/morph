@@ -121,18 +121,22 @@ with the screen and a `choose` callback, and answers once with a `CloseChoice`:
 The handle carries the choice out from its own state, which it holds weakly, so a dialog that answers after its tab's
 handle was destroyed does nothing.
 
-**What a save waits for** is `Screen::pending()`, as `onClose` does: dialogs and mutation runs. A transfer that has not
-yet started its mutation is not counted, and a mutation queued offline stays pending until its replay, so a
-*save and close* made offline waits for it.
+**What a save waits for** is `Screen::pending()`, as `onClose` does: dialogs, mutation runs and transfers. An
+`onSave` that uploads a file waits for the upload and then for the mutation it hands the reference to, and a mutation
+queued offline stays pending until its replay, so a *save and close* made offline waits for it.
 
 The workspace's close-others, close-all and close-saved walks go through `requestClose`, so they stop at a kept
 screen as at any other veto.
 
 **What counts as pending.** `Screen::pending()` is a tracked read of the screen's `pendingWork` counter: an open
-dialog or drawer, and a mutation run in flight, in any of the screen's scopes. A dialog's content scope counts from
-its creation to its destruction, which is from opening to closing. A mutation counts from `run` to its settle, and a
-mutation destroyed with a run in flight gives its count back. The handle watches `pending()` with an Effect, so it
-waits without polling.
+dialog or drawer, a mutation run in flight, and an upload or download in flight, in any of the screen's scopes. A
+dialog's content scope counts from its creation to its destruction, which is from opening to closing. A mutation
+counts from `run` to its settle, and a mutation destroyed with a run in flight gives its count back. A transfer counts
+from the host accepting it to its settle, because its completion carries on the command list that started it: a
+download's `preview` write and the commands after it, an upload's mutation. A transfer the host refuses never counts;
+one that settles after its scope is gone gives its count back; an upload's mutation takes its own count before the
+transfer gives back its own, so `pending()` does not read `false` in between. The handle watches `pending()` with an
+Effect, so it waits without polling.
 
 ## Routes
 
@@ -196,7 +200,7 @@ opened with, are opened once the reload ends, before any navigation the sign-in 
 
 | Decision | Choice | Why |
 |---|---|---|
-| Where the pending count lives | A counter signal on the screen's core, moved by dialog scopes and mutation runs | A scope knows only its parent, so a screen cannot walk down to its dialogs; the places that start and end work can count it. |
+| Where the pending count lives | A counter signal on the screen's core, moved by dialog scopes, mutation runs and transfers | A scope knows only its parent, so a screen cannot walk down to its dialogs; the places that start and end work can count it. |
 | When `cancelClose` is read | When the pending work has ended | A confirm dialog opened by `onClose` answers later; reading the flag when `onClose` returns would close under the user. |
 | Answers | Posted to the owner, joined while pending | A host's callback may destroy the handle; it must not run inside the handler that is still using it. |
 | Who decides a dirty screen without `onClose` | The host, through `CloseGuard` | The choice (save, discard, cancel) is the shell's UI (spec 6 §15), not the document's. |

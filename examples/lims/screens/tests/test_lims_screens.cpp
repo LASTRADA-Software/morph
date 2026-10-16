@@ -248,3 +248,53 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
     }
     CHECK(harness.problems().empty());
 }
+
+// Mutation: drop the row capture's `patch` (the row keeps 12.500, since a row capture refetches nothing).
+TEST_CASE("lims screens: a row's write-through capture patches its row in place", "[lims-screens]") {
+    DbFixture fixture;
+    std::int64_t sampleId = 0;
+    {
+        lims::test::ScopedPrincipal const principal{"tech"};
+        lims::AnalysisCatalogModel catalog;
+        auto const nitrate =
+            catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+        lims::SampleModel model;
+        auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-4"});
+        model.execute(lims::ReceiveSample{});
+        model.execute(lims::StartWork{});
+        model.execute(lims::CaptureConcentration{
+            .analysisVersionId = nitrate.versionId,
+            .value = lims::Concentration{morph::math::Rational{morph::math::Numerator{25}, morph::math::Denominator{2},
+                                                               morph::math::DecimalPlaces{3}}},
+        });
+        sampleId = *sample.id;
+    }
+    ScreenHarness harness{limsApp(), std::string{lims::screens::kResults}, RigMode::Local, sampleParams(sampleId),
+                          LocalSetup{.db = {}, .user = "tech"}};
+    auto const shows = [&harness](std::string_view prefix) {
+        return harness.waitFor([&harness, prefix] {
+            for (int const widget : harness.backend().all("Text")) {
+                if (harness.backend().prop(widget, "text").starts_with(prefix)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    };
+    REQUIRE(shows("12.500"));
+    auto const entry = harness.find("TextInput", "recapture");
+    REQUIRE(entry);
+    harness.backend().submit(*entry, "13.000");
+    bool const patched = shows("13.000");
+    if (!patched) {
+        for (int const widget : harness.backend().all("Text")) {
+            UNSCOPED_INFO("text: " << harness.backend().prop(widget, "text"));
+        }
+    }
+    for (std::string const& problem : harness.problems()) {
+        UNSCOPED_INFO(problem);
+    }
+    CHECK(patched);
+    CHECK(harness.problems().empty());
+}
