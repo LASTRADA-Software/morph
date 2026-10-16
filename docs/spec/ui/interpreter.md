@@ -223,6 +223,10 @@ applies to the width.
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
 - **`switch`** selects the first case whose `when` equals `on` (structurally), else `default`.
+- **A field's `label`.** A text input, select, slider, date-time input or file picker shows no caption of
+  its own, so its `label` is bound as its accessible name (`Common::a11y.name`). An `a11y` part that
+  gives a `name` wins over it; one that gives only a `role` leaves the label as the name. A checkbox's
+  and a button's label is their text, which already names them.
 - **`table`** from `rows`: the columns' labels and widths are set once; a column without a `cell`
   shows the row's field of the column's `id`; `columns` given as an expression is a list of
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone`, `sort`, `filters` and

@@ -4749,6 +4749,15 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     auto textProp = [&](std::string_view key) {
         return bindProp<std::string>(ctx, node.prop(key), std::string{}, stringOf);
     };
+    // A field shows no caption of its own, so its label is what names it to assistive technology. An `a11y` part
+    // that gives a name was written for that purpose and wins; one that gives only a role leaves the label.
+    auto nameByLabel = [&](Common& common) {
+        bool const named = std::ranges::any_of(node.partList("a11y"),
+                                               [](DocNodePtr const& a11y) { return a11y->prop("name") != nullptr; });
+        if (node.prop("label") && !named) {
+            common.a11y.name = textProp("label");
+        }
+    };
     auto action = [&](std::string_view key) -> Action {
         Commands const* const commands = node.event(key);
         if (commands == nullptr) {
@@ -4833,6 +4842,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
+        nameByLabel(spec.common);
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
@@ -4879,6 +4889,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.style = onceText("style") == "radio" ? SelectStyle::Radio : SelectStyle::Dropdown;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
+        nameByLabel(spec.common);
         return ui::select(std::move(spec));
     }
     if (kind == "slider") {
@@ -4902,6 +4913,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         };
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
+        nameByLabel(spec.common);
         return ui::slider(std::move(spec));
     }
     if (kind == "dateTimeInput") {
@@ -4926,6 +4938,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.offsetMinutes = format.utcOffsetMinutes;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
+        nameByLabel(spec.common);
         return ui::dateTimeInput(std::move(spec));
     }
     if (kind == "filePicker") {
@@ -4943,6 +4956,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.mode = onceText("mode") == "save" ? FilePickerMode::Save : FilePickerMode::Open;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
+        nameByLabel(spec.common);
         return ui::filePicker(std::move(spec));
     }
     if (kind == "menu") {

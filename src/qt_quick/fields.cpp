@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QAccessible>
+#include <QQmlContext>
+#include <QQmlProperty>
+#include <QQuickItem>
 #include <QRegularExpression>
 #include <QUrl>
 #include <QVariantList>
@@ -21,6 +25,21 @@ std::function<void(QVariant const&)> textHandler(std::function<void(std::string)
             handler(toUtf8(payload.toString()));
         }
     };
+}
+
+/// Declares the option a drop-down shows as the value of its display child, the style's text field: a ComboBox node
+/// has no value of its own, and Qt Quick Controls declares that child only while the platform's accessibility is on,
+/// which on some platforms it never is. Set from C++ because QML can write an attached property only on the item
+/// that declares it. A style sets its content item once, when the combo box is made.
+void exposeShownOption(QObject const* comboBox) {
+    auto* const shown = comboBox != nullptr ? comboBox->property("contentItem").value<QQuickItem*>() : nullptr;
+    if (shown == nullptr) {
+        return;
+    }
+    QQmlProperty const role{shown, QStringLiteral("Accessible.role"), qmlContext(shown)};
+    if (role.isValid()) {
+        static_cast<void>(role.write(static_cast<int>(QAccessible::EditableText)));
+    }
 }
 
 }  // namespace
@@ -146,7 +165,11 @@ bool CheckboxImpl::checked() const {
 
 SelectImpl::SelectImpl(Context& context, ui::ContainerWidget* parent, ui::SelectStyle style)
     : FieldItemWidget{context, QStringLiteral("MorphSelect"), parent,
-                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio}}} {}
+                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio}}} {
+    if (style == ui::SelectStyle::Dropdown) {
+        exposeShownOption(part("control"));
+    }
+}
 
 void SelectImpl::setOptions(std::vector<ui::SelectOption> const& options) {
     if (options == _options) {
