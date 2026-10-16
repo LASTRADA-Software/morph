@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
+#include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/testing/owner_probe_recorder.hpp>
 #include <stdexcept>
@@ -322,4 +323,50 @@ TEST_CASE("reactive misuse: a Runtime destroyed before its nodes", "[reactive][m
     value.set(2);  // a write still marks the Effect, but nothing posts a flush any more
     CHECK(owner.pending() == 0);
     CHECK(runs == 1);
+}
+
+// Mutation: let mutate() bypass writable() (the Computed's write lands, or a foreign thread's does).
+TEST_CASE("reactive misuse: mutate() inside a Computed or off the owner is dropped like set()", "[reactive][misuse]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    Signal<int> base{runtime, 0};
+    Signal<int> other{runtime, 0};
+    Computed<int> const sneaky{runtime, [&] {
+                                   other.mutate([](int& value) { value = 7; });
+                                   return base.get();
+                               }};
+    CHECK(sneaky.get() == 0);
+    CHECK(other.peek() == 0);
+    CHECK(probe.count(site::kSetInComputed) == 1);
+    std::thread{[&] { other.mutate([](int& value) { value = 9; }); }}.join();
+    CHECK(other.peek() == 0);
+    CHECK(probe.count(site::kOffOwner) == 1);
+    other.mutate([](int& value) { value = 3; });
+    CHECK(other.peek() == 3);
+}
+
+// Mutation: run an Effect made off the owner (its body reads the runtime from a foreign thread).
+TEST_CASE("reactive misuse: an Effect made off the owner does not run", "[reactive][misuse]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    int runs = 0;
+    std::thread{[&] { Effect const effect{runtime, [&] { ++runs; }}; }}.join();
+    CHECK(runs == 0);
+    CHECK(probe.count(site::kOffOwner) >= 1);
+}
+
+// Mutation: report a timer whose probe throws as still scheduled, or one with no probe as gone.
+TEST_CASE("reactive: a timer handle with no probe is active until cancelled, and a throwing probe means gone",
+          "[reactive][scheduler]") {
+    int cancelled = 0;
+    morph::reactive::TimerHandle plain{[&cancelled] { ++cancelled; }};
+    CHECK(plain.active());
+    plain.cancel();
+    CHECK_FALSE(plain.active());
+    CHECK(cancelled == 1);
+    morph::reactive::TimerHandle const probing{[] {}, []() -> bool { throw std::runtime_error{"probe"}; }};
+    CHECK_FALSE(probing.active());
+    CHECK_FALSE(morph::reactive::TimerHandle{}.active());
 }
