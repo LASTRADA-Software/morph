@@ -12,12 +12,18 @@ MorphField {
     property bool edited: false
 
     control: field
+    accessibleItem: field
+    defaultRole: Accessible.EditableText
 
     TextField {
         id: field
         width: root.controlWidth
         readOnly: root.readOnly
         placeholderText: root.withTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd"
+        // Declared, as the text input's field declares them.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
         onTextEdited: root.edited = true
         onEditingFinished: {
             if (!root.edited || root.readOnly)

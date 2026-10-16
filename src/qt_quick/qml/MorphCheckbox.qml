@@ -10,11 +10,18 @@ MorphField {
     property string label: ""
 
     control: box
+    accessibleItem: box
+    defaultName: label
+    defaultRole: Accessible.CheckBox
 
     CheckBox {
         id: box
         width: root.controlWidth
         text: root.label
+        // Declared, as the text input's field declares them.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
         onToggled: {
             if (root.readOnly) {
                 checked = !checked

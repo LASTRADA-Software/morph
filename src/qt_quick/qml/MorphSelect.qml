@@ -34,6 +34,10 @@ MorphField {
     }
 
     control: root.radio ? radios : combo
+    accessibleItem: control
+    // A drop-down the document names no name reads the option it shows; a radio group is a group of its options.
+    defaultName: root.radio ? "" : combo.displayText
+    defaultRole: root.radio ? Accessible.Grouping : Accessible.ComboBox
 
     ComboBox {
         id: combo
@@ -41,10 +45,12 @@ MorphField {
         width: root.controlWidth
         model: root.options
         currentIndex: -1
-        // Declared rather than left to Qt Quick Controls, which fills a control's role and name in only once the
-        // platform's accessibility is active: on a platform without a bridge the combo box would be no node at all.
-        Accessible.role: Accessible.ComboBox
-        Accessible.name: combo.displayText
+        // Declared, as the text input's field declares them.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
+        // A hidden item is still in the accessibility tree: only the presentation shown is the widget's node.
+        Accessible.ignored: root.radio
         onActivated: index => root.choose(index)
 
         // Reported also with no options, so a failed fetch of them can be retried when the user asks for them.
@@ -60,6 +66,10 @@ MorphField {
         id: radios
         visible: root.radio
         width: root.controlWidth
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
+        Accessible.ignored: !root.radio
 
         Repeater {
             id: radioButtons
@@ -69,6 +79,10 @@ MorphField {
                 required property int index
                 required property string modelData
                 text: modelData
+                // Each option is a node of its own, named by its label, that a driver presses.
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: modelData
+                Accessible.ignored: !root.radio
                 onClicked: root.choose(index)
             }
         }

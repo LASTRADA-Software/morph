@@ -70,17 +70,28 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
 - **leaves the scene when destroyed.** The destructor releases the widget's handlers at once, takes the item out of
   its container, hides it and deletes it later: QML may be running one of the item's own handlers, and the handlers
   hold the screen's scopes, which must not outlive it.
-- **is one accessible node.** The widget's item is the node assistive technology and an automation driver see: the
-  document's `a11y` name and role, falling back to the kind's own text and role, and the test id as both
-  `objectName` and, on a Qt that has the property, `Accessible.id`. A role the document names maps to Qt's: `group`
-  Grouping, `heading` Heading, `text` StaticText, `button` Button, `edit` (or `textbox`) EditableText, `checkbox`
-  CheckBox, `list` List, `table` Table, `chart` Chart, `status` StatusBar, and the further names `widget.cpp` lists;
-  an unknown name keeps the kind's role. A button is a Button named by its label, with the press action, and a text
-  is StaticText named by its text; the control inside either is not a second node. A key-value list is one node per
-  pair, named `"<caption>: <value>"`. A select's combo box (ComboBox, named by the option shown) and a text input's
-  field (EditableText) declare their role themselves: Qt Quick Controls fills a control's role in only once the
-  platform's accessibility is active, and on a platform with no accessibility bridge, such as `offscreen` on Qt
-  6.8, it never is, so the control would be no node at all.
+- **is one accessible node.** The node assistive technology and an automation driver see carries the document's
+  `a11y` name and role, falling back to the kind's own text and role, and the test id as both `objectName` and, on
+  a Qt that has the property, `Accessible.id`. A role the document names maps to Qt's: `group` Grouping, `heading`
+  Heading, `text` StaticText, `button` Button, `edit` (or `textbox`) EditableText, `checkbox` CheckBox, `list`
+  List, `table` Table, `chart` Chart, `status` StatusBar, and the further names `widget.cpp` lists; an unknown name
+  keeps the kind's role. For most kinds the node is the widget's item. A button is a Button named by its label,
+  with the press action, and a text is StaticText named by its text; the control inside either is
+  `Accessible.ignored`. A key-value list is one node per pair, named `"<caption>: <value>"`.
+- **an input's node is its control.** For a text input, text area, date input, select, check box, slider and file
+  picker the node is the Qt Quick Controls control a driver focuses and types into or sets, because its text or
+  value interface and its focus live there; the widget's item names it in `accessibleItem` and is
+  `Accessible.ignored`. The control binds the item's `accessibleName`, `accessibleRole` and its messages as
+  `Accessible.description`, and `showTestId` writes the test id onto it as well as onto the item, whose
+  `objectName` `findWidget` matches. So `(name, role)` and the test id resolve to the same single node. Kinds' own
+  roles are EditableText for the text kinds and the file picker's path, ComboBox for a drop-down select, Grouping
+  for a radio select, CheckBox and Slider. A drop-down the document names no name reads the option it shows; a
+  check box reads its label. A radio select's group carries the name, and each option is a RadioButton named by its
+  label, with the press action. A select's hidden presentation is ignored, because a hidden item stays in the
+  accessibility tree. The file picker's button is a Button node of its own. Each control declares its name and
+  role itself: Qt Quick Controls makes a control an accessible node of its own accord only while the platform's
+  accessibility is active, and on a platform with no accessibility bridge, such as `offscreen` on Qt 6.8, it never
+  is.
 - **takes no focus out of reach.** `focus()` on a widget that is hidden or disabled, or inside such a container,
   does nothing; a widget that becomes hidden while focused gives its focus up.
 
@@ -220,8 +231,10 @@ software scene graph:
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
   driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
-  name and press action, a key-value pair named `"<caption>: <value>"`, and the test id as `objectName` and, from Qt
-  6.8, as the accessible identifier.
+  name and press action, a key-value pair named `"<caption>: <value>"`, the test id as `objectName` and, from Qt
+  6.8, as the accessible identifier, and every input kind as one node found by its name and role, the same node as
+  its test id, that a driver focuses and types into (a text input) or sets (a slider), with a radio select's options
+  as radio buttons.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 

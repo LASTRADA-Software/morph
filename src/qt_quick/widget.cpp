@@ -188,12 +188,20 @@ void ItemBase::showTestId(std::string_view testId) const {
         return;
     }
     QString const identifier = toQString(testId);
-    _item->setObjectName(identifier);
-    // `Accessible.id` is the automation id a platform driver reads; a Qt without the property resolves no such
-    // property, and the objectName alone identifies the item there.
-    QQmlProperty const accessibleId{_item, QStringLiteral("Accessible.id"), qmlContext(_item)};
-    if (accessibleId.isValid()) {
-        static_cast<void>(accessibleId.write(identifier));
+    // The root keeps the id, which `findWidget` matches; an input's accessible node is its control, so the control
+    // carries the id too, where a driver walking the accessibility tree finds it.
+    auto const identify = [&identifier](QQuickItem& target) {
+        target.setObjectName(identifier);
+        // `Accessible.id` is the automation id a platform driver reads; a Qt without the property resolves no such
+        // property, and the objectName alone identifies the item there.
+        QQmlProperty const accessibleId{&target, QStringLiteral("Accessible.id"), qmlContext(&target)};
+        if (accessibleId.isValid()) {
+            static_cast<void>(accessibleId.write(identifier));
+        }
+    };
+    identify(*_item);
+    if (auto* const node = qobject_cast<QQuickItem*>(part("accessibleItem")); node != nullptr && node != _item) {
+        identify(*node);
     }
 }
 

@@ -16,10 +16,16 @@ MorphField {
     }
 
     control: slider
+    accessibleItem: slider
+    defaultRole: Accessible.Slider
 
     Slider {
         id: slider
         width: root.controlWidth
+        // Declared, as the text input's field declares them.
+        Accessible.role: root.accessibleRole
+        Accessible.name: root.accessibleName
+        Accessible.description: root.accessibleDescription
         onMoved: {
             if (root.readOnly) {
                 value = root.shownValue
