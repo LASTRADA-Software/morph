@@ -237,6 +237,10 @@ The wire gains its first server-initiated message.
   and spec 5 §15 names it as the place to negotiate this. A server sends events only on a connection whose
   `ui-hello` offered them and that it accepted. A client that never offers sees today's protocol unchanged.
   Negotiation is per connection, so a reconnect negotiates again.
+- **How core learns the result.** `ui-hello` is a UI service kind, and `IEnvelopeService::handle` receives no
+  connection id. It gains a third parameter, `ConnectionFacts&`, with a default overload forwarding to today's
+  two-parameter form. `RemoteServer` passes the facts of the envelope's `cid`. The UI service sets
+  `facts.events = true` when it accepts the offer. Core reads the flag at fan-out. Core never parses a `ui-*` body.
 - **The envelope.** `kind: "event"`, `callId: 0`, `body: {topic, payload}`. For this design the topic is
   `changes`. A client routes it by kind before reply matching, so an event is never taken for an orphaned reply.
 - **Writing to a connection.** `RemoteServer` gains `setConnectionWriter(cid, write)`, the transport's writer for a
@@ -330,15 +334,20 @@ A client watches the topics its cache holds, so the server sends each connection
     - **`Session::reconnected()`**, new. The shell that builds the `Session` registers it with
       `source.onConnected(...)`. That is one line in whichever shell builds the session; in this repository, the
       generic client's shell.
-    - **The `watch` verb.** `Session` has no request channel of its own. Its `Dispatcher` already carries `evaluate`,
-      built over the source's exchange by `evaluatorOver(exchange, session, cbExec)`. It gains `watch`, built the same
-      way by a new `watcherOver(exchange, cbExec)`.
+    - **The `watch` verb.** `Session` owns the cache, so it does the topic reference counting, and it needs its own
+      route to the server: `SessionOptions` gains a `watcher`, a functor `(body) -> Completion<std::string>`. The
+      shell builds it with a new `watcherOver(exchange, currentSession, cbExec)`, alongside `evaluatorOver`. Unlike
+      the evaluator, whose session is fixed when it is built, it takes `currentSession`, a function returning the
+      source's session **now**. A `watch` is sent with whatever session the user is signed in with at that moment.
+      Requests through the exchange are not stamped with the backend's session, so an unsigned `watch` would be
+      refused (§12). `Dispatcher` is unchanged, so its test doubles need nothing.
     - The Qt WebSocket backend already fires `setConnectHandler`. The `net` `SocketBackend` does not override it
       today; part 2 adds the override, fired from `onConnected()` on its loop, the first connect included.
-  - **What `reconnected()` does,** on the owner:
-    1. sends `ui-hello` again, so the new connection negotiates `events`;
-    2. sends the whole watch set;
-    3. marks every entry stale, as spec 6 §9 already does for a backend switch. Entries with a fetch in flight get
+  - **What happens on each connect,** on the owner:
+    1. the remote source's own listener sends `ui-hello` again, so the new connection negotiates `events`, then
+       calls the other listeners, `Session::reconnected()` among them;
+    2. `reconnected()` sends the whole watch set;
+    3. `reconnected()` marks every entry stale, as spec 6 §9 already does for a backend switch. Entries with a fetch in flight get
        `refetchAfter`.
   - **What it does not promise is order, and why that is safe.** What the transports do today:
     - An `execute` made while disconnected is rejected at once with `DisconnectedError`, and one in flight at the
@@ -346,7 +355,7 @@ A client watches the topics its cache holds, so the server sends each connection
     - `request()` envelopes made while disconnected (the `ui-*` kinds, and `watch`/`unwatch` changes) are held, and
       replayed when the connection opens, before the posted handler can run.
     - Executes the owner files **between the connect and `reconnected()` running** (a user's mutation, a
-      `refreshEvery` tick, calls released by the bridge's rebinds) reach the server before the new `ui-hello` and
+      `refreshEvery` tick, a timed replay of queued mutations, calls released by the bridge's rebinds) reach the server before the new `ui-hello` and
       watch set. A fetch among them may read before a change commits that produces no event for this client.
 
     Correctness rests on step 3. Every entry is stale, and an entry whose fetch is in flight gets `refetchAfter`.
@@ -574,8 +583,8 @@ Every test below must fail if the feature does nothing, so each names the change
   - A submit (not a mutation) applies its effects.
   - A discarded `latest` reply marks entries stale and patches nothing, so a newer reply's row is kept.
   - A reply's `updates` patch on an entry whose fetch is pending causes one more fetch, in local mode.
-  - After the transport reconnects, the client sends `ui-hello` and its watch set again before any execute filed
-    after the connect. Every entry is marked stale, and events arrive on the new connection.
+  - After the transport reconnects, the client sends `ui-hello` and its watch set again before any refetch that
+    `reconnected()` files. Every entry is marked stale, and events arrive on the new connection.
   - A fetch filed after the connect but before `reconnected()` runs, and settling after it, refetches once.
   - Watch changes held during the outage and replayed before the full set are superseded by it (`replace: true`).
   - `changesInstance` refetches only entries of that instance.
@@ -599,10 +608,10 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 | # | Part | Layer | Needs | Spec pages |
 |---|---|---|---|---|
 | 1 | **Records and effects.** `BRIDGE_REGISTER_RECORD`, raw and wrapped keys, `keyless`, `derivedFrom`, `privateKeys`; `BRIDGE_REGISTER_EFFECTS` as a registrar; the result walker in the action registration; matching when the phase closes; `records(A)` with paths; deriving changes from a result | core | none | `core/registry.md` |
-| 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, write, backlog, onDrained)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired from `onConnected()`; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
-| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
+| 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, write, backlog, onDrained)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired in `onConnected()` after the held requests are flushed and before the reconnect handler is posted; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
+| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`, and `ConnectionFacts` on `IEnvelopeService::handle`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
-| 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `Dispatcher::watch`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
+| 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `SessionOptions::watcher`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
 | 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
 | 7 | **End-to-end harness and examples.** The two-session harness in `tests/`. Records and effects in the seven rungs that use refresh declarations (`none` on attach-style actions), with their declarations removed in `ui/1` documents where the warnings say so | tests, examples | 4, 5, 6 | the rungs' READMEs, `testing_strategy.md` |
 | 8 | **`ui/2`.** Remove `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer and golden files emit `ui/2`; the server keeps serving `ui/1` | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
