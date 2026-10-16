@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <morph/forms/engine/form_session.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -297,4 +299,57 @@ TEST_CASE("nested: field() walks members and rows and refuses what is not there"
     CHECK_THROWS_AS(form->field("rows[0]"), std::out_of_range);
     CHECK_THROWS_AS(form->field("rows[x].sieve"), std::out_of_range);
     CHECK_THROWS_AS(form->field("rows[0].nope"), std::out_of_range);
+}
+
+// Mutation: have member() or RowState::field() answer the first entry for any name, or RowState::blank() look at
+// only one cell.
+TEST_CASE("nested: an object's member and a row's field are found by wire name, and a row knows when it is blank",
+          "[forms-engine][nested]") {
+    Harness harness;
+    auto const form = harness.session("T_Ignition", kIgnition);
+    auto& specimen = form->field("specimen");
+    REQUIRE(specimen.member("testTemperature") != nullptr);
+    CHECK(specimen.member("testTemperature")->spec().name == "testTemperature");
+    CHECK(specimen.member("nope") == nullptr);
+    CHECK(form->field("method").member("x") == nullptr);  // not an object: no members
+
+    auto const grading = harness.session("T_Grading", kGrading);
+    auto& rows = grading->field("rows");
+    rows.addRow();
+    auto const& row = *rows.rows().front();
+    CHECK(row.blank());
+    REQUIRE(row.field("note") != nullptr);
+    CHECK(row.field("note")->spec().name == "note");
+    CHECK(row.field("missing") == nullptr);
+    harness.type(*grading, "rows[0].note", "x");
+    CHECK_FALSE(row.blank());
+}
+
+// Mutation: let field() accept a path through a missing row, a malformed index or past a leaf (it returns a field).
+TEST_CASE("nested: a field path through a missing row, a bad index or past a leaf is out of range",
+          "[forms-engine][nested]") {
+    Harness harness;
+    auto const form = harness.session("T_Grading", kGrading);
+    form->field("rows").addRow();
+    CHECK_NOTHROW(form->field("rows[0].note"));
+    CHECK_THROWS_AS(form->field("rows[0"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("rows[x].note"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("rows[3].note"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("rows[0]"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("rows[0].note.deeper"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("tags.deeper"), std::out_of_range);
+    CHECK_THROWS_AS(form->field("nothing"), std::out_of_range);
+}
+
+// Mutation: let refill parse text that is not an object (a JSON array or garbage changes the form).
+TEST_CASE("nested: refill with text that is not a JSON object changes nothing", "[forms-engine][nested]") {
+    Harness harness;
+    auto const form = harness.session("T_Ignition", kIgnition);
+    harness.type(*form, "calibrationFactor", "1.5");
+    std::optional<std::string> const before = form->body();
+    form->refill("[1,2]");
+    form->refill("{broken");
+    harness.settle();
+    CHECK(form->body() == before);
+    CHECK(form->field("calibrationFactor").text().peek() == "1.5");
 }

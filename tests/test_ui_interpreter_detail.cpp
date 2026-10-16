@@ -319,3 +319,63 @@ TEST_CASE("interpreter: intOf reads an int, truncates a decimal and falls back f
     CHECK(intOf(Value{ui::Decimal{.value = onePointFive()}}, -1) == 1);
     CHECK(intOf(Value{"9"}, -1) == -1);
 }
+
+namespace {
+
+constexpr std::string_view kRequired = R"({
+  "vocab": "ui/1", "id": "required",
+  "state": { "pressed": { "init": 0 } },
+  "keys": { "F7": [ { "set": "pressed", "value": 1 } ] },
+  "view": { "kind": "column", "children": [
+    { "kind": "checkbox", "id": "agree", "testId": "agree", "label": "agree", "required": true },
+    { "kind": "select", "id": "unit", "testId": "unit", "label": "Unit", "options": { "lit": [ "g", "kg" ] },
+      "required": true },
+    { "kind": "text", "testId": "agreeErrors",
+      "text": { "fn": "format", "args": [ "{0}", { "fn": "count", "args": [ { "ref": "agree.errors" } ] } ] } },
+    { "kind": "text", "testId": "unitErrors",
+      "text": { "fn": "format", "args": [ "{0}", { "fn": "count", "args": [ { "ref": "unit.errors" } ] } ] } },
+    { "kind": "text", "testId": "pressed", "text": { "fn": "format", "args": [ "{0}", { "ref": "pressed" } ] } } ] } })";
+
+}  // namespace
+
+// Mutation: read a checkbox's or select's `value` for `required` (null: the checkbox is reported unchecked as
+// missing, and a chosen unit never clears its error).
+TEST_CASE("interpreter: `required` reads a checkbox's checked and a select's selected", "[ui][interpreter]") {
+    morph::ui::testing::Harness h;
+    auto const screen = h.mount(kRequired);
+    // `false` is engaged (spec: only null, "" and an empty list are not), so an unchecked checkbox is not missing.
+    CHECK(h.text("agreeErrors") == "0");
+    CHECK(h.text("unitErrors") == "1");
+    h.backend.choose(h.byTestId("Select", "unit"), ui::Key{std::string{"kg"}});
+    h.settle();
+    CHECK(h.text("unitErrors") == "0");
+}
+
+// Mutation: drop a node's key bindings (the chord does nothing).
+TEST_CASE("interpreter: a key chord on a node runs its commands", "[ui][interpreter]") {
+    morph::ui::testing::Harness h;
+    auto const screen = h.mount(kRequired);
+    CHECK(h.text("pressed") == "0");
+    CHECK(h.backend.press(h.backend.idOf(screen->root()), "F7"));
+    h.settle();
+    CHECK(h.text("pressed") == "1");
+}
+
+namespace {
+
+constexpr std::string_view kNodeKeys = R"({
+  "vocab": "ui/1", "id": "nodeKeys",
+  "state": { "hit": { "init": 0 } },
+  "view": { "kind": "column", "testId": "page", "keys": { "F8": [ { "set": "hit", "value": 1 } ] }, "children": [
+    { "kind": "text", "testId": "hit", "text": { "fn": "format", "args": [ "{0}", { "ref": "hit" } ] } } ] } })";
+
+}  // namespace
+
+// Mutation: drop a view node's key bindings (the chord does nothing).
+TEST_CASE("interpreter: a view node's chord runs its commands", "[ui][interpreter]") {
+    morph::ui::testing::Harness h;
+    auto const screen = h.mount(kNodeKeys);
+    CHECK(h.backend.press(h.byTestId("Column", "page"), "F8"));
+    h.settle();
+    CHECK(h.text("hit") == "1");
+}

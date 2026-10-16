@@ -520,3 +520,43 @@ TEST_CASE("Views::Registry::ViewIdsContainsRegisteredView", "[views]") {
 TEST_CASE("Views::Registry::UnknownViewThrows", "[views]") {
     CHECK_THROWS_AS(morph::views::ViewRegistry::instance().schemaJson("NoSuchView"), std::runtime_error);
 }
+
+namespace {
+
+glz::generic_u64 viewsDom(std::string_view json) {
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, json));
+    return dom;
+}
+
+}  // namespace
+
+// Mutation: read a `type` array's first alternative instead of its first non-null one (a nullable integer is text).
+TEST_CASE("views: a column's kind follows the property's type, format, widget and comparator", "[views]") {
+    using morph::views::detail::inferColumnKind;
+    using morph::views::detail::schemaType;
+    glz::generic_u64 const row = viewsDom(R"({"$defs":{"Tag":{"type":"string","enum":["a","b"]}}})");
+    CHECK(schemaType(viewsDom(R"({"type":["null","integer"]})")) == "integer");
+    CHECK(schemaType(viewsDom(R"({"type":["null"]})")).empty());
+    CHECK(schemaType(viewsDom(R"({"type":7})")).empty());
+    CHECK(schemaType(viewsDom(R"({})")).empty());
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":["null","integer"]})")) == "integer");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"string","x-comparator":"natural"})")) == "custom");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"string","format":"date"})")) == "date");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"string","format":"date-time"})")) == "dateTime");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"integer","x-widget":"epochDays"})")) == "date");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"integer","x-widget":"epochSeconds"})")) == "dateTime");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"number"})")) == "number");
+    CHECK(inferColumnKind(row, viewsDom(R"({"type":"boolean"})")) == "bool");
+    CHECK(inferColumnKind(row, viewsDom(R"({"$ref":"#/$defs/Tag"})")) == "text");
+}
+
+// Mutation: read `enum` off the property instead of its resolved `$ref` (a referenced enum loses its values).
+TEST_CASE("views: a column entry takes the enum of the definition its property refers to", "[views]") {
+    glz::generic_u64 const row = viewsDom(R"({"properties":{"tag":{"$ref":"#/$defs/Tag","title":"Tag"}},
+                     "$defs":{"Tag":{"type":"string","enum":["a","b"]}}})");
+    glz::generic_u64 const entry = morph::views::detail::buildColumnEntry(row, "tag", "Tag", false);
+    std::string const text = glz::write_json(entry).value_or("");
+    CHECK(text.contains(R"("enum":["a","b"])"));
+    CHECK(text.contains(R"("title":"Tag")"));
+}
