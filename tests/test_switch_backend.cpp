@@ -783,6 +783,14 @@ TEST_CASE("morph::model::detail::IModelHolder::onBackendChanged base default is 
     REQUIRE_NOTHROW(holder.onBackendChanged());
 }
 
+// Mutation: make the base attach hooks do anything but nothing (the stub's attach fails or loses the log).
+TEST_CASE("morph::model::detail::IModelHolder: the attach hooks' base defaults are no-ops", "[model][concept]") {
+    BareModelHolder holder;
+    REQUIRE_NOTHROW(holder.attachIdentity("primary-1"));
+    REQUIRE_NOTHROW(holder.attachActionLog(nullptr, "ctx"));
+    CHECK_FALSE(holder.hasActionLog());
+}
+
 TEST_CASE(
     "morph::model::detail::ModelHolder: the IModelHolder::onBackendChanged path and the "
     "dynamic_cast<IBackendChangedSink*> path both reach the same underlying call",

@@ -169,12 +169,10 @@ concept ModelIdentityAttachable = requires(M& model, std::string key) {
 template <typename M, bool = BackendChangedNotifiable<M>>
 struct BackendChangedMixin {};
 
-/// @brief Specialisation that wires `IBackendChangedSink` to `M::onBackendChanged()`.
+/// @brief Specialisation that adds `IBackendChangedSink` when `M` declares `onBackendChanged()`; its one virtual is
+///        implemented by `ModelHolder<M>::onBackendChanged`.
 template <typename M>
-struct BackendChangedMixin<M, true> : IBackendChangedSink {
-    /// @brief Forwards the virtual call to the concrete model instance.
-    void onBackendChanged() override { static_cast<ModelHolder<M>*>(this)->model.onBackendChanged(); }
-};
+struct BackendChangedMixin<M, true> : IBackendChangedSink {};
 
 // ── Core type-erasure ─────────────────────────────────────────────────────────
 
@@ -331,26 +329,14 @@ struct IModelHolder {
 
 protected:
     /// @brief Forwards @p log/@p contextKey to the wrapped model's own
-    ///        `attachActionLog`, if it declares one. No-op default, for the
-    ///        overwhelming majority of models that only ever rely on
-    ///        `recordIfAttached`'s auto-append and have no model-level state
-    ///        of their own to keep a log reference in.
+    ///        `attachActionLog`, if it declares one.
     ///
-    /// `ModelHolder<Model>` overrides this exactly like `onBackendChanged()`
-    /// (see `BackendChangedMixin`): detected structurally via
-    /// `ModelLevelActionLogAttachable<Model>`, not through a shared
-    /// interface a model opts into by inheritance. This closes the gap a
-    /// registry-constructed remote instance would otherwise have — before
-    /// this hook existed, `RemoteServer::LogProvider`'s `holder->
-    /// attachActionLog(log, contextKey)` populated only this holder's own
-    /// `_actionLog`/`_contextKey` (used by `recordIfAttached`'s auto-append),
-    /// never a `Model`-level `_log`-shaped member a model reads back from
-    /// itself (e.g. for an activity-stream view): the model instance
-    /// `into<Model>()` down-casts to is default-constructed by `ModelFactory::
-    /// create<Model>()` and never otherwise touched. A model with no
-    /// `attachActionLog` of its own is entirely unaffected — this call
-    /// resolves to the base's no-op body for it, same as before this hook
-    /// was added.
+    /// `ModelHolder<Model>` implements it, detecting the member structurally
+    /// (`ModelLevelActionLogAttachable<Model>`) and doing nothing for a model
+    /// without one; this default does nothing, for a holder that is not a
+    /// `ModelHolder`. It is what lets a registry-constructed instance hold a
+    /// model-level log reference (e.g. for an activity-stream view) beside
+    /// the holder's own, which `recordIfAttached`'s auto-append uses.
     /// @param log        Sink entries are forwarded to.
     /// @param contextKey Stable identity of this model instance.
     virtual void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>& log,
@@ -360,15 +346,12 @@ protected:
     }
 
     /// @brief Forwards @p primaryKey to the wrapped model's own
-    ///        `attachIdentity`, if it declares one. No-op default, for models
-    ///        with no need to know their own key ahead of the first action
-    ///        that carries it.
+    ///        `attachIdentity`, if it declares one.
     ///
-    /// `ModelHolder<Model>` overrides this exactly like `onActionLogAttached`:
-    /// detected structurally via `ModelIdentityAttachable<Model>`, not
-    /// through a shared interface a model opts into by inheritance. A model
-    /// with no `attachIdentity` of its own is entirely unaffected — this call
-    /// resolves to this no-op body for it.
+    /// `ModelHolder<Model>` implements it, detecting the member structurally
+    /// (`ModelIdentityAttachable<Model>`) and doing nothing for a model
+    /// without one; this default does nothing, for a holder that is not a
+    /// `ModelHolder`.
     /// @param primaryKey Stable identity of this model instance; never empty
     ///                    (the public `attachIdentity` filters that case out).
     virtual void onIdentityAttached(const std::string& primaryKey) { (void)primaryKey; }
@@ -406,10 +389,8 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
     /// This single definition is the final overrider for two unrelated base
     /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`
     /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via
-    /// `BackendChangedMixin<Model, true>`. That mixin's own forwarding body
-    /// becomes unreachable (shadowed by this more-derived override) but is left
-    /// as-is; both call paths (`IModelHolder*` and `dynamic_cast<IBackendChangedSink*>`)
-    /// land here.
+    /// `BackendChangedMixin<Model, true>`; both call paths (`IModelHolder*` and
+    /// `dynamic_cast<IBackendChangedSink*>`) land here.
     void onBackendChanged() override {
         if constexpr (BackendChangedNotifiable<Model>) {
             model.onBackendChanged();
