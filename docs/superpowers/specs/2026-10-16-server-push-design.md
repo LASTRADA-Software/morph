@@ -157,12 +157,16 @@ BRIDGE_REGISTER_EFFECTS(OpenSample, morph::effects::none)
 ```
 
 - **`BRIDGE_REGISTER_EFFECTS(A, effects...)`** expands to a static registrar that records, under
-  `ActionTraits<A>::typeId()`, the effects as data (`{kind, record type?}`). It must appear where `ActionTraits<A>`
-  is visible: after `BRIDGE_REGISTER_ACTION`, or after `BRIDGE_DECLARE_ACTION` in the same header. It defines no
-  specialisation, so a translation unit that does not see it is not inconsistent with one that does.
-- **Client-only builds** (`MORPH_CLIENT_ONLY`) compile the registrars too; they hold no model code. A pure remote
-  client does not consult them: it takes effects and records from `ui-catalog` (§5), as it takes every other
-  action fact.
+  `ActionTraits<A>::typeId()`, the effects as data (`{kind, record type?}`).
+  - It must appear where `ActionTraits<A>` is visible. Its place is beside the action's registration: after
+    `BRIDGE_REGISTER_ACTION`, or after `BRIDGE_REGISTER_ACTION_SOURCE` in the `.cpp`, for an action split with
+    `BRIDGE_DECLARE_ACTION`. In a header it would run once per translation unit, which is the static-initialisation
+    cost `BRIDGE_DECLARE_ACTION` exists to avoid.
+  - It is idempotent per action, like `registerActionOnce`: registering the same effects twice is a no-op. Registering
+    different effects for one action is refused when the phase closes.
+  - It defines no specialisation, so a translation unit that does not see it is not inconsistent with one that does.
+- **Client-only builds** (`MORPH_CLIENT_ONLY`) compile the registrars out, as they do every action registrar. A
+  pure remote client takes effects and records from `ui-catalog` (§5), as it takes every other action fact.
 - **`updates<R>` finds the records in the result.** The result may be an `R`, a `std::vector<R>`, or an aggregate
   whose members, found by reflection, hold an `R` or a `std::vector<R>`. `R` must have a key. If no `R` is found,
   or `R` has no key, startup fails when the registration phase closes, not when the action first runs. Bank's
@@ -184,11 +188,26 @@ BRIDGE_REGISTER_EFFECTS(OpenSample, morph::effects::none)
 
 ### What each action's result holds
 
-Each action's existing registration also records a reflection walker over its `Result` type, which needs no record
-to be registered yet. When the registration phase closes, the walker's type identities are matched against the
-record registry, giving `records(A)`. For each record, it gives the **paths** at which the result holds it and
-whether it is keyed. A cached query holds exactly the records of its action. `ListResults` returns
-`ListResultsResult{results: vector<ResultView>}`, so its entries hold `Lims_Result` at path `results`.
+Each action's existing registration (`BRIDGE_DETAIL_ACTION_REGISTRARS`, which every form of the macro runs) also
+records a reflection walker over `ActionTraits<A>::Result`. That is the unwrapped type, so a `Task<R>` handler
+contributes `R`. The walker needs no record to be registered yet. When the registration phase closes, the walker's
+type identities are matched against the record registry, giving `records(A)`. For each record, it gives the
+**paths** at which the result holds it and whether it is keyed. A cached query holds exactly the records of its
+action. `ListResults` returns `ListResultsResult{results: vector<ResultView>}`, so its entries hold `Lims_Result` at
+path `results`.
+
+- **What the walker visits.**
+  - The result itself; a `std::vector`, `std::optional` or `std::map` value of a visited type.
+  - The members of a reflectable aggregate. Their JSON names are taken from `glz::reflect`'s keys, which are the
+    names the codec writes.
+  - It recurses into members, depth-first, so a record inside a record (a row list inside a header) has a path such
+    as `header.rows`. It stops at a registered record, so a record's own members are not searched for further
+    records. It stops at a type already on its path, so recursive types end.
+- **What it skips:** `void`, scalars, strings, and any type it cannot reflect, such as a type with a custom
+  `glz::meta` codec or an anonymous-namespace struct. A skipped type contributes no records. An action whose result
+  is skipped holds none. `updates<R>` on such an action fails when the phase closes, because `R` is not found.
+- **The registrars are compiled out of client-only builds.** `MORPH_CLIENT_ONLY` empties every registrar, these
+  included. That is consistent with a pure remote client taking these facts from `ui-catalog`.
 
 ## 5. The catalog
 
@@ -225,12 +244,19 @@ The wire gains its first server-initiated message.
     transport's own thread, as replies are queued today.
   - The size cap (`kMaxEnvelopeBytes`) applies.
   - A write failure drops the connection's watches, as a disconnect does.
-- **The outbound cap.** Events are queued per connection, up to 256 pending events or 1 MiB.
-  - On overflow, the queue is replaced by one `resync` event, meaning "everything you watch may have changed", and
-    the client marks every watched entry stale.
-  - Overflow itself closes nothing. A transport's own rules still apply: the `net` writer closes a peer that
-    stalls past `sendTimeout`, as it does for replies.
-  - This is the only outbound limit the transports gain.
+- **The outbound bound.** The server cannot see what a transport still holds unsent: replies and events are handed
+  to the transport's outbox and forgotten. The design bounds what it can see, and names the transport's rule for the
+  rest.
+  - **The writer reports its backlog.** `setConnectionWriter(cid, write)` takes a writer that returns the bytes
+    still queued for that connection after the write. Both transports already own that queue (the `net` connection's
+    frame queue, Qt's socket buffer), so the writer reads it.
+  - **Events, not replies, give way.** When the reported backlog exceeds 1 MiB, the server stops posting events to
+    that connection and records that it owes it a `resync`. When a later write reports the backlog under 256 KiB, it
+    sends one `resync` event, meaning "everything you watch may have changed". The client marks every watched entry
+    stale. Replies are never held back.
+  - **A peer that stops reading** is closed by the transport's own rule: the `net` writer closes a peer that stalls
+    past `sendTimeout`, as it does today for replies. The Qt transport gains the same timeout in part 2, so both
+    behave alike.
 - **The client side.** `IBackend` gains `setEventHandler(fn)`, delivered on the bridge's executor:
   - the Qt WebSocket backend, the `net` socket backend and `SimulatedRemoteBackend`, which the core transport tests
     use, call it for each `event`;
@@ -246,15 +272,18 @@ A client watches the topics its cache holds, so the server sends each connection
 
 - **Topics.**
   - A record type, for every record its entries hold.
-  - `(model type, instance id)` for every entry read through a **keyed shared** instance whose action holds no
-    records, which is the case for working-copy reads. The instance id is the binding's `currentId`.
+  - `(model type, primary key)` for every entry read through a **keyed shared** instance whose action holds no
+    records, which is the case for working-copy reads. The primary key is the one the alias binds with: the
+    interpreter already binds a keyed alias as `bind(type, Shared, key)` from its token, so the key is known before
+    the first fetch. The server resolves it through its instance directory (`DirectoryKey{typeId, primary}`). The
+    binding's `currentId` cannot serve here, because it is 0 until that first fetch has bound the alias.
   - A private instance needs no watch: its owner is known to the server (§8). A keyless `"shared"` alias names a
     stateless model, which has no instance state to change.
 - **The kinds.** `watch` and `unwatch` are **core** kinds, handled by `RemoteServer` on its strand with the
   connection's `cid`, because the watch table belongs to the connection and fan-out reads it in the execute path.
   - Core can validate them: after part 1, records are a core registry, and instance topics are checked with
     `authorizeInstance`.
-  - The body is `{records: [...], instances: [{modelType, instanceId}]}`. The `ok` reply lists any topic refused
+  - The body is `{records: [...], instances: [{modelType, primary}]}`. The `ok` reply lists any topic refused
     (§12).
   - The UI layer sends them; it does not handle them.
 - **Lifetime.** A topic is watched while at least one cache entry holds it, mounted or kept (spec 5 §5: for
@@ -266,10 +295,17 @@ A client watches the topics its cache holds, so the server sends each connection
   table before the fetch reads anything:
   - a write that commits before the fetch reads is in the fetched value;
   - one that commits after produces an event, which §9 keeps even if the fetch is still in flight.
-- **Reconnect.** The watch set is resent in the `bindContext` step of the offline reconnect sequence (`activate` →
-  `bindContext` → `replay`), after `ui-hello` has negotiated again and before the offline queue replays. The client
-  then marks every entry stale, as spec 6 §9 already does for a backend switch. Events missed while disconnected are
-  not replayed; the stale marks cover them. The replay's own changes arrive as events (§8).
+- **Reconnect.** Both transports reconnect on their own, so the UI layer cannot rely on being told by an offline
+  coordinator. The hosting layer (`ui/host.hpp`) installs the backend's `setConnectHandler`, which runs on every
+  successful connect, the first included. On each connect it:
+  1. sends `ui-hello` again, so the new connection negotiates `events`;
+  2. sends the whole watch set;
+  3. marks every entry stale, as spec 6 §9 already does for a backend switch.
+
+  These are ordinary requests on the new connection, so they go ahead of any execute sent after them. That
+  includes an offline replay, which reaches the cache as events (§8). In an application that also runs
+  `ReconnectCoordinator`, its `bindContext` step runs before `replay`, and the connect handler has already run by
+  then. Events missed while disconnected are not replayed; the stale marks cover them.
 - **Granularity.** Record topics are per type, not per key. Per-key watching would make the server track every key
   every client shows, and those keys change as lists scroll. The event carries keys, and the client filters on them
   (§9).
@@ -321,11 +357,17 @@ The interpreter's query cache applies a change the same way whether it came from
   fetch settles, the entry stays stale and fetches once more, even if it succeeded. Otherwise the success would clear
   the mark, and a change committed after the fetch read would be lost. This replaces today's unconditional
   `stale = false` on settle, and it is what makes the watch-before-fetch argument in §7 hold.
+- **A patch on a fetching entry also refetches.** A reply's `updates` patch that lands on an entry whose fetch is
+  pending is applied and also sets `refetchAfter`. Otherwise that fetch, which may have read before the write
+  committed, would settle over the patch. Remotely the caller's duplicate event would repair this too, but local
+  mode has no events, so the patch path must not rely on one.
 - **Every reply applies its effects.** The single hook is `session.actionSucceeded`, which every success already
   goes through: mutations, and form, collection and wizard submits (`aliasSubmits`). It gains the reply's JSON, so
-  `updates` can patch. A `latest` run whose reply is discarded still applies its effects; only its value is
-  dropped. An offline replay's reply reaches the offline worker, not a mutation. Its effects reach the cache as an
-  event, because the caller is not excluded (§8).
+  `updates` can patch.
+  - **A `latest` run whose reply is discarded** applies its effects as marks only: each `updates` is treated as
+    `changes`. Its values are older than the reply a newer run already applied, so it must never patch.
+  - **An offline replay's reply** reaches the offline worker, not a mutation. Its effects reach the cache as an event,
+    because the caller is not excluded (§8).
 - **Duplicates cost at most one extra fetch.** The caller sees each change twice: once from its reply and once as an
   event.
   - On an idle entry, the second mark lands on an entry already stale or already fetching. While fetching, it sets
@@ -400,13 +442,19 @@ changes visible.
   every envelope. The watch table therefore stores, with each watch, the session context (principal and token) of the
   `watch` envelope that created it, and the verified principal.
   - **A later envelope on the connection with a different verified principal drops all of the connection's
-    watches.** The comparison is made in `stampVerifiedPrincipal`, which every kind passes through, given the
-    envelope's `cid`. That covers signing in as someone else, and a client that keeps old watches across a sign-out.
+    watches.** The comparison is made in `stampVerifiedPrincipal`, given the envelope's `cid`. Every kind that
+    authorises passes through it; `hello`, which carries no session, does not. That covers signing in as someone else, and a client that keeps old watches across a sign-out.
     The client's cache is already cleared on a principal change (spec 5 §5), and it watches again.
-  - **Fan-out re-authorises each watch at send time.** It runs `authenticate` on the stored context, which fails for
-    an expired token, then `authorize` for the action that produced the change, or `authorizeInstance` for an
-    instance topic. A failure drops the watch. The client watches again with its next envelope, which carries a
-    fresh token.
+  - **Fan-out re-authorises each watch at send time, by the rule that admitted it.**
+    - It runs `authenticate` on the stored context, which fails for an expired token.
+    - For a record topic, it then requires again that the principal may run some action whose `records` hold the
+      type, the same rule as below. It does not check the action that wrote the change: a role that may list
+      results but not capture them still receives the change.
+    - For an instance topic, it runs `authorizeInstance`.
+
+    A failure drops the watch. The client watches again with its next envelope, which carries a fresh token. The
+    "may run some action holding `R`" answer is cached per principal and record type, and refreshed when that
+    principal's token is.
 - **What a watch may name.**
   - A record type: only when the principal may run at least one action whose `records` contain it. Otherwise the
     `ok` reply lists it as refused, and the client logs it.
@@ -419,7 +467,8 @@ changes visible.
   where they are enforced today.
 - **Volume.**
   - Coalescing bounds events to 20 a second per connection.
-  - The outbound cap (§6) bounds what a slow reader can queue.
+  - The backlog bound (§6) holds events back from a slow reader and replaces them with one `resync`, and the
+    transport's `sendTimeout` closes a reader that stops.
   - The query-must-read rule (§10) removes the way a fetch could feed itself.
 
 ## 13. Tests
@@ -429,6 +478,8 @@ Every test below must fail if the feature does nothing, so each names the change
 - **Records and effects (core).**
   - Registration extracts raw and wrapped keys, and their paths, from an `R`, a `vector<R>` and a nested member.
   - Registration order across translation units does not change `records(A)`.
+  - The walker finds a record nested inside a record, skips a type it cannot reflect, and ends on a recursive type.
+  - Registering the same effects twice is a no-op; different effects for one action fail when the phase closes.
   - `updates<R>` over a result with no `R`, `updates<R>` on a keyless `R`, and a `derivedFrom` cycle all fail when
     the phase closes.
   - A translation unit that does not see `BRIDGE_REGISTER_EFFECTS` compiles and links with one that does.
@@ -438,7 +489,8 @@ Every test below must fail if the feature does nothing, so each names the change
     handler.
   - A connection that did not offer `events` receives none.
   - An event is not taken for a reply.
-  - Overflow produces exactly one `resync`.
+  - A writer reporting a backlog over 1 MiB holds events back, and exactly one `resync` follows when it drains.
+    Replies are not held back.
   - *Mutation: route events through reply matching; the routing case fails.*
 - **Watching and fan-out (core).**
   - Two connections watch `R`, and an execute from A posts to both.
@@ -446,6 +498,8 @@ Every test below must fail if the feature does nothing, so each names the change
   - A watch made under principal P is dropped by an envelope under Q.
   - A watch whose token has expired is dropped at send time.
   - A watch on a type the principal cannot read is refused.
+  - A principal who may list `R` but not run the writer still receives the change.
+  - An instance topic named by primary key reaches a client whose alias has not fetched yet.
   - A `changesInstance` on a private instance reaches only its owning connection.
   - An execute that times out at the client but succeeds still reaches the caller as an event.
   - *Mutation: skip re-authorisation; the principal case fails.*
@@ -455,7 +509,10 @@ Every test below must fail if the feature does nothing, so each names the change
   - A `changes` event, delivered through the local backend's test seam, refetches it.
   - A change marked while a fetch is pending causes exactly one more fetch after it settles.
   - A submit (not a mutation) applies its effects.
-  - A discarded `latest` reply still applies its effects.
+  - A discarded `latest` reply marks entries stale and patches nothing, so a newer reply's row is kept.
+  - A reply's `updates` patch on an entry whose fetch is pending causes one more fetch, in local mode.
+  - After the transport reconnects, the client sends `ui-hello` and its watch set again before any execute, and
+    events arrive on the new connection.
   - `changesInstance` refetches only entries of that instance.
   - *Mutation: restore the unconditional `stale = false`; the mid-flight case fails.*
 - **Documents (ui).**
@@ -477,11 +534,11 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 | # | Part | Layer | Needs | Spec pages |
 |---|---|---|---|---|
 | 1 | **Records and effects.** `BRIDGE_REGISTER_RECORD`, raw and wrapped keys, `keyless`, `derivedFrom`, `privateKeys`; `BRIDGE_REGISTER_EFFECTS` as a registrar; the result walker in the action registration; matching when the phase closes; `records(A)` with paths; deriving changes from a result | core | none | `core/registry.md` |
-| 2 | **Server-to-client channel.** The `event` kind, `setConnectionWriter` and `post`, the outbound cap and `resync`, both transports, `SimulatedRemoteBackend`, `setEventHandler`, the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
-| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1 | `ui/service.md`, `ui/document.md`, `core/wire.md` |
+| 2 | **Server-to-client channel.** The `event` kind, `setConnectionWriter` with a backlog-reporting writer, `post`, holding events back and `resync`, both transports (and `sendTimeout` for the Qt one), `SimulatedRemoteBackend`, `setEventHandler`, the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
+| 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md` |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
-| 5 | **Client cache.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`; events and `resync`; topic reference counting; watch before fetch; the watch resend in `ReconnectCoordinator`'s `bindContext` | ui, offline glue | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `offline/offline.md`, `ui/host.md`, spec 5 §5 |
-| 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3, 5 | `ui/document.md` |
+| 5 | **Client cache.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; the connect handler in `ui/host.hpp` that re-sends `ui-hello` and the watch set | ui | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/host.md`, `offline/offline.md`, spec 5 §5 |
+| 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
 | 7 | **End-to-end harness and examples.** The two-session harness in `tests/`. Records and effects in the seven rungs that use refresh declarations (`none` on attach-style actions), with their declarations removed in `ui/1` documents where the warnings say so | tests, examples | 5, 6 | the rungs' READMEs, `testing_strategy.md` |
 | 8 | **`ui/2`.** Remove `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer and golden files emit `ui/2`; the server keeps serving `ui/1` | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
 | 9 | **MCP adapter.** A connection scope per agent session, tools from `permitted`, calls through `RemoteServer::handle` | net, ui | 4 | a new `ui/agent.md` |
@@ -489,7 +546,8 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 **Ready now: parts 1 and 2.** They are independent. Part 1 is `registry.hpp` and a new records header. Part 2 is
 `wire.hpp`'s event kind, `remote.hpp`'s writer and `post`, `backend.hpp` and the transports.
 
-**Then part 3, then parts 4 and 5 side by side.**
+**Then part 3,** after part 2, because both change `wire.hpp`. **Then parts 4 and 5 side by side, with part 6
+beside them.**
 - They share only the shapes part 3 defines.
 - Part 4 is in `remote.hpp`; part 5 is in the interpreter and the offline glue.
 - Part 5 tests its event path through the local backend's seam until part 4 lands.
