@@ -672,3 +672,16 @@ TEST_CASE("RecordingBackend: no drop lands on a hidden target or one without a p
     CHECK_FALSE(backend.drag(1, 3));
     CHECK(drops == 0);
 }
+
+// Mutation: make the base Widget::setOnHover keep and call its handler, or the base createCustom load something.
+TEST_CASE("a backend that reports no hovering and loads no components keeps the defaults", "[ui][backend]") {
+    RecordingBackend backend;
+    std::unique_ptr<ui::ButtonWidget> const button = backend.createButton(nullptr);
+    int hovered = 0;
+    button->ui::Widget::setOnHover([&hovered] { ++hovered; });
+    backend.hover(backend.idOf(*button));
+    CHECK(hovered == 0);
+    ui::IViewBackend& plain = backend;
+    CHECK(plain.ui::IViewBackend::createCustom(
+              nullptr, ui::CustomRequest{.name = "Chart", .props = {}, .minVersion = 1}) == nullptr);
+}
