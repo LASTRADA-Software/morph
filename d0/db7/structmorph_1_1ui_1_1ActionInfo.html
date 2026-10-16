@@ -136,6 +136,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a3624d9881dcadf269431a10bb2587515"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reply fields the server marks <span class="tt">secret</span>.  <br /></td></tr>
 <tr class="memitem:ac9b8b302076808d32e7d036ad7497115" id="r_ac9b8b302076808d32e7d036ad7497115"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac9b8b302076808d32e7d036ad7497115">credential</a> = false</td></tr>
 <tr class="memdesc:ac9b8b302076808d32e7d036ad7497115"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the action sends a credential.  <br /></td></tr>
+<tr class="memitem:ad6373ecab96b0b4825a9bb06ac3ee5b0" id="r_ad6373ecab96b0b4825a9bb06ac3ee5b0"><td class="memItemLeft">std::optional&lt; std::vector&lt; std::string &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad6373ecab96b0b4825a9bb06ac3ee5b0">listFields</a></td></tr>
+<tr class="memdesc:ad6373ecab96b0b4825a9bb06ac3ee5b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">When the action's result is a record, the names of its members that hold a list: what a <span class="tt">patch</span> or <span class="tt">optimistic</span> of a query of the action may name as its <span class="tt">at</span>. Empty when the catalog does not say, or the result is not a record.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the catalog says about an action. </p>
@@ -211,6 +213,24 @@ Public Attributes</h2></td></tr>
 <p>Whether the action sends a credential. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad6373ecab96b0b4825a9bb06ac3ee5b0" name="ad6373ecab96b0b4825a9bb06ac3ee5b0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad6373ecab96b0b4825a9bb06ac3ee5b0">&#9670;&#160;</a></span>listFields</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::vector&lt;std::string&gt; &gt; morph::ui::ActionInfo::listFields</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>When the action's result is a record, the names of its members that hold a list: what a <span class="tt">patch</span> or <span class="tt">optimistic</span> of a query of the action may name as its <span class="tt">at</span>. Empty when the catalog does not say, or the result is not a record. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

@@ -1,5 +1,7 @@
 var NAVTREEINDEX5 =
 {
+"d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html":[3,0,0,25,0,38],
+"d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a07f5bb54339fdd154eec2652937d5443":[3,0,0,25,0,38,2],
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a0ba368284653736abc9ca3e0fb425439":[3,0,0,25,0,38,7],
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a2bf6e88db86428ac17b9414ee4a70c95":[3,0,0,25,0,38,6],
 "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a4ad323bac1c072cda2c2c62cc8eec111":[3,0,0,25,0,38,5],
@@ -247,7 +249,5 @@ var NAVTREEINDEX5 =
 "d4/d02/structmorph_1_1ui_1_1Document.html#a4b3839578f92208a5b9cc2b415e7813d":[1,0,0,1,50,0],
 "d4/d02/structmorph_1_1ui_1_1Document.html#a4b3839578f92208a5b9cc2b415e7813d":[3,0,0,25,52,0],
 "d4/d02/structmorph_1_1ui_1_1Document.html#a4c0c083adaa2b02c8aecef9fc9fc6602":[1,0,0,1,50,4],
-"d4/d02/structmorph_1_1ui_1_1Document.html#a4c0c083adaa2b02c8aecef9fc9fc6602":[3,0,0,25,52,4],
-"d4/d02/structmorph_1_1ui_1_1Document.html#a51cec9276e5d0bdc65c3844fdb291299":[1,0,0,1,50,13],
-"d4/d02/structmorph_1_1ui_1_1Document.html#a51cec9276e5d0bdc65c3844fdb291299":[3,0,0,25,52,13]
+"d4/d02/structmorph_1_1ui_1_1Document.html#a4c0c083adaa2b02c8aecef9fc9fc6602":[3,0,0,25,52,4]
 };

@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/db0/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:aa1e4e3a56f0eccdd153a43fb69a46199" id="r_aa1e4e3a56f0eccdd153a43fb69a46199"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aa1e4e3a56f0eccdd153a43fb69a46199">query</a></td></tr>
 <tr class="memdesc:aa1e4e3a56f0eccdd153a43fb69a46199"><td class="mdescLeft">&#160;</td><td class="mdescRight">The query whose cached list it patches.  <br /></td></tr>
+<tr class="memitem:a4cbe0313f07c1b68732575d4beda54c7" id="r_a4cbe0313f07c1b68732575d4beda54c7"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4cbe0313f07c1b68732575d4beda54c7">at</a></td></tr>
+<tr class="memdesc:a4cbe0313f07c1b68732575d4beda54c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The member of the query's record value that holds the list; empty when the value is the list itself.  <br /></td></tr>
 <tr class="memitem:ad9ac32174ab47a618d08376db4e335cb" id="r_ad9ac32174ab47a618d08376db4e335cb"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad9ac32174ab47a618d08376db4e335cb">key</a></td></tr>
 <tr class="memdesc:ad9ac32174ab47a618d08376db4e335cb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row key to replace.  <br /></td></tr>
 <tr class="memitem:a6c86dfceb87344e08fe2128db45d4aed" id="r_a6c86dfceb87344e08fe2128db45d4aed"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6c86dfceb87344e08fe2128db45d4aed">with</a></td></tr>
@@ -138,7 +140,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A <span class="tt">patch</span> or <span class="tt">optimistic</span> row replacement. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa1e4e3a56f0eccdd153a43fb69a46199" name="aa1e4e3a56f0eccdd153a43fb69a46199"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa1e4e3a56f0eccdd153a43fb69a46199">&#9670;&#160;</a></span>query</h2>
@@ -154,7 +156,25 @@ Public Attributes</h2></td></tr>
 
 <p>The query whose cached list it patches. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4cbe0313f07c1b68732575d4beda54c7" name="a4cbe0313f07c1b68732575d4beda54c7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4cbe0313f07c1b68732575d4beda54c7">&#9670;&#160;</a></span>at</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::PatchDecl::at</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The member of the query's record value that holds the list; empty when the value is the list itself. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +192,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row key to replace. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +210,7 @@ Public Attributes</h2></td></tr>
 
 <p>The new row. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

@@ -32,8 +32,9 @@ var searchData=
   ['tokenverifier_29',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html',1,'morph::session']]],
   ['tracesink_30',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]],
   ['trackingframe_31',['TrackingFrame',['../d4/d78/classmorph_1_1reactive_1_1detail_1_1TrackingFrame.html',1,'morph::reactive::detail']]],
-  ['transferstate_32',['TransferState',['../da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html',1,'morph::ui::detail']]],
-  ['type_33',['Type',['../df/d58/structmorph_1_1ui_1_1Type.html',1,'morph::ui']]],
-  ['type_34',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model::type&lt; T &gt;'],['../d8/d96/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf.html',1,'morph::ui::author::detail::type&lt;&gt;'],['../d3/d5c/structmorph_1_1ui_1_1author_1_1detail_1_1Unwrapped.html',1,'morph::ui::author::detail::type&lt; T &gt;']]],
-  ['typedforeach_35',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html',1,'morph::ui::detail']]]
+  ['transferhold_32',['TransferHold',['../d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html',1,'morph::ui::detail']]],
+  ['transferstate_33',['TransferState',['../da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html',1,'morph::ui::detail']]],
+  ['type_34',['Type',['../df/d58/structmorph_1_1ui_1_1Type.html',1,'morph::ui']]],
+  ['type_35',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model::type&lt; T &gt;'],['../d8/d96/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf.html',1,'morph::ui::author::detail::type&lt;&gt;'],['../d3/d5c/structmorph_1_1ui_1_1author_1_1detail_1_1Unwrapped.html',1,'morph::ui::author::detail::type&lt; T &gt;']]],
+  ['typedforeach_36',['TypedForEach',['../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html',1,'morph::ui::detail']]]
 ];

@@ -1,5 +1,7 @@
 var NAVTREEINDEX3 =
 {
+"d1/de5/structmorph_1_1ui_1_1ModelInfo.html#ae25a7a6fa4a3ad079823bfa36281b415":[1,0,0,1,123,0],
+"d1/de5/structmorph_1_1ui_1_1ModelInfo.html#ae25a7a6fa4a3ad079823bfa36281b415":[3,0,0,25,125,0],
 "d1/de8/rational_8hpp.html":[4,0,0,15,2],
 "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aabad9b3dd7a0a67346f338fe63a79bc7e":[4,0,0,15,2,8,1],
 "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e":[4,0,0,15,2,8,0],
@@ -247,7 +249,5 @@ var NAVTREEINDEX3 =
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a0b40e012891c8da5d07825a61cac5e55":[3,0,0,24,0,18],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a0d262e5aa4e7f008824631bc3d431c75":[3,0,0,24,0,13],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a10265262d1318100598e8259defe832b":[3,0,0,24,0,11],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a10f5d5b78fc051d72244075a35946f4a":[3,0,0,24,0,32],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a1711f4dd5127f2c89fb2bcafa346659c":[3,0,0,24,0,23],
-"d2/d8e/classmorph_1_1tui_1_1Backend.html#a1a3afb20e4ea89b51d375b089ac12fe9":[3,0,0,24,0,28]
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a10f5d5b78fc051d72244075a35946f4a":[3,0,0,24,0,32]
 };

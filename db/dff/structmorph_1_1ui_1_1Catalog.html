@@ -143,7 +143,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>The facts load-time validation needs from the application's catalog. Local mode answers them from the model registry in-process, the server at registration, a remote client from the UI service's catalog. </p>
 <p>A lookup left empty skips the rules that need it: <span class="tt"><a class="el" href="#ac2a967c5296c376ee6e06639e1dc098f" title="Looks up a model type by its registered type id.">model</a></span> the unknown-model and keyed-instance rules; <span class="tt"><a class="el" href="#aecb94740dc7c8dc4ab9728a50be19537" title="Looks up an action by its id.">action</a></span> the unknown-action, wrong-model, <span class="tt">refreshOn</span>, optimistic and offline rules. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac2a967c5296c376ee6e06639e1dc098f" name="ac2a967c5296c376ee6e06639e1dc098f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac2a967c5296c376ee6e06639e1dc098f">&#9670;&#160;</a></span>model</h2>
@@ -159,7 +159,7 @@ Public Attributes</h2></td></tr>
 
 <p>Looks up a model type by its registered type id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -177,7 +177,7 @@ Public Attributes</h2></td></tr>
 
 <p>Looks up an action by its id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -195,7 +195,7 @@ Public Attributes</h2></td></tr>
 
 <p>The schema JSON of an action, as <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">forms::schemaJson</a>&lt;A&gt;()</span> emits it: what a <span class="tt">form</span> node builds its form from. Local mode answers it from the action registry, a remote client from the server's <span class="tt">schemas</span>. Empty: a <span class="tt">form</span> node is reported and shown as a muted text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +213,7 @@ Public Attributes</h2></td></tr>
 
 <p>The <span class="tt">v-*</span> view document whose <span class="tt">v-query</span> is an action, as <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">views::viewSchemaJson</a>&lt;V&gt;()</span> emits it: what a <span class="tt">collection</span> node naming that action builds its collection from. Empty: a <span class="tt">collection</span> node is reported and shown as a muted text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -231,7 +231,7 @@ Public Attributes</h2></td></tr>
 
 <p>The <span class="tt">w-*</span> wizard document whose first step is an action, as <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27" title="Generates the w-* JSON document for wizard type W.">flows::wizardSchemaJson</a>&lt;W&gt;()</span> emits it: what a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node naming that action builds its wizard from. Empty: a <span class="tt"><a class="el" href="#ab2ee6924a583c824126fe7b6709ac9a5" title="The w-* wizard document whose first step is an action, as flows::wizardSchemaJson&lt;W&gt;() emits it: what...">wizard</a></span> node is reported and shown as a muted text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

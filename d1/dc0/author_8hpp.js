@@ -152,6 +152,7 @@ var author_8hpp =
       [ "Client", "d1/dc0/author_8hpp.html#a497493840c4e698f3c78175070886ed7a577d7068826de925ea2aec01dbadf5e4", null ],
       [ "Server", "d1/dc0/author_8hpp.html#a497493840c4e698f3c78175070886ed7a9aa1b03934893d7134a660af4204f2a9", null ]
     ] ],
+    [ "morph::ui::author::detail::listFields", "d1/dc0/author_8hpp.html#ae3ed59bbdd08ec44b14483157774dbb3", null ],
     [ "morph::ui::author::detail::scalarAssignable", "d1/dc0/author_8hpp.html#ab13870992c29b475b13e03451c43659f", null ],
     [ "morph::ui::author::detail::assignable", "d1/dc0/author_8hpp.html#a3ee321c6c7dc8b8274405417c8167792", null ],
     [ "morph::ui::author::detail::scalarValue", "d1/dc0/author_8hpp.html#a7d201d7fe7345e2f64ab488400a3ea97", null ],

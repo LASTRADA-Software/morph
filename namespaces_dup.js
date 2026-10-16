@@ -124,6 +124,7 @@ var namespaces_dup =
           [ "ScopeResolver", "d2/d63/classmorph_1_1ui_1_1detail_1_1ScopeResolver.html", "d2/d63/classmorph_1_1ui_1_1detail_1_1ScopeResolver" ],
           [ "ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore" ],
           [ "StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot" ],
+          [ "TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold" ],
           [ "TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState" ],
           [ "TypedForEach", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ],
           [ "ConstantConvertible", "d5/d2a/conceptmorph_1_1ui_1_1detail_1_1ConstantConvertible.html", null ],
@@ -157,6 +158,10 @@ var namespaces_dup =
             [ "Element", "dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a231afe47f3f37d3808096b36c28b4ded", null ],
             [ "Transfer", "dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a6950810f0d2bba97a6f710c7b965b84e", null ]
           ] ],
+          [ "PatchMiss", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3", [
+            [ "NoList", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877", null ],
+            [ "NoRow", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219", null ]
+          ] ],
           [ "mustUnderstand", "d0/dab/bundle_8hpp.html#a6ee99c2d7378ecff58bf4154d7b824cd", null ],
           [ "mustUnderstandIn", "d0/dab/bundle_8hpp.html#aa5f6aa7757b6d1a247667f9a8124064d", null ],
           [ "readMessage", "d0/dab/bundle_8hpp.html#adfde3dda11183f832f17b6629869c8a6", null ],
@@ -189,7 +194,8 @@ var namespaces_dup =
           [ "withPath", "db/d42/interpreter_8hpp.html#aa53bccafec67e86e963ee552350ab60f", null ],
           [ "rowId", "db/d42/interpreter_8hpp.html#af362c6ceae14668623da2481f83136c9", null ],
           [ "mergeRow", "db/d42/interpreter_8hpp.html#a1afbbd50062ca092884330554bfe2911", null ],
-          [ "patchRows", "db/d42/interpreter_8hpp.html#ae0ebb46945bd9b24f9600a56e7ab8443", null ],
+          [ "patchRows", "db/d42/interpreter_8hpp.html#ae01c2cbca049896d9b60af467e569f84", null ],
+          [ "patchMissReason", "db/d42/interpreter_8hpp.html#a583fb750935b651f18fd3242bda1ac07", null ],
           [ "withoutFields", "db/d42/interpreter_8hpp.html#a63f2719002e489613c3068de7d23fce4", null ],
           [ "evalIn", "db/d42/interpreter_8hpp.html#abc78929076ccea8eba3a9bb6211985ba", null ],
           [ "engaged", "db/d42/interpreter_8hpp.html#a9f2da6ea1c78f883e1684a72c2ac4a98", null ],

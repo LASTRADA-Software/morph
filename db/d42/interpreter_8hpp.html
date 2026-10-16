@@ -239,6 +239,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document mounted as the root scope every screen of the session shares (spec 6 §5).  <a href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AInterpreter" id="r_morph_3A_3Aui_3A_3AInterpreter"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html">morph::ui::Interpreter</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.  <a href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ATransferHold" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ATransferHold"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html">morph::ui::detail::TransferHold</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A transfer's share of its screen's pending count.  <a href="../../d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ADetachedLower" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ADetachedLower"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html">morph::ui::detail::DetachedLower</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A lowering context whose scope is held weakly: what an Effect the scope itself owns may keep, so the scope does not keep itself alive.  <a href="../../dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AArrangedChild" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AArrangedChild"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html">morph::ui::detail::ArrangedChild</a></td></tr>
@@ -255,6 +257,13 @@ Typedefs</h2></td></tr>
 <tr class="memitem:a82972b9a51cae8a658d17961a41c62fa" id="r_a82972b9a51cae8a658d17961a41c62fa"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a82972b9a51cae8a658d17961a41c62fa">morph::ui::detail::Done</a> = std::function&lt;void(bool)&gt;</td></tr>
 <tr class="memdesc:a82972b9a51cae8a658d17961a41c62fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called once when a command finishes: whether it succeeded.  <br /></td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:aab6200b5130d91c37e9871b41093d3b3" id="r_aab6200b5130d91c37e9871b41093d3b3"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#aab6200b5130d91c37e9871b41093d3b3">morph::ui::detail::PatchMiss</a> : std::uint8_t { <a class="el" href="#aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877">NoList</a>
+, <a class="el" href="#aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219">NoRow</a>
+ }</td></tr>
+<tr class="memdesc:aab6200b5130d91c37e9871b41093d3b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a patch left a query's value as it was.  <a href="#aab6200b5130d91c37e9871b41093d3b3">More...</a><br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:aa3d2af8e03d357a9574bced5f6db413a" id="r_aa3d2af8e03d357a9574bced5f6db413a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aa3d2af8e03d357a9574bced5f6db413a">morph::ui::detail::failureText</a> (std::exception_ptr const &amp;error)</td></tr>
@@ -269,8 +278,10 @@ Functions</h2></td></tr>
 <tr class="memdesc:af362c6ceae14668623da2481f83136c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row's identity for <span class="tt">patch</span> and <span class="tt">optimistic</span>: its <span class="tt">id</span> field.  <br /></td></tr>
 <tr class="memitem:a1afbbd50062ca092884330554bfe2911" id="r_a1afbbd50062ca092884330554bfe2911"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1afbbd50062ca092884330554bfe2911">morph::ui::detail::mergeRow</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;row, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;with)</td></tr>
 <tr class="memdesc:a1afbbd50062ca092884330554bfe2911"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes <code class="param">with</code> over a row: the fields of a record over a record's, otherwise the whole row.  <br /></td></tr>
-<tr class="memitem:ae0ebb46945bd9b24f9600a56e7ab8443" id="r_ae0ebb46945bd9b24f9600a56e7ab8443"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae0ebb46945bd9b24f9600a56e7ab8443">morph::ui::detail::patchRows</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rows, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;key, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;with)</td></tr>
-<tr class="memdesc:ae0ebb46945bd9b24f9600a56e7ab8443"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces, in a list of rows, the row whose <span class="tt">id</span> equals <code class="param">key</code>.  <br /></td></tr>
+<tr class="memitem:ae01c2cbca049896d9b60af467e569f84" id="r_ae01c2cbca049896d9b60af467e569f84"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>, <a class="el" href="#aab6200b5130d91c37e9871b41093d3b3">PatchMiss</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae01c2cbca049896d9b60af467e569f84">morph::ui::detail::patchRows</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, std::string_view listMember, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;key, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;with)</td></tr>
+<tr class="memdesc:ae01c2cbca049896d9b60af467e569f84"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the row whose <span class="tt">id</span> equals <code class="param">key</code> in a query's list of rows.  <br /></td></tr>
+<tr class="memitem:a583fb750935b651f18fd3242bda1ac07" id="r_a583fb750935b651f18fd3242bda1ac07"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a583fb750935b651f18fd3242bda1ac07">morph::ui::detail::patchMissReason</a> (std::string_view query, std::string_view listMember)</td></tr>
+<tr class="memdesc:a583fb750935b651f18fd3242bda1ac07"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a patch that found no list reports.  <br /></td></tr>
 <tr class="memitem:a63f2719002e489613c3068de7d23fce4" id="r_a63f2719002e489613c3068de7d23fce4"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a63f2719002e489613c3068de7d23fce4">morph::ui::detail::withoutFields</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, std::vector&lt; std::string &gt; const &amp;fields)</td></tr>
 <tr class="memdesc:a63f2719002e489613c3068de7d23fce4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the named fields from a record, and from each record of a list.  <br /></td></tr>
 <tr class="memitem:abc78929076ccea8eba3a9bb6211985ba" id="r_abc78929076ccea8eba3a9bb6211985ba"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#abc78929076ccea8eba3a9bb6211985ba">morph::ui::detail::evalIn</a> (<a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">RtScope</a> const &amp;scope, <a class="el" href="#ac688fc48fbdd94d382ee3860b43d0907">Bindings</a> const *bindings, <a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> const &amp;expr)</td></tr>
@@ -393,7 +404,7 @@ Functions</h2></td></tr>
 
 <p>The names bound at one place, innermost last. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01029">1029</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01066">1066</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -411,7 +422,7 @@ Functions</h2></td></tr>
 
 <p>One run of a mutation, as a command sees it: whether it succeeded, and the reply. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01570">1570</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01607">1607</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +440,40 @@ Functions</h2></td></tr>
 
 <p>Called once when a command finishes: whether it succeeded. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01687">1687</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01724">1724</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="aab6200b5130d91c37e9871b41093d3b3" name="aab6200b5130d91c37e9871b41093d3b3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab6200b5130d91c37e9871b41093d3b3">&#9670;&#160;</a></span>PatchMiss</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#aab6200b5130d91c37e9871b41093d3b3">morph::ui::detail::PatchMiss</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Why a patch left a query's value as it was. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877" name="aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877"></a>NoList&#160;</td><td class="fielddoc"><p>The value, or its <span class="tt">at</span> member, is not a list: the patch can never apply, and is reported. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219" name="aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219"></a>NoRow&#160;</td><td class="fielddoc"><p>No row's <span class="tt">id</span> equals the key: the row is not loaded, which is not a fault. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -666,8 +710,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="ae0ebb46945bd9b24f9600a56e7ab8443" name="ae0ebb46945bd9b24f9600a56e7ab8443"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae0ebb46945bd9b24f9600a56e7ab8443">&#9670;&#160;</a></span>patchRows()</h2>
+<a id="ae01c2cbca049896d9b60af467e569f84" name="ae01c2cbca049896d9b60af467e569f84"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae01c2cbca049896d9b60af467e569f84">&#9670;&#160;</a></span>patchRows()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -676,9 +720,14 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; Value &gt; morph::ui::detail::patchRows </td>
+          <td class="memname">std::expected&lt; Value, PatchMiss &gt; morph::ui::detail::patchRows </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>rows</em></span>, </td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>listMember</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -698,18 +747,60 @@ Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Replaces, in a list of rows, the row whose <span class="tt">id</span> equals <code class="param">key</code>. </p>
+<p>Replaces the row whose <span class="tt">id</span> equals <code class="param">key</code> in a query's list of rows. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">rows</td><td>The list. </td></tr>
+    <tr><td class="paramname">value</td><td>The query's value: the list itself, or a record holding it in member <code class="param">listMember</code>. </td></tr>
+    <tr><td class="paramname">listMember</td><td>The record member holding the list; empty when <code class="param">value</code> is the list. </td></tr>
     <tr><td class="paramname">key</td><td>The row's id. </td></tr>
     <tr><td class="paramname">with</td><td>The new content, merged over the row. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The new list, or <span class="tt">std::nullopt</span> when no row matched or <code class="param">rows</code> is not a list. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The new value, or why it is unchanged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00477">477</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a583fb750935b651f18fd3242bda1ac07" name="a583fb750935b651f18fd3242bda1ac07"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a583fb750935b651f18fd3242bda1ac07">&#9670;&#160;</a></span>patchMissReason()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::detail::patchMissReason </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>query</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>listMember</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a patch that found no list reports. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">query</td><td>The query it patches. </td></tr>
+    <tr><td class="paramname">listMember</td><td>The record member it names; empty when none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The diagnostic's reason. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00522">522</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -750,7 +841,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value without them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -797,7 +888,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01354">1354</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01391">1391</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -833,7 +924,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01365">1365</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01402">1402</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -874,7 +965,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01383">1383</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01420">1420</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -910,7 +1001,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01409">1409</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01446">1446</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -946,7 +1037,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>An <span class="tt">int</span> or a string. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01422">1422</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01459">1459</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -982,7 +1073,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The strings. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01432">1432</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01469">1469</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1018,7 +1109,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01449">1449</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01486">1486</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1054,7 +1145,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context, its scope dropped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01680">1680</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01717">1717</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1095,7 +1186,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The spec, or <span class="tt">nullptr</span> when the kind has no such key of its own. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01703">1703</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01740">1740</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1131,7 +1222,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01716">1716</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01753">1753</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1167,7 +1258,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text; empty for <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02327">2327</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02367">2367</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1208,7 +1299,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The channel, or <span class="tt">nullptr</span> while the alias is unbound. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02344">2344</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02384">2384</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1249,7 +1340,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The element, or <span class="tt">nullptr</span> for a node that keeps none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02954">2954</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03006">3006</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1289,7 +1380,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02967">2967</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03019">3019</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1342,7 +1433,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03203">3203</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03255">3255</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1378,7 +1469,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03214">3214</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03266">3266</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1414,7 +1505,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03339">3339</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03391">3391</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1450,7 +1541,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03352">3352</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03404">3404</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1491,7 +1582,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value; <span class="tt">null</span> for a name the form does not have, or a form without a session. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03379">3379</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03431">3431</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1532,7 +1623,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04106">4106</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04216">4216</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1573,7 +1664,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04116">4116</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04226">4226</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1620,7 +1711,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04126">4126</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04236">4236</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1656,7 +1747,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It; zero for anything that is not a number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04150">4150</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04260">4260</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1697,7 +1788,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04168">4168</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04278">4278</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1738,7 +1829,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04194">4194</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04304">4304</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1779,7 +1870,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The role; <span class="tt">Normal</span> for anything else. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04208">4208</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04318">4318</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1820,7 +1911,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tone; <span class="tt">Neutral</span> for anything else. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04229">4229</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04339">4339</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1856,7 +1947,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04249">4249</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04359">4359</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1892,7 +1983,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The axis. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04262">4262</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04372">4372</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1928,7 +2019,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04270">4270</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04380">4380</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1969,7 +2060,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The options. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04284">4284</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04394">4394</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2005,7 +2096,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04300">4300</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04410">4410</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2052,7 +2143,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04311">4311</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04421">4421</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2099,7 +2190,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The overlay. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04858">4858</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04968">4968</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2135,7 +2226,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context, its scope held weakly. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04905">4905</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05015">5015</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2171,7 +2262,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context; its scope is null once the scope is gone. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04912">4912</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05022">5022</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2212,7 +2303,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Every child, in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05581">5581</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05691">5691</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2253,7 +2344,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ids to show, in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05612">5612</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05722">5722</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2289,7 +2380,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">[{"id", "hidden"}, …]</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05625">5625</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05735">5735</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2330,7 +2421,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The element, or <span class="tt">nullptr</span> when the subtree has none with that id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05639">5639</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05749">5749</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

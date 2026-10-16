@@ -1,5 +1,7 @@
 var NAVTREEINDEX9 =
 {
+"d5/dc1/classmorph_1_1reactive_1_1Runtime.html#a98fe127c9f0fdbf520ce7ff7057167a3":[1,0,0,0,9,5],
+"d5/dc1/classmorph_1_1reactive_1_1Runtime.html#a98fe127c9f0fdbf520ce7ff7057167a3":[3,0,0,18,10,5],
 "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ab885f39c3928d3bf72081f601806f612":[1,0,0,0,9,4],
 "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ab885f39c3928d3bf72081f601806f612":[3,0,0,18,10,4],
 "d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ad824e0ae605a77da5ca4e7ac9b2ecb67":[1,0,0,0,9,1],
@@ -97,6 +99,14 @@ var NAVTREEINDEX9 =
 "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#af52d2f06f31dda620055849bed27ceb7":[3,0,0,17,0,3],
 "d5/df5/file__offline__queue_8hpp_source.html":[4,0,0,5,0],
 "d6/d0e/structmorph_1_1app_1_1FormScreen.html":[3,0,0,0,1],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html":[1,0,0,1,0,47],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html":[3,0,0,25,1,47],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#a3631c2f51735aa0a940f29961d864f2b":[1,0,0,1,0,47,1],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#a3631c2f51735aa0a940f29961d864f2b":[3,0,0,25,1,47,1],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#ad5ecdb58d876c4e4b64bd812d76a460e":[1,0,0,1,0,47,0],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#ad5ecdb58d876c4e4b64bd812d76a460e":[3,0,0,25,1,47,0],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#aef84f07d617c531505bb57598232d593":[1,0,0,1,0,47,2],
+"d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html#aef84f07d617c531505bb57598232d593":[3,0,0,25,1,47,2],
 "d6/d15/classmorph_1_1ui_1_1Navigator.html":[1,0,0,1,131],
 "d6/d15/classmorph_1_1ui_1_1Navigator.html":[3,0,0,25,133],
 "d6/d15/classmorph_1_1ui_1_1Navigator.html#a41736c4a25579c00bb3f5765dd1b9ae4":[1,0,0,1,131,4],
@@ -239,15 +249,5 @@ var NAVTREEINDEX9 =
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a764e65ca68cb0ab108d6e7bc83e8eaff":[3,0,0,15,3,12],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a8500c5bb3923cb3e92cfa722dcd57069":[3,0,0,15,3,0],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a8b6c7be58b3abd7d5a92d9059d481e19":[3,0,0,15,3,13],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#aa5126ca0f0ea8462766820582f6612e2":[3,0,0,15,3,10],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#aa95d031d5173014fe54d1052744828e4":[3,0,0,15,3,7],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a":[3,0,0,15,3,6],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#add838e99c2cec5205ae9a6e754f862b7":[3,0,0,15,3,1],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#ae2836df8cbc154fa062565c2a9272426":[3,0,0,15,3,9],
-"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3":[3,0,0,15,3,5],
-"d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html":[1,0,0,1,0,16],
-"d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html":[3,0,0,25,1,16],
-"d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html#a44a924bd8725d4ae722d9e494ac57656":[1,0,0,1,0,16,1],
-"d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html#a44a924bd8725d4ae722d9e494ac57656":[3,0,0,25,1,16,1],
-"d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html#af21122b27b0d1a33cbd5ce3e3f8bfa49":[1,0,0,1,0,16,0]
+"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#aa5126ca0f0ea8462766820582f6612e2":[3,0,0,15,3,10]
 };

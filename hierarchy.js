@@ -498,6 +498,7 @@ var hierarchy =
     [ "morph::ui::detail::ScopeInfo", "d0/d11/structmorph_1_1ui_1_1detail_1_1ScopeInfo.html", null ],
     [ "morph::ui::detail::ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html", null ],
     [ "morph::ui::detail::StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", null ],
+    [ "morph::ui::detail::TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", null ],
     [ "morph::ui::detail::TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", null ],
     [ "morph::ui::Dialog", "d2/dc0/structmorph_1_1ui_1_1Dialog.html", null ],
     [ "morph::ui::Dispatcher", "d5/d80/classmorph_1_1ui_1_1Dispatcher.html", [

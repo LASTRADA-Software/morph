@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d89/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:aa6bcf02194f3658b7a0a63d429752fb7" id="r_aa6bcf02194f3658b7a0a63d429752fb7"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html">QueryRef</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa6bcf02194f3658b7a0a63d429752fb7">query</a></td></tr>
 <tr class="memdesc:aa6bcf02194f3658b7a0a63d429752fb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The query whose cached list it patches.  <br /></td></tr>
+<tr class="memitem:a2f699cbc6340e7bbb6b2a0f10045d551" id="r_a2f699cbc6340e7bbb6b2a0f10045d551"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2f699cbc6340e7bbb6b2a0f10045d551">at</a></td></tr>
+<tr class="memdesc:a2f699cbc6340e7bbb6b2a0f10045d551"><td class="mdescLeft">&#160;</td><td class="mdescRight">The member of the query's record value that holds the list; empty when the value is the list itself.  <br /></td></tr>
 <tr class="memitem:a6f28b4caef26a505f28677dcc5a0bc88" id="r_a6f28b4caef26a505f28677dcc5a0bc88"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6f28b4caef26a505f28677dcc5a0bc88">key</a></td></tr>
 <tr class="memdesc:a6f28b4caef26a505f28677dcc5a0bc88"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row key, read against the reply bound as <span class="tt">result</span> (patch) or the body bound as <span class="tt">body</span> (optimistic).  <br /></td></tr>
 <tr class="memitem:ac2e647eb28989ef24dc8a5e8e6c551d3" id="r_ac2e647eb28989ef24dc8a5e8e6c551d3"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac2e647eb28989ef24dc8a5e8e6c551d3">with</a></td></tr>
@@ -138,7 +140,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A <span class="tt">patch</span> or <span class="tt">optimistic</span> row replacement. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01470">1470</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01502">1502</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa6bcf02194f3658b7a0a63d429752fb7" name="aa6bcf02194f3658b7a0a63d429752fb7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa6bcf02194f3658b7a0a63d429752fb7">&#9670;&#160;</a></span>query</h2>
@@ -154,7 +156,25 @@ Public Attributes</h2></td></tr>
 
 <p>The query whose cached list it patches. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01472">1472</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01504">1504</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2f699cbc6340e7bbb6b2a0f10045d551" name="a2f699cbc6340e7bbb6b2a0f10045d551"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2f699cbc6340e7bbb6b2a0f10045d551">&#9670;&#160;</a></span>at</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::author::Patch::at</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The member of the query's record value that holds the list; empty when the value is the list itself. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01506">1506</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +192,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row key, read against the reply bound as <span class="tt">result</span> (patch) or the body bound as <span class="tt">body</span> (optimistic). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01475">1475</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01509">1509</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +210,7 @@ Public Attributes</h2></td></tr>
 
 <p>The new row. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01477">1477</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01511">1511</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

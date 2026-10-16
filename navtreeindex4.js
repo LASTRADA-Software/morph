@@ -1,5 +1,7 @@
 var NAVTREEINDEX4 =
 {
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a1711f4dd5127f2c89fb2bcafa346659c":[3,0,0,24,0,23],
+"d2/d8e/classmorph_1_1tui_1_1Backend.html#a1a3afb20e4ea89b51d375b089ac12fe9":[3,0,0,24,0,28],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a231c79ce0c7c5052aa8322adf3d0b7b8":[3,0,0,24,0,12],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a2f02904bbe402ec4f001d948cd70fa91":[3,0,0,24,0,25],
 "d2/d8e/classmorph_1_1tui_1_1Backend.html#a33e7f6ea79b67010d85ffd1a5aa104d6":[3,0,0,24,0,20],
@@ -199,10 +201,10 @@ var NAVTREEINDEX4 =
 "d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html#a574ff901a6a6d54475d478481b392507":[3,0,0,25,0,16,0],
 "d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html#a77f295240fd935f7783c3aea021d66ec":[3,0,0,25,0,16,1],
 "d3/d31/service_8hpp.html":[4,0,0,14,21],
-"d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8":[1,0,0,1,0,151],
-"d3/d31/service_8hpp.html#acab995b09a00bc773a70a72f080437eb":[1,0,0,1,0,149],
+"d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8":[1,0,0,1,0,154],
+"d3/d31/service_8hpp.html#acab995b09a00bc773a70a72f080437eb":[1,0,0,1,0,152],
 "d3/d31/service_8hpp.html#ad69b07175bd3a612103673995ff06c20":[1,0,0,1,311],
-"d3/d31/service_8hpp.html#ad9e64f82f50f869f0a17e7dd6365a259":[1,0,0,1,0,150],
+"d3/d31/service_8hpp.html#ad9e64f82f50f869f0a17e7dd6365a259":[1,0,0,1,0,153],
 "d3/d31/service_8hpp_source.html":[4,0,0,14,21],
 "d3/d34/structmorph_1_1table_1_1detail_1_1IsOptional_3_01std_1_1optional_3_01T_01_4_01_4.html":[3,0,0,21,0,1],
 "d3/d39/structmorph_1_1ui_1_1HostCommand.html":[1,0,0,1,85],
@@ -247,7 +249,5 @@ var NAVTREEINDEX4 =
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a230a16b9bf6b807c2dbc18a7581b4eb2":[3,0,0,21,7,4],
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a24ea2a67b49837f23c6e2748839ec4d4":[3,0,0,21,7,0],
 "d3/d45/structmorph_1_1table_1_1ColumnInfo.html#aed7a0ed2956192435ac92bb808ed6c32":[3,0,0,21,7,1],
-"d3/d45/structmorph_1_1table_1_1ColumnInfo.html#afcc65e273545fc9e7edcc24e08c35cc7":[3,0,0,21,7,2],
-"d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html":[3,0,0,25,0,38],
-"d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a07f5bb54339fdd154eec2652937d5443":[3,0,0,25,0,38,2]
+"d3/d45/structmorph_1_1table_1_1ColumnInfo.html#afcc65e273545fc9e7edcc24e08c35cc7":[3,0,0,21,7,2]
 };

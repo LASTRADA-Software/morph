@@ -495,6 +495,7 @@ var annotated_dup =
           [ "ScopeResolver", "d2/d63/classmorph_1_1ui_1_1detail_1_1ScopeResolver.html", "d2/d63/classmorph_1_1ui_1_1detail_1_1ScopeResolver" ],
           [ "ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore" ],
           [ "StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot" ],
+          [ "TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold" ],
           [ "TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState" ],
           [ "TypedForEach", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ]
         ] ],
