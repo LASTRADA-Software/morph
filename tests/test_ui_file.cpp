@@ -19,7 +19,9 @@
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ui_service_support.hpp"
@@ -176,4 +178,85 @@ TEST_CASE("ui-file refuses a chunk out of order, a malformed request, and is not
 
     Harness const without{false};
     CHECK_FALSE(morph::ui::UiService{uiservice::bundle()}.serves("ui-file"));
+}
+
+namespace {
+
+/// An exchange that answers each request with the next scripted reply, and records the requests' bodies.
+struct ScriptedExchange {
+    std::vector<morph::ui::ExchangeReply> replies;
+    std::vector<std::string> requests;
+
+    [[nodiscard]] morph::ui::Exchange exchange() {
+        return [this](Envelope const& request, std::function<void(morph::ui::ExchangeReply)> const& done) {
+            requests.push_back(request.body);
+            REQUIRE(requests.size() <= replies.size());
+            done(replies.at(requests.size() - 1));
+        };
+    }
+};
+
+morph::ui::ExchangeReply ok(std::string body) {
+    Envelope reply;
+    reply.kind = "ok";
+    reply.body = std::move(body);
+    return reply;
+}
+
+morph::ui::ExchangeReply err(std::string message) {
+    Envelope reply;
+    reply.kind = "err";
+    reply.message = std::move(message);
+    return reply;
+}
+
+std::string uploadOutcome(std::vector<morph::ui::ExchangeReply> replies) {
+    ScriptedExchange script{.replies = std::move(replies), .requests = {}};
+    FileTransfer const transfer{script.exchange(), morph::session::Context{}};
+    std::optional<std::expected<std::string, std::string>> outcome;
+    transfer.upload(morph::ui::FileInfo{.name = "a.csv", .type = "text/csv", .size = 3}, "abc", "M", "A", {},
+                    [&](std::expected<std::string, std::string> result) { outcome = std::move(result); });
+    REQUIRE(outcome.has_value());
+    return outcome->has_value() ? "ref " + **outcome : "error " + outcome->error();
+}
+
+std::string downloadOutcome(std::vector<morph::ui::ExchangeReply> replies) {
+    ScriptedExchange script{.replies = std::move(replies), .requests = {}};
+    FileTransfer const transfer{script.exchange(), morph::session::Context{}};
+    std::optional<std::expected<morph::ui::DownloadedFile, std::string>> outcome;
+    std::vector<double> progress;
+    transfer.download(
+        "ref-1", [&](double fraction) { progress.push_back(fraction); },
+        [&](std::expected<morph::ui::DownloadedFile, std::string> result) { outcome = std::move(result); });
+    REQUIRE(outcome.has_value());
+    return outcome->has_value() ? "file " + (*outcome)->bytes + " " + std::to_string(progress.size())
+                                : "error " + outcome->error();
+}
+
+}  // namespace
+
+// Mutation: take a refused or malformed ui-file reply as success (the upload answers a reference).
+TEST_CASE("FileTransfer: an upload fails with the transport's, the server's or the reply's reason", "[ui][file]") {
+    CHECK(uploadOutcome({std::unexpected(std::string{"no route"})}) == "error no route");
+    CHECK(uploadOutcome({err("denied")}) == "error denied");
+    CHECK(uploadOutcome({ok("{}")}) == "error the ui-file begin reply has no upload id");
+    CHECK(uploadOutcome({ok(R"({"upload":"u1"})"), ok("{}")}) == "error the ui-file chunk reply has no count");
+    CHECK(uploadOutcome({ok(R"({"upload":"u1"})"), std::unexpected(std::string{"lost"})}) == "error lost");
+    CHECK(uploadOutcome({ok(R"({"upload":"u1"})"), ok(R"({"received":3})"), ok("{}")}) ==
+          "error the ui-file end reply has no reference");
+    CHECK(uploadOutcome({ok(R"({"upload":"u1"})"), ok(R"({"received":3})"), err("full")}) == "error full");
+    CHECK(uploadOutcome({ok(R"({"upload":"u1"})"), ok(R"({"received":3})"), ok(R"({"ref":"r9"})")}) == "ref r9");
+}
+
+// Mutation: report no progress for a read that carries a total, or take a refused read as an empty file.
+TEST_CASE("FileTransfer: a download reports progress per chunk and fails with the reply's reason", "[ui][file]") {
+    CHECK(downloadOutcome({ok(R"({"data":"YWJj","total":3,"name":"a.csv"})")}) == "file abc 1");
+    CHECK(downloadOutcome({ok(R"({"data":"YWJj","total":0})")}) == "file abc 0");
+    CHECK(downloadOutcome({std::unexpected(std::string{"gone"})}) == "error gone");
+    CHECK(downloadOutcome({ok(R"({"total":3})")}) == "error the ui-file read reply is malformed");
+}
+
+// Mutation: accept an empty exchange (the first transfer calls an empty function).
+TEST_CASE("FileTransfer refuses an empty exchange", "[ui][file]") {
+    CHECK_THROWS_AS((FileTransfer{morph::ui::Exchange{}, morph::session::Context{}}), std::invalid_argument);
 }
