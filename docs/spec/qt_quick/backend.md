@@ -85,8 +85,10 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
   `Accessible.description`, and `showTestId` writes the test id onto it as well as onto the item, whose
   `objectName` `findWidget` matches. So `(name, role)` and the test id resolve to the same single node. Kinds' own
   roles are EditableText for the text kinds and the file picker's path, ComboBox for a drop-down select, Grouping
-  for a radio select, CheckBox and Slider. A drop-down the document names no name reads the option it shows; a
-  check box reads its label. A radio select's group carries the name, and each option is a RadioButton named by its
+  for a radio select, CheckBox and Slider. A drop-down the document names no name reads the option it shows. A
+  ComboBox node has no value of its own, so the option a drop-down shows is the value of its one child, the style's
+  text field, declared EditableText (and ignored with the drop-down); a named drop-down keeps its name and still
+  reads the option there. A check box reads its label. A radio select's group carries the name, and each option is a RadioButton named by its
   label, with the press action. A select's hidden presentation is ignored, because a hidden item stays in the
   accessibility tree. The file picker's button is a Button node of its own. Each control declares its name and
   role itself: Qt Quick Controls makes a control an accessible node of its own accord only while the platform's

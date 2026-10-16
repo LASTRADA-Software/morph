@@ -983,7 +983,9 @@ API surface).
   `select`, `slider`, `dateTimeInput` and `filePicker` accepted a `label`, and
   registration counted it as naming the field, but the interpreter dropped it,
   so the field reached assistive technology unnamed. The label now binds
-  `Common::a11y.name`; an `a11y` part's own `name` still wins over it.
+  `Common::a11y.name`; an `a11y` part's own `name` still wins over it. On Qt
+  Quick, a labelled drop-down still exposes the option it shows, as the value
+  of its display child.
 
 - **A form's, collection's or wizard's submit triggers `refreshOn`.** Only a
   `mutation`'s success refetched the queries whose `refreshOn` named its action;

@@ -308,6 +308,17 @@ void openAccount(ScreenHarness& harness, std::size_t count) {
 /// The account number a picker's option names: its label up to " (".
 QString numberIn(QString const& label) { return label.section(u" ("_s, 0, 0); }
 
+/// The option a drop-down shows: the value of its display child, because a combo box node has no value of its own.
+QString shownBy(Node const& combo) {
+    for (int index = 0; index < combo.iface->childCount(); ++index) {
+        QAccessibleInterface* const child = combo.iface->child(index);
+        if (child != nullptr && child->role() == QAccessible::EditableText) {
+            return child->text(QAccessible::Value);
+        }
+    }
+    return {};
+}
+
 }  // namespace
 
 // Mutation: a new option list does not mark the chosen key again (after the deposit's refetch the picker no
@@ -327,15 +338,19 @@ TEST_CASE("bank GUI: Move money's picker keeps naming the account the next depos
     AutomatedScreen screen{std::string{bank::screens::kMove}, user};
     INFO(screen.dump());
 
-    // The picker: the combo box with test id `account`, named by the option it shows.
+    // The picker: the combo box named by its label, the same node as its test id; the option it shows is its value.
     auto const picker = [&screen] {
-        return single(screen.tree(), testIdAndRoleAre(u"account"_s, QAccessible::ComboBox));
+        return single(screen.tree(), nameAndRoleAre(u"Account"_s, QAccessible::ComboBox));
     };
+    auto const chosen = [&picker] { return numberIn(shownBy(*picker())); };
     auto const balance = [&screen] {
         std::optional<Node> const node = screen.byTestId(u"balance"_s);
         return node ? node->name : QString{};
     };
     REQUIRE(picker().has_value());
+    std::optional<Node> const byTestId = single(screen.tree(), testIdAndRoleAre(u"account"_s, QAccessible::ComboBox));
+    REQUIRE(byTestId.has_value());
+    CHECK(byTestId->iface == picker()->iface);
 
     // Down from no choice is the first account, once the accounts have arrived; Down again the second.
     screen.focus(*picker());
@@ -343,9 +358,9 @@ TEST_CASE("bank GUI: Move money's picker keeps naming the account the next depos
         screen.key(Qt::Key_Down);
         return balance() == u"Balance 0.00"_s;
     }));
-    QString const first = numberIn(picker()->name);
+    QString const first = chosen();
     screen.key(Qt::Key_Down);
-    QString const second = numberIn(picker()->name);
+    QString const second = chosen();
     REQUIRE(second != first);
     REQUIRE_FALSE(second.isEmpty());
 
@@ -370,18 +385,18 @@ TEST_CASE("bank GUI: Move money's picker keeps naming the account the next depos
     }
     CHECK(deposited);
     // After the refetch the deposit caused, the picker still names the account the user chose.
-    CHECK(numberIn(picker()->name) == second);
+    CHECK(chosen() == second);
 
     // And it is not cosmetic: the next deposit lands in the account the picker names.
-    QString const shown = numberIn(picker()->name);
+    QString const shown = chosen();
     deposit(u"1000"_s);
     CHECK(screen.waitFor([&balance] { return balance() == u"Balance 60.00"_s; }));
-    CHECK(numberIn(picker()->name) == shown);
+    CHECK(chosen() == shown);
 
     // The other account received nothing.
     screen.focus(*picker());
     screen.key(Qt::Key_Up);
-    CHECK(numberIn(picker()->name) == first);
+    CHECK(chosen() == first);
     CHECK(screen.waitFor([&balance] { return balance() == u"Balance 0.00"_s; }));
     CHECK(screen.problems().empty());
 }
