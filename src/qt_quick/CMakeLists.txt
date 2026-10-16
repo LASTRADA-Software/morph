@@ -101,6 +101,7 @@ target_sources(morph_qt_quick
     BASE_DIRS ${PROJECT_SOURCE_DIR}/include
     FILES
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/backend.hpp
+        ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/browser_history.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/components.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/frontend.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/qt_quick/scheduler.hpp

@@ -15,6 +15,7 @@
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/route_history.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
@@ -236,7 +237,16 @@ public:
                     }
                 });
             });
-        mount(start, _options.startParams);
+        if (_options.history != nullptr) {
+            _routes.emplace(*_options.history, [this](std::string const& route) { openRoute(route); });
+            // A start screen asked for by name wins over the route the history holds.
+            if (_options.startScreen.empty()) {
+                _wanted = _routes->initial();
+            }
+        }
+        if (!openWanted()) {
+            mount(start, _options.startParams);
+        }
     }
 
     /// Shows @p text in place of any screen, and reports it.
@@ -302,7 +312,19 @@ private:
                     return;
                 }
                 loadDocuments(*_source->bundle());
+                _changed = true;
+                _signedIn = signingIn;
+                // The route the page was opened with, which the signed-out catalog did not list, is tried once more
+                // with the new session's, before a navigation the sign-in asked for: the link is what the user came
+                // for. A move back or forward made during the reload is tried the same way.
+                bool const opened = openWanted();
+                if (signingIn) {
+                    _wanted.clear();
+                }
                 auto const pending = std::exchange(_pending, std::nullopt);
+                if (opened) {
+                    return;
+                }
                 if (pending) {
                     mount(pending->first, pending->second);
                     return;
@@ -329,8 +351,50 @@ private:
         }
         _current = std::move(*handle);
         _currentId = screenId;
+        if (_routes) {
+            auto const route = _host->routeOf(screenId, params);
+            _routes->shown(route ? *route : std::string{});
+        }
         if (_options.onMounted) {
             _options.onMounted(screenId);
+        }
+    }
+
+    // Opens the route the history held at start, once the catalog lists its screen.
+    bool openWanted() {
+        if (_wanted.empty()) {
+            return false;
+        }
+        auto const route = _host->parseRoute(_wanted);
+        if (!route || !_documents.contains(route->screen)) {
+            return false;
+        }
+        _wanted.clear();
+        mount(route->screen, route->params);
+        return true;
+    }
+
+    // Opens the route of the history entry the user moved to, or the start screen for a route this session cannot
+    // open: an unknown screen, a param that does not parse, a screen the catalog does not list.
+    void openRoute(std::string const& route) {
+        if (_host == nullptr) {
+            return;
+        }
+        if (_reloading) {
+            _wanted = route;  // opened once the catalog is current
+            return;
+        }
+        auto const parsed = _host->parseRoute(route);
+        if (parsed && _documents.contains(parsed->screen)) {
+            mount(parsed->screen, parsed->params);
+            return;
+        }
+        // The start screen: the one asked for at start, until a session change; then the new session's.
+        if (!_changed) {
+            mount(_options.startScreen.empty() ? firstScreen(false) : _options.startScreen,
+                  _options.startScreen.empty() ? ui::ParamMap{} : _options.startParams);
+        } else {
+            mount(firstScreen(_signedIn), {});
         }
     }
 
@@ -362,6 +426,12 @@ private:
     std::unique_ptr<ui::ScreenHandle> _current;
     std::string _currentId;
     std::optional<ui::Mounted> _message;
+    // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
+    bool _changed = false;
+    bool _signedIn = false;
+    std::string _wanted;
+    // Last, so it stops following the history before anything it opens screens with is gone.
+    std::optional<ui::RouteHistory> _routes;
 };
 
 }  // namespace

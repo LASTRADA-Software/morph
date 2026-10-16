@@ -8,6 +8,8 @@ use the same contract, so a document does not know which one shows it. It implem
 |---|---|
 | `include/morph/ui/host.hpp` | `ParamMap`, `MountError`, `ScreenHandle`, `ScreenHost`, `CloseGuard`, `CloseChoice`, `DocumentScreenHost` |
 | `include/morph/ui/route.hpp` | `Route`, `routeOf`, `parseRoute` |
+| `include/morph/ui/route_history.hpp` | `IHistory`, `RouteHistory`, `fragmentOf`, `routeOfFragment` |
+| `include/morph/ui/testing/memory_history.hpp` | `MemoryHistory`, the tests' `IHistory` |
 
 It sits on the interpreter ([interpreter.md](interpreter.md)): `DocumentScreenHost` mounts through an `Interpreter`
 and is its `InterpreterHost` for `navigate`.
@@ -18,6 +20,7 @@ and is its `InterpreterHost` for `navigate`.
 - [DocumentScreenHost](#documentscreenhost)
 - [The close protocol](#the-close-protocol)
 - [Routes](#routes)
+- [Route history](#route-history)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
@@ -152,6 +155,42 @@ declaration order.
   not parse as its type (including a truncated or non-hexadecimal escape, a zero denominator, places past
   `kMaxDecimalPlaces`), and a missing required param.
 - `parseRoute(routeOf(id, p)) == p` for every representable instance.
+
+## Route history
+
+A shell keeps the route of the screen it shows in a history the user moves through with back and forward (spec 3 §10):
+the browser's on WebAssembly, where the route is the page's fragment, `#/<route>` (`fragmentOf`, `routeOfFragment`).
+
+- **`IHistory`** is the seam: `current()`, `push(route)`, `replace(route)`, and `onPop(callback)`, which reports a
+  move back or forward, or an address the user edited. A history reports no move for the address it is already at.
+- **`RouteHistory(history, open)`** follows one. `initial()` is the route the history held when it was made: a
+  reloaded page's, or a shared link's. The shell opens it first, when the session lists its screen, and otherwise
+  opens its start screen and tries `initial()` again after a sign-in.
+- **`shown(route)`**, called after each mount, records the shown screen. The first call replaces the entry the history
+  started on, so the first screen adds no step back to an empty page. A later one adds an entry, unless the route is
+  the current entry's. A screen with no route (a param with no route form) leaves the history as it is.
+- **A move back or forward** calls `open(route)`, which shows the route's screen, or the start screen for a route the
+  session cannot open, before it returns. The first screen it shows replaces the moved-to entry, so a refused route
+  does not stay in the history. A screen shown after that, such as a redirect, adds an entry. `open` may destroy the
+  `RouteHistory`.
+- **A screen with no route** (`shown("")`) leaves the history as it is. After a move back or forward, the next screen
+  with a route then replaces the moved-to entry.
+- **Destroying a `RouteHistory`** leaves its callback in the history, where it does nothing. It does not clear it,
+  because that could clear the callback of a newer `RouteHistory` over the same history.
+
+A refused route the user typed leaves two equal entries, the start screen's twice, because a browser cannot remove an
+entry. The first back then reopens the same screen.
+
+`MemoryHistory` holds the entries in memory, with `back()`, `forward()` and `follow(route)` for a typed address.
+
+**`qt_quick::BrowserHistory`**, built on WebAssembly only, is the page's history. `push` and `replace` call
+`history.pushState` and `history.replaceState` with the route's fragment, which change the fragment without a
+`hashchange`. A move back or forward, or an edited address, is found by reading `location.hash` on a 100 ms `QTimer`.
+The callback therefore runs on the Qt event loop, never inside a JavaScript handler, and no JavaScript function is
+bound to C++. `push` and `replace` are skipped while the address holds a move the timer has not reported yet. The user's move wins,
+and the next tick reports it. The generic client passes one in its WebAssembly build. An explicit `--screen` there
+wins over the route the history holds. A move made while a sign-in reloads the catalog, and the link the page was
+opened with, are opened once the reload ends, before any navigation the sign-in asked for.
 
 ## Design decisions
 

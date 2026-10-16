@@ -16,6 +16,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/ui/frontend.hpp>
+#include <morph/ui/testing/memory_history.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <string>
@@ -137,6 +138,87 @@ TEST_CASE("Client shell: --screen picks the start screen; an unknown one is show
         REQUIRE(missing.problems.size() == 1);
         CHECK(missing.problems.front() == "Cannot open probe.none: unknown screen");
         CHECK(backend.find("Text", "text", "Cannot open probe.none: unknown screen").has_value());
+    }
+    source.close();
+}
+
+// Mutation: mount a moved-to entry from a posted task (the history pushes it, and forward is lost).
+TEST_CASE("Client shell: the shown screen's route is kept in the history, and back and forward reopen it",
+          "[examples-common][shell][route-history]") {
+    using Entries = std::vector<std::string>;
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend backend;
+    LocalAppSource source{probe::app(), LocalSetup{}};
+    ShellLog log;
+    morph::ui::testing::MemoryHistory history;
+    {
+        ClientShellOptions options = log.options();
+        options.history = &history;
+        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
+                                                       std::move(options));
+        CHECK(history.entries() == Entries{"probe.home"});
+        auto const next = backend.find("Button", "testId", "next");
+        REQUIRE(next.has_value());
+        backend.click(next.value());
+        REQUIRE(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
+        CHECK(history.entries() == Entries{"probe.home", "probe.other"});
+
+        REQUIRE(history.back());
+        CHECK(log.mounted == Entries{"probe.home", "probe.other", "probe.home"});
+        CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "answer") == "answer 42"; }));
+        REQUIRE(history.forward());
+        CHECK(log.mounted.back() == "probe.other");
+        CHECK(history.entries() == Entries{"probe.home", "probe.other"});
+        CHECK(history.index() == 1);
+
+        history.follow("probe.none");  // an address the user typed, for a screen there is not
+        CHECK(log.mounted.back() == "probe.home");
+        CHECK(history.entries() == Entries{"probe.home", "probe.other", "probe.home"});
+        CHECK(log.problems.empty());
+    }
+    source.close();
+}
+
+// Mutation: ignore the history's route at start (the start screen mounts instead of probe.other).
+TEST_CASE("Client shell: a reloaded page opens the route it holds, and a route it cannot open shows the start screen",
+          "[examples-common][shell][route-history]") {
+    using Entries = std::vector<std::string>;
+    for (auto const& [initial, expected] : {std::pair<std::string, std::string>{"probe.other", "probe.other"},
+                                            std::pair<std::string, std::string>{"probe.none", "probe.home"},
+                                            std::pair<std::string, std::string>{"probe.home?x=1", "probe.home"}}) {
+        CAPTURE(initial);
+        FakeAppContext context;
+        morph::ui::testing::RecordingBackend backend;
+        LocalAppSource source{probe::app(), LocalSetup{}};
+        ShellLog log;
+        morph::ui::testing::MemoryHistory history{initial};
+        {
+            ClientShellOptions options = log.options();
+            options.history = &history;
+            auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
+                                                           std::move(options));
+            CHECK(log.mounted == Entries{expected});
+            CHECK(history.entries() == Entries{expected});
+        }
+        source.close();
+    }
+}
+
+// Mutation: open the history's route even when a start screen is named (probe.other mounts).
+TEST_CASE("Client shell: a start screen asked for by name wins over the history's route",
+          "[examples-common][shell][route-history]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend backend;
+    LocalAppSource source{probe::app(), LocalSetup{}};
+    ShellLog log;
+    morph::ui::testing::MemoryHistory history{"probe.other"};
+    {
+        ClientShellOptions options = log.options("probe.home");
+        options.history = &history;
+        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
+                                                       std::move(options));
+        CHECK(log.mounted == std::vector<std::string>{"probe.home"});
+        CHECK(history.entries() == std::vector<std::string>{"probe.home"});
     }
     source.close();
 }

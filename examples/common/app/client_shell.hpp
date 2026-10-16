@@ -8,6 +8,7 @@
 #include <morph/ui/backend.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/route_history.hpp>
 #include <string>
 
 #include "app/app_source.hpp"
@@ -33,6 +34,10 @@ struct ClientShellOptions {
     /// @brief Where a screen's `download` saves a file, under the name the screen suggests; the working directory
     ///        when empty.
     std::filesystem::path downloads;
+    /// @brief The history the shown screen's route is kept in (spec 3 §10), such as the browser's: back and forward
+    ///        open the route of the entry moved to, and the route it holds at start is opened once the session has
+    ///        the screen. Borrowed: it outlives the shell; null keeps no history.
+    ui::IHistory* history = nullptr;
 };
 
 /// @brief Mounts the client's shell for what @p source delivered.
