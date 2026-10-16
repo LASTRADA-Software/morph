@@ -270,6 +270,32 @@ public:
         sendHello(run);
     }
 
+    /// @brief What `poll` delivers: the changed bundle, nothing when the digest is the one already held, or why
+    ///        there is none.
+    using PollDone = std::function<void(std::expected<std::optional<LoadedBundle>, ConnectError>)>;
+
+    /// @brief One step of a development client's reload (spec 5 §12): sends `ui-hello`, and when the manifest digest
+    ///        differs from @p knownDigest, opens the changed bundle as `open` does, fetching only what the cache
+    ///        does not hold. @p done is called once, as `open`'s is.
+    /// @param session     The session every request carries.
+    /// @param knownDigest The digest of the bundle the client has, as `HelloReply::digest` spells it.
+    /// @param done        Called with the changed bundle, with nothing when the digest is unchanged, or with why the
+    ///                    poll failed.
+    void poll(::morph::session::Context session, std::string knownDigest, PollDone done) const {
+        auto const answer = std::make_shared<PollDone>(std::move(done));
+        auto const run = std::make_shared<Run>(_shared, std::move(session),
+                                               [answer](std::expected<LoadedBundle, ConnectError> opened) {
+                                                   if (!opened) {
+                                                       (*answer)(std::unexpected(std::move(opened.error())));
+                                                       return;
+                                                   }
+                                                   (*answer)(std::optional<LoadedBundle>{std::move(*opened)});
+                                               });
+        run->knownDigest = std::move(knownDigest);
+        run->unchanged = [answer] { (*answer)(std::optional<LoadedBundle>{}); };
+        sendHello(run);
+    }
+
     /// @brief Rebuilds the last bundle this store verified for @p application, without a connection. Files the
     ///        store no longer holds, or that no longer verify, are left out; the catalog is empty.
     /// @param application The application's id.
@@ -327,6 +353,9 @@ private:
         std::shared_ptr<Shared> shared;
         ::morph::session::Context session;
         Done done;
+        // A poll's: the digest it already has, and what it calls instead of `done` when the reply carries it.
+        std::string knownDigest;
+        std::function<void()> unchanged;
         LoadedBundle loaded;
         std::mutex mutex;
         std::size_t pending = 0;
@@ -456,6 +485,10 @@ private:
                      "the application needs the vocabulary " + vocabulary + ", which this client does not speak");
                 return;
             }
+        }
+        if (run->unchanged && hello->digest == run->knownDigest) {
+            run->unchanged();
+            return;
         }
         run->loaded.hello = std::move(*hello);
         std::string const& digest = run->loaded.hello.digest;

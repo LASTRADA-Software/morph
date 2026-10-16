@@ -2,10 +2,13 @@
 
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "../attributes.hpp"
 #include "../core/executor.hpp"
@@ -32,6 +35,25 @@ struct RuntimeOptions {
     ///        schedules its redraw here. May be empty. An exception it throws is reported
     ///        (`detail::site::kAfterFlushThrew`) and dropped, so it never reaches the owner executor.
     std::function<void()> afterFlush;
+};
+
+/// @brief What a `Runtime` has counted since it was made: its flushes, the Effects they ran, its batches and the
+///        misuses it reported. A development tool reads it (spec 6 §21); counting costs a few increments per flush.
+struct RuntimeStats {
+    /// @brief Flushes that ran at least one queued Effect.
+    std::uint64_t flushes = 0;
+    /// @brief Queued Effects the flushes processed, in all.
+    std::uint64_t effectsRun = 0;
+    /// @brief Queued Effects the latest flush processed.
+    std::uint64_t lastFlushEffects = 0;
+    /// @brief The most queued Effects one flush processed.
+    std::uint64_t maxFlushEffects = 0;
+    /// @brief Outermost batches opened.
+    std::uint64_t batches = 0;
+    /// @brief Misuses reported (`detail::site`), on the owner or off it.
+    std::uint64_t misuses = 0;
+    /// @brief The sites of the latest misuses, oldest first, at most `detail::kRecentMisuses`.
+    std::vector<std::string> recentMisuses;
 };
 
 /// @brief The owner of a signal graph: every node takes one, and every operation runs on its owner.
@@ -126,6 +148,22 @@ public:
     /// @brief Whether a flush is posted and has not run yet.
     /// @return True between the first write that queued an Effect and the flush.
     [[nodiscard]] bool isFlushRequested() const noexcept { return _core->isFlushRequested(); }
+
+    /// @brief What the runtime has counted so far. Read it on the owner.
+    /// @return The counts.
+    [[nodiscard]] RuntimeStats stats() const {
+        RuntimeStats out{.flushes = _core->flushes(),
+                         .effectsRun = _core->effectsRun(),
+                         .lastFlushEffects = _core->lastFlushEffects(),
+                         .maxFlushEffects = _core->maxFlushEffects(),
+                         .batches = _core->batches(),
+                         .misuses = _core->misuses(),
+                         .recentMisuses = {}};
+        for (char const* const where : _core->recentMisuses()) {
+            out.recentMisuses.emplace_back(where);
+        }
+        return out;
+    }
 
     /// @brief The shared core every node holds.
     /// @return The core.

@@ -15,11 +15,16 @@
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/frontend.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/ui/testing/memory_history.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <testkit/fake_app_context.hpp>
 #include <testkit/wait.hpp>
 #include <utility>
@@ -325,4 +330,122 @@ TEST_CASE("ClientSource: switching backends is refused", "[examples-common][sour
     });
     REQUIRE(refusal.has_value());
     CHECK(refusal.value() == "this client does not switch backends; the switch to `local` is the hosting layer's");
+}
+
+namespace {
+
+/// The start screen of the reloading tests, first as served, then as changed: the same state, a different label.
+constexpr std::string_view kCounterServed =
+    R"({"vocab":"ui/1","id":"dev.counter","state":{"count":{"type":"int","init":0}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"text","testId":"count","text":{"fn":"format","args":["count {0}",{"ref":"count"}]}},)"
+    R"({"kind":"button","testId":"bump","label":"bump","onClick":[{"set":"count","value":5}]}]}})";
+constexpr std::string_view kCounterEdited =
+    R"({"vocab":"ui/1","id":"dev.counter","state":{"count":{"type":"int","init":0}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"text","testId":"count","text":{"fn":"format","args":["edited {0}",{"ref":"count"}]}}]}})";
+
+/// A UI service serving one screen, @p text.
+std::shared_ptr<morph::ui::UiService> serving(std::string_view text) {
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "dev", .version = "1"}};
+    morph::ui::CatalogEntry entry;
+    entry.id = "dev.counter";
+    auto const added = served.addScreen(std::move(entry), std::string{text});
+    REQUIRE(added);
+    auto built = served.build();
+    REQUIRE(built);
+    return std::make_shared<morph::ui::UiService>(std::move(*built));
+}
+
+/// A source whose server the test redeploys: its exchange answers through whichever service it holds now, and counts
+/// the `ui-hello` requests.
+class RedeployedSource final : public morph::examples::ClientSource {
+public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test redeploys and counts.
+    std::shared_ptr<morph::ui::UiService> service = serving(kCounterServed);
+    int hellos = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    RedeployedSource() = default;
+    ~RedeployedSource() override { close(); }
+    RedeployedSource(RedeployedSource const&) = delete;
+    RedeployedSource& operator=(RedeployedSource const&) = delete;
+    RedeployedSource(RedeployedSource&&) = delete;
+    RedeployedSource& operator=(RedeployedSource&&) = delete;
+
+protected:
+    [[nodiscard]] std::expected<Transport, morph::ui::ConnectError> connect(
+        morph::ui::AppContext& /*context*/) override {
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        return Transport{
+            .backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
+            .exchange = [this](morph::wire::Envelope const& request,
+                               std::function<void(morph::ui::ExchangeReply)> const& done) {
+                if (request.kind == "ui-hello") {
+                    ++hellos;
+                }
+                done(morph::wire::decode(service->handle(request, *morph::session::allowAllAuthorizer())));
+            }};
+    }
+    void disconnect() override { _workers.reset(); }
+
+private:
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+}  // namespace
+
+// Mutation: leave `dev` out of the shell's options (or never arm the poll) — the edited label never shows.
+// Mutation: arm the poll whatever `dev` says — the production case sends a second ui-hello.
+TEST_CASE(
+    "Client shell: in development mode a changed served document remounts the shown screen, keeping its state; "
+    "without it nothing is polled",
+    "[examples-common][shell][dev-reload]") {
+    std::vector<bool> modes{false};
+#if MORPH_UI_DEV_TOOLS
+    modes.push_back(true);
+#endif
+    for (bool const dev : modes) {
+        CAPTURE(dev);
+        FakeAppContext context;
+        morph::ui::testing::RecordingBackend backend;
+        RedeployedSource source;
+        ShellLog log;
+        std::vector<std::vector<std::string>> reloads;
+        ClientShellOptions options = log.options();
+        options.dev = dev;
+        options.onReloaded = [&reloads](std::vector<std::string> const& remounted) { reloads.push_back(remounted); };
+        {
+            auto const shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source),
+                                                                 source, std::move(options));
+            REQUIRE(log.mounted == std::vector<std::string>{"dev.counter"});
+            auto const bump = backend.find("Button", "testId", "bump");
+            REQUIRE(bump.has_value());
+            backend.click(bump.value());
+            REQUIRE(pumpUntil(context.owner(), [&] { return textOf(backend, "count") == "count 5"; }));
+            int const hellosAtMount = source.hellos;
+
+            source.service = serving(kCounterEdited);  // the server's document changes
+            for (int second = 0; second < 3; ++second) {
+                context.clock().advance(std::chrono::seconds{1});
+                static_cast<void>(pumpUntil(
+                    context.owner(), [&] { return textOf(backend, "count") == "edited 5"; },
+                    std::chrono::milliseconds{50}));
+            }
+            if (dev) {
+                CHECK(textOf(backend, "count") == "edited 5");  // remounted, and the state kept
+                CHECK_FALSE(backend.find("Button", "testId", "bump").has_value());
+                CHECK(source.hellos > hellosAtMount);
+                REQUIRE_FALSE(reloads.empty());
+                CHECK(reloads.front() == std::vector<std::string>{"dev.counter"});
+            } else {
+                CHECK(textOf(backend, "count") == "count 5");
+                CHECK(source.hellos == hellosAtMount);  // the digest is read once per connection
+                CHECK(reloads.empty());
+            }
+            CHECK(log.mounted == std::vector<std::string>{"dev.counter"});  // remounted in place, not navigated
+            CHECK(log.problems.empty());
+        }
+        source.close();
+    }
 }

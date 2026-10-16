@@ -2,6 +2,7 @@
 
 #include "app/client_shell.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <expected>
@@ -11,8 +12,12 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <morph/reactive/scheduler.hpp>
+#include <morph/ui/dev_reload.hpp>
+#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/route_history.hpp>
@@ -22,10 +27,16 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace morph::examples {
 
 namespace {
+
+#if MORPH_UI_DEV_TOOLS
+// How often a development shell polls the source's digest (spec 5 §12).
+constexpr std::chrono::seconds kDevPollEvery{1};
+#endif
 
 /// The library's document host, with `navigate` handed to the shell.
 class Host final : public ui::DocumentScreenHost {
@@ -247,7 +258,29 @@ public:
         if (!openWanted()) {
             mount(start, _options.startParams);
         }
+#if MORPH_UI_DEV_TOOLS
+        if (_options.dev) {
+            _poll = _context->scheduler().every(kDevPollEvery, [this, alive = std::weak_ptr<bool>{_alive}] {
+                _source->poll([this, alive](std::vector<std::string> const& changed) {
+                    if (auto const live = alive.lock(); live != nullptr && *live) {
+                        reloadChanged(changed);
+                    }
+                });
+            });
+        }
+#endif
     }
+
+#if MORPH_UI_DEV_TOOLS
+    void inspectFocused(std::function<void(ui::Inspector&)> const& visit) override {
+        if (!_current || !visit) {
+            return;
+        }
+        if (std::optional<ui::Inspector> inspector = ui::DocumentScreenHost::inspector(*_current)) {
+            visit(*inspector);
+        }
+    }
+#endif
 
     /// Shows @p text in place of any screen, and reports it.
     void show(std::string const& text) {
@@ -398,6 +431,28 @@ private:
         }
     }
 
+#if MORPH_UI_DEV_TOOLS
+    // Loads the documents a development poll found changed and remounts the shown screen when its own changed; a
+    // document that does not load, or that the interpreter refuses, keeps the old one and is reported.
+    void reloadChanged(std::vector<std::string> const& changed) {
+        if (changed.empty() || _host == nullptr || _source->bundle() == nullptr || _reloading) {
+            return;
+        }
+        std::vector<ui::MountedScreen> mounted;
+        if (_current) {
+            mounted.push_back(ui::MountedScreen{.screenId = _currentId, .handle = _current.get()});
+        }
+        ui::ReloadOutcome const outcome = ui::reloadDocuments(
+            changed, *_source->bundle(), ui::LoadOptions{.catalog = _source->catalog()}, _documents, *_host, mounted);
+        for (ui::Refusal const& refusal : outcome.refused) {
+            problem("reload refused: " + refusal.message());
+        }
+        if (_options.onReloaded) {
+            _options.onReloaded(outcome.remounted);
+        }
+    }
+#endif
+
     void unmount() {
         _message.reset();
         if (_current) {
@@ -430,6 +485,10 @@ private:
     bool _changed = false;
     bool _signedIn = false;
     std::string _wanted;
+#if MORPH_UI_DEV_TOOLS
+    // The development poll's timer.
+    std::optional<reactive::TimerHandle> _poll;
+#endif
     // Last, so it stops following the history before anything it opens screens with is gone.
     std::optional<ui::RouteHistory> _routes;
 };

@@ -21,6 +21,7 @@ Read this before changing what a mounted document does. What a document may say 
 - [Commands](#commands)
 - [Lowering](#lowering)
 - [Diagnostics](#diagnostics)
+- [Development tools](#development-tools)
 - [Lifetimes](#lifetimes)
 - [Design decisions](#design-decisions)
 - [Not yet lowered](#not-yet-lowered)
@@ -61,6 +62,13 @@ filled from the opener's `Screen::lend`), and a document without a view. It then
 scope, lowers the view, mounts it through `Mounted` at `MountOptions::depth + 1` (the screen scope's
 own Effects at `depth`, so they run first), wraps the root in a column carrying the document's `keys`
 when it has any, and runs `onMount`.
+
+A mount that replaces a screen, such as a development reload's remount, names it in
+`MountOptions::keepStateOf`. Each state of the new screen scope then starts from the old screen scope's
+value of the state of the same name, when the two declared types have the same name (`int` and `int?`
+differ; untyped is `any`) and the new type admits the value; any other state is initialised from its init.
+Only the screen scope is matched: nested scopes are made later, when their content mounts, and start
+from their inits.
 
 ## Scopes
 
@@ -268,6 +276,13 @@ applies to the width.
   left out, inside a column that carries the node's common properties. They have no element values
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
+
+## Development tools
+
+In a build with `MORPH_UI_DEV_TOOLS`, a screen also records what the development inspector reads
+([`inspector.md`](inspector.md)): each node as it is lowered, with its scope and bindings held weakly; each live
+scope; and each command list `runList` runs, with the batch it ran in. `Screen` befriends `Inspector`, which reads
+them and the scopes' queries and mutations, and returns copies. A build without the switch has none of these members.
 
 ## Diagnostics
 

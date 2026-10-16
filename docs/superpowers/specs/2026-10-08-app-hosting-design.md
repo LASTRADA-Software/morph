@@ -870,7 +870,8 @@ a string percent-encoded.
 ## 21. Development tools
 
 A client started in development mode (`--dev`, or `MORPH_UI_DEV=1`) adds two tools. Neither is built
-into a release client.
+into a release client: the build option `MORPH_UI_DEV_TOOLS`, off by default in release build types,
+compiles them in, and development mode then turns them on at run time.
 
 - **Reload.** Documents and components reload when the server's manifest changes (spec 5 §12,
   "Development reload").

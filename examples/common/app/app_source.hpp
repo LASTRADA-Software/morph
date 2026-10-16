@@ -11,6 +11,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/session/session.hpp>
+#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/interpreter.hpp>
@@ -42,6 +43,9 @@ struct ClientArgs {
     std::string screen;
     /// @brief `--exit-after-mount`: quit once the first screen mounted, with 0 when it mounted cleanly.
     bool exitAfterMount = false;
+    /// @brief `--dev`, or `MORPH_UI_DEV=1`: development mode, which reloads the screens when the server's documents
+    ///        change (spec 5 §12). A client built without the development tools ignores it.
+    bool dev = false;
 };
 
 /// @brief Reads the client's options from @p args and removes them, leaving the rest for the frontend.
@@ -138,6 +142,14 @@ public:
     /// @return It, or nothing before the source is open.
     [[nodiscard]] std::optional<ui::FileTransfer> files() const;
 
+#if MORPH_UI_DEV_TOOLS
+    /// @brief One step of development reload (spec 5 §12): sends `ui-hello`, and when the manifest digest changed,
+    ///        fetches the changed bundle and the catalog for it. Nothing is sent while a poll is still in flight.
+    /// @param changed Called on the owner once the changed bundle is current, with the ids of the documents it
+    ///                changed; not called for an unchanged digest, a failed poll, or after `close`.
+    void poll(std::function<void(std::vector<std::string> changed)> changed);
+#endif
+
     /// @brief The principal before any sign-in, which `signOut` returns to.
     /// @return It; empty for none.
     [[nodiscard]] virtual std::string signedOutPrincipal() const { return {}; }
@@ -205,6 +217,10 @@ private:
     // Fetches the catalog and the bundle for the current session, then the schemas; `done` once they are current.
     void reload(std::shared_ptr<bool> const& alive, std::function<void(std::expected<void, ui::ConnectError>)> done);
     reactive::TimerHandle _timeout;
+#if MORPH_UI_DEV_TOOLS
+    // Whether a development poll is in flight.
+    bool _polling = false;
+#endif
 };
 
 /// @brief Fetches the screens from a server (`--server`), over the transport the frontend calls for.

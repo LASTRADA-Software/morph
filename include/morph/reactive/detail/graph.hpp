@@ -2,6 +2,8 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -60,6 +62,9 @@ inline constexpr std::size_t kDefaultMaxEffectRunsPerFlush = 100;
 
 /// @brief How many flushes in a row are re-posted after an Effect threw, unless `RuntimeOptions` says otherwise.
 inline constexpr std::size_t kDefaultMaxThrowReposts = 3;
+
+/// @brief How many of the latest misuses a runtime keeps the site of.
+inline constexpr std::size_t kRecentMisuses = 16;
 
 /// @brief Whether `==` is usable for @p T: declared, and its element types usable too.
 ///
@@ -160,7 +165,29 @@ public:
     /// @brief Reports a misuse: asserts in a debug build, or hands it to an installed owner probe.
     /// @param where One of the `site::` constants.
     void report(char const* where) const noexcept {
+        // Counted with atomics: a misuse off the owner is reported from the thread that made it.
+        std::uint64_t const index = _misuses.fetch_add(1, std::memory_order_relaxed);
+        _recentMisuses.at(index % kRecentMisuses).store(where, std::memory_order_relaxed);
         exec::detail::noteOwner(where, _affinity.owner().coreExecutor(), false);
+    }
+
+    /// @brief How many misuses have been reported.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t misuses() const noexcept { return _misuses.load(std::memory_order_relaxed); }
+
+    /// @brief The sites of the latest misuses, oldest first, at most `kRecentMisuses`.
+    /// @return The `site::` constants.
+    [[nodiscard]] std::vector<char const*> recentMisuses() const {
+        std::uint64_t const total = misuses();
+        std::uint64_t const kept = std::min<std::uint64_t>(total, kRecentMisuses);
+        std::vector<char const*> sites;
+        sites.reserve(static_cast<std::size_t>(kept));
+        for (std::uint64_t index = total - kept; index < total; ++index) {
+            if (char const* const where = _recentMisuses.at(index % kRecentMisuses).load(std::memory_order_relaxed)) {
+                sites.push_back(where);
+            }
+        }
+        return sites;
     }
 
     /// @brief The owner executor.
@@ -176,8 +203,36 @@ public:
         _afterFlush = std::move(afterFlush);
     }
 
-    /// @brief Opens a batch; batches nest.
-    void beginBatch() noexcept { ++_batchDepth; }
+    /// @brief Opens a batch; batches nest. Opening the outermost one numbers it.
+    void beginBatch() noexcept {
+        if (_batchDepth++ == 0) {
+            ++_batches;
+        }
+    }
+
+    /// @brief The number of the batch open now: how many outermost batches had been opened when it was.
+    /// @return It, or 0 outside every batch.
+    [[nodiscard]] std::uint64_t currentBatch() const noexcept { return _batchDepth == 0 ? 0 : _batches; }
+
+    /// @brief How many outermost batches have been opened.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t batches() const noexcept { return _batches; }
+
+    /// @brief How many flushes ran at least one queued Effect.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t flushes() const noexcept { return _flushes; }
+
+    /// @brief How many queued Effects the flushes processed, in all.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t effectsRun() const noexcept { return _effectsRun; }
+
+    /// @brief How many queued Effects the latest flush processed.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t lastFlushEffects() const noexcept { return _lastFlushEffects; }
+
+    /// @brief The most queued Effects one flush has processed.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t maxFlushEffects() const noexcept { return _maxFlushEffects; }
 
     /// @brief Closes a batch; closing the outermost one requests a flush when effects are queued.
     ///
@@ -294,6 +349,13 @@ private:
     std::size_t _liveNodes = 0;
     std::uint64_t _createdNodes = 0;
     std::uint64_t _flushEpoch = 0;
+    std::uint64_t _batches = 0;
+    std::uint64_t _flushes = 0;
+    std::uint64_t _effectsRun = 0;
+    std::uint64_t _lastFlushEffects = 0;
+    std::uint64_t _maxFlushEffects = 0;
+    mutable std::atomic<std::uint64_t> _misuses{0};
+    mutable std::array<std::atomic<char const*>, kRecentMisuses> _recentMisuses{};
     bool _isFlushRequested = false;
     bool _flushing = false;
     bool _detached = false;
@@ -696,11 +758,15 @@ inline void RuntimeCore::flush() {
     }
     _flushing = true;
     ++_flushEpoch;
+    ++_flushes;
+    _lastFlushEffects = 0;
     bool stopped = false;
     while (!_queue.empty()) {
         std::ranges::pop_heap(_queue, runsLater);
         Node* const effect = _queue.back();
         _queue.pop_back();
+        ++_effectsRun;
+        _maxFlushEffects = std::max(_maxFlushEffects, ++_lastFlushEffects);
         if (effect->countRun(_flushEpoch) > _bounds.maxEffectRunsPerFlush) {
             report(site::kWriteCycle);
             effect->settle();

@@ -19,8 +19,10 @@
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
+#include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
+#include "inspector.hpp"
 #include "interpreter.hpp"
 #include "route.hpp"
 #include "value.hpp"
@@ -416,6 +418,42 @@ public:
     /// @param screen The handle, closed.
     virtual void onScreenClosed(ScreenHandle& screen) { static_cast<void>(screen); }
 
+    /// @brief Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload).
+    ///
+    /// The new screen is mounted with the same params in the same place, and each state of its own scope starts from
+    /// the old screen's value of the state of the same name and type; any other state starts from its init. The old
+    /// screen is then destroyed, which runs its `onUnmount`, and the handle shows the new one: its `title`, `dirty`
+    /// and `identity` follow it, and a pending call stays tied to it. A refused mount keeps the old screen.
+    /// @param handle   A handle this host mounted.
+    /// @param document The changed document of the same screen, loaded.
+    /// @return Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or
+    ///         the interpreter's refusal of the new document.
+    [[nodiscard]] std::expected<void, MountError> remount(ScreenHandle& handle,
+                                                          std::shared_ptr<Document const> document) {
+        auto* const own = dynamic_cast<Handle*>(&handle);
+        if (own == nullptr || !document) {
+            return std::unexpected(MountError{.screenId = document ? document->id : std::string{},
+                                              .reason = "not a document screen of this host"});
+        }
+        return own->remount(_interpreter, std::move(document), *_options.backend);
+    }
+
+#if MORPH_UI_DEV_TOOLS
+    /// @brief The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window
+    ///        reads. It hands out no access to the screen beyond the inspector's own read-only view and its
+    ///        `refetch` command.
+    /// @param handle A handle this host mounted.
+    /// @return The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle.
+    [[nodiscard]] static std::optional<Inspector> inspector(ScreenHandle& handle) {
+        auto const* const own = dynamic_cast<Handle const*>(&handle);
+        Screen* const screen = own == nullptr ? nullptr : own->screen();
+        if (screen == nullptr) {
+            return std::nullopt;
+        }
+        return Inspector{*screen};
+    }
+#endif
+
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.
     /// @return Its root widget, or `nullptr` for a closed or foreign handle.
@@ -464,15 +502,21 @@ private:
         auto screen =
             _interpreter.mount(std::move(document), params, *_options.backend, MountOptions{.parent = parent});
         if (!screen) {
-            std::string reason = screen.error().reason;
-            if (!screen.error().path.empty()) {
-                reason = screen.error().path + ": " + reason;
-            }
-            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = std::move(reason)});
+            return std::unexpected(mountErrorOf(screenId, screen.error()));
         }
         auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard, _options.saveFailed);
+        handle->placed(params, parent);
         adoptCall(*handle, screenId, params);
         return handle;
+    }
+
+    // The interpreter's refusal of a mount, as the host reports it.
+    [[nodiscard]] static MountError mountErrorOf(std::string_view screenId, Refusal const& refusal) {
+        std::string reason = refusal.reason;
+        if (!refusal.path.empty()) {
+            reason = refusal.path + ": " + reason;
+        }
+        return MountError{.screenId = std::string{screenId}, .reason = std::move(reason)};
     }
 
     /// A screen opened to answer its opener (spec 6 §16): answered exactly once, by `return`, by `close: self`, or by
@@ -535,6 +579,39 @@ private:
 
         [[nodiscard]] Widget* root() const { return _state->screen ? &_state->screen->root() : nullptr; }
 
+        /// The screen while it is open; null once it closed.
+        [[nodiscard]] Screen* screen() const { return _state->screen.get(); }
+
+        /// Records what the screen was mounted with, so a remount mounts the same instance in the same place.
+        void placed(ParamMap params, ContainerWidget* parent) {
+            _state->params = std::move(params);
+            _state->parent = parent;
+        }
+
+        /// Mounts @p document with the screen's params, keeping its state by name and type, and replaces the
+        /// screen with it; on a refusal the screen stays as it was.
+        std::expected<void, MountError> remount(Interpreter& interpreter, std::shared_ptr<Document const> document,
+                                                IViewBackend& backend) {
+            State& state = *_state;
+            std::string const screenId = document->id;
+            if (!state.screen) {
+                return std::unexpected(MountError{.screenId = screenId, .reason = "the screen is closed"});
+            }
+            if (state.closing || state.saved.effect) {
+                return std::unexpected(MountError{.screenId = screenId, .reason = "the screen is closing or saving"});
+            }
+            auto next = interpreter.mount(std::move(document), state.params, backend,
+                                          MountOptions{.parent = state.parent, .keepStateOf = state.screen.get()});
+            if (!next) {
+                return std::unexpected(mountErrorOf(screenId, next.error()));
+            }
+            // The old screen goes after the new one has mounted, so its root widget is never missing in between;
+            // destroying it runs its `onUnmount`.
+            std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
+            state.runtime->batch([&state] { state.generation.set(state.generation.peek() + 1); });
+            return {};
+        }
+
         /// The call this screen answers, if it was opened as one.
         void answers(std::shared_ptr<Call> call) { _state->call = std::move(call); }
 
@@ -568,16 +645,17 @@ private:
                   guard{std::move(closeGuard)},
                   saveFailed{std::move(onSaveFailed)},
                   closed{*runtime, false},
+                  generation{*runtime, 0},
                   title{*runtime,
                         [this] {
-                            if (!closed.get()) {
+                            if (!closed.get() && generation.get() >= 0) {
                                 lastTitle = detail::host::titleText(screen->title());
                             }
                             return lastTitle;
                         }},
-                  dirty{*runtime, [this] { return !closed.get() && screen->dirty(); }},
+                  dirty{*runtime, [this] { return !closed.get() && generation.get() >= 0 && screen->dirty(); }},
                   identity{*runtime, [this] {
-                               if (!closed.get()) {
+                               if (!closed.get() && generation.get() >= 0) {
                                    lastIdentity = screen->identity();
                                }
                                return lastIdentity;
@@ -770,7 +848,12 @@ private:
             std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
+            // What the screen was mounted with, for a remount.
+            ParamMap params;
+            ContainerWidget* parent = nullptr;
             reactive::Signal<bool> closed;
+            // Bumped when a remount replaces the screen, so the values below read the new one.
+            reactive::Signal<int> generation;
             reactive::Computed<std::string> title;
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;

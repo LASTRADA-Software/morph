@@ -12,6 +12,8 @@ entries.
 | `include/morph/ui/bundle.hpp` | What both sides share: content hashes, the manifest, the request and reply bodies, their bounds and parsers |
 | `include/morph/ui/service.hpp` | The server: `UiRegistry`, `ServedBundle`, `UiService` |
 | `include/morph/ui/service_client.hpp` | The client: `IBundleStore`, `MemoryBundleStore`, `VerifiedCache`, `UiClient`, `LoadedBundle` |
+| `include/morph/ui/dev_reload.hpp` | Development reload: `changedDocuments`, `reloadDocuments`, `MountedScreen`, `ReloadOutcome`, `DocumentMap` |
+| `include/morph/ui/dev_tools.hpp` | `MORPH_UI_DEV_TOOLS`, the switch that builds the development tools |
 
 The seam it plugs into is `RemoteServer`'s envelope services ([`../core/backend.md`](../core/backend.md#envelope-services));
 the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui-services-kinds)).
@@ -27,6 +29,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 - [The registry](#the-registry)
 - [The client](#the-client)
 - [Design decisions](#design-decisions)
+- [Development reload](#development-reload)
 - [Not yet](#not-yet)
 
 ## The kinds
@@ -281,8 +284,53 @@ an `IFileStore` (`ui/file_store.hpp`); without one, `ui-file` is an unknown kind
   document's `{"upload": e, "to": "m"}`; its default calls `upload(file, …)`, so a host that overrides only that
   keeps working.
 
+## Development reload
+
+A client in development mode follows the server's documents as they change (spec 5 §12, spec 6 §21). The pieces
+every such client needs are in the library (`service_client.hpp`, `dev_reload.hpp`, `host.hpp`). The loop and the
+switch are the client's.
+
+1. **The poll step.** `UiClient::poll(session, knownDigest, done)` sends `ui-hello`. When the reply's digest is
+   `knownDigest`, as `HelloReply::digest` spells it, `done` gets nothing and no other request is sent. Otherwise
+   the poll runs as `open` does from the hello on, fetching only what the cache does not hold, and `done` gets the
+   changed `LoadedBundle`. A transport failure or a refusal is the error, as `open`'s is.
+2. **What changed.** `changedDocuments(before, after)` compares two manifests and names every screen and app
+   document whose hash differs, or that one of them lacks. A document names a delivered component by its hash, so
+   a changed component changes the documents that use it. A theme or a message catalogue is not a document and is
+   not named.
+3. **Remounting.** `reloadDocuments(changed, bundle, loadOptions, documents, host, mounted)` loads each changed
+   screen document with the catalog facts. Each one that loads is remounted, through
+   `DocumentScreenHost::remount`, on every mounted screen that shows it.
+   - A document that does not load is refused, and the old one stays, in the host's document map and on screen.
+   - A remount the interpreter refuses, such as a new param the mounted instance lacks, keeps that screen and the
+     map on the old document too.
+   - Every refusal is returned as a `Refusal` naming the document, for the client to report.
+   - The app document is not remounted: no `DocumentScreenHost` mounts it.
+4. **What a remount keeps.** `DocumentScreenHost::remount(handle, document)` mounts the new document with the
+   params and the container of the old screen, then destroys the old screen (its `onUnmount` runs, and the new
+   screen's `onMount`).
+   - The handle is the same object. Its `title`, `dirty` and `identity` follow the new screen, and a call it answers
+     stays tied to it, so the screen keeps its identity and its tab.
+   - Each state of the new screen's own scope whose name the old screen's own scope declared, with the same type
+     (its name, `int` and `int?` being different types, untyped being `any`), and whose value the type admits,
+     starts from the old value (`MountOptions::keepStateOf`). Every other state starts from its init.
+   - A nested scope (a dialog's or drawer's content, a switch case, a row) is made again from its inits when it next
+     mounts. Matching it to the old screen's would need the two documents compared node by node, not by name.
+   - A remount is refused while a close or a save is waiting, and on a closed screen.
+
+**The generic client.** `--dev`, or `MORPH_UI_DEV=1` in the environment, turns development mode on
+(`ClientArgs::dev`, `ClientShellOptions::dev`). The shell then calls `ClientSource::poll` every second. The source
+keeps one poll in flight at a time, and once a changed bundle and its schemas are current, the shell hands the changed
+ids to `reloadDocuments` with the shown screen and reports each refusal as a problem. Without development mode
+nothing polls, and the digest is read once per connection, by the `open` that loaded the bundle.
+
+**Release builds contain none of it.** The CMake option `MORPH_UI_DEV_TOOLS` defines the macro of the same name, 1
+or 0, on the `morph` target's interface, so every translation unit agrees on it (`morph/ui/dev_tools.hpp` gives 0
+when nothing defines it). It is off by default when `CMAKE_BUILD_TYPE` is `Release`, `MinSizeRel` or
+`RelWithDebInfo`, and on otherwise. With it off, the generic client compiles no poll and no reload, and a `--dev` it
+is given is reported and ignored. The library functions above are header-only and are emitted only where a client
+calls them.
+
 ## Not yet
-- **Development reload** (spec 5 §12) is the generic client's loop over `UiClient::open`, which already fetches
-  only what changed.
 - **Several vocabulary versions of one screen.** There is one vocabulary version, `ui/1`; the registry keeps one
   document per screen.

@@ -9,6 +9,7 @@
 
 #include "../attributes.hpp"
 #include "../ui/backend.hpp"
+#include "../ui/dev_tools.hpp"
 #include "../ui/frontend.hpp"
 
 /// @file
@@ -39,6 +40,11 @@ struct FrontendConfig {
     /// @brief Called with the window's width class (`widthClassOf`) when the window first has a width and each time
     ///        the class changes; empty calls nothing. The shell sets it as `{"env": "widthClass"}`.
     std::function<void(std::string const& widthClass)> onWidthClass;
+#if MORPH_UI_DEV_TOOLS
+    /// @brief Development mode (spec 6 §21): Ctrl+Shift+I in the window opens the inspector over the screen the
+    ///        shell shows (`ui::MountedShell::inspectFocused`). Off, the key does nothing.
+    bool devTools = false;
+#endif
 };
 
 /// @brief Whether a Qt Quick window can be shown here: on macOS, Windows and WebAssembly always; elsewhere when

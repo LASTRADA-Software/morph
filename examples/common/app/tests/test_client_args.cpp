@@ -24,6 +24,20 @@ TEST_CASE("readClientArgs: reads each option in both spellings and leaves the re
     CHECK(args == std::vector<std::string>{"client", "--ui=qt", "-platform", "offscreen"});
 }
 
+TEST_CASE("readClientArgs: --dev asks for development mode, which is off without it", "[examples-common][args]") {
+    std::vector<std::string> args{"client", "--app", "probe", "--dev"};
+    auto const read = readClientArgs(args);
+    REQUIRE(read.has_value());
+    CHECK(read->dev);
+    CHECK_FALSE(read->exitAfterMount);
+    CHECK(args == std::vector<std::string>{"client"});
+
+    std::vector<std::string> plain{"client", "--app", "probe"};
+    auto const production = readClientArgs(plain);
+    REQUIRE(production.has_value());
+    CHECK_FALSE(production->dev);
+}
+
 TEST_CASE("readClientArgs: the last occurrence wins, and nothing after -- is read", "[examples-common][args]") {
     std::vector<std::string> args{"client", "--app", "first", "--app=second", "--", "--server", "ws://h:1"};
     auto const read = readClientArgs(args);

@@ -16,11 +16,16 @@
 #include <morph/qt_quick/frontend.hpp>
 #include <morph/qt_quick/scheduler.hpp>
 #include <morph/reactive/runtime.hpp>
+#include <morph/ui/dev_tools.hpp>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
 #include "qt_quick/keys.hpp"
+
+#if MORPH_UI_DEV_TOOLS
+#include <morph/qt_quick/inspector.hpp>
+#endif
 
 namespace morph::qt_quick {
 
@@ -126,12 +131,36 @@ int Frontend::run(ui::AppSource& source) {
                     BackendOptions{.components = _config.components, .onWidthClass = _config.onWidthClass}};
     Context context{runtime, executor, scheduler};
     QObject::connect(&window, &QQuickWindow::closing, &anchor, [&context] { context.quit(0); });
+    // The shell the inspector reads; cleared once the loop has ended, before runApp destroys the shell.
+    ui::MountedShell* shown = nullptr;
+#if MORPH_UI_DEV_TOOLS
+    std::optional<InspectorWindow> inspector;
+    if (_config.devTools) {
+        inspector.emplace([&shown](std::function<void(ui::Inspector&)> const& visit) {
+            if (shown != nullptr) {
+                shown->inspectFocused(visit);
+            }
+        });
+        inspector->attachTo(window);
+    }
+#endif
     return ui::runApp(
         context, source,
-        [this, &backend](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
-            return _config.mountShell(opened, backend, std::move(result));
+        [this, &backend, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+            auto shell = _config.mountShell(opened, backend, std::move(result));
+            shown = shell.get();
+            return shell;
         },
-        [&context, &window] { return context.loop(window); });
+        [&] {
+            int const code = context.loop(window);
+#if MORPH_UI_DEV_TOOLS
+            if (inspector) {
+                inspector->hide();
+            }
+#endif
+            shown = nullptr;
+            return code;
+        });
 }
 
 ui::FrontendOption frontendOption(int& argc, char** argv, FrontendConfig config) {

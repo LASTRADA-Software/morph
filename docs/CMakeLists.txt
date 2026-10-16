@@ -42,7 +42,9 @@ set(DOXYGEN_CREATE_SUBDIRS         YES)
 set(DOXYGEN_ENABLE_PREPROCESSING   YES)
 set(DOXYGEN_MACRO_EXPANSION        YES)
 set(DOXYGEN_EXPAND_ONLY_PREDEF     YES)
-set(DOXYGEN_PREDEFINED             "MORPH_LIFETIMEBOUND=")
+# MORPH_UI_DEV_TOOLS=1 documents the development tools too (the inspector and what reaches it), which every
+# release build leaves out: their public symbols need complete docs like any other.
+set(DOXYGEN_PREDEFINED             "MORPH_LIFETIMEBOUND=" "MORPH_UI_DEV_TOOLS=1")
 
 # ── Strictness: every public symbol must be documented ──────────────────────
 set(DOXYGEN_EXTRACT_ALL            NO)

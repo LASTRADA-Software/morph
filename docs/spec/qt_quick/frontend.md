@@ -34,7 +34,8 @@ int main(int argc, char** argv) {
   no renderer: `(AppContext&, IViewBackend&, expected<Bundle, ConnectError>) -> unique_ptr<MountedShell>`.
 - `FrontendConfig{mountShell, components, title, onWidthClass}`: the shell factory (it must not be empty), the
   components and restyle map the backend uses (borrowed), the window's title, and the width class callback
-  (`BackendOptions::onWidthClass`).
+  (`BackendOptions::onWidthClass`). A build with the development tools adds `devTools`: when set, Ctrl+Shift+I in the
+  window opens the inspector over the shell's focused screen ([`../ui/inspector.md`](../ui/inspector.md)).
 - `Frontend(argc, argv, config)`; `name()` is `"qt"`.
 
 ## Run
@@ -51,7 +52,9 @@ int main(int argc, char** argv) {
    `quit()`.
 
 Then `ui::runApp` opens the source, mounts the shell through `mountShell` when the source is ready, shows the window
-and runs a `QEventLoop`. On the `offscreen` platform the window renders in software. Teardown is the reverse: `runApp`
+and runs a `QEventLoop`. With `devTools`, a `qt_quick::InspectorWindow` is made before the loop and attached to the
+window; it reads the mounted shell through `inspectFocused`, and is hidden when the loop ends, before the shell is
+destroyed. On the `offscreen` platform the window renders in software. Teardown is the reverse: `runApp`
 destroys the screens and closes the source; then the backend, the window and the engine go, then the scheduler, the
 runtime and the executor, and Qt last. A task posted to the executor after that runs nothing.
 
