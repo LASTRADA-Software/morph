@@ -311,7 +311,7 @@ QString numberIn(QString const& label) { return label.section(u" ("_s, 0, 0); }
 /// The option a drop-down shows: the value of its display child, because a combo box node has no value of its own.
 QString shownBy(Node const& combo) {
     for (int index = 0; index < combo.iface->childCount(); ++index) {
-        QAccessibleInterface* const child = combo.iface->child(index);
+        QAccessibleInterface const* const child = combo.iface->child(index);
         if (child != nullptr && child->role() == QAccessible::EditableText) {
             return child->text(QAccessible::Value);
         }

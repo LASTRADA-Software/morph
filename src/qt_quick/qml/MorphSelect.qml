@@ -52,18 +52,6 @@ MorphField {
         // A hidden item is still in the accessibility tree: only the presentation shown is the widget's node.
         Accessible.ignored: root.radio
         onActivated: index => root.choose(index)
-        // A ComboBox node has no value of its own, so the option it shows is read as the value of its display child,
-        // the style's text field. Declared here, as the name is, for a platform whose accessibility never turns on.
-        onContentItemChanged: combo.exposeShown()
-        Component.onCompleted: combo.exposeShown()
-
-        function exposeShown() {
-            const shown = combo.contentItem
-            if (!shown)
-                return
-            shown.Accessible.role = Accessible.EditableText
-            shown.Accessible.ignored = Qt.binding(() => root.radio)
-        }
 
         // Reported also with no options, so a failed fetch of them can be retried when the user asks for them.
         Connections {
