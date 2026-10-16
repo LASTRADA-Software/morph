@@ -260,3 +260,25 @@ TEST_CASE("FileTransfer: a download reports progress per chunk and fails with th
 TEST_CASE("FileTransfer refuses an empty exchange", "[ui][file]") {
     CHECK_THROWS_AS((FileTransfer{morph::ui::Exchange{}, morph::session::Context{}}), std::invalid_argument);
 }
+
+// Mutation: append a chunk whose data is not base64url or is over the chunk bound, or answer a store refusal of
+// begin or end as success.
+TEST_CASE("ui-file refuses chunk data that does not decode or is too long, and passes the store's refusals on",
+          "[ui-service][files]") {
+    Harness harness;
+    CHECK(harness
+              .send("tech", R"({"op":"begin","name":"a","type":"b","size":999999999999,"model":"Lims_Sample",)"
+                            R"("action":"Lims_Attach"})")
+              .message == "too large");
+    Envelope const begun = harness.send(
+        "tech", R"({"op":"begin","name":"a","type":"b","size":4,"model":"Lims_Sample","action":"Lims_Attach"})");
+    REQUIRE(begun.kind == "ok");
+    auto const reply = morph::ui::parseFileReply(begun.body);
+    REQUIRE((reply && reply->upload));
+    std::string const chunk = R"({"op":"chunk","upload":")" + *reply->upload + R"(","offset":0,"data":")";
+    CHECK(harness.send("tech", chunk + "@@@\"}").message == "ui-file chunk data is not base64url");
+    std::string const tooLong =
+        morph::session::detail::base64UrlEncode(std::string(morph::ui::kMaxFileChunkBytes + 1, 'x'));
+    CHECK(harness.send("tech", chunk + tooLong + "\"}").message.starts_with("ui-file chunk is longer than"));
+    CHECK(harness.send("tech", R"({"op":"end","upload":")" + *reply->upload + "\"}").message == "incomplete");
+}

@@ -9,6 +9,7 @@
 #include <morph/ui/author.hpp>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -1218,4 +1219,23 @@ TEST_CASE("accessibility skips what a hand-built document leaves out", "[ui][aut
     document.id = "built";
     document.components.emplace("Chart", morph::ui::Component{});
     CHECK_FALSE(ui::checkAccessibility(document).has_value());
+}
+
+// Mutation: let enroll(Screen) drop the screen, or let a throwing maker escape enroll (it is noexcept: terminate).
+TEST_CASE("a local registry enrols a screen directly, and counts a maker that throws outside the builder as lost",
+          "[ui][author][registration]") {
+    ui::ScreenRegistry registry;
+    registry.enroll(registeredScreen());
+    CHECK(registry.find("author.registered") != nullptr);
+    registry.enroll([]() -> ui::Screen { throw std::runtime_error{"no memory"}; });
+    CHECK(registry.lost() == 1);
+    CHECK(registry.refusals().empty());
+    registry.enroll(registeredScreen());  // a duplicate id is a refusal, not a loss
+    CHECK(registry.refusals().size() == 1);
+    CHECK(registry.lost() == 1);
+}
+
+// Mutation: spell parseDecimal's call with its arguments swapped.
+TEST_CASE("parseDecimal builds the library call over the text and its places", "[ui][author]") {
+    CHECK(text(ui::parseDecimal(ui::ref("typed"), 2)) == R"({"fn":"parseDecimal","args":[{"ref":"typed"},2]})");
 }
