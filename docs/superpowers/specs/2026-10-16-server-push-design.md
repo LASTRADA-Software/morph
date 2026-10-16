@@ -257,6 +257,10 @@ The wire gains its first server-initiated message.
 
     `setConnectionWriter(cid, write, backlog, onDrained)` hands the server the writer, a read of that counter, and a
     drain callback that the transport calls when the counter falls below 256 KiB.
+    - The counter counts the bytes of the encoded envelopes handed to the writer, and is decremented by the same
+      amount when that frame has been written. It never uses a transport's framed byte counts, so it cannot drift.
+    - `onDrained` runs on the transport's thread. It only posts to the server strand, where the owed `resync` is sent
+      and the flag cleared.
   - **Events, not replies, give way.** When `backlog()` exceeds 1 MiB, the server stops posting events to that
     connection and records that it owes it a `resync`. When the transport calls `onDrained`, the server sends one
     `resync` event, meaning "everything you watch may have changed", and the client marks every watched entry stale.
@@ -288,7 +292,8 @@ A client watches the topics its cache holds, so the server sends each connection
   - **An instance watch is stored by key, not resolved.** The watch is sent before the batch's fetches, so the
     instance may not exist on the server yet: no client has attached it. The server therefore stores the topic as
     `(modelType, primary)` and never resolves it to an instance id. At fan-out, it matches the executing instance's
-    directory key, which every keyed instance holds from construction. An instance that never comes to exist simply
+    directory key (`Instance::sharedKey`), which a keyed instance holds from the moment it is keyed: at construction,
+    or when an `assign` promotes it. An instance that never comes to exist simply
     never matches.
   - A private instance needs no watch: its owner is known to the server (§8). A keyless `"shared"` alias names a
     stateless model, which has no instance state to change.
@@ -297,7 +302,8 @@ A client watches the topics its cache holds, so the server sends each connection
   connection's `cid`, because the watch table belongs to the connection and fan-out reads it in the execute path.
   - Core can validate them: after part 1, records are a core registry, and instance topics are checked with
     `authorizeInstance`.
-  - The body is `{records: [...], instances: [{modelType, primary}]}`. The `ok` reply lists any topic refused
+  - The body is `{records: [...], instances: [{modelType, primary}], replace?}`. Without `replace` it adds topics.
+    `unwatch` removes them. The `ok` reply lists any topic refused
     (§12).
   - The UI layer sends them; it does not handle them.
 - **Lifetime.** A topic is watched while at least one cache entry holds it, mounted or kept (spec 5 §5: for
@@ -311,24 +317,46 @@ A client watches the topics its cache holds, so the server sends each connection
   - one that commits after produces an event, which §9 keeps even if the fetch is still in flight.
 - **Reconnect.** Both transports reconnect on their own, so the UI layer cannot rely on being told by an offline
   coordinator.
-  - **Who is told.** The remote `AppSource` (`ui/frontend.hpp`, spec 6) builds the backend, so it installs the
-    backend's `setConnectHandler`. That handler runs on every successful connect, the first included, on the
-    transport's thread. It only posts to the owner. On the owner, the source calls the session's new `reconnected()`
-    entry point, which `runApp` wires when it opens the source.
-    - The Qt WebSocket backend already fires the handler.
-    - The `net` `SocketBackend` does not override it today. Part 2 adds the override, fired from `onConnected()` on
-      its loop, the first connect included.
+  - **Who is told: library seams, not a particular source.** In the library, `AppSource` (`ui/frontend.hpp`) is an
+    interface. The concrete remote source that builds the backend lives in the generic client
+    (`examples/common/app`), as does the shell that builds the `Session`. So the library names the seams, and a
+    source and a shell only connect them:
+    - **`AppSource::onConnected(listener)`**, a new virtual with an empty default for local sources. The source calls
+      every listener on the owner after each successful connect, the first included. A remote source implements it
+      by installing the backend's `setConnectHandler`, which runs on the transport's thread, and posting to the
+      owner.
+    - **The source owns the backend's single `setConnectHandler` slot.** Anything else that wants connects, such as a
+      connection-status indicator, subscribes through `onConnected`, so the slot is never taken twice.
+    - **`Session::reconnected()`**, new. The shell that builds the `Session` registers it with
+      `source.onConnected(...)`. That is one line in whichever shell builds the session; in this repository, the
+      generic client's shell.
+    - **The `watch` verb.** `Session` has no request channel of its own. Its `Dispatcher` already carries `evaluate`,
+      built over the source's exchange by `evaluatorOver(exchange, session, cbExec)`. It gains `watch`, built the same
+      way by a new `watcherOver(exchange, cbExec)`.
+    - The Qt WebSocket backend already fires `setConnectHandler`. The `net` `SocketBackend` does not override it
+      today; part 2 adds the override, fired from `onConnected()` on its loop, the first connect included.
   - **What `reconnected()` does,** on the owner:
     1. sends `ui-hello` again, so the new connection negotiates `events`;
     2. sends the whole watch set;
     3. marks every entry stale, as spec 6 §9 already does for a backend switch. Entries with a fetch in flight get
        `refetchAfter`.
-  - **What it does not promise is order.** Both transports replay the requests queued during the outage as they
-    reconnect, before a handler posted to the owner can send anything. Executes filed during the outage therefore
-    reach the server **before** this `ui-hello` and watch set, and their changes may produce no event for this
-    client. Correctness rests on step 3 instead. Every entry is stale, and every fetch still in flight refetches once
-    it settles. The first fetches after the connect then run behind the watch set, so nothing committed before them
-    is missed, and anything committed after them produces an event.
+  - **What it does not promise is order, and why that is safe.** What the transports do today:
+    - An `execute` made while disconnected is rejected at once with `DisconnectedError`, and one in flight at the
+      drop is cancelled. No fetch is queued across an outage.
+    - `request()` envelopes made while disconnected (the `ui-*` kinds, and `watch`/`unwatch` changes) are held, and
+      replayed when the connection opens, before the posted handler can run.
+    - Executes the owner files **between the connect and `reconnected()` running** (a user's mutation, a
+      `refreshEvery` tick, calls released by the bridge's rebinds) reach the server before the new `ui-hello` and
+      watch set. A fetch among them may read before a change commits that produces no event for this client.
+
+    Correctness rests on step 3. Every entry is stale, and an entry whose fetch is in flight gets `refetchAfter`.
+    Every refetch that follows is filed after the watch set, on the same ordered channel: `request()` and `execute()`
+    share one queue per connection on both transports. A change committed before such a refetch reads is in its
+    value, and one committed after produces an event. Nothing is missed for good.
+  - **The full watch set replaces.** The `watch` sent in step 2 carries `replace: true`: the connection's watches
+    become exactly that set. Watch changes held during the outage and replayed ahead of it are therefore superseded.
+    The server accepts `watch` before `ui-hello` on a connection; it stores the watches but posts events only once
+    `events` is negotiated.
   - An offline replay through `ReconnectCoordinator` runs after this, and its changes reach the cache as events (§8).
     Events missed while disconnected are not replayed; the stale marks cover them.
 - **Granularity.** Record topics are per type, not per key. Per-key watching would make the server track every key
@@ -548,7 +576,8 @@ Every test below must fail if the feature does nothing, so each names the change
   - A reply's `updates` patch on an entry whose fetch is pending causes one more fetch, in local mode.
   - After the transport reconnects, the client sends `ui-hello` and its watch set again before any execute filed
     after the connect. Every entry is marked stale, and events arrive on the new connection.
-  - An entry whose fetch was queued during the outage and settles after the reconnect refetches once.
+  - A fetch filed after the connect but before `reconnected()` runs, and settling after it, refetches once.
+  - Watch changes held during the outage and replayed before the full set are superseded by it (`replace: true`).
   - `changesInstance` refetches only entries of that instance.
   - *Mutation: restore the unconditional `stale = false`; the mid-flight case fails.*
 - **Documents (ui).**
@@ -573,7 +602,7 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 | 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, write, backlog, onDrained)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired from `onConnected()`; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
 | 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
-| 5 | **Client cache.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`, and the remote `AppSource` installing the connect handler and posting to it | ui | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `offline/offline.md`, spec 5 §5 |
+| 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `Dispatcher::watch`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
 | 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
 | 7 | **End-to-end harness and examples.** The two-session harness in `tests/`. Records and effects in the seven rungs that use refresh declarations (`none` on attach-style actions), with their declarations removed in `ui/1` documents where the warnings say so | tests, examples | 4, 5, 6 | the rungs' READMEs, `testing_strategy.md` |
 | 8 | **`ui/2`.** Remove `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer and golden files emit `ui/2`; the server keeps serving `ui/1` | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
