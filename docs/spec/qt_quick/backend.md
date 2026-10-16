@@ -70,6 +70,17 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
 - **leaves the scene when destroyed.** The destructor releases the widget's handlers at once, takes the item out of
   its container, hides it and deletes it later: QML may be running one of the item's own handlers, and the handlers
   hold the screen's scopes, which must not outlive it.
+- **is one accessible node.** The widget's item is the node assistive technology and an automation driver see: the
+  document's `a11y` name and role, falling back to the kind's own text and role, and the test id as both
+  `objectName` and, on a Qt that has the property, `Accessible.id`. A role the document names maps to Qt's: `group`
+  Grouping, `heading` Heading, `text` StaticText, `button` Button, `edit` (or `textbox`) EditableText, `checkbox`
+  CheckBox, `list` List, `table` Table, `chart` Chart, `status` StatusBar, and the further names `widget.cpp` lists;
+  an unknown name keeps the kind's role. A button is a Button named by its label, with the press action, and a text
+  is StaticText named by its text; the control inside either is not a second node. A key-value list is one node per
+  pair, named `"<caption>: <value>"`. A select's combo box (ComboBox, named by the option shown) and a text input's
+  field (EditableText) declare their role themselves: Qt Quick Controls fills a control's role in only once the
+  platform's accessibility is active, and on a platform with no accessibility bridge, such as `offscreen` on Qt
+  6.8, it never is, so the control would be no node at all.
 - **takes no focus out of reach.** `focus()` on a widget that is hidden or disabled, or inside such a container,
   does nothing; a widget that becomes hidden while focused gives its focus up.
 
@@ -207,6 +218,10 @@ software scene graph:
   with the row's error on a failure.
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused.
+- **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
+  driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
+  name and press action, a key-value pair named `"<caption>: <value>"`, and the test id as `objectName` and, from Qt
+  6.8, as the accessible identifier.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 

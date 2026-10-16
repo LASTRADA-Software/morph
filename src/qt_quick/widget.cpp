@@ -4,6 +4,9 @@
 
 #include <QAccessible>
 #include <QMetaObject>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQmlProperty>
 #include <QStringList>
 #include <QVariantList>
 #include <algorithm>
@@ -155,22 +158,17 @@ struct RoleName {
 };
 
 // NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, name beside role, reads as one.
-constexpr std::array<RoleName, 16> kRoles = {{{"button", QAccessible::Button},
-                                              {"checkbox", QAccessible::CheckBox},
-                                              {"dialog", QAccessible::Dialog},
-                                              {"heading", QAccessible::Heading},
-                                              {"link", QAccessible::Link},
-                                              {"list", QAccessible::List},
-                                              {"listitem", QAccessible::ListItem},
-                                              {"menu", QAccessible::PopupMenu},
-                                              {"progressbar", QAccessible::ProgressBar},
-                                              {"radio", QAccessible::RadioButton},
-                                              {"region", QAccessible::Section},
-                                              {"slider", QAccessible::Slider},
-                                              {"status", QAccessible::StatusBar},
-                                              {"tab", QAccessible::PageTab},
-                                              {"table", QAccessible::Table},
-                                              {"textbox", QAccessible::EditableText}}};
+constexpr std::array<RoleName, 20> kRoles = {
+    {{"button", QAccessible::Button},     {"chart", QAccessible::Chart},
+     {"checkbox", QAccessible::CheckBox}, {"dialog", QAccessible::Dialog},
+     {"edit", QAccessible::EditableText}, {"group", QAccessible::Grouping},
+     {"heading", QAccessible::Heading},   {"link", QAccessible::Link},
+     {"list", QAccessible::List},         {"listitem", QAccessible::ListItem},
+     {"menu", QAccessible::PopupMenu},    {"progressbar", QAccessible::ProgressBar},
+     {"radio", QAccessible::RadioButton}, {"region", QAccessible::Section},
+     {"slider", QAccessible::Slider},     {"status", QAccessible::StatusBar},
+     {"tab", QAccessible::PageTab},       {"table", QAccessible::Table},
+     {"text", QAccessible::StaticText},   {"textbox", QAccessible::EditableText}}};
 // NOLINTEND(modernize-use-designated-initializers)
 
 }  // namespace
@@ -186,8 +184,16 @@ void ItemBase::showAccessibleRole(std::string_view role) const {
 }
 
 void ItemBase::showTestId(std::string_view testId) const {
-    if (_item != nullptr) {
-        _item->setObjectName(toQString(testId));
+    if (_item == nullptr) {
+        return;
+    }
+    QString const identifier = toQString(testId);
+    _item->setObjectName(identifier);
+    // `Accessible.id` is the automation id a platform driver reads; a Qt without the property resolves no such
+    // property, and the objectName alone identifies the item there.
+    QQmlProperty const accessibleId{_item, QStringLiteral("Accessible.id"), qmlContext(_item)};
+    if (accessibleId.isValid()) {
+        static_cast<void>(accessibleId.write(identifier));
     }
 }
 

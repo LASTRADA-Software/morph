@@ -10,6 +10,9 @@ MorphField {
     property string text: ""
     property int role: 0
 
+    // The widget's item is the node a driver finds, so it reads the text; the label inside it is not a second node.
+    defaultName: text
+    defaultRole: Accessible.StaticText
     control: label
 
     Label {
@@ -20,5 +23,6 @@ MorphField {
         font.bold: root.role === 2
         font.pixelSize: root.role === 2 ? Math.round(Theme.unitHeight * 1.2) : Theme.metrics.font.pixelSize
         color: Theme.textColor(root.role)
+        Accessible.ignored: true
     }
 }

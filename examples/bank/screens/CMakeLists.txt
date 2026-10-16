@@ -69,5 +69,25 @@ if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit)
         catch_discover_tests(bank_render_smoke DISCOVERY_MODE PRE_TEST DL_PATHS "${_bank_dl_paths}"
             TEST_PREFIX "bank.render."
             PROPERTIES TIMEOUT 120 LABELS "ladder-bank" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        # bank's GUI behaviour driven through QAccessible, as a UI-automation suite drives it. Its own main owns the
+        # QGuiApplication.
+        find_package(Qt6 REQUIRED COMPONENTS Test)
+        add_executable(bank_gui_behaviour tests/test_bank_gui_behaviour.cpp)
+        target_link_libraries(bank_gui_behaviour PRIVATE
+            bank_screens morph::examples_common morph::qt_quick morph::ladder_testkit Qt6::Test Catch2::Catch2)
+        target_include_directories(bank_gui_behaviour PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../tests")
+        apply_warnings(bank_gui_behaviour)
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(bank_gui_behaviour ${AF_SANITIZER})
+        endif()
+        if(AF_COVERAGE)
+            apply_coverage(bank_gui_behaviour)
+        endif()
+        target_compile_features(bank_gui_behaviour PRIVATE cxx_std_23)
+        apply_bigobj(bank_gui_behaviour)
+        catch_discover_tests(bank_gui_behaviour DISCOVERY_MODE PRE_TEST DL_PATHS "${_bank_dl_paths}"
+            TEST_PREFIX "bank.gui."
+            PROPERTIES TIMEOUT 120 LABELS "ladder-bank" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()
