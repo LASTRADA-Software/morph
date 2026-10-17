@@ -193,6 +193,26 @@ TEST_CASE("morph::observe::ScopedObserveOverride: restores previous sinks on sco
     REQUIRE(morph::observe::detail::beginSpan("r", "m", "a") == 0);
 }
 
+// Mutation: skip saving an installed sink (the guard's exit leaves no sink instead of the outer one).
+TEST_CASE("morph::observe::ScopedObserveOverride: hands back the sinks installed before it", "[observability]") {
+    ObserveGuard outer;
+    int outerMetrics = 0;
+    morph::observe::setMetricSink([&outerMetrics](const morph::observe::MetricEvent&) { ++outerMetrics; });
+    morph::observe::setTraceSink(morph::observe::TraceSink{
+        .beginSpan = [](std::string_view, std::string_view, std::string_view) { return morph::observe::SpanId{7}; },
+        .endSpan = [](morph::observe::SpanId, bool) {},
+    });
+    {
+        ObserveGuard inner;
+        morph::observe::setMetricSink(nullptr);
+        morph::observe::setTraceSink({});
+        REQUIRE_FALSE(morph::observe::metricsEnabled());
+    }
+    morph::observe::detail::emitMetric(morph::observe::Metric::executeErrors, 1.0);
+    CHECK(outerMetrics == 1);
+    CHECK(morph::observe::detail::beginSpan("r", "m", "a") == 7);
+}
+
 TEST_CASE("morph::observe::ScopedObserveOverride: works in a process that never installed a sink", "[observability]") {
     // Until the first setMetricSink/setTraceSink the state holds no sink
     // object at all, not an empty one -- the state a test run filtered down to

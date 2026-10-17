@@ -185,6 +185,16 @@ TEST_CASE("morph::model: dispatching through the process dispatcher closes the l
         REQUIRE(dispatchAsync(processDispatcher));
         CHECK(morph::model::registrationPhaseClosed());
     }
+    SECTION("evaluate") {
+        morph::model::detail::reopenRegistrationPhaseForTesting();
+        REQUIRE_THROWS_AS(localDispatcher.evaluate("RegPhase_Model", "RegPhase_NoSuchAction", "{}"),
+                          std::runtime_error);
+        CHECK_FALSE(morph::model::registrationPhaseClosed());
+
+        REQUIRE_THROWS_AS(processDispatcher.evaluate("RegPhase_Model", "RegPhase_NoSuchAction", "{}"),
+                          std::runtime_error);
+        CHECK(morph::model::registrationPhaseClosed());
+    }
 
     morph::model::detail::reopenRegistrationPhaseForTesting();
 }

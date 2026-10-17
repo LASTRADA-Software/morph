@@ -32,6 +32,7 @@ struct RawRequestId {};
 struct RawSleep {
     int ms = 0;
 };
+struct RawTaskFail {};
 // Builds a raw handler on Raw_Counter from inside the action: shared and
 // attached to `key` when it is not empty, private otherwise.
 struct RawSpawn {
@@ -69,6 +70,10 @@ struct RawCounter {
         rawprobe::sleeper().finished.fetch_add(1);
         co_return action.ms;
     }
+    core::async::Task<int> execute(RawTaskFail /*action*/) {
+        throw std::runtime_error{"task refused"};
+        co_return 0;
+    }
     [[nodiscard]] std::int64_t execute(const RawSpawn& action) const {
         auto& slot = rawprobe::spawnSlot();
         if (slot.bridge == nullptr) {
@@ -90,6 +95,7 @@ BRIDGE_REGISTER_ACTION(RawCounter, RawFail, "Raw_Fail")
 BRIDGE_REGISTER_ACTION(RawCounter, RawLoad, "Raw_Load")
 BRIDGE_REGISTER_ACTION(RawCounter, RawRequestId, "Raw_RequestId")
 BRIDGE_REGISTER_ACTION(RawCounter, RawSleep, "Raw_Sleep")
+BRIDGE_REGISTER_ACTION(RawCounter, RawTaskFail, "Raw_TaskFail")
 BRIDGE_REGISTER_ACTION(RawCounter, RawSpawn, "Raw_Spawn")
 BRIDGE_MODEL_KEY(RawCounter, RawLoad, &RawLoad::id);
 
