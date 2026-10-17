@@ -12,6 +12,8 @@ MorphWidget {
     // 0 vertical (panes top to bottom), 1 horizontal; fixed at creation.
     property int axis: 1
     property var sizes: []
+    // Whether the user has dragged a handle: from then on the panes keep the sizes the user gave them.
+    property bool userSized: false
     readonly property Item content: split
     readonly property real unit: root.axis === 0 ? Theme.unitHeight : Theme.unitWidth
 
@@ -19,6 +21,8 @@ MorphWidget {
         const panes = split.contentChildren
         const given = root.sizes && root.sizes.length === panes.length
         const total = root.axis === 0 ? split.height : split.width
+        if (!given && total <= 0)
+            return
         for (let i = 0; i < panes.length; ++i) {
             const size = given ? root.sizes[i] * root.unit : total / Math.max(1, panes.length)
             if (root.axis === 0)
@@ -36,17 +40,48 @@ MorphWidget {
         return out
     }
 
+    // The Basic style's handle thickness, between two panes.
+    readonly property real handleExtent: 6
+
+    // What the panes ask for: along the axis, each pane's size in units when `sizes` matches the pane count and its
+    // implicit extent otherwise, plus the handles between them; across, the largest pane's implicit extent. A
+    // SplitView's own implicit size is 0x0, so a splitter sized `content` would otherwise have no area.
+    readonly property var paneExtents: {
+        const panes = split.contentChildren
+        const given = root.sizes && root.sizes.length === panes.length
+        let along = Math.max(0, panes.length - 1) * root.handleExtent
+        let across = 0
+        for (let i = 0; i < panes.length; ++i) {
+            const pane = panes[i]
+            along += given ? root.sizes[i] * root.unit : (root.axis === 0 ? pane.implicitHeight : pane.implicitWidth)
+            across = Math.max(across, root.axis === 0 ? pane.implicitWidth : pane.implicitHeight)
+        }
+        return [along, across]
+    }
+
     onSizesChanged: apply()
-    implicitWidth: split.implicitWidth
-    implicitHeight: split.implicitHeight
+    implicitWidth: root.axis === 0 ? paneExtents[1] : paneExtents[0]
+    implicitHeight: root.axis === 0 ? paneExtents[0] : paneExtents[1]
 
     SplitView {
         id: split
         anchors.fill: parent
         orientation: root.axis === 0 ? Qt.Vertical : Qt.Horizontal
+        // The share is re-applied as the split view's length changes, until the user drags: panes are adopted while
+        // the splitter is still small, and a share applied then would stay that small.
+        onWidthChanged: {
+            if (root.axis === 1 && !root.userSized)
+                root.apply()
+        }
+        onHeightChanged: {
+            if (root.axis === 0 && !root.userSized)
+                root.apply()
+        }
         onResizingChanged: {
-            if (!resizing)
+            if (!resizing) {
+                root.userSized = true
                 root.fire("resize", root.currentSizes())
+            }
         }
     }
 }

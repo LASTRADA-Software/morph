@@ -356,3 +356,26 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
     // The row packs its children at the start rather than spreading them.
     CHECK(horizontalGap(Scene::itemOf(*button), Scene::itemOf(*other)) == 0.0);
 }
+
+TEST_CASE("qt_quick containers: a content-sized splitter is as large as its panes", "[qt_quick]") {
+    Scene scene;
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto splitter = scene.backend().createSplitter(row.get(), ui::Axis::Horizontal);
+    auto left = scene.backend().createText(splitter.get());
+    auto right = scene.backend().createText(splitter.get());
+    left->setText("Left");
+    right->setText("Right");
+    scene.settle();
+    QQuickItem const& leftItem = Scene::itemOf(*left);
+    QQuickItem const& rightItem = Scene::itemOf(*right);
+    CHECK(Scene::itemOf(*splitter).width() >= leftItem.implicitWidth() + rightItem.implicitWidth());
+    CHECK(Scene::itemOf(*splitter).height() >= leftItem.implicitHeight());
+    CHECK(rightItem.mapToScene(QPointF{0, 0}).x() >=
+          leftItem.mapToScene(QPointF{0, 0}).x() + leftItem.implicitWidth());
+
+    splitter->setSizes({10, 30});
+    scene.settle();
+    qreal const unit = Scene::itemOf(*splitter).property("unit").toReal();
+    CHECK(Scene::itemOf(*splitter).implicitWidth() >= 40.0 * unit);
+    CHECK(Scene::itemOf(*splitter).implicitWidth() < 40.0 * unit + 16.0);
+}
