@@ -42,20 +42,23 @@ and the WebAssembly build that serves the GitHub Pages client builds bank withou
 
 **One add.** The root adds bank only when the ladder is off: `if(MORPH_BUILD_BANK_EXAMPLE AND NOT
 MORPH_BUILD_LADDER)`. With the ladder on, the ladder's rung loop adds it, when it is selected by
-`MORPH_LADDER_RUNGS` or `MORPH_BUILD_BANK_EXAMPLE` is on. Bank then configures after the root's test setup (Catch2
-resolved) and after `morph::qt` exists, both of which it already tolerates; its comment about configuring before
-`morph::qt` is rewritten to the order that holds. The add-once property is checked by configuring
+`MORPH_LADDER_RUNGS` or `MORPH_BUILD_BANK_EXAMPLE` is on. Bank then configures after the root's test setup (Catch2 resolved) and still
+before `morph::qt` exists, which is why its server stays gated on the `MORPH_BUILD_QT` option rather than on
+`TARGET morph::qt`: link names resolve at generate time. The add-once property is checked by configuring
 `linux-everything`, which turns both options on.
 
 **Names the rung consumers key on.** The test target `bank_tests` is renamed `ladder_bank_tests`, the name every
 rung's suite has, so `scripts/coverage.sh`, `scripts/check_coverage_objects.sh` and the collision gate find it
-without a special case. Its cases get `TEST_PREFIX "bank."` and the label `ladder-bank`. CTest's `-L` is a
-regular expression, so `-L ladder` (ladder-tests, ladder-sanitizers) and `-L bank` (bank-sanitizers) both select
-it. Bank's other targets keep their names.
+without a special case. Its cases get `TEST_PREFIX "bank."` and the label `ladder-bank`, which bank's screen
+suites already carry; CTest's `-L` is a regular expression, so `-L ladder` (ladder-tests, ladder-sanitizers) selects
+them all. Bank's other targets keep their names.
 
-**Coverage.** `bank_lib` and `ladder_bank_tests` get `apply_coverage` under `AF_COVERAGE`; the `bank_tests` GAP entry
-in `check_coverage_objects.sh` goes. `coverage.sh` then adds `examples/bank/{include,src,screens}` as it does for
-every rung, with `src/cli` and `src/server` excluded since a `main` is not driven by the test suite. `codecov.yml`
+**Coverage.** `bank_lib`, `ladder_bank_tests` and `bank_cli` get `apply_coverage` under `AF_COVERAGE`: the
+instrumentation is a link option too, so every executable linking an instrumented `bank_lib` needs it
+(`ladder_bank_server` and `bank_screens` already have it). The `bank_tests` GAP entry in
+`check_coverage_objects.sh` goes. `coverage.sh` then adds `examples/bank/{include,src,screens}` as it does for every
+rung; the command-line and server `main`s stay out of the report without an exclusion, because neither binary is an
+llvm-cov object (neither is a test). `codecov.yml`
 gets a `bank` component beside `bookmarks` and `lims`.
 
 **Rule 5.** `examples/IMPLEMENTATION.md`'s 100% model line and branch coverage applies to bank as to every rung.
@@ -74,6 +77,8 @@ Bank's scenario corpus (`scripts/scenario/scenarios/bank/`) already exists and s
 - Their entries in `examples/client` (`example_apps.cpp`, `CMakeLists.txt`), `codecov.yml`, `.github/workflows/ci.yml`
   (filters, comments, the `kanban-tsan` job), `cmake/tsan.supp`, `examples/common/testkit` comments, and the root
   `CMakeLists.txt` comment that names kanban as the offline SQLite consumer.
+- **The `bank-sanitizers` job.** With bank among the rungs, `ladder-sanitizers` (ASan and UBSan, `-L ladder`) builds
+  and runs bank's suites, so a second sanitizer job over the same code is redundant.
 - **The `kanban-tsan` job.** It is the only ThreadSanitizer run over ladder code, and none of the three remaining
   rungs has a stress suite for it to run. It is dropped, not retargeted. The library's own TSan coverage
   (`linux-sanitizers`, `morph_tests`) is unchanged. A TSan leg over a rung comes back when a rung gains a stress
@@ -86,6 +91,10 @@ past work and are not edited, except for a new changelog entry.
 
 ## The documents that change
 
+The rule: every path or present-tense citation of a removed rung that
+`grep -rnE 'examples/(pastebin|polls|kanban|ledger|crm)|\b(pastebin|polls|kanban|crm)\b'` finds, outside the
+exemptions below, is rewritten, in code comments as in documents. The ones that need more than a rewording:
+
 - `examples/LADDER.md` is rewritten around the three rungs. `examples/IMPLEMENTATION.md`, `examples/TESTING.md`,
   `examples/bank/README.md` (its "not a rung" text) and `examples/lims/README.md` (its new role) follow.
 - `docs/GETTING-STARTED.md` walks through pastebin; it is rewritten around bookmarks, the new first rung.
@@ -96,6 +105,9 @@ past work and are not edited, except for a new changelog entry.
   current fact.
 - `tests/test_extension_bag_spike.cpp` cites `examples/crm/EXTENSION-BAG-SPIKE.md`; the finding's reasoning moves into
   the test's own comment.
+- Pastebin's `malformed-envelope` and `broken-on-purpose` scenarios move to bookmarks: the first is the only scenario
+  that pins the decode-failure reply, the second is the runner's own control that a failing scenario is reported as
+  one.
 
 ## What must not be lost
 
