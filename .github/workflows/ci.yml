@@ -2709,11 +2709,11 @@ jobs:
           path: /home/runner/.cache/sccache
           merge-multiple: true
 
-      # The repository's whole Actions cache budget is 10 GB, shared with the
-      # CPM and Qt caches, and for a moment this entry exists alongside the one
-      # it replaces. Over 4.5 GiB the save is refused and the job fails, so a
-      # cache that outgrows its budget turns master red instead of evicting
-      # everything else.
+      # The repository's whole Actions cache budget is 10 GiB, shared with the
+      # CPM and Qt caches (about 0.6 GiB). The old entry is deleted before the
+      # new one is saved, so only one copy ever counts against it. Over 8 GiB
+      # the save is refused and the job fails, so a cache that outgrows its
+      # budget turns master red instead of evicting everything else.
       - name: Check the merged cache fits its budget
         id: size
         run: |
@@ -2721,7 +2721,7 @@ jobs:
           dir=/home/runner/.cache/sccache
           bytes=$(du -sb "$dir" | cut -f1)
           entries=$(find "$dir" -type f | wc -l)
-          limit=$((4608 * 1024 * 1024))
+          limit=$((8192 * 1024 * 1024))
           echo "merged cache: ${entries} entries, $((bytes / 1048576)) MiB (budget $((limit / 1048576)) MiB)"
           if [ "$entries" -eq 0 ]; then
             echo "::error::no job uploaded any sccache entries -- nothing to publish"
@@ -2732,14 +2732,11 @@ jobs:
             exit 1
           fi
 
-      - name: Save it as the master cache
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-master-${{ github.sha }}
-
-      # Its own guard, independent of the job's: only a master push may delete
-      # entries that other branches restore.
+      # Before the save, not after: two copies would not fit the budget
+      # together. Jobs that start while the save runs build without a cache,
+      # and a failed save leaves none until the next push to master. Its own
+      # guard, independent of the job's: only a master push may delete entries
+      # that other branches restore.
       - name: Delete every older sccache entry
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         env:
@@ -2754,3 +2751,9 @@ jobs:
                 gh cache delete --repo "$GITHUB_REPOSITORY" "$key"
               fi
             done
+
+      - name: Save it as the master cache
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-master-${{ github.sha }}
