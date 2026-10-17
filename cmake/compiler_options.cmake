@@ -34,6 +34,42 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(MORPH_COMPILER_FAMILY "GNU")
 endif()
 
+# How much debug information Debug builds, and every -g this file adds, emit.
+# `full` is the compiler's plain -g. `lines` keeps only line tables
+# (-gline-tables-only on Clang, -g1 on GCC): enough for symbolized sanitizer
+# and crash stack traces, not for a debugger to show locals. Its objects are
+# several times smaller, which is what lets CI keep a whole build's objects
+# in its compiler cache. The default comes from the MORPH_DEBUG_INFO
+# environment variable when that is set, so CI can choose it once for every
+# job.
+if(DEFINED ENV{MORPH_DEBUG_INFO})
+    set(_morph_debug_info_default "$ENV{MORPH_DEBUG_INFO}")
+else()
+    set(_morph_debug_info_default "full")
+endif()
+set(MORPH_DEBUG_INFO "${_morph_debug_info_default}" CACHE STRING "Debug information level: full or lines")
+set_property(CACHE MORPH_DEBUG_INFO PROPERTY STRINGS full lines)
+unset(_morph_debug_info_default)
+
+set(MORPH_DEBUG_INFO_FLAG "-g")
+if(MORPH_DEBUG_INFO STREQUAL "lines")
+    if(MORPH_COMPILER_FAMILY STREQUAL "Clang" AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+        set(MORPH_DEBUG_INFO_FLAG "-gline-tables-only")
+    elseif(MORPH_COMPILER_FAMILY STREQUAL "GNU")
+        set(MORPH_DEBUG_INFO_FLAG "-g1")
+    else()
+        message(FATAL_ERROR "MORPH_DEBUG_INFO=lines is supported on GCC and Clang only, not ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+    # A plain -g in the Debug flags would come first on the command line and be
+    # overridden; replacing it keeps the dependencies' objects small too.
+    foreach(_lang C CXX)
+        string(REGEX REPLACE "(^| )-g( |$)" "\\1${MORPH_DEBUG_INFO_FLAG}\\2"
+            CMAKE_${_lang}_FLAGS_DEBUG "${CMAKE_${_lang}_FLAGS_DEBUG}")
+    endforeach()
+elseif(NOT MORPH_DEBUG_INFO STREQUAL "full")
+    message(FATAL_ERROR "MORPH_DEBUG_INFO must be full or lines, not '${MORPH_DEBUG_INFO}'")
+endif()
+
 set(MORPH_WARNING_FLAGS "")          # applied to every apply_warnings() target
 set(MORPH_DROPPED_WARNING_FLAGS "")  # probed for, not supported here; reported
 set(MORPH_WARNING_SENTINEL "")       # the one flag morph_verify_warning_flags()
@@ -559,17 +595,17 @@ endfunction()
 function(apply_sanitizers target mode)
     if(mode STREQUAL "asan")
         target_compile_options(${target} PRIVATE
-            -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
+            -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer ${MORPH_DEBUG_INFO_FLAG})
         target_link_options(${target} PRIVATE
             -fsanitize=address,undefined -fno-sanitize-recover=undefined)
     elseif(mode STREQUAL "tsan")
         target_compile_options(${target} PRIVATE
-            -fsanitize=thread -fno-omit-frame-pointer -g)
+            -fsanitize=thread -fno-omit-frame-pointer ${MORPH_DEBUG_INFO_FLAG})
         target_link_options(${target} PRIVATE
             -fsanitize=thread)
     elseif(mode STREQUAL "ubsan")
         target_compile_options(${target} PRIVATE
-            -fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
+            -fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer ${MORPH_DEBUG_INFO_FLAG})
         target_link_options(${target} PRIVATE
             -fsanitize=undefined -fno-sanitize-recover=undefined)
     else()
@@ -836,7 +872,7 @@ function(apply_coverage target)
     # reporting an arm as covered that nothing takes, which is the direction
     # that matters.
     target_compile_options(${target} PRIVATE
-        -fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic -g -O0)
+        -fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic ${MORPH_DEBUG_INFO_FLAG} -O0)
     target_link_options(${target} PRIVATE
         -fprofile-instr-generate)
 
@@ -946,7 +982,7 @@ function(apply_fuzzer target)
     # RemoteServer::dispatchMessage. Only meaningful on Clang (libFuzzer ships
     # with the Clang runtime via -fsanitize=fuzzer). Combined with
     # AddressSanitizer so a fuzzer-found crash is also a memory-safety finding.
-    target_compile_options(${target} PRIVATE -fsanitize=fuzzer,address -fno-omit-frame-pointer -g -O1)
+    target_compile_options(${target} PRIVATE -fsanitize=fuzzer,address -fno-omit-frame-pointer ${MORPH_DEBUG_INFO_FLAG} -O1)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer,address)
 endfunction()
 
