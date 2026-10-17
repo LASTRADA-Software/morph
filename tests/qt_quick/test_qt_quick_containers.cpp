@@ -3,6 +3,7 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QPointF>
 #include <QQuickItem>
 #include <QStringList>
 #include <QVariantList>
@@ -10,7 +11,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <vector>
 
@@ -244,4 +247,82 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     QPointF const shown = last.mapToItem(&area, QPointF{0, 0});
     CHECK(shown.y() >= 0);
     CHECK(shown.y() + last.height() <= area.height() + 1);
+}
+
+namespace {
+
+/// The scene-space distance from the bottom of @p above to the top of @p below.
+qreal verticalGap(QQuickItem const& above, QQuickItem const& below) {
+    return below.mapToScene(QPointF{0, 0}).y() - (above.mapToScene(QPointF{0, 0}).y() + above.height());
+}
+
+/// The scene-space distance from the right of @p left to the left of @p right.
+qreal horizontalGap(QQuickItem const& left, QQuickItem const& right) {
+    return right.mapToScene(QPointF{0, 0}).x() - (left.mapToScene(QPointF{0, 0}).x() + left.width());
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick containers: a stack's gap is its spacing step's distance on the theme's scale", "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setGap(2);
+    auto title = scene.backend().createText(column.get());
+    title->setText("Title");
+    auto first = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto second = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*title), Scene::itemOf(*first)) == 8.0);
+    CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 8.0);
+
+    auto row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+    row->setGap(5);
+    auto left = scene.backend().createButton(row.get());
+    auto right = scene.backend().createButton(row.get());
+    left->setLabel("Left");
+    right->setLabel("Right");
+    scene.settle();
+    CHECK(horizontalGap(Scene::itemOf(*left), Scene::itemOf(*right)) == 24.0);
+}
+
+TEST_CASE("qt_quick containers: a grid's gap and a panel's padding are spacing steps", "[qt_quick]") {
+    Scene scene;
+    auto grid = scene.backend().createGrid(nullptr);
+    grid->setColumns(2);
+    grid->setGap(1);
+    auto a = scene.backend().createText(grid.get());
+    auto b = scene.backend().createText(grid.get());
+    auto c = scene.backend().createText(grid.get());
+    a->setText("a");
+    b->setText("b");
+    c->setText("c");
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setPadding(3);
+    auto inside = scene.backend().createText(panel.get());
+    inside->setText("inside");
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*a), Scene::itemOf(*c)) == 4.0);
+    CHECK(Scene::itemOf(*b).mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*a).mapToScene(QPointF{0, 0}).x() >=
+          Scene::itemOf(*a).width() + 4.0);
+    // The frame's one-pixel border, then the step's 12 px.
+    CHECK(Scene::itemOf(*inside).mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*panel).mapToScene(QPointF{0, 0}).x() ==
+          13.0);
+}
+
+TEST_CASE("qt_quick containers: a theme's space token sets what a spacing step is", "[qt_quick]") {
+    Scene scene;
+    auto const tokens =
+        ui::parseTokens(R"({"space": {"$type": "dimension", "2": {"$value": {"value": 20, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setGap(2);
+    auto first = scene.backend().createText(column.get());
+    auto second = scene.backend().createText(column.get());
+    first->setText("first");
+    second->setText("second");
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 20.0);
 }

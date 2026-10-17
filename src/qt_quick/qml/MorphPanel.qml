@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// A framed region with a title and `padding` units around its content. A collapsible panel is an accordion section:
+// A framed region with a title and `padding` (a spacing step) around its content. A collapsible panel is an accordion section:
 // its header button asks to collapse or expand it, and a collapsed panel hides its content.
 MorphWidget {
     id: root
@@ -21,18 +21,18 @@ MorphWidget {
     Rectangle {
         id: frame
         anchors.fill: parent
-        implicitWidth: inner.implicitWidth + 2 * root.padding * Theme.unitWidth + 2
-        implicitHeight: inner.implicitHeight + 2 * root.padding * Theme.unitHeight + 2
+        implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
+        implicitHeight: inner.implicitHeight + 2 * Theme.spaceOf(root.padding) + 2
         color: "transparent"
         border.color: Theme.border
 
         ColumnLayout {
             id: inner
             anchors.fill: parent
-            anchors.leftMargin: root.padding * Theme.unitWidth + 1
-            anchors.rightMargin: root.padding * Theme.unitWidth + 1
-            anchors.topMargin: root.padding * Theme.unitHeight + 1
-            anchors.bottomMargin: root.padding * Theme.unitHeight + 1
+            anchors.leftMargin: Theme.spaceOf(root.padding) + 1
+            anchors.rightMargin: Theme.spaceOf(root.padding) + 1
+            anchors.topMargin: Theme.spaceOf(root.padding) + 1
+            anchors.bottomMargin: Theme.spaceOf(root.padding) + 1
 
             RowLayout {
                 visible: root.title !== "" || root.collapsible

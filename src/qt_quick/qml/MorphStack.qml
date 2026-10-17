@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// A column or a row: children in order along the axis, `gap` units apart.
+// A column or a row: children in order along the axis, `gap` (a spacing step) apart.
 MorphWidget {
     id: root
 
@@ -19,7 +19,7 @@ MorphWidget {
         id: layout
         anchors.fill: parent
         flow: root.axis === 0 ? GridLayout.TopToBottom : GridLayout.LeftToRight
-        rowSpacing: root.gap * Theme.unitHeight
-        columnSpacing: root.gap * Theme.unitWidth
+        rowSpacing: Theme.spaceOf(root.gap)
+        columnSpacing: Theme.spaceOf(root.gap)
     }
 }
