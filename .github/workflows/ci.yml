@@ -65,7 +65,7 @@ env:
   # `sccache --show-stats` output those steps emit -- deliberately left
   # unchanged here so the effect of the cache-sharing change can be read on
   # its own.
-  SCCACHE_CACHE_SIZE: "1G"
+  SCCACHE_CACHE_SIZE: "20G"
   # Attributes every fastcache-cc invocation to this one job, so the
   # "fastcache-cc stats" steps below can report *this* build's hit rate.
   # Without it they call `--show-stats` bare, which reads the whole
