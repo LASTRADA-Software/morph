@@ -186,8 +186,6 @@ TEST_CASE("The inspector reads the reactive runtime's counters", "[ui][inspector
     CHECK(after.recentMisuses.empty());
 }
 
-#endif
-
 namespace {
 
 constexpr std::string_view kSaving = R"({
@@ -226,3 +224,5 @@ TEST_CASE("The inspector follows a mutation from pending to fresh or error, and 
     CHECK(failed.state == "error");
     CHECK_FALSE(failed.lastError.empty());
 }
+
+#endif
