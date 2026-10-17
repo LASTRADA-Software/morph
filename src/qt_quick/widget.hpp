@@ -115,6 +115,12 @@ private:
 ///
 /// A child's item is appended to `contentFor(child)`; `move` applies `ui::ContainerWidget::moveChild` as one
 /// stacking-order change, which the Qt Quick layouts follow, so a moved child keeps its item and its state.
+/// Which way a container's content-sized children fill it: across its axis, as the backend contract asks.
+struct CrossFill {
+    bool width = false;   ///< A child whose width is content takes the container's width.
+    bool height = false;  ///< A child whose height is content takes the container's height.
+};
+
 class ContainerCore {
 public:
     ContainerCore() = default;
@@ -141,6 +147,9 @@ protected:
     /// Shows @p child, now at @p destination in `children()`, in its new place: a stacking-order change by default.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
     virtual void reorder(ItemBase& child, std::size_t origin, std::size_t destination);
+    /// Which way a content-sized child fills this container; written on each child as it is adopted. A container that
+    /// shows its children one above the other fills their width, which is the default.
+    [[nodiscard]] virtual CrossFill crossFill() const noexcept { return CrossFill{.width = true, .height = false}; }
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.

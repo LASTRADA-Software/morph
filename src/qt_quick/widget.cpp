@@ -271,6 +271,9 @@ void ContainerCore::adopt(ItemBase& child) {
     if (QQuickItem* const item = child.item(); item != nullptr && content != nullptr) {
         item->setParentItem(content);
     }
+    CrossFill const fill = crossFill();
+    child.write("fillsWidth", fill.width);
+    child.write("fillsHeight", fill.height);
     _children.push_back(&child);
     adopted(child);
 }

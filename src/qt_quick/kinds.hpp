@@ -226,6 +226,15 @@ class StackImpl final : public ContainerItemWidget<ui::StackWidget> {
 public:
     StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis);
     void setGap(int gap) override;
+
+protected:
+    /// A column fills its children's width, a row their height.
+    [[nodiscard]] CrossFill crossFill() const noexcept override {
+        return CrossFill{.width = _axis == ui::Axis::Vertical, .height = _axis == ui::Axis::Horizontal};
+    }
+
+private:
+    ui::Axis _axis;
 };
 
 class GridImpl final : public ContainerItemWidget<ui::GridWidget> {
@@ -301,6 +310,8 @@ public:
     void setOnResize(std::function<void(std::vector<int>)> onResize) override;
 
 protected:
+    /// The split view sizes its panes itself.
+    [[nodiscard]] CrossFill crossFill() const noexcept override { return {}; }
     [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override;
     void adopted(ItemBase& child) override;
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
@@ -379,6 +390,8 @@ public:
     void setKey(ui::Key key);
 
 protected:
+    /// The table places a row's cells in its columns.
+    [[nodiscard]] CrossFill crossFill() const noexcept override { return {}; }
     void adopted(ItemBase& child) override;
 
 private:

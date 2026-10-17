@@ -17,6 +17,9 @@ Item {
     property int heightKind: 0
     property int heightAmount: 0
     property int columnSpan: 1
+    // Whether a content-sized dimension fills the container: the container sets them, from its kind and axis.
+    property bool fillsWidth: false
+    property bool fillsHeight: false
     property string tooltip: ""
     // Whether C++ listens for the pointer coming to rest here.
     property bool hoverWatched: false
@@ -48,8 +51,8 @@ Item {
         return root.host ? root.host.ask(name, payload) : false
     }
 
-    Layout.fillWidth: widthKind === 2
-    Layout.fillHeight: heightKind === 2
+    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth)
+    Layout.fillHeight: heightKind === 2 || (heightKind === 0 && fillsHeight)
     Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
     Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1

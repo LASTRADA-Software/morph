@@ -130,6 +130,16 @@ reorders children, and only through this.
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included |
 | `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built. A hidden cell keeps its column: the cells after it stay under their own headers |
 
+**Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
+value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
+`space.<step>` in px on Qt Quick, cells by axis on the terminal.
+
+**The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
+units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
+in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
+fills its width. Along the axis a stack packs its children at the start, `setGap` apart; only a `stretch` child takes
+spare length. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
+
 ## Interfaces
 
 | Interface | Setters | Handlers |

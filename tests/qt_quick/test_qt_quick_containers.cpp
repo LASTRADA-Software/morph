@@ -326,3 +326,33 @@ TEST_CASE("qt_quick containers: a theme's space token sets what a spacing step i
     scene.settle();
     CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 20.0);
 }
+
+TEST_CASE("qt_quick containers: a content child fills its container across the axis", "[qt_quick]") {
+    Scene scene;
+    auto outer = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    outer->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
+    auto column = scene.backend().createStack(outer.get(), ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto narrow = scene.backend().createButton(column.get());
+    narrow->setLabel("Narrow");
+    narrow->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    auto row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+    auto tall = scene.backend().createText(row.get());
+    tall->setText("one\ntwo\nthree");
+    auto button = scene.backend().createButton(row.get());
+    button->setLabel("Go");
+    auto other = scene.backend().createButton(row.get());
+    other->setLabel("Stop");
+    scene.settle();
+
+    qreal const unit = Scene::itemOf(*outer).width() / 40.0;
+    // In a column, a content child is as wide as the column; a fixed one keeps its width.
+    CHECK(std::abs(Scene::itemOf(*input).width() - Scene::itemOf(*outer).width()) < 1.0);
+    CHECK(Scene::itemOf(*narrow).width() == 10.0 * unit);
+    // In a row, a content child is as tall as the row, and keeps its natural width.
+    CHECK(Scene::itemOf(*button).height() == Scene::itemOf(*row).height());
+    CHECK(Scene::itemOf(*button).height() > Scene::itemOf(*other).implicitHeight());
+    CHECK(Scene::itemOf(*button).width() == Scene::itemOf(*button).implicitWidth());
+    // The row packs its children at the start rather than spreading them.
+    CHECK(horizontalGap(Scene::itemOf(*button), Scene::itemOf(*other)) == 0.0);
+}

@@ -181,7 +181,18 @@ it; a widget out of reach takes none.
 
 A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size, `fixed(n)` to a preferred size of
 `n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
-horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`). A stale field is dimmed; a
+horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`).
+
+A content-sized dimension fills the container across its axis ([`../ui/backend_contract.md`](../ui/backend_contract.md),
+the cross axis). A QML child cannot see its parent's axis, so the container says: `ContainerCore::adopt` writes the
+child's `fillsWidth` and `fillsHeight` from `crossFill()`, which is the width for every container but a row (the
+height), a splitter and a table row (neither, since they size their own children). `MorphWidget` binds
+`Layout.fillWidth` to a stretch width, or a content width with `fillsWidth`, and the same for height. Along its axis a
+`MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
+start: a `GridLayout` given more length hands the spare to the gaps between its cells.
+
+A spacing step (a stack's or grid's `gap`, a panel's `padding`) is `Theme.spaceOf(step)` px, from the `space.0` …
+`space.5` tokens, not a number of units. A stale field is dimmed; a
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour
 roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
 tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
