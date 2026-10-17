@@ -1,0 +1,43 @@
+name: Upload used sccache entries
+description: >-
+  Upload the compiler-cache entries this job read or wrote as an artifact,
+  for ci.yml's sccache-publish job to merge into the next master cache.
+
+inputs:
+  name:
+    description: A name unique to this job and matrix leg.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Only the entries this build used, never the whole directory: the
+    # directory starts as the previous master cache, so uploading all of it
+    # would carry every entry forward forever and the merged cache would only
+    # grow.
+    - name: Collect the entries this build used
+      shell: bash
+      run: |
+        set -euo pipefail
+        marker="$RUNNER_TEMP/sccache-build-start"
+        if [ ! -f "$marker" ]; then
+          echo "::error::no build-start marker -- sccache-setup did not run in this job"
+          exit 1
+        fi
+        out="$RUNNER_TEMP/sccache-used"
+        rm -rf "$out"
+        mkdir -p "$out"
+        cd /home/runner/.cache/sccache
+        find . -type f -newer "$marker" -print0 | xargs -0 -r cp --parents -p -t "$out"
+        echo "entries used by this build: $(find "$out" -type f | wc -l), $(du -sh "$out" | cut -f1)"
+
+    # sccache stores its entries compressed already, so zipping them again
+    # costs time and saves nothing.
+    - name: Upload them
+      uses: actions/upload-artifact@v4
+      with:
+        name: sccache-part-${{ inputs.name }}
+        path: ${{ runner.temp }}/sccache-used
+        retention-days: 1
+        compression-level: 0
+        if-no-files-found: error

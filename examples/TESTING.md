@@ -604,10 +604,9 @@ here as though it already existed, but it has never been built:
    separate concern from the rest of this tiering (hundreds–thousands of
    sockets, a large self-hosted-class runner), not something that can run
    on every push. Everything else the ladder needs, including sanitizer and
-   fuzz-style coverage, runs in the CI tier above; `ci.yml`'s existing
-   `valgrind`/fuzz jobs are themselves triggered on every push/PR today
-   (there is no scheduled workflow in this repo yet), so nothing in the
-   ladder should assume a cadence the rest of the project doesn't have.
+   fuzz-style coverage, runs in the CI tier above; Valgrind and the
+   fuzz replay run nightly (`nightly-slow-checks.yml`), not on every push
+   or pull request.
 
 ## Two coverage numbers
 

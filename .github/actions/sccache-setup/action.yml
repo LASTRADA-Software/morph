@@ -1,0 +1,35 @@
+name: Set up sccache
+description: >-
+  Restore the compiler cache that master's last run published, install
+  sccache, and mark the build start so sccache-upload can tell which entries
+  this job used.
+
+runs:
+  using: composite
+  steps:
+    # Every job restores the same entry, read-only. Only the sccache-publish
+    # job in ci.yml writes it, from a push to master, so no pull request can
+    # evict or overwrite what the others read.
+    - name: Restore the master compiler cache
+      uses: actions/cache/restore@v4
+      with:
+        path: /home/runner/.cache/sccache
+        key: sccache-master-${{ github.sha }}
+        restore-keys: sccache-master-
+
+    - name: Install sccache
+      shell: bash
+      run: |
+        set -euo pipefail
+        # `--fail` and a file rather than a pipe into tar: piped, an HTTP
+        # error page reaches tar as a successful download and the only error
+        # in the log names gzip, not the failed request.
+        curl -sSL --fail -o /tmp/sccache.tar.gz \
+          https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+        tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+          sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+        # The restore keeps each entry's archived mtime. sccache sets an
+        # entry's mtime to now when it reads it and writes new entries with
+        # the current time, so after the build, exactly the entries this job
+        # used are newer than this marker.
+        touch "$RUNNER_TEMP/sccache-build-start"

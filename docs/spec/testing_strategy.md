@@ -262,8 +262,8 @@ Measured, 20 processes per configuration, best-of-five figures:
 | Debug loaded | 0.0598 / 0.0608 / 1.8717 | 1549 / 22684 / 22990 |
 
 The Debug rows are the ones the defaults must hold for: the only CI leg setting
-`MORPH_BUILD_LOAD_TESTS=ON` is `linux-all-features`, on the `gcc-debug` /
-`clang-debug` presets, and its `ctest --preset` passes no label filter. **The
+`MORPH_BUILD_LOAD_TESTS=ON` is the nightly `linux-all-features` job
+(`nightly-slow-checks.yml`), on the `gcc-debug` / `clang-debug` presets, and its `ctest --preset` passes no label filter. **The
 two ceilings are therefore unchanged, and that is a measurement rather than
 timidity**: Debug-under-load still spans 28x on throughput and 57x on p99 for
 the same binary, so no pair of constants separates a regression from a

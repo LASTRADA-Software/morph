@@ -47,25 +47,25 @@ env:
   # permissions: block and its "Add NuGet source" step, which is what
   # actually defines the `github` source this string names).
   VCPKG_BINARY_SOURCES: "clear;nuget,github,readwrite"
+  # One compiler cache for every Linux job. Each job restores the entry that
+  # master's last run published (.github/actions/sccache-setup), and on a push
+  # to master uploads the entries its build used (sccache-upload); the
+  # sccache-publish job merges those into the next entry and deletes the old
+  # one. Pull requests only read it. The entries are this run's working set,
+  # so the cache tracks what CI builds now instead of accumulating.
   SCCACHE_DIR: /home/runner/.cache/sccache
-  # Caps each cache family's on-disk sccache blob. Cache keys are scoped by
-  # preset name alone (gcc-debug, gcc-release, clang-debug, clang-release,
-  # clang-asan, clang-tsan, clang-ubsan, clang-coverage), not by job name --
-  # sccache disambiguates by the actual compiler invocation, so every job that
-  # builds a given preset (e.g. linux-compilers', linux-qt's, ladder-tests'
-  # and valgrind's gcc-debug legs) shares one cache family instead of keeping
-  # its own. That is 8 families total rather than one per job, so this cap
-  # times 8 stays comfortably inside GitHub's 10 GB per-repo actions-cache
-  # budget where 16 job-scoped 1 GB blobs did not, and every job's build now
-  # also warms the cache the next job's build reads from.
-  #
-  # The write side still only fires on a push to master (see each job's "Save
-  # sccache" step) so generations do not keep multiplying underneath this.
-  # Whether 1 GB is the right cap per family is a question for the
-  # `sccache --show-stats` output those steps emit -- deliberately left
-  # unchanged here so the effect of the cache-sharing change can be read on
-  # its own.
-  SCCACHE_CACHE_SIZE: "1G"
+  # Local cap only: it must exceed the published entry, or sccache evicts part
+  # of what it just restored. sccache-publish enforces the real budget.
+  SCCACHE_CACHE_SIZE: "10G"
+  # The server otherwise exits after ten idle minutes, and a test step longer
+  # than that leaves the stats step reading a fresh server's zero counters.
+  SCCACHE_IDLE_TIMEOUT: "0"
+  # Line tables instead of full debug information in every GCC and Clang
+  # Debug build (cmake/compiler_options.cmake): sanitizer stack traces keep
+  # their file and line, and the objects are small enough for one cache entry
+  # to hold every job's build. The Windows job overrides it, since MSVC has no
+  # equivalent.
+  MORPH_DEBUG_INFO: lines
   # Attributes every fastcache-cc invocation to this one job, so the
   # "fastcache-cc stats" steps below can report *this* build's hit rate.
   # Without it they call `--show-stats` bare, which reads the whole
@@ -161,10 +161,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # MSVC and clang-cl have no line-tables-only mode.
+      MORPH_DEBUG_INFO: full
     strategy:
       fail-fast: false
       matrix:
-        preset: [cl-debug, cl-release, clangcl-debug, clangcl-release]
+        # Release legs build without running tests and are the slowest jobs in
+        # the workflow, so pull requests get the two debug legs, which build
+        # and test, and master pushes add the release legs.
+        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["cl-debug", "clangcl-debug"]' || '["cl-debug", "cl-release", "clangcl-debug", "clangcl-release"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -301,7 +307,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [gcc-debug, gcc-release, clang-debug, clang-release]
+        # No gcc-debug leg: linux-qt configures gcc-debug with Qt on and runs
+        # the whole suite, which covers everything a plain gcc-debug leg would.
+        preset: [gcc-release, clang-debug, clang-release]
     steps:
       - uses: actions/checkout@v4
 
@@ -314,13 +322,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-compilers-${{ matrix.preset }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-compilers-${{ matrix.preset }}-
 
       - name: Install GCC 15 and ninja
         if: startsWith(matrix.preset, 'gcc-')
@@ -356,7 +357,7 @@ jobs:
           #     curl: (22) The requested URL returned error: 404
           #     exit=22
           #
-          # Same three lines as the `Install sccache` steps, so the
+          # Same three lines as the sccache-setup action's install step, so the
           # repository has one download idiom rather than two: `--fail` so the
           # download reports its own failure, a file so nothing downstream runs
           # when it does, and `test -s` for the 200-with-empty-body case that
@@ -367,62 +368,12 @@ jobs:
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
-      # Keyed by preset alone, not this job's name: gcc-debug/clang-debug's
-      # object files are the same ones linux-qt, ladder-tests, valgrind (for
-      # gcc-debug) and clang-tidy (for clang-debug) compile with extra
-      # -DMORPH_BUILD_* flags layered on top. sccache disambiguates by the
-      # actual compiler invocation, not by this key, so sharing one cache
-      # entry per preset across jobs only raises the hit rate -- it cannot
-      # serve a wrong object for a different flag set.
-
-      # Skipped on the self-hosted path: CompileCache.cmake's
-      # FASTCACHE_AUTO_INSTALL only fetches fastcache-cc when NONE of
-      # fastcache-cc/sccache/ccache are already on PATH ("only when there is
-      # nothing else to use" -- see that file's own comment on the guard).
-      # Installing sccache unconditionally, as this job used to, permanently
-      # defeated auto-install regardless of FASTCACHE_AUTO_INSTALL=ON:
-      # sccache was always present, so the auto-install guard's `AND NOT
-      # SCCACHE` was always false. GitHub-hosted's fallback still gets
-      # sccache exactly as before.
-      - name: Restore sccache
+      # Skipped on the self-hosted path, which caches through fastcache-cc:
+      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # launcher is on PATH, so installing sccache there would disable it.
+      - name: Set up sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
-
-      - name: Install sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail`, and a file rather than a pipe into tar. Piped, a host
-          # that serves an error page instead of a tarball kills the step with
-          #
-          #     gzip: stdin: not in gzip format
-          #     tar: Child returned status 1
-          #     tar: Error is not recoverable: exiting now
-          #
-          # because plain `curl` reports an HTTP 4xx/5xx as a *successful*
-          # transfer of that page, exit 0, straight down the pipe. The only
-          # diagnostic anyone sees names the decompressor, and the event that
-          # actually happened -- the download failed, with a status -- appears
-          # nowhere in the log. `set -o pipefail` cannot salvage it either:
-          # GitHub runs `run:` under `bash -e`, without pipefail, so the
-          # pipeline's status is tar's regardless of what curl did.
-          #
-          # `--fail` makes curl exit non-zero and print `curl: (22) The
-          # requested URL returned error: 503`; writing to a file means tar
-          # never runs at all when it does. This is not a retry policy and it
-          # does not make the outage less likely -- it makes the log name the
-          # thing that happened, which is the half of the problem that needs no
-          # CI-wide decision. The rest of that class -- a retry policy, or a
-          # marker that distinguishes "the environment failed" from "the
-          # change failed" in the check list, and the apt/PPA outages that
-          # are the other three quarters of the ticket -- is still open.
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+        uses: ./.github/actions/sccache-setup
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
       # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
@@ -448,8 +399,10 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
+      # Release legs run the suite too: these are the only builds with NDEBUG
+      # defined and MORPH_UI_DEV_TOOLS off, so code on those paths runs nowhere
+      # else.
       - name: Test
-        if: endsWith(matrix.preset, '-debug')
         run: ctest --preset ${{ matrix.preset }}
 
       # Cumulative hit/miss for this leg. Without it the cache is
@@ -457,7 +410,7 @@ jobs:
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
       #
-      # Guarded the same way as the Install/Restore sccache steps above:
+      # Guarded the same way as the Set up sccache step above:
       # sccache is never installed on the self-hosted path (fastcache-cc is
       # used there instead), so `sccache --show-stats` would just fail
       # "command not found" there.
@@ -503,21 +456,11 @@ jobs:
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps the property that makes the cache
-      # usable at all (only one branch ever writes, so no branch can delete
-      # another's entry) while collapsing the generations that actually blow
-      # the budget. Pull requests still restore, read-only, and get the full
-      # benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
   linux-sanitizers:
@@ -549,13 +492,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-sanitizers-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-sanitizers-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -567,41 +503,19 @@ jobs:
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
-      # Keyed by preset alone, matching linux-compilers' cache above: this
-      # matrix's clang-asan/clang-tsan legs share the same preset name (and
-      # much of the same object set) as ladder-sanitizers and kanban-tsan
-      # respectively, which build the identical compiler+preset with extra
-      # -DMORPH_BUILD_* flags on top. See linux-compilers' identical comment
-      # for why sharing the key across jobs is safe.
-
-      # Skipped on the self-hosted path: see linux-compilers' identical
-      # Restore/Install sccache steps for why (installing sccache
-      # unconditionally would permanently defeat fastcache-cc auto-install).
-      - name: Restore sccache
+      # Skipped on the self-hosted path, which caches through fastcache-cc:
+      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # launcher is on PATH, so installing sccache there would disable it.
+      - name: Set up sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
-
-      - name: Install sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+        uses: ./.github/actions/sccache-setup
 
       # morph::net and the SQLite offline queue are opt-in, but they are also
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
       # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
       # silently skip them. QML, the fuzzers, and the ladder stay out of
-      # this matrix entirely — they are covered by linux-coverage and
-      # linux-all-features, and "a GUI stack under TSan is mostly noise".
+      # this matrix entirely — they are covered by linux-coverage and the
+      # nightly all-features job, and "a GUI stack under TSan is mostly noise".
       # morph::tui is built too: its event pump, its posted redraws and its
       # loop executor are where a terminal application's threading lives.
       #
@@ -652,7 +566,7 @@ jobs:
       - name: Test
         env:
           # Known-false-positive suppressions, the same treatment
-          # cmake/valgrind.supp already gets on the Valgrind job below. The
+          # cmake/valgrind.supp gets on the nightly Valgrind job. The
           # entries are libstdc++'s two refcounts for a shared exception --
           # exception_ptr's, and the COW string holding the message -- both
           # decremented inside an uninstrumented libstdc++.so.6, so TSan
@@ -759,6 +673,16 @@ jobs:
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
+      - name: sccache stats
+        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: sccache --show-stats || true
+
+      - name: Upload the sccache entries this build used
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
+        uses: ./.github/actions/sccache-upload
+        with:
+          name: ${{ github.job }}-${{ strategy.job-index }}
+
   # ── Linux: coverage (clang, ladder + Qt) ─────────────────────────────
   #
   # Split out of linux-sanitizers (which used to carry this as a 4th
@@ -781,13 +705,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-coverage-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-coverage-
 
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
@@ -837,22 +754,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-coverage-${{ github.sha }}
-          restore-keys: sccache-clang-coverage-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       - name: Configure
         run: |
@@ -942,20 +845,11 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Writing a new per-commit entry from
-      # every run does not work here: with 16 cache-writing legs at 1 GB each,
-      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
-      # each other and entries rarely survive to be reused. Restricting writes
-      # to master keeps the property that makes the cache usable at all (only
-      # one branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that blow the budget. Pull requests still
-      # restore, read-only, and get the full benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-coverage-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
   # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
@@ -991,13 +885,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-kanban-tsan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-kanban-tsan-
 
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
@@ -1038,27 +925,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Keyed by preset alone (clang-tsan), matching linux-sanitizers' cache:
-      # this job's clang-tsan+Qt+kanban build shares the same compiler and
-      # much of the same core-library object set as that job's clang-tsan
-      # leg, which builds plain clang-tsan+net+offline_sqlite. See
-      # linux-compilers' identical comment for why sharing the key is safe.
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tsan-${{ github.sha }}
-          restore-keys: sccache-clang-tsan-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       # MORPH_LADDER_RUNGS=kanban (a single rung, not "all"): examples/CMakeLists.txt's
       # rung-selection loop (`if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST
@@ -1146,20 +1014,11 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Writing a new per-commit entry from
-      # every run does not work here: with 16 cache-writing legs at 1 GB each,
-      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
-      # each other and entries rarely survive to be reused. Restricting writes
-      # to master keeps the property that makes the cache usable at all (only
-      # one branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that blow the budget. Pull requests still
-      # restore, read-only, and get the full benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tsan-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: the bank example under UndefinedBehaviorSanitizer ──────────
   # No other sanitizer leg builds the bank example: linux-sanitizers,
@@ -1198,13 +1057,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-bank-ubsan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-bank-ubsan-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -1237,26 +1089,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Keyed by preset alone (clang-ubsan), matching linux-sanitizers' cache:
-      # this job's clang-ubsan+Qt+bank build shares the same compiler and much
-      # of the same core-library object set as that job's clang-ubsan leg. See
-      # linux-compilers' identical comment for why sharing the key is safe.
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-ubsan-${{ github.sha }}
-          restore-keys: sccache-clang-ubsan-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       # MORPH_BUILD_QT=ON builds bank's server alongside bank_lib. No
       # MORPH_BUILD_LADDER: bank is not a rung, so it would add every rung's
@@ -1323,14 +1157,11 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master, for the cache-budget reason every other
-      # leg's identical step gives.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-ubsan-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
@@ -1349,13 +1180,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-qt-
-
       - name: Install GCC 15, ninja, catch2, Qt6 WebSockets
         run: |
           sudo apt-get update -q
@@ -1367,27 +1191,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      # Keyed by preset alone (gcc-debug), matching linux-compilers' cache:
-      # this job's gcc-debug+Qt build shares the same core-library object set
-      # as linux-compilers' plain gcc-debug leg, ladder-tests' gcc-debug+Qt+
-      # ladder build, and valgrind's gcc-debug+net build. See linux-compilers'
-      # identical comment for why sharing the key across jobs is safe.
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-          restore-keys: sccache-gcc-debug-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       - name: Configure (gcc-debug with MORPH_BUILD_QT=ON)
         run: |
@@ -1421,74 +1226,13 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Writing a new per-commit entry from
-      # every run does not work here: with 16 cache-writing legs at 1 GB each,
-      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
-      # each other and entries rarely survive to be reused. Restricting writes
-      # to master keeps the property that makes the cache usable at all (only
-      # one branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that blow the budget. Pull requests still
-      # restore, read-only, and get the full benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: application ladder testkit (path-filtered) ─────────────────
-  linux-qt-quick:
-    name: Linux / Qt Quick renderer
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install GCC 15, ninja and catch2
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 libgl1-mesa-dev
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-
-      # morph::qt_quick needs Qt 6.5+ Quick, which Ubuntu 24.04's packages
-      # (6.4) do not provide.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      # Only the renderer and its suites: the examples and the core suites are
-      # other jobs' work.
-      - name: Configure (gcc-debug with MORPH_BUILD_QT_QUICK=ON)
-        run: |
-          cmake --preset gcc-debug \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_EXAMPLES=OFF
-
-      - name: Build
-        run: cmake --build build/gcc-debug --target morph_qt_quick_tests morph_qt_quick_frontend_tests
-
-      # `-L qt_quick` selects only the renderer's cases, qmllint over the
-      # MorphUi components among them, and `--no-tests=error` turns "selected
-      # nothing" red.
-      - name: Test (offscreen, software scene graph)
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build/gcc-debug -L qt_quick --no-tests=error --output-on-failure
-
   ladder-tests:
     name: Application ladder
     needs: probe-self-hosted
@@ -1525,11 +1269,14 @@ jobs:
           # that can. Nothing enforces this rule across the file's other `run:`
           # blocks, so it is a convention rather than something CI holds you to.
           set -o pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base="${{ github.event.before }}"
+          # Pull requests only. A master push always runs, so the compiler
+          # cache it publishes always carries this job's entries; filtered
+          # there, the next pull request that does run it would build cold.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          base="${{ github.event.pull_request.base.sha }}"
           if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -1543,7 +1290,9 @@ jobs:
           # correctly decided there was nothing to do. See
           # scripts/ladder_rungs.sh for what the non-rung half of the pattern
           # covers and why.
-          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)"
+          # tests/qt_quick/ is this job's too: it also runs the Qt Quick renderer's
+          # suites, which no other job builds.
+          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)|^tests/qt_quick/"
           echo "ladder path filter: $pattern"
           if echo "$changed" | grep -qE "$pattern"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -1660,14 +1409,6 @@ jobs:
           done
           exit "$status"
 
-      - name: Cache apt packages
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-qt-
-
       - name: Install GCC 15, ninja, catch2
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -1709,32 +1450,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Keyed by preset alone (gcc-debug), matching linux-qt's cache above:
-      # this job's gcc-debug+Qt+ladder build shares the same core-library
-      # objects as linux-compilers' plain gcc-debug leg and linux-qt's
-      # gcc-debug+Qt build.
-
-      # Skipped on the self-hosted path: see linux-compilers' identical
-      # Restore/Install sccache steps for why (installing sccache
-      # unconditionally would permanently defeat fastcache-cc auto-install).
-      - name: Restore sccache
+      # Skipped on the self-hosted path, which caches through fastcache-cc:
+      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # launcher is on PATH, so installing sccache there would disable it.
+      - name: Set up sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-          restore-keys: sccache-gcc-debug-
-
-      - name: Install sccache
-        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+        uses: ./.github/actions/sccache-setup
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -1835,6 +1556,16 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
 
+      # The Qt Quick renderer's suites, on the Qt this job installs (Ubuntu's
+      # packaged Qt is older than the 6.5 Qt Quick needs). `--no-tests=error`
+      # turns a configure that quietly dropped MORPH_BUILD_QT_QUICK red rather
+      # than green over nothing.
+      - name: Test (offscreen Qt platform, Qt Quick renderer suites)
+        if: "!cancelled() && steps.filter.outputs.run == 'true'"
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset gcc-debug -L qt_quick --no-tests=error --output-on-failure
+
       # ── The scenario corpus, against the servers just built ────────────
       # This step is the only place in CI that runs
       # scripts/scenario/run_scenarios.py. Without it the corpus can be refused
@@ -1891,7 +1622,7 @@ jobs:
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
       #
-      # Guarded the same way as the Install/Restore sccache steps above:
+      # Guarded the same way as the Set up sccache step above:
       # sccache is never installed on the self-hosted path.
       - name: sccache stats
         if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
@@ -1935,21 +1666,11 @@ jobs:
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps the property that makes the cache
-      # usable at all (only one branch ever writes, so no branch can delete
-      # another's entry) while collapsing the generations that actually blow
-      # the budget. Pull requests still restore, read-only, and get the full
-      # benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── Linux: every rung's tests under AddressSanitizer + UBSan ──────────
   # Before this job, no rung test ran under any sanitizer: ladder-tests above
@@ -2018,11 +1739,14 @@ jobs:
           # that can. Nothing enforces this rule across the file's other `run:`
           # blocks, so it is a convention rather than something CI holds you to.
           set -o pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base="${{ github.event.before }}"
+          # Pull requests only. A master push always runs, so the compiler
+          # cache it publishes always carries this job's entries; filtered
+          # there, the next pull request that does run it would build cold.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          base="${{ github.event.pull_request.base.sha }}"
           if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -2035,14 +1759,6 @@ jobs:
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Cache apt packages
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-ladder-asan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-ladder-asan-
 
       - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, ODBC
         if: steps.filter.outputs.run == 'true'
@@ -2073,31 +1789,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Keyed by preset alone (clang-asan), matching linux-sanitizers' cache:
-      # this job's clang-asan+Qt+ladder build shares the same compiler and
-      # much of the same core-library object set as that job's clang-asan leg.
-
-      # Skipped on the self-hosted path: see linux-compilers' identical
-      # Restore/Install sccache steps for why (installing sccache
-      # unconditionally would permanently defeat fastcache-cc auto-install).
-      - name: Restore sccache
+      # Skipped on the self-hosted path, which caches through fastcache-cc:
+      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # launcher is on PATH, so installing sccache there would disable it.
+      - name: Set up sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-asan-${{ github.sha }}
-          restore-keys: sccache-clang-asan-
-
-      - name: Install sccache
-        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+        uses: ./.github/actions/sccache-setup
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -2210,7 +1907,7 @@ jobs:
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
       #
-      # Guarded the same way as the Install/Restore sccache steps above:
+      # Guarded the same way as the Set up sccache step above:
       # sccache is never installed on the self-hosted path.
       - name: sccache stats
         if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
@@ -2254,502 +1951,11 @@ jobs:
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps the property that makes the cache
-      # usable at all (only one branch ever writes, so no branch can delete
-      # another's entry) while collapsing the generations that actually blow
-      # the budget. Pull requests still restore, read-only, and get the full
-      # benefit.
-      - name: Save sccache
+      - name: Upload the sccache entries this build used
         if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/sccache-upload
         with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-asan-${{ github.sha }}
-
-  # ── Linux: every optional feature enabled at once ─────────────────────
-  # Every MORPH_BUILD_* option below is off by default, and until this job
-  # existed no CI configuration turned any of them on — so several thousand
-  # lines (morph::net, the Qt/QML forms renderer, the SQLite queue, the fuzz
-  # harnesses, the vetted-HMAC adapters, the soak/bench targets) were never
-  # compiled here, let alone tested. That is how a build that cannot configure
-  # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
-  # extension both reached master green. Enabling them together also proves
-  # they compose, which building each alone would not.
-  linux-all-features:
-    name: Linux / all optional features (${{ matrix.compiler }})
-    # Not on pull_request: this leg's own build (every MORPH_BUILD_* option,
-    # the whole ladder, the fuzz replay, --parallel ctest) runs 45min-1h+, the
-    # longest in this workflow. It still runs on every push to master/main --
-    # unchanged from before this line, so the "closes a real hole" and
-    # "the one leg exercising --parallel ctest" properties below keep their
-    # existing immediacy -- and .github/workflows/nightly-slow-checks.yml runs
-    # an independent copy against master on a schedule, so a gap between
-    # pushes is still covered, just not within a PR's own required checks.
-    if: github.event_name != 'pull_request'
-    needs: probe-self-hosted
-    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
-    env:
-      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
-      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
-      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
-      # name -- CompileCache.cmake declares it as a plain option(), which
-      # CMake never reads from the environment.
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Clang additionally builds the libFuzzer harnesses, which require it.
-          - compiler: clang
-            preset: clang-debug
-            fuzzers: 'ON'
-          - compiler: gcc
-            preset: gcc-debug
-            fuzzers: 'OFF'
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-all-features-${{ matrix.compiler }}-
-
-      - name: Install toolchain and the non-Qt dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          # unixodbc-dev + libsqliteodbc: the application ladder (enabled in
-          # the configure step below) fetches the Lightweight ORM, whose CMake
-          # runs `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder
-          # fixtures open a real `DRIVER=SQLite3` connection at test time.
-          # Named explicitly rather than relied on from the runner image.
-          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt
-          # (examples/bank/CMakeLists.txt's comment on the same fetch) does
-          # `find_package(yaml-cpp)`/`find_package(libzip)` as system CONFIG
-          # packages, not through CPM — without these, Lightweight's configure
-          # fails with "could not find a package configuration file" the
-          # moment MORPH_BUILD_LADDER=ON pulls it in here.
-          sudo apt-get install -y ninja-build catch2 \
-            libsqlite3-dev libsodium-dev libssl-dev \
-            unixodbc-dev libsqliteodbc \
-            libyaml-cpp-dev libzip-dev \
-            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
-            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            sudo apt-get install -y gcc-15 g++-15
-            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-          else
-            # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
-            # bash`: see linux-compilers' identical install step for why the piped
-            # form reports success having installed nothing.
-            curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-            test -s /tmp/llvm.sh
-            sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
-          fi
-
-      # Not the distro's Qt: the ladder and MORPH_BUILD_QT_QUICK need 6.5+ and
-      # Ubuntu 24.04 still ships 6.4.2.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      # Keyed by preset alone, matching linux-compilers' cache: this matrix's
-      # gcc-debug/clang-debug legs (with every optional feature layered on
-      # top) share their core-library objects with linux-compilers' plain
-      # gcc-debug/clang-debug legs and every other job building the same
-      # preset (linux-qt, ladder-tests, valgrind for gcc-debug).
-
-      # Skipped on the self-hosted path: see linux-compilers' identical
-      # Restore/Install sccache steps for why (installing sccache
-      # unconditionally would permanently defeat fastcache-cc auto-install).
-      - name: Restore sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
-
-      - name: Install sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
-      # MORPH_REQUIRE_VETTED_HMAC is deliberately combined with
-      # MORPH_BUILD_TESTS=ON (the preset default). docs/spec/security.md
-      # documents that pairing as supported; this is what keeps it that way.
-      - name: Configure (every optional feature ON)
-        run: |
-          EXTRA=""
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            EXTRA="-DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}"
-          fi
-          # shellcheck disable=SC2086
-          # MORPH_BUILD_LADDER belongs in this job by its own charter ("every
-          # MORPH_BUILD_* option … enabling them together also proves they
-          # compose"): it is the one leg with Qt ${{ env.QT_VERSION }} from
-          # aqtinstall, the ladder, Qt Quick and the bank example together.
-          # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
-          # Configure steps for why leaving it unset is what lets
-          # fastcache-cc be selected.
-          cmake --preset ${{ matrix.preset }} \
-            -DMORPH_BUILD_NET=ON \
-            -DMORPH_BUILD_TUI=ON \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_LADDER=ON \
-            -DMORPH_LADDER_RUNGS=all \
-            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
-            -DMORPH_BUILD_LOAD_TESTS=ON \
-            -DMORPH_BUILD_HMAC_EXAMPLES=ON \
-            -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
-            -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_REQUIRE_VETTED_HMAC=ON \
-            $EXTRA \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
-
-      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
-      # catch_discover_tests() runs each Qt-linked test binary once at BUILD
-      # time to enumerate its cases (CatchAddTests.cmake), not only when
-      # ctest later executes them — a ladder_<rung>_tests binary aborts at
-      # that discovery step on this headless runner (no X server, xcb
-      # platform plugin fails to load) without it, before any real test ever
-      # runs. Only bites once MORPH_BUILD_LADDER=ON actually reaches a rung's
-      # own Qt-linked test binary, which is why this job's build only started
-      # failing here after the yaml-cpp/libzip configure gap (fixed earlier
-      # this branch) stopped masking it.
-      - name: Build
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset ${{ matrix.preset }}
-
-      # ── moc output that climbs out of the build tree ─────────────────
-      # Same gate as linux-qt, and for the same reason -- see its comment.
-      # This is the widest build it reaches: the clang leg is the only one that
-      # compiles moc output under -Weverything, where -Wshadow-header is what
-      # actually fires.
-      - name: Check no generated moc include ascends
-        run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
-
-      # Includes the fuzz *replay* tests on the clang leg: each committed seed
-      # and crash reproducer is replayed once and must not crash. This is a
-      # deterministic regression check, not a fuzzing campaign.
-      #
-      # ── --parallel: the one leg in this repository that runs ctest in
-      #    parallel, deliberately ─────────────────────────────────────────────
-      #
-      # Every other ctest invocation in .github/workflows/ is serial, which
-      # makes a whole class of defect invisible to CI by construction: two
-      # ctest cases sharing an on-disk database, a port, or a temp path cannot
-      # collide when only one runs at a time. Measured instance: bank's suites
-      # at 0/21 under `ctest -j 12` on a workstation and 21/21 serially, with
-      # CI green throughout, on every leg, for as long as the defect existed.
-      #
-      # This leg and not another: it is the only one whose ctest covers the
-      # bank suites *and* every ladder rung *and* Qt *and*
-      # the core suites, so it is the only place where one flag exposes the
-      # whole class rather than one corner of it. It also costs no new leg --
-      # a second job would add its own configure and build to every future PR,
-      # for the same coverage this already has.
-      #
-      # Measured, with the caveat stated rather than smoothed over. On a
-      # 12-core workstation, clang-debug with MORPH_BUILD_NET, MORPH_BUILD_QT
-      # and MORPH_BUILD_OFFLINE_SQLITE on -- 1898 tests, which is this tree's
-      # core/forms/net/qt/offline set but *not* the ladder or bank:
-      #
-      #     ctest                   1898/1898 passed, 275.06 s
-      #     ctest --parallel 12     1898/1898 passed,  98.25 s
-      #     ctest --parallel 12     1898/1898 passed, 127.53 s
-      #     ctest --parallel 12     1898/1898 passed,  78.80 s
-      #     ctest --parallel 4      1898/1898 passed, 109.38 s   (hosted vCPU count)
-      #
-      # So for the part that could be measured locally this is a saving, not a
-      # cost: the test step gets faster, and the leg's wall time with it. Bank,
-      # measured separately once its suites took per-case databases, is 21/21
-      # in 1.1 s parallel against 5.7 s serial.
-      #
-      # NOT measured, and this is the risk: the ladder rungs in parallel with
-      # each other. They declare RESOURCE_LOCK (cmake/morph_add_rung.cmake),
-      # which is what ctest --parallel consults to serialise the cases that
-      # need it -- a mechanism that exists precisely for this and that no other
-      # leg exercises. A `SQLite database is locked` in the ledger corpus is
-      # the shape of first bill to expect here.
-      #
-      # If this leg goes red or flaky on contention rather than on a real
-      # regression, the failing case is the finding -- file it, fix the
-      # isolation, and keep the flag. Dropping `--parallel` again puts the
-      # whole class back out of CI's sight, which is what this flag exists to
-      # prevent. $(nproc) rather than a literal: hosted runners give 4, the
-      # self-hosted fleet gives more, and the point is contention, not a number.
-      - name: Test (offscreen Qt platform, ctest in parallel)
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" --output-on-failure
-
-      # The tui suite ran at all. The step above passes just as well when
-      # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
-      # and morph_tui and its tests were never built: `-L tui` selects only the
-      # tui cases, and `--no-tests=error` turns "selected nothing" red.
-      - name: The tui suite was built and ran
-        if: "!cancelled()"
-        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
-
-      # A guard that never fires is indistinguishable from one that works, so
-      # assert the fuzz replay actually ran the committed crash reproducers
-      # rather than silently matching nothing (the `.txt`-vs-`.bin` glob bug).
-      # `!cancelled()`: this checks something the ctest step
-      # above cannot report on -- whether the replay matched the committed
-      # reproducers at all, the `.txt`-vs-`.bin` glob bug -- so skipping it
-      # when some unrelated test fails hides a guard going vacuous behind an
-      # unrelated red. Not `always()`; see ladder-tests' note. Still red on
-      # failure.
-      - name: Verify the fuzz replay covered the committed reproducers
-        if: "!cancelled() && matrix.fuzzers == 'ON'"
-        run: |
-          ctest --preset ${{ matrix.preset }} -R fuzz -V > fuzz-replay.log 2>&1
-          status=0
-          for finding in tests/fuzz/findings/*/*; do
-            if ! grep -qF "$(basename "$finding")" fuzz-replay.log; then
-              echo "::error::fuzz replay never referenced committed reproducer $finding"
-              status=1
-            fi
-          done
-          exit "$status"
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      #
-      # Guarded the same way as the Install/Restore sccache steps above:
-      # sccache is never installed on the self-hosted path.
-      - name: sccache stats
-        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: sccache --show-stats || true
-
-      # Cache statistics for this leg. The `sccache stats` step is skipped
-      # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
-      # it, so those legs ran with no cache reporting at all: exactly the
-      # "unfalsifiable" state the sccache step's own comment warns about, where
-      # a thrashing cache and a working one look identical from the outside and
-      # only the build duration hints at which one you have.
-      #
-      # The line that matters is
-      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
-      # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
-      # the build simply takes as long as a cold one, so no other signal in the
-      # job would reveal it.
-      #
-      # Mirror of the sccache step's condition, so exactly one of the two runs.
-      # `|| true` for the same reason it has one: a stats failure must never
-      # fail the job.
-      - name: fastcache-cc stats
-        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          FC="$(command -v fastcache-cc || true)"
-          if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
-          fi
-          if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
-            exit 0
-          fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
-          # This job's own numbers, not the runner's lifetime totals. The
-          # bare form is kept underneath because the whole-runner view is
-          # what shows eviction pressure across jobs, which a single job's
-          # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
-          echo "--- whole runner, all jobs (context for the above) ---"
-          "$FC" --show-stats || true
-
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps the property that makes the cache
-      # usable at all (only one branch ever writes, so no branch can delete
-      # another's entry) while collapsing the generations that actually blow
-      # the budget. Pull requests still restore, read-only, and get the full
-      # benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-
-  # ── Valgrind (memcheck) ───────────────────────────────────────────────
-  valgrind:
-    name: Valgrind memcheck
-    # Not on pull_request: this leg alone has run anywhere from ~15 minutes to
-    # over an hour on the runners available to this repo, the least
-    # predictable wait in this workflow. It still runs on every push to
-    # master/main -- unchanged from before this line -- and
-    # .github/workflows/nightly-slow-checks.yml runs an independent copy
-    # against master on a schedule, so a gap between pushes is still covered,
-    # just not within a PR's own required checks.
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-valgrind-
-
-      - name: Install GCC 15, ninja, catch2, valgrind
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 valgrind
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-
-      # Keyed by preset alone (gcc-debug), matching linux-compilers' cache:
-      # this job's gcc-debug+net+offline_sqlite build shares its
-      # core-library objects with every other job building plain gcc-debug.
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-          restore-keys: sccache-gcc-debug-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
-      # morph::net and the SQLite queue are where the raw pointers, manual
-      # buffers and C API calls live — precisely what memcheck is for — so they
-      # are built here rather than left to the default (Qt/QML stays out: it
-      # drags in a GUI stack whose own allocations dominate the report).
-      - name: Configure
-        run: |
-          cmake --preset gcc-debug \
-            -DMORPH_BUILD_NET=ON \
-            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      - name: Build
-        run: cmake --build --preset gcc-debug
-
-      - name: Run tests under Valgrind
-        run: |
-          status=0
-          for suite in tests/morph_tests tests/net/morph_net_tests tests/offline_sqlite/morph_offline_sqlite_tests; do
-            binary="build/gcc-debug/$suite"
-            if [ ! -x "$binary" ]; then
-              echo "::error::expected Valgrind suite $binary was not built"
-              exit 1
-            fi
-            echo "── memcheck: $suite ──"
-            # [oom-injector]/[issue108]: morph::testkit::OomInjector
-            # overrides the process-wide operator new/delete
-            # (tests/oom_injector.cpp) to force std::bad_alloc on demand --
-            # Valgrind's own memcheck instrumentation intercepts allocations
-            # at a layer this override does not reach, so the injector
-            # silently never fires under Valgrind (confirmed: even its own
-            # self-tests fail here). Skipped for this leg only; every other
-            # CI leg (plain clang/gcc, Windows) runs these tests normally.
-            EXTRA_ARGS=()
-            if [ "$suite" = "tests/morph_tests" ]; then
-              EXTRA_ARGS=("~[oom-injector]" "~[issue108]")
-            fi
-            # --fair-sched=yes: Valgrind runs one thread at a time, and by
-            # default a thread that yields can take the lock straight back.
-            # A test whose threads spin or yield while they wait for another
-            # thread then waits on luck. The strand drain-race case, removed
-            # with morph's own strand, did: 1982 s alone, 45 of master's 54
-            # minutes here, and past three hours on one run of #806; with a
-            # fair queue, 63 s. Kept for the next test that waits that way.
-            valgrind \
-              --fair-sched=yes \
-              --tool=memcheck \
-              --leak-check=full \
-              --show-leak-kinds=definite,indirect \
-              --errors-for-leak-kinds=definite,indirect \
-              --error-exitcode=1 \
-              --suppressions=cmake/valgrind.supp \
-              "$binary" "${EXTRA_ARGS[@]}" || status=1
-          done
-          exit "$status"
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      # Save only on a push to master. Writing a new per-commit entry from
-      # every run does not work here: with 16 cache-writing legs at 1 GB each,
-      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
-      # each other and entries rarely survive to be reused. Restricting writes
-      # to master keeps the property that makes the cache usable at all (only
-      # one branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that blow the budget. Pull requests still
-      # restore, read-only, and get the full benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
+          name: ${{ github.job }}-${{ strategy.job-index }}
 
   # ── clang-format (whole tree) ─────────────────────────────────────────
   #
@@ -2817,6 +2023,34 @@ jobs:
           path: clang-format-report.txt
           if-no-files-found: ignore
 
+  # ── actionlint (the workflows themselves) ─────────────────────────────
+  # The workflows are thousands of lines of YAML and embedded bash that no
+  # other job checks. actionlint validates expressions, job references and
+  # action inputs, and runs shellcheck over every `run:` step. shellcheck is
+  # gated at warning severity; its info and style notes are reported locally
+  # but do not fail the job.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          curl -sSL --fail -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint
+
+      - name: Lint every workflow
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          # actionlint skips shellcheck without a word when it is not on PATH,
+          # which would leave every `run:` step unchecked behind a green job.
+          command -v shellcheck || { echo "::error::shellcheck not found"; exit 1; }
+          actionlint -color
+
   # ── clang-tidy-diff (changed lines only) ──────────────────────────────
 
   clang-tidy:
@@ -2836,13 +2070,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-clang-tidy-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-clang-tidy-
 
       - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the non-Qt deps
         run: |
@@ -3463,3 +2690,73 @@ jobs:
           CC: gcc-15
           CXX: g++-15
         run: bash scripts/check_install_export.sh
+
+  # ── The master compiler cache ─────────────────────────────────────────
+  # Merges the entries every Linux job used on this push into the one cache
+  # entry all jobs restore, then deletes every older sccache entry. Runs after
+  # the builds whether or not their tests passed: a failing test does not make
+  # its objects wrong. A cancelled run publishes nothing.
+  sccache-publish:
+    name: Publish the master compiler cache
+    needs: [linux-compilers, linux-sanitizers, linux-coverage, kanban-tsan, bank-sanitizers, linux-qt, ladder-tests, ladder-sanitizers]
+    if: "!cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Download every job's entries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sccache-part-*
+          path: /home/runner/.cache/sccache
+          merge-multiple: true
+
+      # The repository's whole Actions cache budget is 10 GiB, shared with the
+      # CPM and Qt caches (about 0.6 GiB). The old entry is deleted before the
+      # new one is saved, so only one copy ever counts against it. Over 8 GiB
+      # the save is refused and the job fails, so a cache that outgrows its
+      # budget turns master red instead of evicting everything else.
+      - name: Check the merged cache fits its budget
+        id: size
+        run: |
+          set -euo pipefail
+          dir=/home/runner/.cache/sccache
+          bytes=$(du -sb "$dir" | cut -f1)
+          entries=$(find "$dir" -type f | wc -l)
+          limit=$((8192 * 1024 * 1024))
+          echo "merged cache: ${entries} entries, $((bytes / 1048576)) MiB (budget $((limit / 1048576)) MiB)"
+          if [ "$entries" -eq 0 ]; then
+            echo "::error::no job uploaded any sccache entries -- nothing to publish"
+            exit 1
+          fi
+          if [ "$bytes" -gt "$limit" ]; then
+            echo "::error::merged sccache is $((bytes / 1048576)) MiB, over its $((limit / 1048576)) MiB budget -- not saved"
+            exit 1
+          fi
+
+      # Before the save, not after: two copies would not fit the budget
+      # together. Jobs that start while the save runs build without a cache,
+      # and a failed save leaves none until the next push to master. Its own
+      # guard, independent of the job's: only a master push may delete entries
+      # that other branches restore.
+      - name: Delete every older sccache entry
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          keep="sccache-master-${GITHUB_SHA}"
+          gh cache list --repo "$GITHUB_REPOSITORY" --key sccache- --limit 100 --json key --jq '.[].key' |
+            while read -r key; do
+              if [ "$key" != "$keep" ]; then
+                echo "deleting $key"
+                gh cache delete --repo "$GITHUB_REPOSITORY" "$key"
+              fi
+            done
+
+      - name: Save it as the master cache
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-master-${{ github.sha }}

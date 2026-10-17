@@ -2,8 +2,8 @@
 
 Runs **organisation-level** GitHub Actions runners for `LASTRADA-Software`
 inside Docker containers, supervised by systemd. Used by `ci.yml`'s
-`linux-compilers`, `linux-sanitizers`, `linux-all-features`, `ladder-tests`,
-and `ladder-sanitizers` jobs whenever a runner is online and idle (see
+`linux-compilers`, `linux-sanitizers`, `ladder-tests`, and
+`ladder-sanitizers` jobs whenever a runner is online and idle (see
 **ci.yml integration** below).
 
 ## Which repositories use this
@@ -366,8 +366,7 @@ that part of the container's local state was never the problem.
 
 A self-hosted runner executes arbitrary job code on whatever host runs the
 container — a cloud VM here, or your own machine. `linux-compilers`,
-`linux-sanitizers`, `linux-all-features`, `ladder-tests`, and
-`ladder-sanitizers` inherit `ci.yml`'s top-level `on: pull_request:`
+`linux-sanitizers`, `ladder-tests`, and `ladder-sanitizers` inherit `ci.yml`'s top-level `on: pull_request:`
 trigger with no fork restriction of their own, but
 they cannot actually run on this runner from a forked PR: `probe-self-hosted`
 picks the runner by reading the `RUNNER_STATUS_TOKEN` repo secret (see
@@ -427,8 +426,8 @@ address does not resolve and every job silently compiles uncached.
 
 ## ci.yml integration
 
-None of `linux-compilers`, `linux-sanitizers`, `linux-all-features`,
-`ladder-tests`, or `ladder-sanitizers` hardcode `runs-on:`. A
+None of `linux-compilers`, `linux-sanitizers`, `ladder-tests`, or
+`ladder-sanitizers` hardcode `runs-on:`. A
 `probe-self-hosted` job that runs first checks the runners API for an
 online, non-busy runner labeled `lastrada-docker` and outputs the label
 set each of them should use — self-hosted if one is free, otherwise the
@@ -505,8 +504,8 @@ docker exec -u root lastrada-docker-1 git config --system http.version HTTP/1.1
 
 ## Compiler cache: fastcache-cc
 
-`linux-compilers`, `linux-sanitizers`, `linux-all-features`, `ladder-tests`,
-and `ladder-sanitizers` each set `FASTCACHE_ADDR=host.docker.internal:6674`
+`linux-compilers`, `linux-sanitizers`, `ladder-tests`, and
+`ladder-sanitizers` each set `FASTCACHE_ADDR=host.docker.internal:6674`
 as job-level env — but **only** when `probe-self-hosted` chose the
 self-hosted path; it is left empty on the GitHub-hosted fallback, where
 `host.docker.internal` does not resolve (it isn't a Docker container) and
