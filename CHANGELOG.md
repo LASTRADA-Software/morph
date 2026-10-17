@@ -36,6 +36,30 @@ API surface).
   `ladder_bank_tests`, and the `kanban-tsan` and `bank-sanitizers` CI jobs
   are gone.
 
+### Added
+
+- **The app explorer** (`ui/explorer.hpp`). `ui::Explorer` is a host screen
+  listing an application's screens and every model its catalog names with
+  every action of it; for one action it shows the catalog's facts, the fields
+  as the forms engine reads them, every place a loaded document names it, and
+  "Try it": the `form`, `collection` or `wizard` the framework builds for it,
+  mounted live through the document host, so submitting runs the action under
+  the principal's session. `actionUses`, `actionFields`, `tryItDocument` and
+  `tryItCatalog` are the queries it is built from. The generic client opens
+  it from the navigator's Tools module, or with `--screen explorer`, in every
+  build and mode.
+- **The shell frame** (`ui/shell_frame.hpp`). `ui::ShellFrame` is the frame a
+  client shows its screens in: a sidebar with the application's name and the
+  navigator, a top bar with the shown screen's title, the principal and
+  sign-out, and the page the workspace's tabs sit on. The generic client uses
+  it. `Workspace::handleOf`, `activeHandle`, `forceCloseAll` and
+  `WorkspaceOptions::onChanged` are what a frame needs of the workspace.
+- **Surfaces and button emphasis.** `ui-theme/1` gains dimensions, shadows and
+  the `page`, `card`, `sidebar` and `toolbar` surfaces, which Qt Quick draws as
+  schemes and the terminal draws inverse for a sidebar and a toolbar. A
+  `button`'s `emphasis` is `normal`, `primary` or `danger`. A bundle's theme
+  reaches the window (`Bundle::themes`, `qt_quick::applyBundleTheme`).
+
 ### Removed
 
 - The `MORPH_UI_DEV_TOOLS` CMake option and macro.

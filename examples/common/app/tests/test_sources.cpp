@@ -457,7 +457,7 @@ TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[examp
     LocalAppSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     {
-        auto shell =
+        auto const shell =
             morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
         auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
         REQUIRE(sidebar.has_value());

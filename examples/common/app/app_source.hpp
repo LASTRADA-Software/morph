@@ -12,6 +12,7 @@
 #include <morph/reactive/scheduler.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/explorer.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/queueing_dispatcher.hpp>
@@ -142,6 +143,11 @@ public:
         return _loaded ? &_loaded->catalog : nullptr;
     }
 
+    /// @brief The `schemas` document of every model the catalog names, by model type, or why it did not arrive: what
+    ///        the explorer lists each model's actions from.
+    /// @return Them; empty before a bundle was delivered.
+    [[nodiscard]] ui::SchemasByModel const& schemasByModel() const noexcept { return _byModel; }
+
     /// @brief The principal the source's session carries now.
     /// @return It; empty for none.
     [[nodiscard]] std::string const& principal() const noexcept { return _session.principal; }
@@ -205,12 +211,14 @@ private:
     ui::Exchange _exchange;
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
-    // The model types the loaded catalog names.
+    // The model types the loaded catalog names: its models, and the model of each action it has facts for.
     [[nodiscard]] std::vector<std::string> modelTypes() const;
     // Records each action's schema of one `{actionType: schema}` document; a document that does not parse adds none.
     void recordSchemas(std::string const& document);
     // The schema of each action, by action id, fetched for every model type the catalog names.
     std::map<std::string, std::string, std::less<>> _schemas;
+    // Each model's schemas document as it arrived, or why it did not.
+    ui::SchemasByModel _byModel;
     std::optional<ui::LoadedBundle> _loaded;
     // The catalog the screens read through `catalog()`: replaced in place when a sign-in reloads it, so a session
     // built over the first catalog sees the facts of the current one.

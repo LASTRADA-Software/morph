@@ -225,6 +225,11 @@ Sign in with any username — the login is a development login with no password
 says exactly what that does and does not mean). Two clients with two usernames
 against one server show two isolated collections and a shared feed.
 
+Once signed in, **Explorer** under the navigator's Tools (or `--screen
+explorer` at start) lists the application's screens and its models with every
+action: choose one to see its facts, its fields, the screens that use it, and
+a live form that runs it. `--ui=tui` shows the same client in the terminal.
+
 Section 12 comes back to what is — and is not — different between those two
 command lines.
 

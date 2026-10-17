@@ -213,10 +213,21 @@ bool ClientSource::isPublic(std::string_view screenId) const {
 
 std::vector<std::string> ClientSource::modelTypes() const {
     std::vector<std::string> types;
-    if (_loaded && _loaded->catalog.models) {
+    if (!_loaded) {
+        return types;
+    }
+    if (_loaded->catalog.models) {
         for (auto const& [type, info] : *_loaded->catalog.models) {
             static_cast<void>(info);
             types.push_back(type);
+        }
+    }
+    if (_loaded->catalog.actions) {
+        for (auto const& [action, info] : *_loaded->catalog.actions) {
+            static_cast<void>(action);
+            if (!info.modelType.empty() && std::ranges::find(types, info.modelType) == types.end()) {
+                types.push_back(info.modelType);
+            }
         }
     }
     return types;
@@ -236,6 +247,7 @@ void ClientSource::recordSchemas(std::string const& document) {
 
 void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
     _schemas.clear();
+    _byModel.clear();
     std::vector<std::string> const types = modelTypes();
     if (types.empty()) {
         done();
@@ -245,17 +257,19 @@ void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function
     auto const pending = std::make_shared<std::size_t>(types.size());
     auto const finished = std::make_shared<std::function<void()>>(std::move(done));
     for (std::string const& type : types) {
-        fetchSchemas(type, [this, alive, pending, finished](std::expected<std::string, std::string> const& document) {
-            if (!*alive) {
-                return;
-            }
-            if (document) {
-                recordSchemas(*document);
-            }
-            if (--*pending == 0) {
-                (*finished)();
-            }
-        });
+        fetchSchemas(type,
+                     [this, type, alive, pending, finished](std::expected<std::string, std::string> const& document) {
+                         if (!*alive) {
+                             return;
+                         }
+                         if (document) {
+                             recordSchemas(*document);
+                         }
+                         _byModel.insert_or_assign(type, document);
+                         if (--*pending == 0) {
+                             (*finished)();
+                         }
+                     });
     }
 }
 
@@ -450,8 +464,15 @@ LocalAppSource::~LocalAppSource() {
 
 void LocalAppSource::fetchSchemas(std::string const& modelType,
                                   std::function<void(std::expected<std::string, std::string>)> done) {
-    // In process, the registry the local backend dispatches through answers directly, as a server's does.
-    done(model::detail::defaultDispatcher().schemasJson(modelType));
+    // In process, the registry the local backend dispatches through answers directly, as a server's does; a model
+    // whose schemas cannot be emitted (an unsatisfiable form) is reported as not described, as a refusal would be.
+    std::expected<std::string, std::string> document;
+    try {
+        document = model::detail::defaultDispatcher().schemasJson(modelType);
+    } catch (std::exception const& error) {
+        document = std::unexpected(std::string{error.what()});
+    }
+    done(std::move(document));
 }
 
 std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect(ui::AppContext& context) {

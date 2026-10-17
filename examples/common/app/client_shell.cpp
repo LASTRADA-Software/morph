@@ -15,6 +15,7 @@
 #include <morph/reactive/scheduler.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/explorer.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
@@ -25,6 +26,7 @@
 #include <morph/ui/view.hpp>
 #include <morph/ui/workspace.hpp>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -36,6 +38,9 @@ namespace {
 
 // How often a development shell polls the source's digest (spec 5 §12).
 constexpr std::chrono::seconds kDevPollEvery{1};
+
+// The explorer's screen id, and the host screen it names.
+constexpr std::string_view kExplorer = "explorer";
 
 /// The library's document host, with `navigate` handed to the shell.
 class Host final : public ui::DocumentScreenHost {
@@ -204,10 +209,16 @@ public:
         sessionOptions.catalog = source.catalog();
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
             auto const found = _documents.find(screenId);
-            return found == _documents.end() ? nullptr : found->second;
+            if (found != _documents.end()) {
+                return found->second;
+            }
+            // The explorer's "Try it" documents.
+            auto const generated = _generated.find(screenId);
+            return generated == _generated.end() ? nullptr : generated->second;
         };
         hostOptions.backend = _backend;
         _application = std::make_unique<Application>(
@@ -237,6 +248,10 @@ public:
                     }
                 });
             });
+        _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
+            static_cast<void>(params);
+            return std::expected<std::unique_ptr<ui::ScreenHandle>, ui::MountError>{openExplorer(page)};
+        });
         if (_options.history != nullptr) {
             _routes.emplace(*_options.history, [this](std::string const& route) { openRoute(route); });
             // A start screen asked for by name wins over the route the history holds.
@@ -278,6 +293,43 @@ public:
     }
 
 private:
+    // The explorer over what the source holds now: the catalog, every model's schemas, and the loaded documents.
+    std::unique_ptr<ui::ScreenHandle> openExplorer(ui::ContainerWidget& page) {
+        ui::ExplorerOptions explorer;
+        if (ui::CatalogReply const* const catalog = _source->catalogReply()) {
+            explorer.catalog = *catalog;
+        }
+        explorer.facts = _source->catalog();
+        explorer.schemas = _source->schemasByModel();
+        explorer.documents = _documents;
+        if (_appDocument) {
+            explorer.documents.emplace(std::string{ui::kAppFile}, _appDocument);
+        }
+        explorer.host = _host.get();
+        explorer.provide = [this](std::string const& screenId, std::shared_ptr<ui::Document const> document) {
+            _generated.insert_or_assign(screenId, std::move(document));
+        };
+        explorer.onOpen = [this](std::string const& screenId) {
+            // Posted: the button that asked is a widget of the explorer's tab.
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    mount(screenId, {});
+                }
+            });
+        };
+        return std::make_unique<ui::Explorer>(_context->runtime(), *_backend, page, std::move(explorer));
+    }
+
+    // What `{"can": …}` reads: the actions the current catalog lets the principal run.
+    void showPermitted() {
+        ui::CatalogReply const* const catalog = _source->catalogReply();
+        if (_session == nullptr || catalog == nullptr) {
+            return;
+        }
+        _session->setPermitted(
+            std::set<std::string, std::less<>>{catalog->permitted.begin(), catalog->permitted.end()});
+    }
+
     // Signing out, from the frame's button or a document's `signOut`: every screen goes first, so their private
     // instances are released under the session that owns them; from a posted task, since the screen that signed out
     // may still be running its commands.
@@ -308,6 +360,14 @@ private:
                 }
             }
         }
+        // The explorer, once there is a navigator to list it in.
+        if (!entries.empty()) {
+            entries.push_back(ui::CatalogEntry{.id = std::string{kExplorer},
+                                               .title = "Explorer",
+                                               .module = "Tools",
+                                               .singleton = true,
+                                               .host = std::string{kExplorer}});
+        }
         ui::ShellFrameOptions frame;
         frame.applicationName = _source->bundle() != nullptr ? _source->bundle()->applicationId : std::string{};
         frame.navigator.entries = entries;
@@ -328,6 +388,9 @@ private:
         ui::WorkspaceOptions tabs;
         tabs.screens = [entries = catalog != nullptr ? catalog->entries
                                                      : std::vector<ui::CatalogEntry>{}](std::string_view screenId) {
+            if (screenId == kExplorer) {
+                return ui::WorkspaceScreen{.singleton = true, .host = std::string{kExplorer}};
+            }
             for (ui::CatalogEntry const& entry : entries) {
                 if (entry.id == screenId) {
                     return ui::WorkspaceScreen{.singleton = entry.singleton,
@@ -339,6 +402,7 @@ private:
             return ui::WorkspaceScreen{};
         };
         tabs.onChanged = [this] { showActiveTitle(); };
+        tabs.hosts = &_hosts;
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page());
     }
@@ -367,7 +431,17 @@ private:
     // load is reported and left out.
     void loadDocuments(ui::Bundle const& bundle) {
         _documents.clear();
+        _generated.clear();
+        _appDocument.reset();
         ui::Catalog const catalog = _source->catalog();
+        if (auto const app = bundle.documents.find(ui::kAppFile); app != bundle.documents.end()) {
+            auto loaded = ui::loadDocumentText(app->second, ui::LoadOptions{.catalog = catalog});
+            if (loaded) {
+                _appDocument = std::make_shared<ui::Document const>(std::move(*loaded));
+            } else {
+                problem(loaded.error().message());
+            }
+        }
         for (std::string const& screenId : _source->screens()) {
             auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
             if (!loaded) {
@@ -417,6 +491,7 @@ private:
                     return;
                 }
                 loadDocuments(*_source->bundle());
+                showPermitted();
                 _changed = true;
                 _signedIn = signingIn;
                 // A screen that signed in in place stays when it is still listed and the new session has no screen
@@ -551,6 +626,11 @@ private:
     bool _reloading = false;
     std::optional<std::pair<std::string, ui::ParamMap>> _pending;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
+    // The app document, which the explorer reads its uses from.
+    std::shared_ptr<ui::Document const> _appDocument;
+    // The documents the explorer generates for "Try it", by their screen ids.
+    std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
+    ui::ScreenHostRegistry _hosts;
     std::unique_ptr<ui::Session> _session;
     std::unique_ptr<Application> _application;
     std::unique_ptr<Host> _host;

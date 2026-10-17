@@ -373,6 +373,18 @@ morph::session::SigningAuthorizer authz{
 
 The default (no policy) admits any validly-signed, unexpired token.
 
+## Describing a model type (`schemas`)
+
+A `schemas` request asks the server for a model type's `{actionType: schema}` document: every action's field names,
+types, bounds, rules and payload fingerprint. That is a disclosure, and a read channel over the type, so `RemoteServer`
+gates it as it gates `instances`: it stamps the verified principal and calls `authorize(session, typeId, "")`, an
+empty action id meaning *describe this type*. A refusal answers `unauthorized`. A deployer can therefore refuse
+describing a type without refusing using it, and must refuse it to any caller the server would not let execute.
+
+The UI client asks for the schemas of every model its catalog names, so its forms can be built, and the app explorer
+lists a model's actions from the same documents. Neither sees a type the authorizer will not describe: the client
+builds no form for its actions, and the explorer lists the model as "not described" with the refusal.
+
 ## The per-instance ownership hook (`authorizeInstance`)
 
 `authorize` sees only the model **type**, so it cannot answer "may this caller

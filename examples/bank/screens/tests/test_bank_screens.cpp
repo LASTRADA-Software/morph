@@ -207,3 +207,53 @@ TEST_CASE("bank screens: a loan's schedule is the model's, through the schedule 
     CHECK(textsUnder(harness, table.value()) == 36U);
     CHECK(harness.problems().empty());
 }
+
+// Mutation: send the explorer's Try it form to Deposit instead (B's balance is unchanged).
+TEST_CASE("bank screens: the explorer lists the bank's models, and its Try it for Transfer moves money",
+          "[bank-screens][explorer]") {
+    std::string const user = uniqueUser("explore");
+    bank::testing::ensurePrincipal(user);
+    std::vector<std::int64_t> keys;
+    {
+        ScreenHarness accounts = open(bank::screens::kAccounts, user);
+        REQUIRE(accounts.waitFor([&accounts] { return accounts.find("Column", "openForm").has_value(); }));
+        openAccount(accounts, 1);
+        openAccount(accounts, 2);
+        keys = optionKeys(accounts, "historyAccount");
+    }
+    REQUIRE(keys.size() == 2U);
+    {
+        ScreenHarness move = open(bank::screens::kMove, user);
+        REQUIRE(move.waitFor([&move] { return optionKeys(move, "account").size() == 2; }));
+        move.backend().choose(move.find("Select", "account").value(), morph::ui::Key{keys.at(0)});
+        REQUIRE(move.waitForText("balance", "Balance 0.00"));
+        move.editField("depositForm", "amountMinor", "1250");
+        REQUIRE(move.submitForm("depositForm"));
+        REQUIRE(move.waitForText("balance", "Balance 12.50"));
+    }
+
+    ScreenHarness harness = open("explorer", user);
+    for (std::string_view const model : {"AccountModel", "TransactionModel", "Bank_AuthModel", "LoanModel"}) {
+        CHECK(harness.find("Collapsible", "explorer_model_" + std::string{model}).has_value());
+    }
+    harness.click("explorer_action_Transfer");
+    REQUIRE(harness.waitFor([&harness] { return harness.find("Panel", "explorer_fields").has_value(); }));
+    CHECK(harness.backend().find("Text", "text", "fromAccountId").has_value());
+    CHECK(harness.backend().find("Text", "text", "permitted").has_value());
+    harness.editField("tryit", "fromAccountId", std::to_string(keys.at(0)));
+    harness.editField("tryit", "toAccountId", std::to_string(keys.at(1)));
+    harness.editField("tryit", "amountMinor", "500");
+    REQUIRE(harness.submitForm("tryit"));
+    bool const replied = harness.waitFor([&harness] { return !harness.text("tryit_result").value_or("").empty(); });
+    reportProblems(harness);
+    CHECK(replied);
+    CHECK(harness.text("tryit_error").value_or("").empty());
+
+    // The balances read back from the move screen.
+    ScreenHarness move = open(bank::screens::kMove, user);
+    REQUIRE(move.waitFor([&move] { return optionKeys(move, "account").size() == 2; }));
+    move.backend().choose(move.find("Select", "account").value(), morph::ui::Key{keys.at(1)});
+    CHECK(move.waitForText("balance", "Balance 5.00"));
+    move.backend().choose(move.find("Select", "account").value(), morph::ui::Key{keys.at(0)});
+    CHECK(move.waitForText("balance", "Balance 7.50"));
+}
