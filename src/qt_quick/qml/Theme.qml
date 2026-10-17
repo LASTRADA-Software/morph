@@ -2,9 +2,9 @@
 pragma Singleton
 import QtQuick
 
-// The colours and units every MorphUi component reads. A unit is the default font's average character width
-// horizontally and its line height vertically. The colours and the stale opacity are the ui-theme/1 defaults;
-// qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
+// The colours, units and spacing every MorphUi component reads. A unit is the default font's average character width
+// horizontally and its line height vertically. The colours, the stale opacity and the spacing are the ui-theme/1
+// defaults; qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
 QtObject {
     readonly property FontMetrics metrics: FontMetrics {}
     readonly property real unitWidth: metrics.averageCharacterWidth
@@ -24,6 +24,13 @@ QtObject {
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     property real staleOpacity: 0.55
+    // The spacing scale in px, one entry per spacing step 0 to 5: the `space.<step>` defaults.
+    property list<real> space: [0, 4, 8, 12, 16, 24]
+
+    // A spacing step's distance; a step outside 0 to 5 is the nearest end, as the mount already clamps it.
+    function spaceOf(step: int): real {
+        return space[Math.max(0, Math.min(space.length - 1, step))]
+    }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.
     function textColor(role: int): color {

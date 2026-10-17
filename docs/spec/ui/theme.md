@@ -97,10 +97,16 @@ the combination (`base + dark + density compact: …`). At most 17³ combination
 | `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.neutral`, `color.selection` | colour |
 | `color.ok`, `color.warn`, `color.err`, `color.info`, each with `.bg`, `.border` and `.dot` | colour |
 | `opacity.stale` | number |
+| `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
-its default otherwise; a token outside the set is ignored. `space.*`, `control.*`, `font.*` and `elevation.*` are
-resolved and checked like any token, and join the set with the components that read them.
+its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
+(`kPixelsPerRem`): the renderers do not change the root font size. `ThemeValues` keeps colours, numbers and
+dimensions in three maps.
+
+The six `space` tokens are the spacing scale: `space.<step>` is how far apart a `gap` or `padding` of that step puts
+things (`docs/spec/ui/view_tree.md`, the spacing step). Other `space.*` paths, `control.*`, `font.*` and
+`elevation.*` are resolved and checked like any token, and join the set with the components that read them.
 
 ## On Qt Quick
 
@@ -112,6 +118,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus` | `color.<same name>` |
 | `error`, `success`, `info`, `warn` | `color.err`, `color.ok`, `color.info`, `color.warn` |
 | `staleOpacity` | `opacity.stale` |
+| `space` (six px lengths) | `space.0` … `space.5` |
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
@@ -133,5 +140,6 @@ component draws them.
 ## Not yet
 
 - Surfaces resolved per subtree, and `{"pref": "density"}` choosing a density at runtime.
-- The scale tokens in the closed set, and units from them rather than from the default font.
+- Units from the scale tokens rather than from the default font; `control.*`, `font.*` and `elevation.*` in the closed
+  set.
 - Icons, the terminal renderer's palette mapping.

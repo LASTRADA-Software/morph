@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QColor>
+#include <QList>
 #include <QObject>
 #include <QQmlEngine>
 #include <QVariant>
 #include <array>
 #include <morph/qt_quick/theme.hpp>
+#include <morph/ui/view.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -54,6 +56,17 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
     if (auto const stale = values.numbers.find("opacity.stale");
         stale != values.numbers.end() && !theme->setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
+    }
+    QList<qreal> space;
+    for (int step = 0; step <= ui::kMaxSpacingStep; ++step) {
+        auto const found = values.dimensions.find("space." + std::to_string(step));
+        if (found == values.dimensions.end()) {
+            break;
+        }
+        space.push_back(found->second);
+    }
+    if (space.size() == ui::kMaxSpacingStep + 1 && !theme->setProperty("space", QVariant::fromValue(space))) {
+        unset.emplace_back("space");
     }
     return unset;
 }

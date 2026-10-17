@@ -125,6 +125,33 @@ namespace detail {
     return found == object.end() ? nullptr : &found->second;
 }
 
+/// @brief How many px a `rem` is: the default root font size, which the renderers do not change.
+inline constexpr double kPixelsPerRem = 16.0;
+
+/// @brief A DTCG `dimension` value in px.
+/// @param json The value: an object of a number `value` and the unit `px` or `rem`.
+/// @return Its length in px, or nothing when it is not a dimension.
+[[nodiscard]] inline std::optional<double> pixelsOf(Json const& json) {
+    auto const* const object = std::get_if<Json::object_t>(&json.data);
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    Json const* const value = memberOf(*object, "value");
+    Json const* const unit = memberOf(*object, "unit");
+    auto const length = value != nullptr ? numberOf(*value) : std::nullopt;
+    auto const* const unitText = unit != nullptr ? std::get_if<std::string>(&unit->data) : nullptr;
+    if (!length || unitText == nullptr) {
+        return std::nullopt;
+    }
+    if (*unitText == "px") {
+        return *length;
+    }
+    if (*unitText == "rem") {
+        return *length * kPixelsPerRem;
+    }
+    return std::nullopt;
+}
+
 /// @brief Reads `#rgb`, `#rrggbb` or `#rrggbbaa`.
 /// @param text The text.
 /// @return The colour, or nothing.
@@ -803,8 +830,9 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
 
 /// @brief What a `ui-theme/1` token is read as.
 enum class ThemeTokenKind : std::uint8_t {
-    Color,   ///< A `color` token.
-    Number,  ///< A `number` token.
+    Color,      ///< A `color` token.
+    Number,     ///< A `number` token.
+    Dimension,  ///< A `dimension` token, read in px (a `rem` is 16 px).
 };
 
 /// @brief One token of the closed `ui-theme/1` set: its path, kind and the `MorphUi` default.
@@ -815,14 +843,14 @@ struct ThemeTokenSpec {
     ThemeTokenKind kind;
     /// @brief A colour's default, `#rrggbb`; empty for a number.
     std::string_view color;
-    /// @brief A number's default.
+    /// @brief A number's default, or a dimension's in px.
     double number = 0.0;
 };
 
-/// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles and the opacity the
-/// built-in
-///        components read, and the semantic sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 25> kThemeTokens = {{
+/// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
+///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
+///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
+inline constexpr std::array<ThemeTokenSpec, 31> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -848,6 +876,12 @@ inline constexpr std::array<ThemeTokenSpec, 25> kThemeTokens = {{
     {.path = "color.info.border", .kind = ThemeTokenKind::Color, .color = "#90caf9", .number = 0.0},
     {.path = "color.info.dot", .kind = ThemeTokenKind::Color, .color = "#1565c0", .number = 0.0},
     {.path = "opacity.stale", .kind = ThemeTokenKind::Number, .color = "", .number = 0.55},
+    {.path = "space.0", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "space.1", .kind = ThemeTokenKind::Dimension, .color = "", .number = 4.0},
+    {.path = "space.2", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
+    {.path = "space.3", .kind = ThemeTokenKind::Dimension, .color = "", .number = 12.0},
+    {.path = "space.4", .kind = ThemeTokenKind::Dimension, .color = "", .number = 16.0},
+    {.path = "space.5", .kind = ThemeTokenKind::Dimension, .color = "", .number = 24.0},
 }};
 
 /// @brief The `ui-theme/1` set's values for one resolved theme.
@@ -856,6 +890,8 @@ struct ThemeValues {
     std::map<std::string, Rgba, std::less<>> colors;
     /// @brief Every number of the set, by path.
     std::map<std::string, double, std::less<>> numbers;
+    /// @brief Every dimension of the set, by path, in px.
+    std::map<std::string, double, std::less<>> dimensions;
 };
 
 /// @brief Fills the closed `ui-theme/1` set from a resolved theme.
@@ -875,6 +911,12 @@ struct ThemeValues {
             }
             values.colors.insert_or_assign(std::string{spec.path},
                                            color.value_or(detail::hexColor(spec.color).value_or(Rgba{})));
+        } else if (spec.kind == ThemeTokenKind::Dimension) {
+            std::optional<double> pixels;
+            if (found != resolved.end() && found->second.type == "dimension") {
+                pixels = detail::pixelsOf(found->second.value);
+            }
+            values.dimensions.insert_or_assign(std::string{spec.path}, pixels.value_or(spec.number));
         } else {
             std::optional<double> number;
             if (found != resolved.end() && found->second.type == "number") {

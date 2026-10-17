@@ -9,6 +9,7 @@
 #include <map>
 #include <morph/ui/service.hpp>
 #include <morph/ui/theme.hpp>
+#include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -102,6 +103,27 @@ TEST_CASE("theme: a variant layers over base, later files winning", "[ui][theme]
     CHECK(values.colors.at("color.err").hex() == "#cc1a1a80");
 }
 
+TEST_CASE("theme: the spacing scale is space.0 to space.5, in px, with rem as 16 px", "[ui][theme]") {
+    morph::ui::ThemeValues const defaults = morph::ui::themeValues();
+    std::vector<double> scale;
+    for (int step = 0; step <= morph::ui::kMaxSpacingStep; ++step) {
+        scale.push_back(defaults.dimensions.at("space." + std::to_string(step)));
+    }
+    CHECK(scale == std::vector<double>{0, 4, 8, 12, 16, 24});
+
+    TokenSet const tokens = parsed(R"({"space": {"$type": "dimension",
+        "3": {"$value": {"value": 20, "unit": "px"}}, "4": {"$value": {"value": 1.5, "unit": "rem"}},
+        "5": {"$type": "number", "$value": 99}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.dimensions.at("space.3") == 20.0);
+    CHECK(values.dimensions.at("space.4") == 24.0);
+    // A path of the set with another type keeps the default.
+    CHECK(values.dimensions.at("space.5") == 24.0);
+    CHECK(values.dimensions.at("space.1") == 4.0);
+}
+
 TEST_CASE("theme: a missing token takes its default; an unknown path is ignored", "[ui][theme]") {
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");
@@ -115,7 +137,8 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     CHECK(values.colors.at("color.muted").hex() == "#6e6e73");
     CHECK(values.colors.at("color.warn.bg").hex() == "#fff4e5");
     CHECK_FALSE(values.colors.contains("space.2"));
-    CHECK(values.colors.size() + values.numbers.size() == morph::ui::kThemeTokens.size());
+    CHECK(values.dimensions.at("space.2") == 8.0);
+    CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() == morph::ui::kThemeTokens.size());
 
     // A path of the set with another type keeps the default.
     TokenSet const wrong = parsed(R"({"color": {"text": {"$type": "number", "$value": 3}}})");
