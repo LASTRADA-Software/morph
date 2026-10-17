@@ -130,7 +130,8 @@ The theme index already defines a surface: a named token file that overrides the
   holding the application's name and a `ui::Navigator`; then the **main** column (stretch), holding the **top bar**
   (a row, surface `toolbar`: the shown screen's title, a stretch spacer, the principal's name and a sign-out button)
   and the **workspace** (`ui::Workspace`'s tabs, stretch, surface `page`);
-- `showSignedIn(bool)`: signed out, the sidebar and the top bar are hidden;
+- `showSignedIn(bool)`: false hides the sidebar and the top bar. The client shows them once the catalog lists a
+  screen beyond the public ones, so an application without a sign-in shows them from the start;
 - each tab's content is padded by step 4.
 
 `Workspace` gains `handleOf(index)` and `activeHandle()`, giving the `ScreenHandle` of a tab, so a client can remount a
