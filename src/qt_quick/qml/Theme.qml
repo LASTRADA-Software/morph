@@ -24,6 +24,24 @@ QtObject {
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     property real staleOpacity: 0.55
+    // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
+    // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
+    property color background: "#f2f3f7"
+    property real radiusControl: 6
+    property real radiusCard: 10
+    property real controlHeight: 32
+    property real bodySize: 0
+    property real headingSize: 0
+    readonly property real bodyPixels: bodySize > 0 ? bodySize : metrics.font.pixelSize > 0 ? metrics.font.pixelSize
+                                                                                           : metrics.height * 0.75
+    readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
+    // The card's shadow: `elevation.card`.
+    property color cardShadowColor: "#14000000"
+    property real cardShadowOffsetX: 0
+    property real cardShadowOffsetY: 2
+    property real cardShadowBlur: 10
+    property real cardShadowSpread: 0
+
     // The spacing scale in px, one entry per spacing step 0 to 5: the `space.<step>` defaults.
     property list<real> space: [0, 4, 8, 12, 16, 24]
 

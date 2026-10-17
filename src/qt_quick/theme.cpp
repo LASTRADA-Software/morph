@@ -34,6 +34,15 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorPropert
     {"color.focus", "focus"},
 }};
 
+/// The `Theme` property each dimension token of the set sets, besides the spacing scale.
+constexpr std::array<std::pair<std::string_view, char const*>, 5> kDimensionProperties = {{
+    {"radius.control", "radiusControl"},
+    {"radius.card", "radiusCard"},
+    {"control.height", "controlHeight"},
+    {"font.size.body", "bodySize"},
+    {"font.size.heading", "headingSize"},
+}};
+
 }  // namespace
 
 std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values) {
@@ -56,6 +65,33 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
     if (auto const stale = values.numbers.find("opacity.stale");
         stale != values.numbers.end() && !theme->setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
+    }
+    if (auto const background = values.colors.find("color.background"); background != values.colors.end()) {
+        ui::Rgba const& color = background->second;
+        if (!theme->setProperty("background", QColor{color.r, color.g, color.b, color.a})) {
+            unset.emplace_back("background");
+        }
+    }
+    for (auto const& [path, property] : kDimensionProperties) {
+        auto const found = values.dimensions.find(path);
+        if (found != values.dimensions.end() && !theme->setProperty(property, found->second)) {
+            unset.emplace_back(property);
+        }
+    }
+    if (auto const card = values.shadows.find("elevation.card"); card != values.shadows.end()) {
+        ui::ThemeShadow const& shadow = card->second;
+        std::array<std::pair<char const*, QVariant>, 5> const parts{{
+            {"cardShadowColor", QColor{shadow.color.r, shadow.color.g, shadow.color.b, shadow.color.a}},
+            {"cardShadowOffsetX", shadow.offsetX},
+            {"cardShadowOffsetY", shadow.offsetY},
+            {"cardShadowBlur", shadow.blur},
+            {"cardShadowSpread", shadow.spread},
+        }};
+        for (auto const& [property, value] : parts) {
+            if (!theme->setProperty(property, value)) {
+                unset.emplace_back(property);
+            }
+        }
     }
     QList<qreal> space;
     for (int step = 0; step <= ui::kMaxSpacingStep; ++step) {

@@ -352,7 +352,40 @@ namespace detail {
                : std::optional<std::string>{"not a font weight"};
 }
 
+/// @brief Checks a `shadow`: an object of a `color` and the dimensions `offsetX`, `offsetY`, `blur` and `spread`, or a
+///        non-empty list of them.
+/// @param value The value.
+/// @return Why it is not one, or nothing.
+[[nodiscard]] inline std::optional<std::string> checkShadow(Json const& value) {
+    auto const one = [](Json const& layer) {
+        auto const* const object = std::get_if<Json::object_t>(&layer.data);
+        if (object == nullptr) {
+            return false;
+        }
+        Json const* const color = memberOf(*object, "color");
+        if (color == nullptr || !colorOf(*color)) {
+            return false;
+        }
+        return std::ranges::all_of(std::array<std::string_view, 4>{"offsetX", "offsetY", "blur", "spread"},
+                                   [object](std::string_view name) {
+                                       Json const* const length = memberOf(*object, name);
+                                       return length != nullptr && !checkMeasure("dimension", *length);
+                                   });
+    };
+    if (auto const* const layers = std::get_if<Json::array_t>(&value.data)) {
+        if (!layers->empty() && std::ranges::all_of(*layers, one)) {
+            return std::nullopt;
+        }
+    } else if (one(value)) {
+        return std::nullopt;
+    }
+    return std::string{"a shadow is an object of a colour and the dimensions offsetX, offsetY, blur and spread"};
+}
+
 inline std::optional<std::string> checkTokenValue(std::string_view type, Json const& value) {
+    if (type == "shadow") {
+        return checkShadow(value);
+    }
     if (type == "color") {
         return colorOf(value) ? std::nullopt : std::optional<std::string>{"not a colour in sRGB or hex"};
     }
@@ -833,6 +866,21 @@ enum class ThemeTokenKind : std::uint8_t {
     Color,      ///< A `color` token.
     Number,     ///< A `number` token.
     Dimension,  ///< A `dimension` token, read in px (a `rem` is 16 px).
+    Shadow,     ///< A `shadow` token: a colour and four px lengths; of a list of layers, the first.
+};
+
+/// @brief A `shadow` token's default, in the form a `constexpr` table can hold.
+struct ThemeShadowSpec {
+    /// @brief The colour, `#rrggbbaa`.
+    std::string_view color;
+    /// @brief The horizontal offset, in px.
+    double offsetX = 0.0;
+    /// @brief The vertical offset, in px.
+    double offsetY = 0.0;
+    /// @brief The blur radius, in px.
+    double blur = 0.0;
+    /// @brief The spread, in px.
+    double spread = 0.0;
 };
 
 /// @brief One token of the closed `ui-theme/1` set: its path, kind and the `MorphUi` default.
@@ -845,12 +893,14 @@ struct ThemeTokenSpec {
     std::string_view color;
     /// @brief A number's default, or a dimension's in px.
     double number = 0.0;
+    /// @brief A shadow's default.
+    ThemeShadowSpec shadow{};
 };
 
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 31> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 38> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -882,7 +932,32 @@ inline constexpr std::array<ThemeTokenSpec, 31> kThemeTokens = {{
     {.path = "space.3", .kind = ThemeTokenKind::Dimension, .color = "", .number = 12.0},
     {.path = "space.4", .kind = ThemeTokenKind::Dimension, .color = "", .number = 16.0},
     {.path = "space.5", .kind = ThemeTokenKind::Dimension, .color = "", .number = 24.0},
+    {.path = "color.background", .kind = ThemeTokenKind::Color, .color = "#f2f3f7", .number = 0.0},
+    {.path = "radius.control", .kind = ThemeTokenKind::Dimension, .color = "", .number = 6.0},
+    {.path = "radius.card", .kind = ThemeTokenKind::Dimension, .color = "", .number = 10.0},
+    {.path = "control.height", .kind = ThemeTokenKind::Dimension, .color = "", .number = 32.0},
+    {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "elevation.card",
+     .kind = ThemeTokenKind::Shadow,
+     .color = "",
+     .number = 0.0,
+     .shadow = {.color = "#00000014", .offsetX = 0.0, .offsetY = 2.0, .blur = 10.0, .spread = 0.0}},
 }};
+
+/// @brief A `shadow` of the set, resolved.
+struct ThemeShadow {
+    /// @brief The colour.
+    Rgba color{};
+    /// @brief The horizontal offset, in px.
+    double offsetX = 0.0;
+    /// @brief The vertical offset, in px.
+    double offsetY = 0.0;
+    /// @brief The blur radius, in px.
+    double blur = 0.0;
+    /// @brief The spread, in px.
+    double spread = 0.0;
+};
 
 /// @brief The `ui-theme/1` set's values for one resolved theme.
 struct ThemeValues {
@@ -892,7 +967,44 @@ struct ThemeValues {
     std::map<std::string, double, std::less<>> numbers;
     /// @brief Every dimension of the set, by path, in px.
     std::map<std::string, double, std::less<>> dimensions;
+    /// @brief Every shadow of the set, by path.
+    std::map<std::string, ThemeShadow, std::less<>> shadows;
 };
+
+namespace detail {
+
+/// @brief A checked `shadow` value as a `ThemeShadow`; of a list of layers, the first.
+/// @param json The value, checked by `checkShadow`.
+/// @return It, or nothing when it is not a shadow.
+[[nodiscard]] inline std::optional<ThemeShadow> shadowOf(Json const& json) {
+    Json const* layer = &json;
+    if (auto const* const layers = std::get_if<Json::array_t>(&json.data)) {
+        if (layers->empty()) {
+            return std::nullopt;
+        }
+        layer = &layers->front();
+    }
+    auto const* const object = std::get_if<Json::object_t>(&layer->data);
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    Json const* const color = memberOf(*object, "color");
+    auto const rgba = color != nullptr ? colorOf(*color) : std::nullopt;
+    auto const length = [object](std::string_view name) -> std::optional<double> {
+        Json const* const member = memberOf(*object, name);
+        return member != nullptr ? pixelsOf(*member) : std::nullopt;
+    };
+    auto const x = length("offsetX");
+    auto const y = length("offsetY");
+    auto const blur = length("blur");
+    auto const spread = length("spread");
+    if (!rgba || !x || !y || !blur || !spread) {
+        return std::nullopt;
+    }
+    return ThemeShadow{.color = *rgba, .offsetX = *x, .offsetY = *y, .blur = *blur, .spread = *spread};
+}
+
+}  // namespace detail
 
 /// @brief Fills the closed `ui-theme/1` set from a resolved theme.
 ///
@@ -911,6 +1023,18 @@ struct ThemeValues {
             }
             values.colors.insert_or_assign(std::string{spec.path},
                                            color.value_or(detail::hexColor(spec.color).value_or(Rgba{})));
+        } else if (spec.kind == ThemeTokenKind::Shadow) {
+            std::optional<ThemeShadow> shadow;
+            if (found != resolved.end() && found->second.type == "shadow") {
+                shadow = detail::shadowOf(found->second.value);
+            }
+            values.shadows.insert_or_assign(
+                std::string{spec.path},
+                shadow.value_or(ThemeShadow{.color = detail::hexColor(spec.shadow.color).value_or(Rgba{}),
+                                            .offsetX = spec.shadow.offsetX,
+                                            .offsetY = spec.shadow.offsetY,
+                                            .blur = spec.shadow.blur,
+                                            .spread = spec.shadow.spread}));
         } else if (spec.kind == ThemeTokenKind::Dimension) {
             std::optional<double> pixels;
             if (found != resolved.end() && found->second.type == "dimension") {

@@ -100,3 +100,25 @@ TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing tok
     // The theme sets no muted colour: the MorphUi default stands.
     CHECK(item.property("muted").value<QColor>() == QColor{"#6e6e73"});
 }
+
+TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"background": {"$type": "color", "$value": "#101010"}},
+      "radius": {"$type": "dimension", "card": {"$value": {"value": 14, "unit": "px"}}},
+      "control": {"height": {"$type": "dimension", "$value": {"value": 40, "unit": "px"}}},
+      "elevation": {"card": {"$type": "shadow", "$value": {"color": "#11223344", "offsetX": {"value": 1, "unit": "px"},
+        "offsetY": {"value": 3, "unit": "px"}, "blur": {"value": 6, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("background").value<QColor>() == QColor{"#101010"});
+    CHECK(theme->property("radiusCard").toReal() == 14.0);
+    CHECK(theme->property("radiusControl").toReal() == 6.0);
+    CHECK(theme->property("controlHeight").toReal() == 40.0);
+    CHECK(theme->property("cardShadowColor").value<QColor>() == QColor::fromRgb(0x11, 0x22, 0x33, 0x44));
+    CHECK(theme->property("cardShadowOffsetY").toReal() == 3.0);
+    CHECK(theme->property("cardShadowBlur").toReal() == 6.0);
+}
