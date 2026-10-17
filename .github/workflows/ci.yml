@@ -57,6 +57,9 @@ env:
   # Local cap only: it must exceed the published entry, or sccache evicts part
   # of what it just restored. sccache-publish enforces the real budget.
   SCCACHE_CACHE_SIZE: "10G"
+  # The server otherwise exits after ten idle minutes, and a test step longer
+  # than that leaves the stats step reading a fresh server's zero counters.
+  SCCACHE_IDLE_TIMEOUT: "0"
   # Line tables instead of full debug information in every GCC and Clang
   # Debug build (cmake/compiler_options.cmake): sanitizer stack traces keep
   # their file and line, and the objects are small enough for one cache entry

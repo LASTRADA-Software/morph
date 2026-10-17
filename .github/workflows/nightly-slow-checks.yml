@@ -37,6 +37,9 @@ env:
   SCCACHE_DIR: /home/runner/.cache/sccache
   # Large enough for the master cache these jobs restore; see ci.yml.
   SCCACHE_CACHE_SIZE: "10G"
+  # The server otherwise exits after ten idle minutes, and a test step longer
+  # than that leaves the stats step reading a fresh server's zero counters.
+  SCCACHE_IDLE_TIMEOUT: "0"
   MORPH_DEBUG_INFO: lines
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
