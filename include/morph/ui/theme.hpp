@@ -144,7 +144,7 @@ inline constexpr double kPixelsPerRem = 16.0;
         return std::nullopt;
     }
     if (*unitText == "px") {
-        return *length;
+        return length;
     }
     if (*unitText == "rem") {
         return *length * kPixelsPerRem;

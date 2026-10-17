@@ -201,7 +201,7 @@ TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfa
 TEST_CASE("qt_quick theme: a surface set after its children exist still colours them", "[qt_quick]") {
     Scene scene;
     auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
-    auto nested = scene.backend().createStack(sidebar.get(), ui::Axis::Vertical);
+    auto const nested = scene.backend().createStack(sidebar.get(), ui::Axis::Vertical);
     auto inside = scene.backend().createText(nested.get());
     inside->setText("late");
     sidebar->setSurface("sidebar");

@@ -551,7 +551,7 @@ TEST_CASE("qt_quick widgets: a widget's width class follows the host's width", "
 
 TEST_CASE("qt_quick widgets: a primary button is accent-filled, a danger one error-filled", "[qt_quick]") {
     Scene scene;
-    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto plain = scene.backend().createButton(column.get());
     auto primary = scene.backend().createButton(column.get());
     auto danger = scene.backend().createButton(column.get());

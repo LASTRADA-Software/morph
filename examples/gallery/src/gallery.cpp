@@ -87,12 +87,13 @@ ui::Screen homeScreen() {
              ui::filePicker({.label = "File", .onPick = ui::set(picked, ui::event())})},
             {.title = "Inputs", .padding = 2});
 
-        auto layout = ui::row({ui::grid({ui::text({.text = "Cell"}), ui::spacer()}, {.gap = 1, .columns = 2}),
-                               ui::scroll({ui::text({.text = "Scrolled"})}, "vertical"),
-                               ui::tabs({{.label = "One", .children = ui::text({.text = "First tab"})},
-                                         {.label = "Two", .children = ui::text({.text = "Second tab"})}}),
-                               ui::splitter({ui::text({.text = "Left"}), ui::text({.text = "Right"})}, "horizontal")},
-                              {.gap = 2});
+        auto const layout =
+            ui::row({ui::grid({ui::text({.text = "Cell"}), ui::spacer()}, {.gap = 1, .columns = 2}),
+                     ui::scroll({ui::text({.text = "Scrolled"})}, "vertical"),
+                     ui::tabs({{.label = "One", .children = ui::text({.text = "First tab"})},
+                               {.label = "Two", .children = ui::text({.text = "Second tab"})}}),
+                     ui::splitter({ui::text({.text = "Left"}), ui::text({.text = "Right"})}, "horizontal")},
+                    {.gap = 2});
 
         auto menus = ui::menu({{.label = "View",
                                 .items = {{.label = "Side panel", .onClick = ui::open(side)},

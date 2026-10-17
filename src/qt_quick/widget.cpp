@@ -286,12 +286,13 @@ void ContainerCore::adopt(ItemBase& child) {
     adopted(child);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): a container's children may be containers, which pass it on in turn.
 void ContainerCore::passSchemeDown() const {
     QObject* const inherited = scheme();
     if (inherited == nullptr) {
         return;
     }
-    for (ItemBase* const child : _children) {
+    for (ItemBase const* const child : _children) {
         child->write("inheritedScheme", QVariant::fromValue(inherited));
         auto const* const nested = dynamic_cast<ContainerCore const*>(child);
         if (nested != nullptr && child->read("surface").toString().isEmpty()) {

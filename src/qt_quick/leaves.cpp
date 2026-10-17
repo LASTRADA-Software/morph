@@ -57,7 +57,14 @@ ButtonImpl::ButtonImpl(Context& context, ui::ContainerWidget* parent)
 void ButtonImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 
 void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
-    write("emphasis", emphasis == ui::ButtonEmphasis::Primary ? 1 : emphasis == ui::ButtonEmphasis::Danger ? 2 : 0);
+    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger.
+    int shown = 0;
+    if (emphasis == ui::ButtonEmphasis::Primary) {
+        shown = 1;
+    } else if (emphasis == ui::ButtonEmphasis::Danger) {
+        shown = 2;
+    }
+    write("emphasis", shown);
 }
 
 void ButtonImpl::setOnClick(ui::Action onClick) {

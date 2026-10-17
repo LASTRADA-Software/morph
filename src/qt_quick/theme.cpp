@@ -64,42 +64,39 @@ constexpr std::array<std::pair<std::string_view, char const*>, 5> kDimensionProp
     {"font.size.heading", "headingSize"},
 }};
 
-}  // namespace
-
-std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
-                                    std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces) {
-    std::vector<std::string> unset;
-    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
-    if (theme == nullptr) {
-        unset.emplace_back("Theme");
-        return unset;
-    }
+// The colours, the stale opacity, the background and the dimensions; each property that would not take its value
+// is added to @p unset.
+void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     for (auto const& [path, property] : kColorProperties) {
         auto const found = values.colors.find(path);
         if (found == values.colors.end()) {
             continue;
         }
         ui::Rgba const& color = found->second;
-        if (!theme->setProperty(property, QColor{color.r, color.g, color.b, color.a})) {
+        if (!theme.setProperty(property, QColor{color.r, color.g, color.b, color.a})) {
             unset.emplace_back(property);
         }
     }
     if (auto const stale = values.numbers.find("opacity.stale");
-        stale != values.numbers.end() && !theme->setProperty("staleOpacity", stale->second)) {
+        stale != values.numbers.end() && !theme.setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
     }
     if (auto const background = values.colors.find("color.background"); background != values.colors.end()) {
         ui::Rgba const& color = background->second;
-        if (!theme->setProperty("background", QColor{color.r, color.g, color.b, color.a})) {
+        if (!theme.setProperty("background", QColor{color.r, color.g, color.b, color.a})) {
             unset.emplace_back("background");
         }
     }
     for (auto const& [path, property] : kDimensionProperties) {
         auto const found = values.dimensions.find(path);
-        if (found != values.dimensions.end() && !theme->setProperty(property, found->second)) {
+        if (found != values.dimensions.end() && !theme.setProperty(property, found->second)) {
             unset.emplace_back(property);
         }
     }
+}
+
+// The card's shadow and the spacing steps, which only a complete set of steps replaces.
+void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     if (auto const card = values.shadows.find("elevation.card"); card != values.shadows.end()) {
         ui::ThemeShadow const& shadow = card->second;
         std::array<std::pair<char const*, QVariant>, 5> const parts{{
@@ -110,7 +107,7 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
             {"cardShadowSpread", shadow.spread},
         }};
         for (auto const& [property, value] : parts) {
-            if (!theme->setProperty(property, value)) {
+            if (!theme.setProperty(property, value)) {
                 unset.emplace_back(property);
             }
         }
@@ -123,12 +120,17 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         }
         space.push_back(found->second);
     }
-    if (space.size() == ui::kMaxSpacingStep + 1 && !theme->setProperty("space", QVariant::fromValue(space))) {
+    if (space.size() == ui::kMaxSpacingStep + 1 && !theme.setProperty("space", QVariant::fromValue(space))) {
         unset.emplace_back("space");
     }
+}
+
+// Each surface's colours, onto the scheme the theme keeps for it.
+void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces,
+                 std::vector<std::string>& unset) {
     for (auto const& [name, surface] : surfaces) {
         QVariant made;
-        QMetaObject::invokeMethod(theme, "schemeObject", Qt::DirectConnection, qReturnArg(made),
+        QMetaObject::invokeMethod(&theme, "schemeObject", Qt::DirectConnection, qReturnArg(made),
                                   QVariant{QString::fromStdString(name)});
         auto* const scheme = made.value<QObject*>();
         if (scheme == nullptr) {
@@ -146,6 +148,21 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
             }
         }
     }
+}
+
+}  // namespace
+
+std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
+                                    std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces) {
+    std::vector<std::string> unset;
+    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr) {
+        unset.emplace_back("Theme");
+        return unset;
+    }
+    setPlainTokens(*theme, values, unset);
+    setShadowAndSpace(*theme, values, unset);
+    setSurfaces(*theme, surfaces, unset);
     return unset;
 }
 
@@ -153,17 +170,17 @@ std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
                                           std::map<std::string, std::string, std::less<>> const& themes) {
     std::optional<ui::ThemeIndex> index;
     std::map<std::string, ui::TokenSet, std::less<>> files;
-    for (auto const& [id, text] : themes) {
+    for (auto const& [fileId, text] : themes) {
         if (ui::isThemeIndex(text)) {
             if (auto parsed = ui::parseThemeIndex(text)) {
                 index = std::move(*parsed);
             } else {
-                return {"theme index " + id + ": " + parsed.error()};
+                return {"theme index " + fileId + ": " + parsed.error()};
             }
         } else if (auto tokens = ui::parseTokens(text)) {
-            files.insert_or_assign(id, std::move(*tokens));
+            files.insert_or_assign(fileId, std::move(*tokens));
         } else {
-            return {"theme file " + id + ": " + tokens.error()};
+            return {"theme file " + fileId + ": " + tokens.error()};
         }
     }
     if (!index) {

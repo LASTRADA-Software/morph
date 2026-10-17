@@ -270,8 +270,8 @@ TEST_CASE("qt_quick containers: a stack's gap is its spacing step's distance on 
     column->setGap(2);
     auto title = scene.backend().createText(column.get());
     title->setText("Title");
-    auto first = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
-    auto second = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto const first = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto const second = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
     scene.settle();
     CHECK(verticalGap(Scene::itemOf(*title), Scene::itemOf(*first)) == 8.0);
     CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 8.0);
@@ -332,12 +332,12 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
     Scene scene;
     auto outer = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     outer->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
-    auto column = scene.backend().createStack(outer.get(), ui::Axis::Vertical);
-    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto const column = scene.backend().createStack(outer.get(), ui::Axis::Vertical);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
     auto narrow = scene.backend().createButton(column.get());
     narrow->setLabel("Narrow");
     narrow->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
-    auto row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+    auto const row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
     auto tall = scene.backend().createText(row.get());
     tall->setText("one\ntwo\nthree");
     auto button = scene.backend().createButton(row.get());
@@ -366,7 +366,7 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
 
 TEST_CASE("qt_quick containers: a content-sized splitter is as large as its panes", "[qt_quick]") {
     Scene scene;
-    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
     auto splitter = scene.backend().createSplitter(row.get(), ui::Axis::Horizontal);
     auto left = scene.backend().createText(splitter.get());
     auto right = scene.backend().createText(splitter.get());
@@ -384,7 +384,7 @@ TEST_CASE("qt_quick containers: a content-sized splitter is as large as its pane
     scene.settle();
     qreal const unit = Scene::itemOf(*splitter).property("unit").toReal();
     CHECK(Scene::itemOf(*splitter).implicitWidth() >= 40.0 * unit);
-    CHECK(Scene::itemOf(*splitter).implicitWidth() < 40.0 * unit + 16.0);
+    CHECK(Scene::itemOf(*splitter).implicitWidth() < (40.0 * unit) + 16.0);
 }
 
 TEST_CASE("qt_quick containers: a root that stretches in height fills the window; content roots sit at the top",

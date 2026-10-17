@@ -46,7 +46,7 @@ protected:
     // The roots draw with the theme's own scheme.
     [[nodiscard]] QObject* scheme() const override {
         QQmlEngine* const engine = _column != nullptr ? qmlEngine(_column) : nullptr;
-        QObject* const theme =
+        QObject const* const theme =
             engine != nullptr ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
                               : nullptr;
         return theme != nullptr ? theme->property("themeScheme").value<QObject*>() : nullptr;
