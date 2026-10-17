@@ -1,28 +1,12 @@
 name: Nightly slow checks
 
-# Independent backstop for the two legs .github/workflows/ci.yml no longer
-# gates pull requests with: Valgrind memcheck (15min-1h+, the least
-# predictable wait in that workflow) and Linux / all optional features
-# (45min-1h+, the only leg building every MORPH_BUILD_* option together,
-# including MORPH_BUILD_LADDER + MORPH_BUILD_QT_QUICK). Both still run
-# immediately on every push to master/main inside ci.yml itself -- unchanged
-# from before that split -- so this workflow's job is to catch what a push
-# cannot: environment drift between pushes (a moved apt/vcpkg package, a
-# revoked cache entry, a flaky self-hosted runner) on a day nobody pushes.
+# The two slowest checks, run once a night rather than on every pull request
+# or push: Valgrind memcheck, and Linux / all optional features, the only
+# build that turns every MORPH_BUILD_* option on together. A failure files an
+# issue (reconcile-issues below), and the next passing night closes it.
 #
-# Maintenance note, stated rather than hidden: the two jobs below are
-# deliberate copies of ci.yml's `valgrind` and `linux-all-features` jobs, not
-# a shared definition -- this repository has no reusable-workflow (
-# `workflow_call`) precedent yet, and introducing one here would need to
-# thread `probe-self-hosted`'s outputs and every relevant secret across a
-# call boundary for two jobs, versus accepting that a future change to
-# either original needs a second, deliberate edit here. The nightly copy
-# also drops the self-hosted-runner probe `linux-all-features` uses in
-# ci.yml (kept simple as always-GitHub-hosted, since a schedule has no PR
-# latency to protect) and both copies never write sccache -- their
-# `github.event_name` is `schedule`/`workflow_dispatch`, never `push`, so the
-# unmodified "Save sccache" `if:` condition they inherit is always false and
-# they only ever restore what the last push already wrote.
+# Both restore the compiler cache master publishes and never write it: their
+# builds are not part of the set ci.yml's sccache-publish job merges.
 #
 # A third job, `tracy-capture`, is not a copy of anything in ci.yml: it is
 # the check that morph's profiler zones fire under a real capture. See its
@@ -51,7 +35,9 @@ env:
   MORPH_TEST_LOG_LEVEL: debug
   VCPKG_BINARY_SOURCES: "clear;nuget,github,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
-  SCCACHE_CACHE_SIZE: "1G"
+  # Large enough for the master cache these jobs restore; see ci.yml.
+  SCCACHE_CACHE_SIZE: "10G"
+  MORPH_DEBUG_INFO: lines
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
   CATCH2_VERSION: "3.4.0"
@@ -59,10 +45,9 @@ env:
 
 jobs:
   # ── Valgrind (memcheck) ───────────────────────────────────────────────
-  # Verbatim copy of ci.yml's `valgrind` job -- see that job's own comments
-  # for the reasoning behind each step. Kept in step by hand; there is
-  # nothing that checks the two stay identical (see this file's own top
-  # comment).
+  # memcheck over the core suite on a gcc-debug build with morph::net and the
+  # SQLite offline queue on. Nightly because a run takes anywhere from about
+  # fifteen minutes to over an hour.
   valgrind:
     name: Valgrind memcheck (nightly)
     runs-on: ubuntu-24.04
@@ -79,19 +64,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-          restore-keys: sccache-gcc-debug-
-
-      - name: Install sccache
-        run: |
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       - name: Configure
         run: |
@@ -133,13 +107,6 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-
       - name: Capture a failure excerpt for the issue filer
         if: failure()
         run: |
@@ -158,10 +125,10 @@ jobs:
           retention-days: 7
 
   # ── Linux: every optional feature ON ──────────────────────────────────
-  # Verbatim copy of ci.yml's `linux-all-features` job, minus the
-  # self-hosted-runner probe (see this file's own top comment for why) --
-  # see that job's own comments for the reasoning behind each remaining
-  # step.
+  # Every MORPH_BUILD_* option is off by default, and this is the only build
+  # that turns them all on: morph::net, Qt Quick, the ladder, the SQLite queue,
+  # the fuzz harnesses, the vetted-HMAC adapters and the soak/bench targets.
+  # Building them together is also what proves they compose.
   linux-all-features:
     name: Linux / all optional features (nightly, ${{ matrix.compiler }})
     runs-on: ubuntu-24.04
@@ -207,19 +174,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
-
-      - name: Install sccache
-        run: |
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+      - name: Set up sccache
+        uses: ./.github/actions/sccache-setup
 
       - name: Configure (every optional feature ON)
         run: |
@@ -282,13 +238,6 @@ jobs:
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true
-
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
       - name: Capture a failure excerpt for the issue filer
         if: failure()
