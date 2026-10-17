@@ -877,9 +877,7 @@ TEST_CASE("A host screen's handle cannot save unless it says so, and answers a s
     // A foreign handle has no root, no inspector, and is not remounted.
     RelayHost host{harness, true};
     CHECK(DocumentScreenHost::rootOf(handle) == nullptr);
-#if MORPH_UI_DEV_TOOLS
     CHECK_FALSE(DocumentScreenHost::inspector(handle).has_value());
-#endif
     auto const remounted = host.remount(handle, loadOrFail(kNote, morph::ui::testing::corpusCatalog()));
     REQUIRE_FALSE(remounted.has_value());
     CHECK(remounted.error().reason == "not a document screen of this host");
@@ -889,7 +887,6 @@ TEST_CASE("A host screen's handle cannot save unless it says so, and answers a s
     CHECK(noDocument.error().screenId.empty());
 }
 
-#if MORPH_UI_DEV_TOOLS
 // Mutation: hand out an inspector over a closed screen (it reads a destroyed screen).
 TEST_CASE("The inspector of a mounted screen is there until the screen closes", "[ui][host]") {
     Harness harness;
@@ -901,7 +898,6 @@ TEST_CASE("The inspector of a mounted screen is there until the screen closes", 
     harness.settle();
     CHECK_FALSE(DocumentScreenHost::inspector(*note).has_value());
 }
-#endif
 
 // Mutation: skip the opener's answer when the host keeps the default onScreenClosed (the title stays "none").
 TEST_CASE("A dialog answers its opener under a host that ignores screens closing themselves", "[ui][host]") {

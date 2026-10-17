@@ -14,18 +14,14 @@
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/frontend.hpp>
+#include <morph/qt_quick/inspector.hpp>
 #include <morph/qt_quick/scheduler.hpp>
 #include <morph/reactive/runtime.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
 #include "qt_quick/keys.hpp"
-
-#if MORPH_UI_DEV_TOOLS
-#include <morph/qt_quick/inspector.hpp>
-#endif
 
 namespace morph::qt_quick {
 
@@ -133,9 +129,8 @@ int Frontend::run(ui::AppSource& source) {
     QObject::connect(&window, &QQuickWindow::closing, &anchor, [&context] { context.quit(0); });
     // The shell the inspector reads; cleared once the loop has ended, before runApp destroys the shell.
     ui::MountedShell* shown = nullptr;
-#if MORPH_UI_DEV_TOOLS
     std::optional<InspectorWindow> inspector;
-    if (_config.devTools) {
+    if (_config.devTools == ui::DevelopmentTools::On) {
         inspector.emplace([&shown](std::function<void(ui::Inspector&)> const& visit) {
             if (shown != nullptr) {
                 shown->inspectFocused(visit);
@@ -143,7 +138,6 @@ int Frontend::run(ui::AppSource& source) {
         });
         inspector->attachTo(window);
     }
-#endif
     return ui::runApp(
         context, source,
         [this, &backend, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
@@ -153,11 +147,9 @@ int Frontend::run(ui::AppSource& source) {
         },
         [&] {
             int const code = context.loop(window);
-#if MORPH_UI_DEV_TOOLS
             if (inspector) {
                 inspector->hide();
             }
-#endif
             shown = nullptr;
             return code;
         });

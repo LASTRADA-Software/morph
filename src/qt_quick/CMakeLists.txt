@@ -95,11 +95,7 @@ add_library(morph_qt_quick STATIC
     widget.hpp
 )
 add_library(morph::qt_quick ALIAS morph_qt_quick)
-# The development inspector's window (spec 6 §21) is compiled only into a build with the development tools, so a
-# release client contains none of it; its public header declares nothing without them.
-if(MORPH_UI_DEV_TOOLS)
-    target_sources(morph_qt_quick PRIVATE inspector.cpp inspector_model.hpp)
-endif()
+target_sources(morph_qt_quick PRIVATE inspector.cpp inspector_model.hpp)
 target_sources(morph_qt_quick
     PUBLIC
     FILE_SET HEADERS

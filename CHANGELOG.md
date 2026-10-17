@@ -11,6 +11,35 @@ API surface).
 
 ### Changed
 
+- **A `gap` or `padding` is a spacing step.** It names a step from 0 to 5,
+  which the mount clamps and each frontend maps: the theme's `space.0` …
+  `space.5` (0, 4, 8, 12, 16, 24 px by default) on Qt Quick, and rows and
+  columns on the terminal (vertically 0, 0, 0, 1, 1, 2; horizontally 0, 1, 1,
+  2, 2, 3). It used to be a number of units, a line height on Qt Quick, so a
+  `gap = 8` put fields 136 px apart. Every example and the forms engine are
+  rewritten to steps.
+- **A content-sized child fills its container across the axis on Qt Quick**,
+  as it already did on the terminal: a form's fields are as wide as the form.
+  A button, badge or checkbox keeps its natural width at the start of its
+  line, and a stack packs its children at the start rather than spreading
+  them. A content-sized splitter is as large as its panes.
+- **The development tools are in every build.** The inspector and document
+  reload are compiled into every client, release builds included, and turned
+  on by development mode (`--dev`, `MORPH_UI_DEV=1`).
+  `SessionOptions::developmentTools` (`DevelopmentTools::Off` or `On`) decides
+  whether a session's screens record what the inspector reads;
+  `Inspector::over(screen)` gives no inspector for an `Off` screen;
+  `qt_quick::FrontendConfig::devTools` is a `DevelopmentTools`.
+- **The application ladder is three rungs:** bookmarks (small), bank
+  (medium, now a rung) and lims (large). Pastebin, polls, kanban, ledger and
+  crm are removed with their scenario corpora; bank's suite is
+  `ladder_bank_tests`, and the `kanban-tsan` and `bank-sanitizers` CI jobs
+  are gone.
+
+### Removed
+
+- The `MORPH_UI_DEV_TOOLS` CMake option and macro.
+
 - **A Qt Quick input is one accessible node, found by its name and role.**
   Every input kind showed as two nodes: the widget's item carried the name
   and the test id but read as a plain item with no text or value, and the

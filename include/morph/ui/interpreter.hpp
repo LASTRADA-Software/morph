@@ -382,6 +382,8 @@ struct SessionOptions {
     /// @brief Maps a failed call to its error kind (`denied`, `offline`, `timeout`, …); empty uses the default,
     ///        which knows the bridge's own failures and calls everything else `error`.
     std::function<std::string(std::exception_ptr const&)> classify;
+    /// @brief Development mode: whether this session's screens record what the inspector reads. Off by default.
+    DevelopmentTools developmentTools = DevelopmentTools::Off;
 };
 
 namespace detail {
@@ -1044,7 +1046,6 @@ struct BorrowedModel {
 
 class Screen;
 
-#if MORPH_UI_DEV_TOOLS
 class Inspector;
 
 /// @brief One command of a command list the inspector's log shows (spec 6 §21).
@@ -1067,7 +1068,6 @@ struct CommandLogEntry {
     ///        every batch.
     std::uint64_t batch = 0;
 };
-#endif
 
 /// @brief What `Interpreter::mount` is given beside the document.
 struct MountOptions {
@@ -1789,7 +1789,6 @@ struct LowerCtx {
     return listed(kStateful, kind);
 }
 
-#if MORPH_UI_DEV_TOOLS
 /// @brief How many command lists the inspector's log keeps.
 inline constexpr std::size_t kCommandLogSize = 256;
 
@@ -1851,7 +1850,6 @@ inline constexpr std::size_t kPruneLoweredAt = 256;
             return "unknown";
     }
 }
-#endif
 
 /// @brief One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that
 ///        declares scopes, lowers nodes and runs commands.
@@ -1874,6 +1872,7 @@ public:
           prefs{session.runtime()},
           submitted{session.runtime(), false},
           pendingWork{session.runtime(), 0},
+          recording{owner.options().developmentTools == DevelopmentTools::On},
           _doc{std::move(doc)} {
         ValueRecord defaults;
         for (auto const& [name, point] : _doc->customize) {
@@ -1918,11 +1917,9 @@ public:
     /// @param path   Where.
     /// @param reason What.
     void report(std::string_view path, std::string_view reason) {
-#if MORPH_UI_DEV_TOOLS
         if (inspecting) {
             return;
         }
-#endif
         std::string key = std::string{path} + '\x1f' + std::string{reason};
         if (!reported.insert(std::move(key)).second) {
             return;
@@ -2061,6 +2058,8 @@ public:
     /// @brief The open dialogs and drawers, the mutation runs and the transfers in flight, across every scope of the
     ///        screen: what a close waits for (spec 6 §3).
     reactive::Signal<int> pendingWork;
+    /// @brief Whether this screen records what the inspector reads: its session's `developmentTools`, read once.
+    bool const recording;
 
     /// @brief Counts pending work in or out.
     /// @param delta What started (positive) or ended (negative).
@@ -2076,7 +2075,6 @@ public:
     };
     /// @brief The states of the own scope of the screen this one replaces, by name (`MountOptions::keepStateOf`).
     std::map<std::string, KeptState, std::less<>> keptStates;
-#if MORPH_UI_DEV_TOOLS
     /// @brief A node as it was lowered, which the inspector lists while its scope lives.
     struct LoweredNode {
         /// @brief The node.
@@ -2094,7 +2092,6 @@ public:
     std::deque<CommandLogEntry> commandLog;
     /// @brief Set while the inspector evaluates, so that an expression error it meets is not reported.
     bool inspecting = false;
-#endif
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     /// @brief The value a state of the screen's own scope keeps from the screen it replaces: that screen's value of
@@ -2187,7 +2184,6 @@ private:
         return runtime().untracked([&] { return evalIn(*ctx.scope, ctx.bindings.get(), expr); });
     }
 
-#if MORPH_UI_DEV_TOOLS
     /// @brief Keeps a command list in the inspector's log.
     void logList(Commands const& commands) {
         CommandLogEntry entry{.event = {}, .commands = {}, .batch = runtime().core()->currentBatch()};
@@ -2202,7 +2198,6 @@ private:
         }
         commandLog.push_back(std::move(entry));
     }
-#endif
 
     std::shared_ptr<Document const> _doc;
     SlotId _slots = 1;
@@ -2351,9 +2346,7 @@ public:
 
 private:
     friend class Interpreter;
-#if MORPH_UI_DEV_TOOLS
     friend class Inspector;
-#endif
 
     Screen() = default;
 
@@ -2600,15 +2593,15 @@ namespace detail {
 inline RtScope::RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, reactive::Signal<Value> const* current,
                         std::size_t depth)
     : core{screen}, parent{std::move(enclosing)}, row{current}, nodes{screen.runtime(), depth} {
-#if MORPH_UI_DEV_TOOLS
-    core.scopes.push_back(this);
-#endif
+    if (core.recording) {
+        core.scopes.push_back(this);
+    }
 }
 
 inline RtScope::~RtScope() {
-#if MORPH_UI_DEV_TOOLS
-    std::erase(core.scopes, this);
-#endif
+    if (core.recording) {
+        std::erase(core.scopes, this);
+    }
     if (owner != nullptr) {
         core.addPending(-1);
         if (owner->inner.peek() == this) {
@@ -3783,9 +3776,9 @@ inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx,
         bool ok = true;
         Done done;
     };
-#if MORPH_UI_DEV_TOOLS
-    logList(commands);
-#endif
+    if (recording) {
+        logList(commands);
+    }
     auto join = std::make_shared<Join>(Join{.left = commands.size() + 1, .ok = true, .done = std::move(done)});
     auto finish = [join](bool succeeded) {
         join->ok = join->ok && succeeded;
@@ -4621,12 +4614,12 @@ namespace detail {
 
 // NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
 inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
-#if MORPH_UI_DEV_TOOLS
-    if (loweredNodes.size() >= kPruneLoweredAt && loweredNodes.size() % kPruneLoweredAt == 0) {
-        std::erase_if(loweredNodes, [](LoweredNode const& entry) { return entry.scope.expired(); });
+    if (recording) {
+        if (loweredNodes.size() >= kPruneLoweredAt && loweredNodes.size() % kPruneLoweredAt == 0) {
+            std::erase_if(loweredNodes, [](LoweredNode const& entry) { return entry.scope.expired(); });
+        }
+        loweredNodes.push_back(LoweredNode{.node = &node, .scope = ctx.scope, .bindings = ctx.bindings});
     }
-    loweredNodes.push_back(LoweredNode{.node = &node, .scope = ctx.scope, .bindings = ctx.bindings});
-#endif
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
 }
 

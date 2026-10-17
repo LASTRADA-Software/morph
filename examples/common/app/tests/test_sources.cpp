@@ -17,7 +17,6 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/memory_history.hpp>
@@ -402,9 +401,7 @@ TEST_CASE(
     "without it nothing is polled",
     "[examples-common][shell][dev-reload]") {
     std::vector<bool> modes{false};
-#if MORPH_UI_DEV_TOOLS
     modes.push_back(true);
-#endif
     for (bool const dev : modes) {
         CAPTURE(dev);
         FakeAppContext context;

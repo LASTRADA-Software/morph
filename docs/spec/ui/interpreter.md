@@ -283,10 +283,11 @@ applies to the width.
 
 ## Development tools
 
-In a build with `MORPH_UI_DEV_TOOLS`, a screen also records what the development inspector reads
+In development mode (`SessionOptions::developmentTools` is `On`), a screen also records what the development inspector reads
 ([`inspector.md`](inspector.md)): each node as it is lowered, with its scope and bindings held weakly; each live
 scope; and each command list `runList` runs, with the batch it ran in. `Screen` befriends `Inspector`, which reads
-them and the scopes' queries and mutations, and returns copies. A build without the switch has none of these members.
+them and the scopes' queries and mutations, and returns copies. A screen whose session is `Off` keeps these members
+empty and records nothing into them.
 
 ## Diagnostics
 

@@ -5,17 +5,13 @@
 #include <memory>
 #include <string>
 
-#include "../ui/dev_tools.hpp"
 #include "../ui/inspector.hpp"
 
 /// @file
 /// @brief `morph::qt_quick::InspectorWindow`: the development inspector's window (spec 6 §21), opened with
 ///        Ctrl+Shift+I over the focused screen.
 ///
-/// Built only with `MORPH_UI_DEV_TOOLS`; without it this header declares nothing. Specified in
-/// `docs/spec/ui/inspector.md`.
-
-#if MORPH_UI_DEV_TOOLS
+/// Specified in `docs/spec/ui/inspector.md`.
 
 class QQuickWindow;
 
@@ -73,5 +69,3 @@ private:
 };
 
 }  // namespace morph::qt_quick
-
-#endif

@@ -349,7 +349,6 @@ void ClientSource::reload(std::shared_ptr<bool> const& alive,
     });
 }
 
-#if MORPH_UI_DEV_TOOLS
 void ClientSource::poll(std::function<void(std::vector<std::string> changed)> changed) {
     if (!_exchange || !_loaded || !_alive || _polling) {
         return;
@@ -379,7 +378,6 @@ void ClientSource::poll(std::function<void(std::vector<std::string> changed)> ch
                     });
                 });
 }
-#endif
 
 void ClientSource::signIn(std::string principal, std::string token, std::function<void(bool)> done) {
     _session.principal = std::move(principal);
