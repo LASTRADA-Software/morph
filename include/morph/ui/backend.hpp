@@ -265,7 +265,7 @@ public:
 class StackWidget : public ContainerWidget {
 public:
     /// @brief Sets the space between children.
-    /// @param gap Backend units.
+    /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
 };
 
@@ -277,7 +277,7 @@ public:
     virtual void setColumns(int columns) = 0;
 
     /// @brief Sets the space between cells.
-    /// @param gap Backend units.
+    /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
 
     /// @brief Sets how many columns a child spans; a child spans one until this is called.
@@ -297,7 +297,7 @@ public:
     virtual void setTitle(std::string_view title) = 0;
 
     /// @brief Sets the space between frame and content.
-    /// @param padding Backend units.
+    /// @param padding A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setPadding(int padding) = 0;
 
     /// @brief Sets whether the user can collapse the panel.

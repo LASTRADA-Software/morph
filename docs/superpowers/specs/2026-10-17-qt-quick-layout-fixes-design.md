@@ -40,8 +40,9 @@ mistake in that many places is a missing framework seam, so the fix is in the vo
 
 - **The clamp is in the mount.** `ui::spacingStep(value)` maps a document's value to 0..5 (below 0 is 0, above 5 is
   5), and `Mount` passes only that to `setGap` and `setPadding`. The backend contract says the argument is a step in
-  0..5; a backend never sees another value, and `RecordingBackend` records the clamped step. A conformance case
-  mounts a column with gap 99 and -3 and checks the backend received 5 and 0.
+  0..5; a backend never sees another value, and `RecordingBackend` records the clamped step. A mount test on
+  `RecordingBackend` mounts gaps and paddings of 99, -3, 7 and 6 and checks the backend received 5, 0, 5 and 5; each
+  backend's own tests check what a step becomes there.
 - **Qt Quick** reads a step from the `Theme` singleton's `space` list (six lengths in px), so a theme can change it.
   `MorphStack`, `MorphGrid` and `MorphPanel` multiply by nothing any more: spacing is `Theme.space[gap]`.
 - **The terminal** maps a step through the fixed table above, by axis. A cell is about twice as tall as it is wide,
@@ -129,7 +130,7 @@ must fail there.
 - A theme that sets `space.3` to 20 px makes a gap of step 3 20 px wide; `applyTheme` reports nothing unset.
 - The terminal maps every step through its table, both axes (`tests/tui/test_tui_layout.cpp`, including `pad` and
   `planGrid` with distinct row and column gaps).
-- The conformance case for the clamp, run by `RecordingBackend`, the terminal and Qt Quick.
+- The mount test for the clamp, on `RecordingBackend`.
 - `tests/test_ui_theme.cpp`: the set's size counts dimensions; `space.2` is now in the set.
 
 ## Not in this change
