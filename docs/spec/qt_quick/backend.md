@@ -122,7 +122,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
 | Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view | — |
-| Slot | `MorphSlot` | its children | — |
+| Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
 | Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |

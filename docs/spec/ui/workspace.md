@@ -19,7 +19,8 @@
 
 - `Workspace(runtime, backend, host, options, parent)` makes a `TabsWidget` appended to `parent` (a backend root
   when it is null): the shell's root, which the host places. Each tab is a page slot of that bar, and its screen is
-  mounted into it with `DocumentScreenHost::mountInto`.
+  mounted into it with `DocumentScreenHost::mountInto`. The bar and every page stretch both ways, so a screen whose
+  root stretches fills the page; a content-sized one keeps its own size.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as

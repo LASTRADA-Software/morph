@@ -102,6 +102,8 @@ public:
           _host{&host},
           _options{std::move(options)},
           _bar{backend.createTabs(parent)} {
+        // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
+        _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _bar->setTabs({});
         _bar->setSelected(kNone);
         _bar->setOnSelect([this](std::size_t index) {
@@ -414,6 +416,7 @@ private:
         tab->id = ++_lastId;
         tab->screenId = std::string{screenId};
         tab->page = _backend->createSlot(_bar.get());
+        tab->page->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         tab->page->setVisible(false);
         std::expected<std::unique_ptr<ScreenHandle>, MountError> handle;
         if (facts.host.empty()) {
