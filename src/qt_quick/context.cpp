@@ -43,6 +43,13 @@ protected:
         static_cast<void>(child);
         return _column;
     }
+    // The roots draw with the theme itself.
+    [[nodiscard]] QObject* scheme() const override {
+        QQmlEngine* const engine = _column != nullptr ? qmlEngine(_column) : nullptr;
+        return engine != nullptr
+                   ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
+                   : nullptr;
+    }
 
 private:
     QPointer<QQuickItem> _column;

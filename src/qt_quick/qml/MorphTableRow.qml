@@ -46,7 +46,7 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: root.selected ? Theme.selection : "transparent"
+        color: root.selected ? root.scheme.selection : "transparent"
     }
 
     Item {

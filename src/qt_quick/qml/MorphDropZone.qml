@@ -26,8 +26,8 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: files.containsDrag ? Qt.alpha(Theme.info, 0.08) : "transparent"
-        border.color: files.containsDrag ? Theme.info : Theme.border
+        color: files.containsDrag ? Qt.alpha(root.scheme.info, 0.08) : "transparent"
+        border.color: files.containsDrag ? root.scheme.info : root.scheme.border
         border.width: 1
         radius: 4
     }

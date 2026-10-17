@@ -6,6 +6,8 @@ import QtQuick
 // horizontally and its line height vertically. The colours, the stale opacity and the spacing are the ui-theme/1
 // defaults; qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
 QtObject {
+    id: theme
+
     readonly property FontMetrics metrics: FontMetrics {}
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
@@ -48,6 +50,58 @@ QtObject {
     // A spacing step's distance; a step outside 0 to 5 is the nearest end, as the mount already clamps it.
     function spaceOf(step: int): real {
         return space[Math.max(0, Math.min(space.length - 1, step))]
+    }
+
+    // The built-in surfaces: the page screens sit on, a raised card, the dark navigator column and the top bar. A theme
+    // index's surface of the same name replaces one, and any other name gets a scheme of its own (`scheme`).
+    readonly property MorphScheme pageScheme: MorphScheme {
+        base: theme
+        surface: theme.background
+    }
+    readonly property MorphScheme cardScheme: MorphScheme {
+        base: theme
+    }
+    readonly property MorphScheme sidebarScheme: MorphScheme {
+        base: theme
+        surface: "#1f2430"
+        text: "#c9ccd6"
+        muted: "#7d8396"
+        accent: "#4c8dff"
+        selection: "#2f3646"
+        border: "#2f3646"
+    }
+    readonly property MorphScheme toolbarScheme: MorphScheme {
+        base: theme
+        border: "#e3e5ea"
+    }
+    property var extraSchemes: ({})
+    readonly property Component schemeComponent: Component {
+        MorphScheme {}
+    }
+
+    // The scheme of a surface name: a built-in one, one a theme declared, or, for the empty name, the theme itself.
+    function scheme(name: string): QtObject {
+        switch (name) {
+        case "":
+            return theme
+        case "page":
+            return pageScheme
+        case "card":
+            return cardScheme
+        case "sidebar":
+            return sidebarScheme
+        case "toolbar":
+            return toolbarScheme
+        default:
+            if (!(name in extraSchemes))
+                extraSchemes[name] = schemeComponent.createObject(theme, {base: theme})
+            return extraSchemes[name]
+        }
+    }
+
+    // Whether a surface name is one the theme draws a background for.
+    function draws(name: string): bool {
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || (name in extraSchemes)
     }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.

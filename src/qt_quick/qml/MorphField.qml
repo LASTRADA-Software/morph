@@ -29,7 +29,7 @@ MorphWidget {
         anchors.right: parent.right
         visible: root.required
         text: "*"
-        color: Theme.error
+        color: root.scheme.error
     }
 
     Label {
@@ -38,7 +38,7 @@ MorphWidget {
         width: root.width
         visible: root.errors.length > 0
         text: root.errors.join("\n")
-        color: Theme.error
+        color: root.scheme.error
         wrapMode: Text.Wrap
     }
 }

@@ -22,7 +22,7 @@ MorphField {
         wrapMode: Text.Wrap
         font.bold: root.role === 2
         font.pixelSize: root.role === 2 ? Math.round(Theme.unitHeight * 1.2) : Theme.metrics.font.pixelSize
-        color: Theme.textColor(root.role)
+        color: root.textColorOf(root.role)
         Accessible.ignored: true
     }
 }

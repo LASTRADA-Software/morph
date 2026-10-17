@@ -39,7 +39,7 @@ MorphWidget {
                 required property var modelData
                 text: root.marker(modelData.state) + " " + modelData.label
                 font.bold: index === root.current
-                color: modelData.state === 3 ? Theme.error : Theme.text
+                color: modelData.state === 3 ? root.scheme.error : root.scheme.text
             }
         }
     }

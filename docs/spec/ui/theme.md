@@ -89,6 +89,23 @@ none), a density (or none) and a surface (or none) over `base` must resolve from
 cycle, a missing reference, or a file the index names that the bundle lacks refuses the bundle, naming the index and
 the combination (`base + dark + density compact: …`). At most 17³ combinations are resolved.
 
+## Surfaces
+
+A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Four are
+built in, so an application gets the shell's look with no theme file; a theme index's surface of the same name
+replaces one, and declares any other:
+
+| Surface | Background | Colour roles |
+|---|---|---|
+| `page` | `color.background` | the theme's |
+| `card` | `color.surface`, with `radius.card`, a border and `elevation.card` | the theme's |
+| `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection and border `#2f3646`; the rest the theme's |
+| `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
+
+A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
+is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither
+built in nor in the theme draws nothing and changes no colour.
+
 ## The closed set
 
 `kThemeTokens` is the closed `ui-theme/1` set, each path with its kind and the `MorphUi` default:
@@ -150,7 +167,7 @@ component draws them.
 
 ## Not yet
 
-- Surfaces resolved per subtree, and `{"pref": "density"}` choosing a density at runtime.
+- `{"pref": "density"}` choosing a density at runtime.
 - Units from the scale tokens rather than from the default font; `control.*`, `font.*` and `elevation.*` in the closed
   set.
 - Icons, the terminal renderer's palette mapping.

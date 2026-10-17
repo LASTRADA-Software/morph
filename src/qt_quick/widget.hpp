@@ -150,6 +150,8 @@ protected:
     /// Which way a content-sized child fills this container; written on each child as it is adopted. A container that
     /// shows its children one above the other fills their width, which is the default.
     [[nodiscard]] virtual CrossFill crossFill() const noexcept { return CrossFill{.width = true, .height = false}; }
+    /// The colour scheme this container's children inherit: its item's `scheme`, or null when it has none.
+    [[nodiscard]] virtual QObject* scheme() const = 0;
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.
@@ -246,6 +248,7 @@ protected:
         static_cast<void>(child);
         return qobject_cast<QQuickItem*>(this->part("content"));
     }
+    [[nodiscard]] QObject* scheme() const override { return this->part("scheme"); }
 };
 // NOLINTEND(portability-template-virtual-member-function)
 

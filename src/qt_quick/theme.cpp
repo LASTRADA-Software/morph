@@ -2,10 +2,14 @@
 
 #include <QColor>
 #include <QList>
+#include <QMetaObject>
 #include <QObject>
 #include <QQmlEngine>
+#include <QString>
 #include <QVariant>
 #include <array>
+#include <functional>
+#include <map>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
@@ -34,6 +38,22 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorPropert
     {"color.focus", "focus"},
 }};
 
+/// The scheme property each colour token of a surface sets.
+constexpr std::array<std::pair<std::string_view, char const*>, 12> kSchemeProperties = {{
+    {"color.surface", "surface"},
+    {"color.text", "text"},
+    {"color.muted", "muted"},
+    {"color.accent", "accent"},
+    {"color.focus", "focus"},
+    {"color.selection", "selection"},
+    {"color.border", "border"},
+    {"color.neutral", "neutral"},
+    {"color.err", "error"},
+    {"color.ok", "success"},
+    {"color.info", "info"},
+    {"color.warn", "warn"},
+}};
+
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
 constexpr std::array<std::pair<std::string_view, char const*>, 5> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
@@ -45,7 +65,8 @@ constexpr std::array<std::pair<std::string_view, char const*>, 5> kDimensionProp
 
 }  // namespace
 
-std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values) {
+std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
+                                    std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces) {
     std::vector<std::string> unset;
     auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     if (theme == nullptr) {
@@ -103,6 +124,25 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
     }
     if (space.size() == ui::kMaxSpacingStep + 1 && !theme->setProperty("space", QVariant::fromValue(space))) {
         unset.emplace_back("space");
+    }
+    for (auto const& [name, surface] : surfaces) {
+        QObject* scheme = nullptr;
+        QMetaObject::invokeMethod(theme, "scheme", Qt::DirectConnection, qReturnArg(scheme),
+                                  QString::fromStdString(name));
+        if (scheme == nullptr) {
+            unset.push_back(name);
+            continue;
+        }
+        for (auto const& [path, property] : kSchemeProperties) {
+            auto const found = surface.colors.find(path);
+            if (found == surface.colors.end()) {
+                continue;
+            }
+            ui::Rgba const& color = found->second;
+            if (!scheme->setProperty(property, QColor{color.r, color.g, color.b, color.a})) {
+                unset.push_back(name + "." + property);
+            }
+        }
     }
     return unset;
 }

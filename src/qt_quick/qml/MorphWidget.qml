@@ -38,12 +38,46 @@ Item {
     // `accessibleName` and `accessibleRole` itself, and the root then presents no node of its own.
     property Item accessibleItem: null
     property string surface: ""
+    // The colour roles this widget draws with: its own surface's scheme when it has a surface, else the one its
+    // container passed down when it adopted it (the theme's at the roots).
+    property QtObject inheritedScheme: Theme
+    readonly property QtObject scheme: surface !== "" ? Theme.scheme(surface) : inheritedScheme
     // A drag key as text (`i:<int64>` or `s:<text>`); empty when the widget cannot be dragged.
     property string dragKey: ""
     property bool dropEnabled: false
     property list<string> chords: []
     // The item keyboard focus goes to.
     property Item focusTarget: root
+
+    // A text role's colour in this widget's scheme: Normal, Muted, Heading, Error, Success.
+    function textColorOf(role: int): color {
+        switch (role) {
+        case 1:
+            return root.scheme.muted
+        case 3:
+            return root.scheme.error
+        case 4:
+            return root.scheme.success
+        default:
+            return root.scheme.text
+        }
+    }
+
+    // A tone's colour in this widget's scheme: Neutral, Info, Ok, Warn, Err.
+    function toneOf(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.info
+        case 2:
+            return root.scheme.success
+        case 3:
+            return root.scheme.warn
+        case 4:
+            return root.scheme.error
+        default:
+            return root.scheme.muted
+        }
+    }
 
     function fire(event: string, payload: var) {
         if (root.host)
@@ -139,12 +173,34 @@ Item {
         }
     }
 
+    // A surface's background, under everything the widget shows; a card has the card's radius and a shadow below it.
+    Rectangle {
+        anchors.fill: parent
+        anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+        anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+        anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+        anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+        z: -2
+        visible: root.surface === "card"
+        radius: Theme.radiusCard + Theme.cardShadowBlur / 4
+        color: Theme.cardShadowColor
+    }
+    Rectangle {
+        anchors.fill: parent
+        z: -1
+        visible: root.surface !== "" && Theme.draws(root.surface)
+        radius: root.surface === "card" ? Theme.radiusCard : 0
+        color: root.scheme.surface
+        border.width: root.surface === "toolbar" || root.surface === "card" ? 1 : 0
+        border.color: root.scheme.border
+    }
+
     Rectangle {
         anchors.fill: parent
         z: 100
         visible: dropArea.containsDrag
         color: "transparent"
-        border.color: Theme.info
+        border.color: root.scheme.info
         border.width: 2
     }
 }

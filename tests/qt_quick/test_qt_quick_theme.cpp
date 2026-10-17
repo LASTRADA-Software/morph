@@ -122,3 +122,53 @@ TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
     CHECK(theme->property("cardShadowOffsetY").toReal() == 3.0);
     CHECK(theme->property("cardShadowBlur").toReal() == 6.0);
 }
+
+namespace {
+
+/// The background a surface draws: the widget's direct child Rectangle at z -1.
+QQuickItem const* surfaceBackground(QQuickItem const& item) {
+    for (QQuickItem const* const child : item.childItems()) {
+        if (child->z() == -1.0 && child->inherits("QQuickRectangle")) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick theme: a surface colours its subtree and draws its background", "[qt_quick]") {
+    Scene scene;
+    auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    sidebar->setSurface("sidebar");
+    auto inside = scene.backend().createText(sidebar.get());
+    inside->setText("inside");
+    auto card = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    card->setSurface("card");
+    auto outside = scene.backend().createText(nullptr);
+    outside->setText("outside");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#c9ccd6"});
+    CHECK(labelColor(Scene::itemOf(*outside), QStringLiteral("outside")) == QColor{"#1d1d1f"});
+    QQuickItem const* const sidebarBackground = surfaceBackground(Scene::itemOf(*sidebar));
+    REQUIRE(sidebarBackground != nullptr);
+    CHECK(sidebarBackground->isVisible());
+    CHECK(sidebarBackground->property("color").value<QColor>() == QColor{"#1f2430"});
+    QQuickItem const* const cardBackground = surfaceBackground(Scene::itemOf(*card));
+    REQUIRE(cardBackground != nullptr);
+    CHECK(cardBackground->property("color").value<QColor>() == QColor{"#ffffff"});
+    CHECK(cardBackground->property("radius").toReal() == 10.0);
+    QQuickItem const* const plain = surfaceBackground(Scene::itemOf(*outside));
+    CHECK((plain == nullptr || !plain->isVisible()));
+
+    // A theme's own surface of a built-in name replaces it, and every other role is the theme's.
+    auto const layer = ui::parseTokens(R"({"color": {"$type": "color", "surface": {"$value": "#123456"}}})");
+    REQUIRE(layer);
+    auto const resolved = ui::resolveTokens({&*layer});
+    REQUIRE(resolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*resolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    scene.settle();
+    CHECK(sidebarBackground->property("color").value<QColor>() == QColor{"#123456"});
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#1d1d1f"});
+}

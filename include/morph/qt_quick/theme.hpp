@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -22,9 +24,14 @@ namespace morph::qt_quick {
 /// instance, so both update. A path of the set the theme lacks has its default in @p values (`ui::themeValues`), which
 /// is the `Theme` property's own default, so applying `ui::themeValues()` restores the defaults. Call it on the
 /// engine's thread, before or after screens mount.
-/// @param engine The engine the backend compiles its components in.
-/// @param values The values, from `ui::themeValues`.
-/// @return The `Theme` properties that could not be set; empty when every one was.
-std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values);
+/// A surface named in @p surfaces gets every colour role from its values: the theme resolved with that surface's layer
+/// (`ui::resolveTheme`), so a role the surface does not set is the theme's. A built-in surface (`page`, `card`,
+/// `sidebar`, `toolbar`) the map does not name keeps its built-in colours.
+/// @param engine   The engine the backend compiles its components in.
+/// @param values   The values, from `ui::themeValues`.
+/// @param surfaces The theme's surfaces by name, each resolved with its layer; empty keeps the built-in ones.
+/// @return The `Theme` properties that could not be set, a surface's as `<name>.<role>`; empty when every one was.
+std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
+                                    std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces = {});
 
 }  // namespace morph::qt_quick

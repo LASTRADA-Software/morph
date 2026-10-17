@@ -191,6 +191,14 @@ height), a splitter and a table row (neither, since they size their own children
 `MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
 start: a `GridLayout` given more length hands the spare to the gaps between its cells.
 
+**Surfaces.** `Theme.scheme(name)` is the colour scheme of a surface (`MorphScheme`: the colour roles, each the
+theme's unless the surface sets it), and the theme itself for the empty name. Every `MorphWidget` draws with
+`scheme`: its own surface's when it has one, else `inheritedScheme`, which its container writes when it adopts it
+(`ContainerCore::scheme()`; the roots give the theme). The mount sets a node's surface before it mounts the node's
+children, so a container's scheme is known when they are adopted. A widget with a surface draws its background under
+its content. `applyTheme(engine, values, surfaces)` sets every role of each named surface's scheme in place, so a
+widget that holds one follows a later theme.
+
 The roots fill the window as one column: a root whose height stretches takes what the others leave, as on the
 terminal; without one, the roots keep their own heights at the top.
 
@@ -269,7 +277,7 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- Per-subtree surfaces and a runtime density from theme tokens; the units come from the default font, not the
+- A runtime density from theme tokens; the units come from the default font, not the
   scale tokens.
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

@@ -24,7 +24,7 @@ MorphWidget {
         implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
         implicitHeight: inner.implicitHeight + 2 * Theme.spaceOf(root.padding) + 2
         color: "transparent"
-        border.color: Theme.border
+        border.color: root.scheme.border
 
         ColumnLayout {
             id: inner

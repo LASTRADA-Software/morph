@@ -274,6 +274,9 @@ void ContainerCore::adopt(ItemBase& child) {
     CrossFill const fill = crossFill();
     child.write("fillsWidth", fill.width);
     child.write("fillsHeight", fill.height);
+    if (QObject* const inherited = scheme()) {
+        child.write("inheritedScheme", QVariant::fromValue(inherited));
+    }
     _children.push_back(&child);
     adopted(child);
 }
