@@ -120,9 +120,8 @@ apply_bigobj(bank_lib)
 # someone remembered.
 #
 # Instrumenting bank_lib does mean instrumenting the vendored Lightweight ORM
-# headers it compiles in. Measured rather than assumed: ci.yml's
-# `bank-sanitizers` job is the leg that runs this, and its banner records the
-# finding count (zero) and the build cost.
+# headers it compiles in; ci.yml's `ladder-sanitizers` job is the leg that runs
+# it, with every rung.
 #
 # All of the blocks below are required together, not one of them optional. An
 # instrumented bank_lib with an uninstrumented executable does not merely go

@@ -400,8 +400,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       # Release legs run the suite too: these are the only builds with NDEBUG
-      # defined and MORPH_UI_DEV_TOOLS off, so code on those paths runs nowhere
-      # else.
+      # defined, so code on those paths runs nowhere else.
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
