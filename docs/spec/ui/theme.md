@@ -102,6 +102,10 @@ replaces one, and declares any other:
 | `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection and border `#2f3646`; the rest the theme's |
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 
+**In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
+shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the index's `base`, and each of its surfaces
+resolved with its layer; a bundle without a theme index restores the defaults. No variant or density is chosen yet.
+
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
 is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither
 built in nor in the theme draws nothing and changes no colour.

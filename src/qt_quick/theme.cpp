@@ -12,6 +12,7 @@
 #include <map>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -146,6 +147,46 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         }
     }
     return unset;
+}
+
+std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
+                                          std::map<std::string, std::string, std::less<>> const& themes) {
+    std::optional<ui::ThemeIndex> index;
+    std::map<std::string, ui::TokenSet, std::less<>> files;
+    for (auto const& [id, text] : themes) {
+        if (ui::isThemeIndex(text)) {
+            if (auto parsed = ui::parseThemeIndex(text)) {
+                index = std::move(*parsed);
+            } else {
+                return {"theme index " + id + ": " + parsed.error()};
+            }
+        } else if (auto tokens = ui::parseTokens(text)) {
+            files.insert_or_assign(id, std::move(*tokens));
+        } else {
+            return {"theme file " + id + ": " + tokens.error()};
+        }
+    }
+    if (!index) {
+        return applyTheme(engine, ui::themeValues());
+    }
+    ui::TokenFileLookup const lookup = [&files](std::string_view fileId) -> ui::TokenSet const* {
+        auto const found = files.find(fileId);
+        return found == files.end() ? nullptr : &found->second;
+    };
+    auto const base = ui::resolveTheme(*index, lookup, {}, {}, {});
+    if (!base) {
+        return {"theme: " + base.error()};
+    }
+    std::map<std::string, ui::ThemeValues, std::less<>> surfaces;
+    for (auto const& [name, file] : index->surfaces) {
+        static_cast<void>(file);
+        auto const layered = ui::resolveTheme(*index, lookup, {}, {}, name);
+        if (!layered) {
+            return {"theme surface " + name + ": " + layered.error()};
+        }
+        surfaces.insert_or_assign(name, ui::themeValues(*layered));
+    }
+    return applyTheme(engine, ui::themeValues(*base), surfaces);
 }
 
 }  // namespace morph::qt_quick

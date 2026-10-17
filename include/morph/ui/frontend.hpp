@@ -97,6 +97,9 @@ struct Bundle {
     /// @brief Every document of the bundle, by id, as its JSON text: the screens, the app shell, and the app document
     ///        (`app`) when the bundle has one.
     std::map<std::string, std::string, std::less<>> documents;
+    /// @brief The theme's files, by id, as their JSON text: the theme index and the token files it names; empty when
+    ///        the bundle has no theme.
+    std::map<std::string, std::string, std::less<>> themes;
 };
 
 /// @brief Why a source could not be opened.

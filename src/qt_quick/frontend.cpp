@@ -11,11 +11,13 @@
 #include <QSGRendererInterface>
 #include <algorithm>
 #include <array>
+#include <iostream>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/frontend.hpp>
 #include <morph/qt_quick/inspector.hpp>
 #include <morph/qt_quick/scheduler.hpp>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <optional>
 #include <stdexcept>
@@ -140,7 +142,13 @@ int Frontend::run(ui::AppSource& source) {
     }
     return ui::runApp(
         context, source,
-        [this, &backend, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+        [this, &backend, &engine, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+            // The application's look, before the shell mounts its first screen.
+            if (result) {
+                for (std::string const& problem : applyBundleTheme(engine, result->themes)) {
+                    std::cerr << "morph::qt_quick: " << problem << '\n';
+                }
+            }
             auto shell = _config.mountShell(opened, backend, std::move(result));
             shown = shell.get();
             return shell;

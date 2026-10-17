@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QVariant>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
@@ -171,4 +173,26 @@ TEST_CASE("qt_quick theme: a surface colours its subtree and draws its backgroun
     scene.settle();
     CHECK(sidebarBackground->property("color").value<QColor>() == QColor{"#123456"});
     CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#1d1d1f"});
+}
+
+TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfaces", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, std::string, std::less<>> const themes{
+        {"theme/index.json",
+         R"({"vocab": "ui-theme/1", "base": "theme/base.json", "surfaces": {"sidebar": "theme/sidebar.json"}})"},
+        {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}}})"},
+        {"theme/sidebar.json", R"({"color": {"$type": "color", "surface": {"$value": "#102030"}}})"}};
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("accent").value<QColor>() == QColor{"#aa0055"});
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("surface").value<QColor>() == QColor{"#102030"});
+    // A role the surface does not set is the theme's: the base's accent.
+    CHECK(sidebar->property("accent").value<QColor>() == QColor{"#aa0055"});
+
+    // A bundle without a theme restores the defaults.
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    CHECK(theme->property("accent").value<QColor>() == QColor{"#1565c0"});
 }
