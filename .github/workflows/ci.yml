@@ -315,13 +315,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-compilers-${{ matrix.preset }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-compilers-${{ matrix.preset }}-
-
       - name: Install GCC 15 and ninja
         if: startsWith(matrix.preset, 'gcc-')
         run: |
@@ -549,13 +542,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-sanitizers-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-sanitizers-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -782,13 +768,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-coverage-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-coverage-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -992,13 +971,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-kanban-tsan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-kanban-tsan-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -1198,13 +1170,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-bank-ubsan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-bank-ubsan-
-
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
@@ -1348,13 +1313,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-qt-
 
       - name: Install GCC 15, ninja, catch2, Qt6 WebSockets
         run: |
@@ -1659,14 +1617,6 @@ jobs:
             fi
           done
           exit "$status"
-
-      - name: Cache apt packages
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-qt-
 
       - name: Install GCC 15, ninja, catch2
         if: steps.filter.outputs.run == 'true'
@@ -2036,14 +1986,6 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Cache apt packages
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-ladder-asan-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-ladder-asan-
-
       - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, ODBC
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -2323,13 +2265,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-all-features-${{ matrix.compiler }}-
 
       - name: Install toolchain and the non-Qt dependencies
         run: |
@@ -2635,13 +2570,6 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-valgrind-
-
       - name: Install GCC 15, ninja, catch2, valgrind
         run: |
           sudo apt-get update -q
@@ -2836,13 +2764,6 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-clang-tidy-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-clang-tidy-
 
       - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the non-Qt deps
         run: |

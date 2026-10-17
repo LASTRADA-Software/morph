@@ -69,13 +69,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-valgrind-
-
       - name: Install GCC 15, ninja, catch2, valgrind
         run: |
           sudo apt-get update -q
@@ -184,13 +177,6 @@ jobs:
             fuzzers: "OFF"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-all-features-${{ matrix.compiler }}-
 
       - name: Install toolchain and the non-Qt dependencies
         run: |
