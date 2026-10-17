@@ -441,8 +441,10 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
+      # Release legs run the suite too: these are the only builds with NDEBUG
+      # defined and MORPH_UI_DEV_TOOLS off, so code on those paths runs nowhere
+      # else.
       - name: Test
-        if: endsWith(matrix.preset, '-debug')
         run: ctest --preset ${{ matrix.preset }}
 
       # Cumulative hit/miss for this leg. Without it the cache is
@@ -2744,6 +2746,34 @@ jobs:
           name: clang-format-report
           path: clang-format-report.txt
           if-no-files-found: ignore
+
+  # ── actionlint (the workflows themselves) ─────────────────────────────
+  # The workflows are thousands of lines of YAML and embedded bash that no
+  # other job checks. actionlint validates expressions, job references and
+  # action inputs, and runs shellcheck over every `run:` step. shellcheck is
+  # gated at warning severity; its info and style notes are reported locally
+  # but do not fail the job.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          curl -sSL --fail -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint
+
+      - name: Lint every workflow
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          # actionlint skips shellcheck without a word when it is not on PATH,
+          # which would leave every `run:` step unchecked behind a green job.
+          command -v shellcheck || { echo "::error::shellcheck not found"; exit 1; }
+          actionlint -color
 
   # ── clang-tidy-diff (changed lines only) ──────────────────────────────
 
