@@ -496,6 +496,7 @@ target_sources(morph
         include/morph/ui/author.hpp
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
+        include/morph/ui/button_emphasis.hpp
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp

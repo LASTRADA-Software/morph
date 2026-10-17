@@ -134,6 +134,11 @@ reorders children, and only through this.
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
 `space.<step>` in px on Qt Quick, cells by axis on the terminal.
 
+**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary` or `Danger`; the mount
+calls it only for another value than `Normal`, so a document without the `emphasis` key (`normal`, `primary`,
+`danger`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error colour;
+the terminal draws both bold, a danger one in the error colour.
+
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,

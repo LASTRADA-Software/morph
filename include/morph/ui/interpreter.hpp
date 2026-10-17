@@ -4781,6 +4781,11 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "button") {
         Button spec{.label = textProp("label")};
+        if (node.name("emphasis") == "primary") {
+            spec.emphasis = ButtonEmphasis::Primary;
+        } else if (node.name("emphasis") == "danger") {
+            spec.emphasis = ButtonEmphasis::Danger;
+        }
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");
         if (onClick != nullptr || onActivate != nullptr) {

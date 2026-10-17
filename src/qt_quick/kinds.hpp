@@ -129,6 +129,7 @@ public:
     ButtonImpl(Context& context, ui::ContainerWidget* parent);
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
+    void setEmphasis(ui::ButtonEmphasis emphasis) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

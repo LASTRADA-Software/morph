@@ -155,6 +155,10 @@ public:
     /// @brief Sets what activation calls (Enter, Space or a click).
     /// @param onClick The handler; empty does nothing.
     virtual void setOnClick(Action onClick) = 0;
+
+    /// @brief Sets how much the button stands out. The mount calls it only for another value than `Normal`.
+    /// @param emphasis The emphasis.
+    virtual void setEmphasis(ButtonEmphasis emphasis) = 0;
 };
 
 /// @brief An editable text field.

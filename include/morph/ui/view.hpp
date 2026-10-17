@@ -18,6 +18,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
+#include "button_emphasis.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -399,6 +400,8 @@ struct Text {
 struct Button {
     /// @brief The caption.
     Prop<std::string> label;
+    /// @brief How much it stands out; set once.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Called on activation.
     Action onClick;
     /// @brief Visibility, enablement, layout, drag-and-drop.

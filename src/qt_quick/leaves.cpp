@@ -56,6 +56,10 @@ ButtonImpl::ButtonImpl(Context& context, ui::ContainerWidget* parent)
 
 void ButtonImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 
+void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
+    write("emphasis", emphasis == ui::ButtonEmphasis::Primary ? 1 : emphasis == ui::ButtonEmphasis::Danger ? 2 : 0);
+}
+
 void ButtonImpl::setOnClick(ui::Action onClick) {
     relay().on(QStringLiteral("click"), actionHandler(std::move(onClick)));
 }

@@ -126,6 +126,22 @@ TEST_CASE("ui::Mounted: a gap or padding reaches the backend as a spacing step i
           "    Text#9 role=Normal text=f\n");
 }
 
+TEST_CASE("ui::Mounted: a button's emphasis reaches the backend only when it is not Normal", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::row({.children = {ui::button({.label = "Plain"}),
+                              ui::button({.label = "Go", .emphasis = ui::ButtonEmphasis::Primary}),
+                              ui::button({.label = "Drop", .emphasis = ui::ButtonEmphasis::Danger})}})};
+    CHECK(backend.dump() ==
+          "Row#1 gap=0\n"
+          "  Button#2 label=Plain\n"
+          "  Button#3 emphasis=Primary label=Go\n"
+          "  Button#4 emphasis=Danger label=Drop\n");
+}
+
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {
     Owner owner;
     Runtime runtime{owner};

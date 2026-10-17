@@ -622,3 +622,22 @@ TEST_CASE("tui widgets: a press that reaches no widget ends a press that lost it
     CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
     CHECK(clicks == 1);
 }
+
+TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error colour", "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const plain = harness.make<ButtonImpl>(column.get());
+    plain->setLabel("Plain");
+    auto const primary = harness.make<ButtonImpl>(column.get());
+    primary->setLabel("Go");
+    primary->setEmphasis(ui::ButtonEmphasis::Primary);
+    auto const danger = harness.make<ButtonImpl>(column.get());
+    danger->setLabel("Drop");
+    danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 2).style.bold);
+    CHECK(buffer.at(1, 2).style.bold);
+    CHECK(buffer.at(2, 2).style.bold);
+    CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
+}

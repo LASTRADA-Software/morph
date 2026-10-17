@@ -9,11 +9,14 @@ Rectangle {
     property bool hovered: false
     property bool pressed: false
     property bool focused: false
+    // A filled button (primary, danger) is drawn in `fill` with no outline.
+    property bool filled: false
+    property color fill: scheme.surface
 
     implicitHeight: Theme.controlHeight
     implicitWidth: Theme.unitWidth * 8
     radius: Theme.radiusControl
-    color: pressed ? Qt.darker(scheme.surface, 1.12) : hovered ? Qt.darker(scheme.surface, 1.05) : scheme.surface
-    border.width: focused ? 2 : 1
+    color: pressed ? Qt.darker(fill, 1.12) : hovered ? Qt.darker(fill, 1.05) : fill
+    border.width: focused ? 2 : filled ? 0 : 1
     border.color: focused ? scheme.focus : scheme.border
 }

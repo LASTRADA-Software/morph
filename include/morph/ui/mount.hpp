@@ -571,6 +571,9 @@ private:
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
+        if (spec.emphasis != ButtonEmphasis::Normal) {
+            widget.setEmphasis(spec.emphasis);
+        }
         widget.setOnClick(event(spec.onClick));
         return widget;
     }

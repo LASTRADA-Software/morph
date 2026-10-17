@@ -32,6 +32,7 @@ public:
     explicit ButtonImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
+    void setEmphasis(ui::ButtonEmphasis emphasis) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
@@ -42,6 +43,7 @@ public:
 private:
     std::string _label;
     ui::Action _onClick;
+    ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
 };
 
 /// Checkbox: `[x] label`; Enter, Space or a click flips it and reports the new state.

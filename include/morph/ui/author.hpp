@@ -25,6 +25,7 @@
 #include "../core/model_key.hpp"
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
+#include "button_emphasis.hpp"
 #include "../detail/reflected_member.hpp"
 #include "../ui/document.hpp"
 #include "../ui/value.hpp"
@@ -2872,6 +2873,8 @@ struct ButtonOptions {
     AnyHandle label;
     /// @brief An icon of the theme's icon map; it never names the button.
     AnyHandle icon;
+    /// @brief How much it stands out; `Normal` writes no key.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Commands run on a click.
     Commands onClick;
     /// @brief Commands run on activation by keyboard.
@@ -2882,7 +2885,13 @@ struct ButtonOptions {
 /// @param options The button.
 /// @return The node.
 [[nodiscard]] inline Node button(ButtonOptions const& options) {
-    return detail::NodeWriter{"button"}
+    detail::NodeWriter writer{"button"};
+    if (options.emphasis == ButtonEmphasis::Primary) {
+        writer.put("emphasis", std::string{"primary"});
+    } else if (options.emphasis == ButtonEmphasis::Danger) {
+        writer.put("emphasis", std::string{"danger"});
+    }
+    return std::move(writer)
         .put("label", options.label)
         .put("icon", options.icon)
         .put("onClick", options.onClick)
