@@ -13,6 +13,7 @@
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/shell_frame.hpp>
 #include <morph/ui/theme.hpp>
 #include <string>
 #include <vector>
@@ -408,4 +409,31 @@ TEST_CASE("qt_quick containers: a root that stretches in height fills the window
     second->setText("second");
     scene.settle();
     CHECK(Scene::itemOf(*second).mapToScene(QPointF{0, 0}).y() == headerItem.height());
+}
+
+TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28 units wide", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    auto content = scene.backend().createText(&frame.page());
+    content->setText("content");
+    scene.settle();
+    auto const itemFor = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    QQuickItem const& root = itemFor("shell");
+    QQuickItem const& sidebar = itemFor("shell_sidebar");
+    CHECK(std::abs(root.width() - scene.window().width()) < 1.0);
+    CHECK(std::abs(root.height() - scene.window().height()) < 1.0);
+    CHECK(std::abs(sidebar.width() - (28.0 * unit)) < 1.0);
+    CHECK(std::abs(sidebar.height() - scene.window().height()) < 1.0);
+    // The content sits right of the sidebar, inside the page's padding (step 4, 16 px).
+    CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x() >= sidebar.width() + 16.0);
 }

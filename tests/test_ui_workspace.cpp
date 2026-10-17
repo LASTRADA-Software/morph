@@ -304,3 +304,26 @@ TEST_CASE("workspace: a walk needs two tabs, and a close answered after the work
     harness.settle();
     CHECK_FALSE(answered);
 }
+
+// Mutation: let forceCloseAll ask the guard (the dirty draft keeps its tab).
+TEST_CASE("workspace: a tab's handle is reachable, and forceCloseAll closes every tab without asking",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, false};  // a guard that would keep every dirty screen open
+    int changes = 0;
+    WorkspaceOptions options = catalog();
+    options.onChanged = [&changes] { ++changes; };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
+    REQUIRE(shell.open("note", note(1)) == 0U);
+    REQUIRE(shell.open("draft", {}) == 1U);
+    harness.settle();
+    CHECK(changes >= 2);
+    REQUIRE(shell.handleOf(0) != nullptr);
+    CHECK(shell.handleOf(2) == nullptr);
+    CHECK(shell.activeHandle() == shell.handleOf(1));
+
+    shell.forceCloseAll();
+    harness.settle();
+    CHECK(shell.tabs().empty());
+    CHECK(shell.activeHandle() == nullptr);
+}

@@ -508,6 +508,7 @@ target_sources(morph
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
         include/morph/ui/service_client.hpp
+        include/morph/ui/shell_frame.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp

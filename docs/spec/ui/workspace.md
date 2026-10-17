@@ -27,6 +27,13 @@
 - An application routes its host's `onNavigate` to `open`, so a document's `navigate` opens or focuses a tab.
 - The destructor unmounts every screen without asking, newest first.
 
+- `handleOf(index)` is a tab's `ScreenHandle`, and `activeHandle()` the active tab's; null past the end or with no
+  tab. A client remounts a tab's screen through it on a development reload and reaches its inspector.
+- `forceCloseAll()` closes every tab without running a close guard, newest first: what signing out does, since no
+  guard may keep a screen of the principal who is leaving.
+- `WorkspaceOptions::onChanged` is called after the open tabs, their captions or the active tab changed, so a client's
+  top bar can follow the active tab's title.
+
 ## Opening
 
 `open(screenId, params)` answers the index of the tab it opened or focused, which becomes the active one:
