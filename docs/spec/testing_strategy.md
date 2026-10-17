@@ -134,9 +134,9 @@ regression cases under `tests/fuzz/findings/`:
   so reproduced the identical gap for every string field of every action and
   result. Action bodies are pure caller data (a paste's content, a chat
   message, a filename), so this is at least as exposed as the envelope was.
-  Found from the other end — by the application ladder's rung 1 (pastebin)
-  replaying `tests/fuzz/findings/` as *paste content*, which is the round trip
-  its README's "hostile content" requirement asks for — and fixed with the same
+  Found from the other end — by an application-ladder rung replaying
+  `tests/fuzz/findings/` as stored *user content*, the round trip a
+  "hostile content" requirement asks for — and fixed with the same
   instrument one layer down, `model::detail::EscapingWriteOpts` (see
   docs/spec/core/registry.md, "Control bytes in action and result bodies").
 

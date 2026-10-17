@@ -278,9 +278,9 @@ permanent failures will discard work it could have retried.
 
 All three limit-gated rows are unreachable against a **default-configured**
 server, because every `LimitPolicy` field defaults to `0`, meaning unbounded.
-Across the ladder only one of them is live: `bookmarks`, `polls`, `kanban` and
-`ledger` each set `maxLiveModels = 256` and leave every other field at `0`, and
-`pastebin` installs no policy at all. So `too many models` is asserted by a
+Across the ladder only one of them is live: `bookmarks` and `bank` each set
+`maxLiveModels = 256` and leave every other field at `0`, and `lims` installs
+no policy at all. So `too many models` is asserted by a
 real scenario (`scenarios/bookmarks/the-live-model-cap-is-reached.scenario`),
 while `server busy` and `timeout` carry written exemptions in
 `scripts/scenario/coverage_allowlist.json` — as do `server shutting down` and

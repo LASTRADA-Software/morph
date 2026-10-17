@@ -11,7 +11,7 @@ typing, subscriptions and nine others — are tabulated in
 
 > **New here?** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) builds one
 > small app end to end — model, registration, call site, then the same call
-> site over a socket — using [`examples/pastebin`](examples/pastebin) as the
+> site over a socket — using [`examples/bookmarks`](examples/bookmarks) as the
 > worked example. Start there; this page is the feature tour.
 
 Models may live **in-process** (local mode) or in a **remote server process**

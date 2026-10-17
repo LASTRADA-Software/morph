@@ -25,8 +25,8 @@ tax, drawn from the fix budget) or **explicitly dispositioned in the spec
 as app-layer by design**. Without this rule the ladder ends with a shadow
 framework living in `examples/common` — which would be the program's
 biggest finding, permanently unfiled. The op-id ledger example is no longer
-hypothetical: five rungs hand-wrote the same op-id table across seven call
-sites before it was promoted as `morph::offline::IReplayLedger` — see
+hypothetical: the same op-id table hand-written across several call sites
+is what `morph::offline::IReplayLedger` promotes — see
 [`docs/spec/offline/offline.md`](../docs/spec/offline/offline.md)'s
 `IReplayLedger` section for what it promotes and what it deliberately leaves
 app-side.
@@ -62,7 +62,7 @@ The user-code contract is: **you implement Models; morph exposes them.**
 - Follow [`bank`](bank/README.md)'s established shape: `BRIDGE_REGISTER_*`
   macros in the model header so every call site sees the `ActionTraits`
   specialisation; stateful models keyed with `BRIDGE_KEY_FROM`/
-  `BRIDGE_MODEL_KEY` where the domain has identity (account, poll, board,
+  `BRIDGE_MODEL_KEY` where the domain has identity (account, customer,
   sample); the model instance is a cache with identity — hydrated on first
   use, written through on every mutation, dropped when the instance dies;
   the store stays authoritative.
@@ -106,7 +106,7 @@ must exercise morph's typed machinery.
 
 **The only plain type permitted in an action/result field is
 `std::string`** (for genuinely textual data: names, descriptions, paste
-content, URLs). Everything else is a strong type:
+notes, URLs). Everything else is a strong type:
 
 | Data | Required type |
 |---|---|
@@ -114,16 +114,16 @@ content, URLs). Everything else is a strong type:
 | Exact unitless numbers | `morph::math::Rational` |
 | Points in time | `morph::time::Timestamp` / `DateTime` |
 | Foreign keys / lookups chosen by a user | `morph::forms::Choice<T, "ListAction">` |
-| Entity identity | A per-entity strong id type (e.g. `struct PasteId`) exposing `hasValue()` so it joins the forms palette as an empty-capable field |
+| Entity identity | A per-entity strong id type (e.g. `struct BookmarkId`) exposing `hasValue()` so it joins the forms palette as an empty-capable field |
 | Closed sets of states/options | `enum class` **with a `glz::meta`/`glz::enumerate` specialisation** (never a bare integer, never `bool` — a two-state flag is a two-enumerator `enum class`, per the readability rule that call sites must not read `f(true)`). The `glz::meta` is not optional decoration: `morph::forms::schemaJson<A>()` refuses to compile without one on any `enum class` member it reaches — glaze cannot describe the closed set otherwise, and a renderer would draw a checkbox for it instead of a combo box. |
 | Optional fields | empty-capable state (`hasValue()` / empty `Quantity`) or the action's `optionalFields` opt-out — not `std::optional<Quantity>`, which silently loses schema annotations (see the round-5 review finding in [`LADDER.md`](LADDER.md)) |
 | Line items / sub-objects | nested aggregates of the same palette |
 | Protocol scalars — pagination cursors, event ids / epoch tokens, op-ids / idempotency keys, base versions, job ids, capability & confirmation tokens | A named opaque newtype per role (e.g. `struct EventId`, `struct Cursor`), `hasValue()`-capable, serialising as its underlying scalar — **never** a bare `int64_t` and never a loose `std::string`. If morph offers no cheap `Tagged<T, "Name">` helper that joins glaze and the forms palette, that is a **day-one finding filed once**, not eight hand-rolled wrapper sets (round-7 T2). |
 
 **Forbidden in any DTO field: `int`, `int64_t`, `double`, `float`, `bool`,
-raw enums.** This deliberately supersedes bank's DTO style (integer minor
-units, integer ids, enums-as-integers) — bank predates this rule; the
-ladder exists to stress the exact-value and schema machinery, and every
+raw enums.** Bank (rung 2) does not follow this rule yet — its DTOs carry
+integer minor units, integer ids and enums as integers, and its README
+records that as a known gap rather than a precedent. The ladder exists to stress the exact-value and schema machinery, and every
 bare `int` in a DTO is a missed stress test. Where a strong type doesn't
 fit the palette, that is a finding, not a license for `int64_t`.
 
@@ -131,8 +131,8 @@ Each rung defines its unit system once (`<rung>/include/<rung>/units.hpp`,
 modelled on `examples/forms/lab_units.hpp`): the enum, `UnitTraits`
 metadata, the consteval algebra, and the exact entry-unit relations. Money
 is a unit system too (currency units with per-currency `dp` — respecting
-the `DecimalPlaces >= 1` floor and the documented JPY/KRW convention from
-the ledger rung).
+the `DecimalPlaces >= 1` floor and the documented JPY/KRW convention in
+`docs/spec/util/quantity_type.md`).
 
 Every action declares `validate()` (via `allRequiredEngaged` +
 domain checks) and carries `fieldMetadata`/`formRules` where the form needs
@@ -180,16 +180,18 @@ code itself.**
   raw-query facility, invoked from inside the model, with a mandatory
   finding entry** — never the sqlite3 API, never a parallel helper layer.
   Known escapees, pre-enumerated so nobody relitigates them: conditional
-  atomic updates with `RETURNING` (pastebin's burn-atomicity answer), FTS5
-  virtual tables (a full-text search fallback), and WAL-read-transaction snapshot
-  pinning (ledger reports). Without this tier, rung 1's *recommended*
-  design was illegal under this rule — rule erosion or silent workarounds
-  would have followed, both defects by the prime directive's own standard.
+  atomic updates with `RETURNING` (a guard and an increment applied
+  indivisibly), FTS5 virtual tables (a full-text search fallback), and
+  WAL-read-transaction snapshot pinning (a consistent multi-query report).
+  Without this tier a design that needs one of them would be illegal under
+  this rule, and rule erosion or silent workarounds would follow, both
+  defects by the prime directive's own standard.
 - **WASM**: Lightweight (ODBC) cannot run in the browser, and no
   browser-side substitute store may be written. The ladder's WASM clients
   are **remote clients** — persistence lives server-side, behind the model.
-  (Bank's local-only in-memory WASM store predates this rule and is not the
-  ladder pattern.)
+  Bank's in-memory WASM store (`bank_memory_lib`), which serves the GitHub
+  Pages demo with no server at all, is the one exception, and its README
+  says so.
 - The framework's own durable stores are unaffected by this rule: morph's
   `SqliteOfflineQueue`, journal logs, etc. are library code under test, not
   app database layer.
@@ -197,12 +199,13 @@ code itself.**
 ## 5. Testing: models are 100% unit tested
 
 - **Every model is 100% unit tested** — line and branch coverage of
-  `src/models/` + `include/<rung>/models/` at 100%, enforced as a
-  **blocking `codecov.yml` component gate** scoped to those paths (the
-  recipe rung 0 proved out on `examples/common`: a
-  `component_management.individual_components` entry naming the paths,
-  `informational: false`, wired to the `clang-coverage` CI leg's
-  `scripts/coverage.sh` output — see [`TESTING.md`](TESTING.md)'s "Build
+  `src/models/` + `include/<rung>/models/` at 100%. This is a target, not a
+  gate: each rung has a `codecov.yml` component
+  (`component_management.individual_components`) naming its paths, and every
+  component is `informational: true`, so a shortfall is recorded in the rung's
+  README rather than failing a build. The component reads the
+  `clang-coverage` CI leg's
+  `scripts/coverage.sh` output (see [`TESTING.md`](TESTING.md)'s "Build
   system and CI"). The DTO⇄entity mapping and error paths count as model
   code. **The store-error half is covered honestly, not excluded**
   (round-7 T3): branches reachable only through database failure
@@ -269,9 +272,9 @@ code itself.**
   `LocalSingleThread` / `Socket`) per [`TESTING.md`](TESTING.md); every
   invariant named in the rung README ("required tests", DoD) exists as a
   named test before the feature is called done.
-- Invariants are tested property-style where the README says so (ledger's
-  per-currency zero-sum, kanban's dense-unique positions) with seeds
-  printed on failure.
+- Invariants are tested property-style where the README says so (a
+  per-currency zero-sum, dense unique positions) with seeds printed on
+  failure.
 - GUI/presenter testing follows `TESTING.md`; there is no separate GUI
   logic to test if rule 2 was followed — presenter tests verify routing,
   error surfacing, and quiescence, not business behavior.
@@ -288,8 +291,8 @@ Every rung PR states, in its description:
    (rule 3); `std::string` only where the data is text.
 4. No database code outside Lightweight entities/migrations/mappers
    (rule 4) — `grep sqlite3_` returns nothing in the rung.
-5. Model coverage gate green (rule 5) — the blocking `codecov.yml`
-   component, target set from a measured ceiling with every known-artifact
-   line documented, matrix green.
+5. Model coverage measured (rule 5) — the rung's `codecov.yml` component,
+   its target set from a measured ceiling with every known-artifact line
+   documented, any shortfall recorded in the rung README, matrix green.
 6. The rung README's design questions are resolved in writing
    ([`LADDER.md`](LADDER.md) discipline rule).

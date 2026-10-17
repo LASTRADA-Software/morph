@@ -171,8 +171,9 @@ change the `required` array, or add a rule — those all come from the compiled
 type, and `decorate` deliberately touches none of them. A definition wanting a
 different *shape* still cannot be served without recompiling.
 
-This is the boundary the `crm` rung's runtime custom fields (its build order
-step 9) runs into head-on, and this seam does not move it: it covers the case
+This is the boundary runtime custom fields run into head-on
+(`tests/test_extension_bag_spike.cpp` probes them), and this seam does not
+move it: it covers the case
 where the fields are known at compile time and only their *parameters* are
 data. An open extension bag whose members appear in schemas, validation and the
 journal as first-class fields is a strictly larger problem — it needs a

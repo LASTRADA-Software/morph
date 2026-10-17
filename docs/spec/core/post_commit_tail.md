@@ -59,7 +59,7 @@ Both overloads run `tail` once. If it throws, the exception is caught — a
 ```
 
 Nothing is rethrown. `what` names the handler; by convention it carries the
-model's tag too (`"[kanban::BoardModel] CreateColumn"`), because the log line is
+model's tag too (`"[bookmarks::BookmarkModel] BulkEdit"`), because the log line is
 the only place the failure surfaces.
 
 - **The `void` overload** is for a tail whose result the caller does not need —

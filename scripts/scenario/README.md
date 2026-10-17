@@ -17,15 +17,16 @@ Verified on CPython 3.9.6, 3.12 and 3.14.
 ## Running one
 
 ```bash
-# Start a server; it prints the port it bound (PASTEBIN_PORT=0 → the OS picks).
-PASTEBIN_DB="DRIVER=SQLite3;Database=$PWD/pastebin.db;Timeout=5000" \
-PASTEBIN_PORT=0 QT_QPA_PLATFORM=offscreen \
-    ./build/examples/pastebin/ladder_pastebin_server
-# pastebin-server: listening on port 60101
+# Start a server; it prints the port it bound (BOOKMARKS_PORT=0 → the OS picks).
+BOOKMARKS_TOKEN_SECRET="pick-something-real" \
+BOOKMARKS_DB="DRIVER=SQLite3;Database=$PWD/bookmarks.db;Timeout=5000" \
+BOOKMARKS_PORT=0 QT_QPA_PLATFORM=offscreen \
+    ./build/examples/bookmarks/ladder_bookmarks_server
+# bookmarks-server: listening on ws://127.0.0.1:60101
 
 python3 scripts/scenario/morph_scenario.py \
     --server ws://127.0.0.1:60101 \
-    scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
+    scripts/scenario/scenarios/bookmarks/archive-unarchive-round-trip.scenario
 ```
 
 ## Running a whole rung
@@ -38,33 +39,20 @@ deliberately does not own. It needs the rung servers built:
 cmake --preset clang-release -B build/ladder-srv -DMORPH_BUILD_LADDER=ON \
     -DMORPH_LADDER_RUNGS=all -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON \
     -DMORPH_BUILD_TESTS=ON
-cmake --build build/ladder-srv --target ladder_pastebin_server ladder_bookmarks_server \
-    ladder_polls_server ladder_kanban_server ladder_ledger_server
+cmake --build build/ladder-srv --target ladder_bookmarks_server ladder_bank_server
 
 python3 scripts/scenario/run_scenarios.py                     # every rung
-python3 scripts/scenario/run_scenarios.py --rung pastebin
-python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
+python3 scripts/scenario/run_scenarios.py --rung bookmarks
+python3 scripts/scenario/run_scenarios.py --rung bank --twice --mutate
 ```
 
-**bank is built separately**, because it is not a ladder rung: it is absent
-from `examples/rungs.txt`, never calls `morph_add_rung()`, and its server is a
-local target in `examples/bank/CMakeLists.txt`. It also pulls a heavy
-dependency tree (the Lightweight ORM over ODBC), which is why it sits behind
-its own option and off by default:
+With the ladder on, `-DMORPH_LADDER_RUNGS=all` builds bank too: it is rung 2,
+with its own `CMakeLists.txt` rather than `morph_add_rung()`.
 
-```bash
-cmake --preset clang-release -B build/bank-srv -DMORPH_BUILD_BANK_EXAMPLE=ON \
-    -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON -DMORPH_BUILD_TESTS=ON
-cmake --build build/bank-srv --target ladder_bank_server
-
-python3 scripts/scenario/run_scenarios.py --rung bank --build-dir build/bank-srv --twice
-```
-
-Note that `--build-dir` applies to *every* rung in the run, so it is for
-single-rung runs like the one above. A whole-corpus `run_scenarios.py` with no
-`--build-dir` still works across the two build directories: it globs
-`build/*/examples/<name>/`, and each server binary exists under exactly one of
-them.
+Note that `--build-dir` applies to *every* rung in the run. With no
+`--build-dir` the runner globs `build/*/examples/<name>/`, so servers built in
+different build directories still work as long as each binary exists under
+exactly one of them.
 
 | Flag | Meaning |
 |---|---|
@@ -85,43 +73,16 @@ pass left behind and demands the same result.
 `broken-on-purpose.scenario` has its verdict inverted: it is meant to fail, so
 a run in which it passes is a failure.
 
-Ledger is seeded with two `ledgers` rows before its scenarios run — the only
-rung that gets any. They are fixture books for the fourteen ledger files
-written against the fixed ids `1` and `2`, one of which
-(`two-books-are-isolated`) needs two books to exist before its first step.
-They are not a statement that a book cannot be created over the wire:
-`CreateLedger` does that, and
-`ledger/bootstrap-a-book-over-the-wire.scenario` names no seeded id at all, so
-it would pass against a database the driver never touched. Every other rung
-creates its own root entity over the wire and is seeded with nothing.
+No rung's database is seeded: every rung creates its own root entity over the
+wire. (`RungSpec.seed_sql` exists for a rung that needs fixture rows before its
+first step; none does.)
 
-`scenarios/` holds one directory per server, and one file per workflow. Five of
-the six are ladder rungs; `bank` is not one, which is why the column below says
-"server" rather than "rung".
-
-That asymmetry is deliberate and is not drift to be tidied away. `bank` appears
-in `run_scenarios.py`'s `RUNGS` and in a gate removed on 2026-09-23's `SERVER_RUNGS`,
-and is absent from [`examples/rungs.txt`](../../examples/rungs.txt) — the
-ladder's authoritative rung list — because those lists answer different
-questions. `rungs.txt` decides what the ladder *builds and gates on*: every
-entry is pulled into `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
-`coverage.sh` and `codecov.yml`'s per-rung
-components. The two tuples here decide only
-what a scenario can *reach*, and have always selected on "ships a
-`src/server/main.cpp`". Bank ships one — built by a local `add_executable`, not
-by `morph_add_rung()` — and is unnumbered prior art that predates the ladder
-(`examples/LADDER.md` records that status next to its numbered table). The
-independence already ran the other way too: `lims` and `crm` are rungs with no
-scenarios. `--rung bank` and the `bank` column below are therefore spellings of
-"the `bank` directory", not a rung claim.
+`scenarios/` holds one directory per rung with a server, and one file per
+workflow. lims has no scenarios yet.
 
 | Directory | Server | What it covers |
 |---|---|---|
-| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, burn-after-reads, expiry, listing privacy and pagination; the envelope kinds a typed client never sends, and malformed frames |
-| `bookmarks/` | `ladder_bookmarks_server` | sign-in and forged tokens, CRUD, archive, atomic bulk edit, tag rename/merge, filters, the changes-since poll, import/export, two users and a shared feed; the live-model cap |
-| `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
-| `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
-| `ledger/` | `ladder_ledger_server` | bootstrapping a book from nothing, per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
+| `bookmarks/` | `ladder_bookmarks_server` | sign-in and forged tokens, CRUD, archive, atomic bulk edit, tag rename/merge, filters, the changes-since poll, import/export, two users and a shared feed; the live-model cap; an envelope the server cannot decode |
 | `bank/` | `ladder_bank_server` | registration and password-only sign-in, accounts and the ledger behind them, overdraft boundaries, transfers, bills and scheduled/standing instructions, cards, loans and amortisation, budgets, notifications, statements; two customers, the anonymous session, and the stateful account cache |
 
 Some of the bank files assert behaviour that is **wrong**, deliberately, and
@@ -145,7 +106,7 @@ The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
 counted against no rung and is refused by the self-test.
 
-`pastebin/broken-on-purpose.scenario` is *meant to fail* — see below.
+`bookmarks/broken-on-purpose.scenario` is *meant to fail* — see below.
 
 Exit code `0` if every assertion held, `1` if one did not (the run stops at the
 first failure and prints the state at that point), `2` if the file is malformed
@@ -165,7 +126,7 @@ top to bottom, on the connection of whichever client is current.
 ```
 # Settings — both optional, both must precede the first step.
 server ws://127.0.0.1:8765     # default url for every client
-model  PasteModel              # default typeId every client registers
+model  BookmarkModel           # default typeId every client registers
 
 # Open a named connection: connect, "hello", "register".
 client alice
@@ -266,7 +227,7 @@ failed-then-retried sign-in appears in no in-process rig, because rigs arrive
 already authenticated.
 
 The credentials may equally be written on the `client` line that opens the
-connection — `client books model=LedgerModel principal=$who token=$token` — and
+connection — `client store model=BookmarkModel principal=$who token=$token` — and
 mean the same thing as the two-line `client` then `session` form. That equality
 is load-bearing: were `client` to read its options raw, `$token` would go to
 the server as six literal characters and the run would fail several steps later
@@ -281,120 +242,21 @@ A scenario that passes proves nothing until you know it *can* fail.
 ```bash
 python3 scripts/scenario/mutate_scenario.py \
     --server ws://127.0.0.1:60101 \
-    scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
+    scripts/scenario/scenarios/bookmarks/archive-unarchive-round-trip.scenario
 ```
 
 A surviving mutant is an assertion that is not load-bearing. It exits non-zero
 if any survives.
 
-`scenarios/pastebin/broken-on-purpose.scenario` is a scenario that is *meant* to fail: it
-asserts a paste reads back with content it was never created with. Run it to see
+`scenarios/bookmarks/broken-on-purpose.scenario` is a scenario that is *meant* to fail: it
+asserts a bookmark reads back with a title it was never created with. Run it to see
 what a failure report looks like.
 
-## Measuring what the corpus covers
+## In CI
 
-A corpus grows by whoever last added a file, and "have we covered everything?"
-has no answer unless the universe is countable. a gate removed on 2026-09-23 makes it
-countable: it enumerates every envelope kind `RemoteServer::dispatchMessage`
-handles and every refusal string it can put on the wire, straight out of
-`include/morph/core/remote.hpp`, then diffs that against what the scenario
-files actually send and assert.
-
-```bash
-python3 scripts/scenario/a gate removed on 2026-09-23
-```
-
-Exit `0` if every kind and refusal is covered or exempt *and* the workflow
-axis below is satisfied, `1` if either axis has a real gap, `2` if the tool
-itself is broken — a header it cannot read, an extraction too small to be
-believable, or a stale allowlist.
-
-Anything deliberately left uncovered goes in `coverage_allowlist.json` with a
-**written reason**, and is checked in both directions: an entry for something
-now covered, or for something `remote.hpp` no longer has, fails the run. The
-list can only shrink deliberately.
-
-The report is itself a control, so it is built not to pass while measuring
-nothing: it refuses to run if it extracts an implausibly small surface (rename
-`makeErr` and it fails loudly rather than reporting full coverage over an empty
-universe), and a gate removed on 2026-09-23 drives it against fixtures whose right
-answers are known, including one where the correct exit code is non-zero.
-
-### The workflow axis
-
-Protocol coverage answers "did some scenario ever send this envelope kind or
-assert this refusal?" — it says nothing about whether scenarios exercise real
-*journeys* through a rung's domain actions, as opposed to a flat list of
-independent calls that happen to share a socket. a gate removed on 2026-09-23 also
-measures that, per rung, against the registered `BRIDGE_REGISTER_ACTION`
-surface under `examples/<rung>/`.
-
-A scenario file counts as a **workflow** only when a later **`do`** step's
-arguments reference a name an earlier step `capture`d — one dispatched action
-consuming another's captured state — and it does so at least
-`WORKFLOW_MIN_CHAINED` times across at least `WORKFLOW_MIN_ACTIONS` distinct
-actions. Chaining on any other verb does not count: a `session
-principal=$who token=$token` step reuses one sign-in's credentials rather than
-carrying a result forward, so a file that installs the same token on three
-clients and then fires four unrelated `do` calls threads nothing between its
-actions and is not a workflow. A file that fires several unrelated calls, or
-that re-reads the same captured id without threading it into a *new* action,
-does not qualify either: format demonstrations and CRUD smoke tests are
-deliberately excluded, because what a workflow is meant to exercise — strand
-ordering, exactly-once replay, second-call authorization — only shows up when
-steps genuinely depend on each other's results.
-
-Two conditions must hold per rung, from `scenarios/<rung>/`:
-
-- every registered action is dispatched (appears in some scenario's `do`
-  step) by some file in that rung's directory;
-- the rung has at least as many qualifying workflow files as its floor in
-  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 16,
-  `kanban` 20, `bank` 22) — floors scaled to how finite that directory's space
-  of meaningful journeys is, not quotas: it may carry more. `bank`'s is the
-  highest because its 41 registered actions across eleven models are the
-  largest surface measured here.
-
-An action that genuinely cannot be driven by any WebSocket client — because
-the server refuses every principal but its own internal caller, or because no
-action on the wire ever hands back the id it needs — is not a coverage gap to
-close but a fact about the rung, and gets an entry in `coverage_allowlist.json`
-under `"actions"`, keyed `"<rung>/<Action>"`, with the same **written reason**
-requirement as `kinds` and `messages`.
-
-That section is audited in both directions too: an entry with no written
-reason, one not keyed `"<rung>/<Action>"`, one naming a rung that registers
-nothing, or one naming an action its rung no longer registers all fail the run
-as a broken tool (exit `2`). What retires such an entry is *success*, not
-dispatch: the entry claims the action cannot be driven to completion, so a
-scenario that calls it precisely to assert its refusal is the reason's
-evidence and leaves it standing, while a scenario that dispatches it with an
-`expect ok` has done what the reason said was impossible and the entry must
-go. An entry whose action *is* dispatched grants no exemption — `exempt` is
-scoped to the actions no scenario dispatches at all — so the report lists it
-apart from the entries the per-rung `(n exempt)` count actually reflects.
-
-### In CI
-
-`.github/workflows/drift-guard.yml`'s `scenario-coverage` job runs
-a gate removed on 2026-09-23 and then a gate removed on 2026-09-23 on every push and
-pull request. Both read source and scenario files only — they compile nothing
-and start nothing — which is what lets them sit in a workflow whose every job
-is fast and dependency-free.
-
-That gate catches the surface drifting away from the corpus: an action
-registered with no scenario reaching it, a refusal added to `remote.hpp` that
-nothing asserts, an allowlist entry left behind after the thing it exempted
-became coverable, or a scenario edited until it no longer qualifies as a
-workflow.
-
-Behaviour is gated separately, by `.github/workflows/ci.yml`'s `ladder-tests`
-job, which runs the whole corpus against real servers. It builds them anyway
+`.github/workflows/ci.yml`'s `ladder-tests` job which runs the whole corpus against real servers. It builds them anyway
 for its own ladder tests, so the build the corpus needs is already paid for:
-`-DMORPH_LADDER_RUNGS=all` gives it every rung's `ladder_<rung>_server`, and
-`-DMORPH_BUILD_BANK_EXAMPLE=ON` gives it `ladder_bank_server`, which is a local
-`add_executable()` in `examples/bank/CMakeLists.txt` rather than a rung target
-(bank is deliberately not in `examples/rungs.txt` — see that file). The final
+`-DMORPH_LADDER_RUNGS=all` gives it every rung's `ladder_<rung>_server`. The final
 step then passes `--rung` once per directory under `scenarios/`, so the set
 that runs is the set that exists, and `--build-dir` so no stale binary from
 another build tree can be picked up. A missing binary is not softened into a
@@ -413,20 +275,6 @@ worse, by being quietly left out of a run that then reports green.
 (`scripts/ladder_rungs.sh ci-path-regex`), so a pull request touching only the
 corpus still reaches the job that runs it.
 
-a gate removed on 2026-09-23 --floors` is a **testing-only** override for this tool's
-own fixtures (it lets them satisfy a floor without authoring dozens of
-throwaway workflow files); CI and any real run pass it nothing and get the
-shipped `WORKFLOW_FLOORS`.
-
-## Self-test
-
-a gate removed on 2026-09-23 covers the parser, the value syntax, the path reader
-and the comparison rules. It needs no server:
-
-```bash
-python3 scripts/scenario/a gate removed on 2026-09-23
-```
-
 ## What this deliberately does not do
 
 - **No `sleep`, and no wall-clock waits.** Every assertion is on a reply to a
@@ -437,9 +285,7 @@ python3 scripts/scenario/a gate removed on 2026-09-23
 - **No schema validation of inputs.** The runner does not check a scenario's
   inputs against the server's served JSON Schema before sending, and the reason
   is *not* that it could not: the `schemas` kind serves exactly that document,
-  and `scenarios/pastebin/wire-kinds-and-typeid-refusals.scenario` reads
-  `PasteModel`'s out of a live server, `required` array, declared bounds and
-  all. The narrower statement is the true one: this runner sends what the
+  `required` array, declared bounds and all, out of a live server. The narrower statement is the true one: this runner sends what the
   file says without consulting it, which is also what makes deliberately
   malformed payloads expressible. Validating against the served schema is
   therefore *possible* and merely not done.

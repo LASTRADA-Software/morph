@@ -1,8 +1,10 @@
-# lims — rung 6 of the [application ladder](../LADDER.md)
+# lims — rung 3 of the [application ladder](../LADDER.md)
 
-**Status: built** — the rung named a design annex under the [round-7
-program decision](../LADDER.md) has since been constructed: §1–§7 below are
-all implemented, with model tests under [`tests/`](tests) and its screens
+The ladder's large application, and **the rung that grows**: new screens,
+modules and models are added here, so the ladder always has one application
+whose size is what a real client faces (see [`LADDER.md`](../LADDER.md)).
+
+**Status: built** — §1–§7 below are all implemented, with model tests under [`tests/`](tests) and its screens
 under [`screens/`](screens); see [Definition of
 done](#definition-of-done) for what that does and does not mean. A
 lightweight Laboratory Information Management System:
@@ -88,10 +90,8 @@ Build order:
 5. Conditional form logic: fields required/visible depending on other
    fields (e.g. dilution factor only when diluted).
    `requiredWhen`/`visibleWhen`/`readonlyWhen` with single-node conditions
-   exist and are enforced client- and server-side. **Correction (rung 6,
-   verified against the shipped headers):** round 5's "there are no
-   `and`/`or`/`not` combinators" is **out of date** — `andOf`/`orOf`/`notOf`
-   exist, are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
+   exist and are enforced client- and server-side. The compound conditions
+   `andOf`/`orOf`/`notOf` exist too, are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
    are usable both nested in a `when` clause and directly as a top-level
    rule. What remains true: the vocabulary is still closed (no application
    lambdas), a hidden field's draft value still travels (decide
@@ -123,16 +123,15 @@ transitions; journal as regulatory audit.
   `Quantity`, `belowLOD`, `aboveUDL`) must round-trip distinguishably
   through glaze *and* through the offline queue's opaque payloads.
 - Schema versioning: morph serves schemas from compiled C++ types; versioned
-  catalogs mean schemas become *data*. Bridges toward rung 7's runtime
-  custom fields.
+  catalogs mean schemas become *data*. Bridges toward runtime custom
+  fields (`tests/test_extension_bag_spike.cpp`).
 - **Journal payload evolution — this rung owns the ladder's answer
   [framework gap]**: replay decodes stored payloads with the *current*
   action structs; rename or retype a field and old entries decode
   leniently, silently dropping data — the "reconstructible from the journal
   alone" DoD is then false. Versioned analyses make this unavoidable:
   per-entry schema/app-version pinning plus a migration story (the journal
-  format's `v` covers the line format only). Rungs 5 and 7 reuse whatever
-  is decided here.
+  format's `v` covers the line format only).
 - **Stale-schema submission**: schema `required`/bounds are client-side
   only — the server runs whatever payload arrives. A v-N payload against a
   v-N+1 server (narrowed spec range) must be accepted-under-old-rules,
@@ -170,8 +169,9 @@ transitions; journal as regulatory audit.
   refuse empty principals on mutating actions.
 - Base-version conflict detection is app logic today — evaluate whether a
   reusable morph primitive should exist.
-- Offline field capture in the browser inherits kanban's WASM-offline scope
-  limits ([`../kanban/README.md`](../kanban/README.md)) — desktop-first.
+- Offline field capture in the browser is out of scope: `SqliteOfflineQueue`
+  needs a filesystem and `NetworkMonitor` a probe thread, neither of which
+  the single-threaded WebAssembly client has — desktop-first.
 
 ## Definition of done
 
@@ -333,7 +333,7 @@ The form's *shape* is still compiled and therefore identical for every
 version: the `required` array and the `x-rules` list come from
 `CaptureConcentration`, so a version wanting an extra field or a different
 rule still cannot be served without recompiling. That boundary is unchanged,
-and it is what rung 7's runtime custom fields run into head-on.
+and it is what runtime custom fields run into head-on.
 
 `GetAnalysisSchema` **refuses** a version whose canonical unit has no
 compiled result-entry action, rather than serving the mg/L form for an amps
@@ -379,8 +379,8 @@ is the honest summary of §7's framework story.
 throwing. Throwing would abort the replay of every later item in the queue
 and lose the very flag the run exists to raise. `IMPLEMENTATION.md`'s "never
 encode failure as a magic value in a result DTO" is about *failures*; a
-stale-base update is a legitimate business outcome that a human must see, and
-the two-enumerator result enum is the same shape as `polls::Restored`.
+stale-base update is a legitimate business outcome that a human must see, so
+it is an enumerator of the result.
 
 Genuine errors still throw: an envelope that does not validate, an author who
 is not the authenticated principal, a sample or analysis version that does not
@@ -438,7 +438,7 @@ Roles are **not hierarchical**: a supervisor who must also verify is granted
 second pair of eyes on their own work without anyone deciding they should be.
 
 `LimsAuthorizer` derives from `SigningAuthorizer` rather than
-`AllowAllAuthorizer` (polls' choice) because a role gate needs an
+`AllowAllAuthorizer` because a role gate needs an
 authenticated principal: a non-authenticating authorizer makes `RemoteServer`
 *clear* `Context::principal` before dispatch, leaving nothing to key on. Roles
 come from the `lims_operators` table, not the token's `roles` claim — a token
@@ -562,8 +562,8 @@ produces no new finding.
 this rung needs an operation that is *atomic across several samples* — one
 transaction covering rows owned by several keyed instances. That is a real
 framework question (morph serialises per instance, not across instances) and
-none of §2–§7 raised it. If a rung 7 or 8 needs cross-instance atomicity, the
-worksheet is the natural place to put it, and this decision should be
+none of §2–§7 raised it. If this rung grows a feature that needs
+cross-instance atomicity, the worksheet is the natural place to put it, and this decision should be
 revisited then rather than treated as settled.
 
 ## The client
@@ -623,25 +623,15 @@ omitted the second pair of eyes, which is the one thing a four-eyes record
 exists to show. Fixed by rekeying the journal to the result's own sample
 (same for conflict resolutions), and pinned by its own test.
 
-Neither this component nor rung 5's could have scored anything before this,
-because `scripts/coverage.sh`'s rung list had drifted from CMake's and named
-only rungs 1–4 — so ledger's carefully-measured 87% gate was matching a set of
-files no uploaded report contained. Fixed here.
-
 ## Findings raised by this rung
 
 - **`ModelKey` rejected strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
   routes the key through `keyToString`, whose concept admitted only
   `std::integral` or `std::string`, while `IMPLEMENTATION.md` rule 3 mandates
-  a strong id struct for entity identity. ledger and kanban carried the
-  identical hand-written workaround; lims was the third, which is the
-  rule-of-three trigger. `ModelKey` admits a strong id wrapping a raw key
+  a strong id struct for entity identity. `ModelKey` admits a strong id wrapping a raw key
   (`WrappedModelKey`) now, so no rung carries a hand-written block —
   `SampleModel` keys on `SampleId` itself, and an empty id is refused
   by `keyToString` instead of dereferenced.
-- **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
-  order §5 above, corrected in place). They exist and are specified in
-  `docs/spec/forms/forms.md`.
 - **a forms schema is a pure function of the compiled action type.**
   **Partly closed upstream.** Per-instance *values* now reach the framework's
   own keys through `morph::forms::InstanceConstraints`: the two analysis
@@ -651,7 +641,7 @@ files no uploaded report contained. Fixed here.
   recording it. What remains is the structural half — the schema's *shape* is
   still a function of the compiled type, so a rung whose definitions are data
   needs one compiled action per unit family rather than per analysis. That is
-  what rung 7's runtime custom fields run into head-on.
+  what runtime custom fields run into head-on.
 - **a journal entry from an older build decodes leniently to defaults, with no
   signal.** **Closed at the framework level; this rung's own audit
   reconstruction has not adopted it.** `journal::replay()` now stamps every
@@ -735,19 +725,13 @@ files no uploaded report contained. Fixed here.
   replay. Found by driving replay through `switchBackend` rather than calling
   the hook directly — the §7 suite's own helper had been supplying a session
   the framework never does.
-- **`scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
-  lims were both missing, so neither reached any uploaded report — and rung
-  5's codecov component, with a target derived from a genuinely careful
-  measurement, was scoring files the report did not contain. A component that
-  matches nothing does not fail; it reports nothing. Fixed here.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what
   `IMPLEMENTATION.md` rule 5 requires the audit trail to be tested through —
-  records nothing. `ledger` (three models), `kanban`, and this rung's
-  catalogue each hand-rolled the same `attachActionLog`/`logAction` pair;
-  this rung shares one copy between its two models
-  (`include/lims/core/self_journal.hpp`) rather than adding a sixth. Not
+  records nothing, so a model that journals carries its own
+  `attachActionLog`/`logAction` pair; this rung shares one copy between its
+  two models (`include/lims/core/self_journal.hpp`). Not
   filed as a separate finding pending a decision on whether "models do not
   journal, dispatchers do" is the intended contract — but if it is, the
   contract makes the "reconstructible from the journal alone" DoD untestable

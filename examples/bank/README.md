@@ -21,28 +21,37 @@ It ships the models, a full test suite, a scripted CLI driver, a server, and
 
 ## Bank and the application ladder
 
-Bank predates [the application ladder](../LADDER.md) and is **unnumbered prior
-art**: `LADDER.md` cites it in its intro, measures rung effort in
-"bank-equivalents", and gives it no rung number. That is deliberate — the
-numbers in `LADDER.md`'s table are load-bearing for the rungs that consume each
-other's answers, and bank has nothing to take but a renumbering. Concretely,
-bank is absent from [`examples/rungs.txt`](../rungs.txt) and never calls
-`morph_add_rung()`, which is what keeps it out of `ci.yml`'s `ladder-tests`
-and `ladder-sanitizers`, `coverage.sh` and `codecov.yml`'s per-rung
-components; `ci.yml`'s `bank-sanitizers` and all-features jobs build it with
-`-DMORPH_BUILD_BANK_EXAMPLE=ON`, and `wasm-demo.yml` builds the browser demo.
-`ladder_bank_server` below is a local `add_executable` for the same reason; the `ladder_` prefix is the scenario tooling's naming convention, not a
-rung claim.
+Bank is **rung 2** of [the application ladder](../LADDER.md): the medium-sized
+application, between bookmarks (small) and lims (large). It is listed in
+[`examples/rungs.txt`](../rungs.txt), so `ci.yml`'s `ladder-tests` and
+`ladder-sanitizers`, `scripts/coverage.sh` and `codecov.yml`'s `bank` component
+cover it like every other rung, and its test cases carry the `bank.` prefix and
+the `ladder-bank` label.
 
-Conventions bank **shares** with the rungs: persistence exclusively through the
-Lightweight ORM, with the schema owned by `LIGHTWEIGHT_SQL_MIGRATION`
-definitions — [`LADDER.md`](../LADDER.md) calls that "bank's pattern" and binds
-every rung to it — models as the application, plain aggregates on the wire, and
-[server-defined screens](#server-defined-screens). The convention it does
-**not** follow is the [`TESTING.md`](../TESTING.md) dual-deployment-mode rig — its remote coverage is
-`SimulatedRemoteBackend` in `test_remote.cpp` plus the scenario corpus below.
-Bringing that into line is open work; the numbering question is
-the part that is settled.
+It keeps its own `CMakeLists.txt` rather than calling `morph_add_rung()`,
+because it builds variants a rung does not: the in-memory model library for
+WebAssembly (`bank_memory_lib`), the command-line client, and its own screens
+directory. With `-DMORPH_BUILD_LADDER=ON` the ladder's rung loop adds it (when
+`MORPH_LADDER_RUNGS` selects it or `MORPH_BUILD_BANK_EXAMPLE` is on); without
+the ladder the root adds it on `MORPH_BUILD_BANK_EXAMPLE` alone, which is how
+`wasm-demo.yml` builds the browser demo.
+
+Conventions bank **shares** with the other rungs: persistence exclusively
+through the Lightweight ORM, with the schema owned by
+`LIGHTWEIGHT_SQL_MIGRATION` definitions, models as the application, plain
+aggregates on the wire, and [server-defined screens](#server-defined-screens).
+Known gaps against the ladder's rules, recorded rather than closed:
+
+- **[`TESTING.md`](../TESTING.md)'s dual-deployment-mode rig is not used.**
+  Bank's remote coverage is `SimulatedRemoteBackend` in `test_remote.cpp` plus
+  the scenario corpus below.
+- **[`IMPLEMENTATION.md`](../IMPLEMENTATION.md) rule 3 is not followed.** The
+  DTOs carry integer minor units, integer ids and enums as their integer
+  values, not strong types.
+- **Rule 5's 100% model line and branch coverage has not been measured for
+  bank yet.** The `bank` codecov component reads it from the coverage leg, and
+  like every component it is informational: a shortfall is a known gap, not a
+  failed build.
 
 ## Architecture: two type layers
 
@@ -170,7 +179,7 @@ stdexec, yaml-cpp, libzip — via Lightweight). Enable it from the repo root:
 
 ```sh
 cmake -G Ninja -B build -S . -DMORPH_BUILD_BANK_EXAMPLE=ON
-cmake --build build --target bank_tests bank_cli
+cmake --build build --target ladder_bank_tests bank_cli
 ```
 
 Requirements: a C++23 compiler, **unixODBC**, and the **SQLite3 ODBC driver**
@@ -178,7 +187,7 @@ registered with unixODBC (the connection string is `DRIVER=SQLite3;Database=…`
 
 ```sh
 # Run the test suite
-./build/examples/bank/bank_tests
+./build/examples/bank/ladder_bank_tests
 
 # Run the scripted tour (same scenario on local, then remote, backend)
 ./build/examples/bank/bank_cli
@@ -219,9 +228,7 @@ python3 scripts/scenario/run_scenarios.py --rung bank --build-dir build
 `--build-dir` names the directory `ladder_bank_server` was built into; add
 `--twice` to rerun the directory against the database the first pass left
 behind. The format, the flags and what the corpus is measured against are in
-[`scripts/scenario/README.md`](../../scripts/scenario/README.md). Note that
-`--rung bank` is the runner's spelling for "the `bank` directory" — bank is not
-a rung, per the section above.
+[`scripts/scenario/README.md`](../../scripts/scenario/README.md).
 
 #### This server authenticates nobody — do not copy it as an authentication example
 
