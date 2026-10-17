@@ -454,7 +454,7 @@ jobs:
           "$FC" --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -675,7 +675,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -843,7 +843,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -1012,7 +1012,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -1155,7 +1155,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -1224,7 +1224,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: (github.event_name == 'pull_request' || github.event_name == 'push')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -1664,7 +1664,7 @@ jobs:
           "$FC" --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: "steps.filter.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -1949,7 +1949,7 @@ jobs:
           "$FC" --show-stats || true
 
       - name: Upload the sccache entries this build used
-        if: "steps.filter.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: ./.github/actions/sccache-upload
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
@@ -2696,7 +2696,7 @@ jobs:
   sccache-publish:
     name: Publish the master compiler cache
     needs: [linux-compilers, linux-sanitizers, linux-coverage, kanban-tsan, bank-sanitizers, linux-qt, ladder-tests, ladder-sanitizers]
-    if: "!cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push')"
+    if: "!cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
     runs-on: ubuntu-24.04
     permissions:
       actions: write
