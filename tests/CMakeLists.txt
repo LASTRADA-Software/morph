@@ -186,6 +186,7 @@ add_executable(morph_tests
     test_ui_common.cpp
     test_ui_custom.cpp
     test_ui_shell_frame.cpp
+    test_ui_explorer.cpp
     test_ui_workspace.cpp
     test_ui_workspace_start.cpp
     test_ui_field.cpp
