@@ -236,7 +236,9 @@
     { "name": "clangcl-debug",     "configurePreset": "clangcl-debug",     "inherits": "base-test" },
     { "name": "windows-everything","configurePreset": "windows-everything","inherits": "base-test" },
     { "name": "gcc-debug",         "configurePreset": "gcc-debug",         "inherits": "base-test" },
+    { "name": "gcc-release",       "configurePreset": "gcc-release",       "inherits": "base-test" },
     { "name": "clang-debug",       "configurePreset": "clang-debug",       "inherits": "base-test" },
+    { "name": "clang-release",     "configurePreset": "clang-release",     "inherits": "base-test" },
     { "name": "linux-everything",  "configurePreset": "linux-everything",  "inherits": "base-test" },
     {
       "name": "clang-asan",
