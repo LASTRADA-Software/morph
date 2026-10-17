@@ -6077,7 +6077,7 @@ inline Node ScreenCore::lowerArrangeEditor(DocNode const& node, LowerCtx const& 
         shown.common.testId = "arrange-shown-" + childId;
         return ui::row(Row{.children = {ui::checkbox(std::move(shown)), ui::button(std::move(moveUp)),
                                         ui::button(std::move(moveDown))},
-                           .gap = 4});
+                           .gap = 1});
     };
     ForEach editor{.model =
                        std::make_shared<TypedForEach<Value> const>(std::move(rows), std::move(key), std::move(view))};

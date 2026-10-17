@@ -41,9 +41,9 @@ ui::Screen loginScreen() {
         return ui::column(
             {ui::row({ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
                       ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")},
-                     {.gap = 8}),
+                     {.gap = 2}),
              ui::text({.text = login.error()}).testId("error")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 
@@ -95,7 +95,7 @@ ui::Screen bookmarksScreen() {
                  .testId("renameForm"),
              ui::form<MergeTags>(tagModel, {.onSuccess = refreshed}).id(ui::element("mergeForm")).testId("mergeForm"),
              ui::text({.text = ui::coalesce({bookmarks.error(), tags.error(), archive.error()})}).testId("error")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 

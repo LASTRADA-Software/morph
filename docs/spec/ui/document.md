@@ -162,6 +162,8 @@ place a kind is described.
 | `collection`, `wizard` | `model`, `action` (required) | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
+`gap` and `padding` are spacing steps, 0 to 5 ([`view_tree.md`](view_tree.md)); the mount clamps any other value.
+
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 ## Scopes and names

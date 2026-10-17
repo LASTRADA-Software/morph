@@ -3067,7 +3067,7 @@ namespace detail {
 
 /// @brief Options of `column`, `row` and `grid`.
 struct ContainerOptions {
-    /// @brief The gap between children.
+    /// @brief The gap between children: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
     /// @brief A grid's columns; adaptive layouts read `env("widthClass")`.
     AnyHandle columns;
@@ -3310,7 +3310,7 @@ struct ForEachOptions {
     AnyHandle key;
     /// @brief The axis.
     AnyHandle axis;
-    /// @brief The gap.
+    /// @brief The gap between rows: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
 };
 

@@ -68,12 +68,12 @@ ui::Node sidebar(std::string_view current) {
     }
     items.push_back(ui::button({.label = "Sign out", .onClick = {ui::signOut(), ui::navigate(std::string{kLogin})}})
                         .testId("signOut"));
-    return ui::column(items, {.gap = 4});
+    return ui::column(items, {.gap = 1});
 }
 
 // A signed-in screen: the sidebar, then its content.
 ui::Node page(std::string_view current, ui::Nodes const& content) {
-    return ui::row({sidebar(current), ui::column(content, {.gap = 8})}, {.gap = 16});
+    return ui::row({sidebar(current), ui::column(content, {.gap = 2})}, {.gap = 4});
 }
 
 // Sign-in: a successful login or registration installs the principal it answered and opens the accounts.
@@ -113,9 +113,9 @@ ui::Screen loginScreen() {
                  .testId("displayName"),
              ui::row({ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn"),
                       ui::button({.label = "Create account", .onClick = ui::run(registered)}).testId("register")},
-                     {.gap = 8}),
+                     {.gap = 2}),
              ui::text({.text = ui::coalesce({refusal, login.error(), registered.error()})}).testId("loginError")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 
