@@ -641,3 +641,23 @@ TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error
     CHECK(buffer.at(2, 2).style.bold);
     CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
 }
+
+TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const sidebar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    sidebar->setSurface("sidebar");
+    auto const inside = harness.make<TextImpl>(sidebar.get());
+    inside->setText("inside");
+    auto const card = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    card->setSurface("card");
+    auto const carded = harness.make<TextImpl>(card.get());
+    carded->setText("card");
+    auto const outside = harness.make<TextImpl>(column.get());
+    outside->setText("outside");
+    CHECK(harness.draw() == Rows{"inside", "card", "outside"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.inverse);
+    CHECK_FALSE(buffer.at(1, 0).style.inverse);
+    CHECK_FALSE(buffer.at(2, 0).style.inverse);
+}

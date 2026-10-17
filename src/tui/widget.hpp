@@ -87,9 +87,12 @@ public:
     [[nodiscard]] std::string const& accessibleName() const noexcept { return _accessibleName; }
     [[nodiscard]] std::string const& accessibleRole() const noexcept { return _accessibleRole; }
     [[nodiscard]] std::string const& testId() const noexcept { return _testId; }
-    /// Keeps the theme's token set by name. The terminal renders one theme, so a surface changes nothing drawn.
+    /// Keeps the surface by name: the token set that styles the widget and everything inside it.
     void applySurface(std::string_view surface) { _surface = surface; }
     [[nodiscard]] std::string const& surface() const noexcept { return _surface; }
+    /// The surface the widget draws on: its own, or else its nearest container's. The terminal draws the `sidebar`
+    /// and `toolbar` surfaces in the inverse of its colours and every other surface as it draws no surface.
+    [[nodiscard]] std::string const& effectiveSurface() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
     void applyTooltip(std::string_view text) { _tooltip = text; }
     /// What the hover shows: the tooltip, and a field adds its messages.

@@ -102,7 +102,9 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
 
 A terminal has no icon map and no assistive technology: icons, accessible names and roles are kept and not drawn,
-and a surface changes nothing drawn. The test id is kept for the probe. The tooltip shows on hover.
+and a widget draws on its surface, its own or else its nearest container's: `sidebar` and `toolbar` draw every cell
+of the widget inverse, set after it paints so a child painting over its container stays inverse, and any other
+surface draws as no surface does. A surface changes no size. The test id is kept for the probe. The tooltip shows on hover.
 
 **Files dropped on a terminal.** A terminal reports a file dragged onto it as its path pasted. A drop zone takes the
 focus, and a paste while it has it is a drop: the text read as paths, separated by whitespace, each quoted with `'`
