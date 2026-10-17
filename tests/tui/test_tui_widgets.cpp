@@ -9,6 +9,7 @@
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -42,12 +43,28 @@ TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][wid
 TEST_CASE("tui widgets: a row lays out left to right, with its gap", "[tui][widgets]") {
     Harness harness{20, 2};
     auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
-    row->setGap(2);
+    // Step 3: two columns.
+    row->setGap(3);
     auto const left = harness.make<TextImpl>(row.get());
     left->setText("ab");
     auto const right = harness.make<TextImpl>(row.get());
     right->setText("cd");
     CHECK(harness.draw() == Rows{"ab  cd"});
+}
+
+TEST_CASE("tui widgets: a column's gap step is rows, half as many as a row's columns", "[tui][widgets]") {
+    for (auto const& [step, expected] :
+         std::vector<std::pair<int, Rows>>{{2, Rows{"ab", "cd"}}, {3, Rows{"ab", "", "cd"}}}) {
+        INFO("step " << step);
+        Harness harness{10, 3};
+        auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+        column->setGap(step);
+        auto const top = harness.make<TextImpl>(column.get());
+        top->setText("ab");
+        auto const bottom = harness.make<TextImpl>(column.get());
+        bottom->setText("cd");
+        CHECK(harness.draw() == expected);
+    }
 }
 
 TEST_CASE("tui widgets: a spacer takes the space its siblings leave", "[tui][widgets]") {

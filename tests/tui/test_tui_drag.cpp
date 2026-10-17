@@ -46,7 +46,8 @@ struct Board {
           todo{harness.make<StackImpl>(board.get(), ui::Axis::Vertical)},
           done{harness.make<StackImpl>(board.get(), ui::Axis::Vertical)},
           card{harness.make<TextImpl>(todo.get())} {
-        board->setGap(2);
+        // Step 3: two columns.
+        board->setGap(3);
         todo->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
         done->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
         card->setText("task");
@@ -181,7 +182,8 @@ TEST_CASE("tui drag: a source inside a container disabled two levels up does not
     auto const inner = harness.make<StackImpl>(left.get(), ui::Axis::Vertical);
     auto const card = harness.make<TextImpl>(inner.get());
     auto const done = harness.make<StackImpl>(row.get(), ui::Axis::Vertical);
-    row->setGap(2);
+    // Step 3: two columns.
+    row->setGap(3);
     left->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
     done->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
     card->setText("task");

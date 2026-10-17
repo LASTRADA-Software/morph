@@ -29,6 +29,7 @@ public:
     StackImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
     void setGap(int gap) override;
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
+    /// The gap in cells along the axis: the spacing step `setGap` was given, mapped by `layout::stepCells`.
     [[nodiscard]] int gap() const noexcept { return _gap; }
     /// Fixed main-axis extents and their gap, for a Table row; an empty list returns the row to the solver.
     void setColumnLayout(std::vector<int> extents, int gap);
@@ -73,7 +74,8 @@ private:
     [[nodiscard]] std::vector<layout::GridCell> cellsOf(std::span<WidgetBase* const> shown) const;
 
     int _columns = 1;
-    int _gap = 0;
+    int _columnGap = 0;
+    int _rowGap = 0;
     std::unordered_map<WidgetBase const*, int> _spans;
 };
 
@@ -110,7 +112,8 @@ private:
     void syncChildren();
 
     std::string _title;
-    int _padding = 0;
+    int _paddingRows = 0;
+    int _paddingColumns = 0;
     bool _collapsible = false;
     bool _collapsed = false;
     std::function<void(bool)> _onToggle;

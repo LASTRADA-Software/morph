@@ -78,7 +78,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Checkbox | `[x] label` | Enter, Space, click |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
-| Stack, Slot | children along an axis, with the gap | — |
+| Stack, Slot | children along an axis, a spacing step apart | — |
 | Grid | equal columns, cells row-major, spans | — |
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
@@ -116,6 +116,22 @@ A cell-based solver. A stack gives Fixed children their amount, Content children
 what is left among Stretch children by weight; an overflow is taken from the last child first. A grid places cells
 row-major in equal columns. Several roots share the screen as a column, in the order they were made: each takes the
 height it asks for, and the last shown one what is left; a single root takes the whole screen.
+
+Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, at most
+the space there is (`layout::crossExtent`): in a column every content child is as wide as the column, in a row as tall
+as the row. A grid cell, and the one child of a panel, slot or scroll area, fills its width the same way.
+
+**Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
+cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many
+rows as columns:
+
+| Step | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| Rows (vertical) | 0 | 0 | 0 | 1 | 1 | 2 |
+| Columns (horizontal) | 0 | 1 | 1 | 2 | 2 | 3 |
+
+A stack's gap is along its axis; a grid has a column gap and a row gap from the same step; a panel's padding is rows at
+its top and bottom and columns at its sides.
 
 ## Focus, dialogs and drawers
 
