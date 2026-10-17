@@ -136,6 +136,16 @@ public:
     /// @return It; null before a bundle was delivered.
     [[nodiscard]] ui::Bundle const* bundle() const noexcept { return _loaded ? &_loaded->bundle : nullptr; }
 
+    /// @brief The catalog for the current principal: its entries, what the principal may run, and the facts.
+    /// @return It; null before a bundle was delivered.
+    [[nodiscard]] ui::CatalogReply const* catalogReply() const noexcept {
+        return _loaded ? &_loaded->catalog : nullptr;
+    }
+
+    /// @brief The principal the source's session carries now.
+    /// @return It; empty for none.
+    [[nodiscard]] std::string const& principal() const noexcept { return _session.principal; }
+
     /// @brief The file side channel (`files/1`) over the source's exchange, carrying its session: what a screen's
     ///        `upload` and `download` move bytes through.
     /// @return It, or nothing before the source is open.

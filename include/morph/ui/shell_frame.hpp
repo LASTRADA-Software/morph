@@ -47,14 +47,20 @@ public:
     /// @param options What it shows and reports.
     ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidget* parent, ShellFrameOptions options)
         : _root{backend.createStack(parent, Axis::Horizontal)},
-          _sidebar{backend.createStack(_root.get(), Axis::Vertical)},
-          _name{backend.createText(_sidebar.get())},
-          _navigator{std::make_unique<Navigator>(backend, _sidebar.get(), std::move(options.navigator))},
+          _sidebar{backend.createStack(_root.get(), Axis::Horizontal)},
+          _sideStart{backend.createSpacer(_sidebar.get())},
+          _side{backend.createStack(_sidebar.get(), Axis::Vertical)},
+          _sideTop{backend.createSpacer(_side.get())},
+          _name{backend.createText(_side.get())},
+          _navigator{std::make_unique<Navigator>(backend, _side.get(), std::move(options.navigator))},
+          _sideEnd{backend.createSpacer(_sidebar.get())},
           _main{backend.createStack(_root.get(), Axis::Vertical)},
           _topBar{backend.createStack(_main.get(), Axis::Horizontal)},
+          _topStart{backend.createSpacer(_topBar.get())},
           _title{backend.createText(_topBar.get())},
           _principal{backend.createText(_topBar.get())},
           _signOut{backend.createButton(_topBar.get())},
+          _topEnd{backend.createSpacer(_topBar.get())},
           _page{backend.createStack(_main.get(), Axis::Vertical)},
           _top{backend.createSpacer(_page.get())},
           _padded{backend.createStack(_page.get(), Axis::Horizontal)},
@@ -66,8 +72,14 @@ public:
 
         _sidebar->setSurface("sidebar");
         _sidebar->setLayout({.width = Sizing::fixed(kShellSidebarWidth), .height = Sizing::stretch()});
-        _sidebar->setGap(2);
+        _sidebar->setGap(3);
         _sidebar->setTestId("shell_sidebar");
+        // Spacers either side and above pad the sidebar's content by its gaps.
+        _sideStart->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _side->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        _side->setGap(3);
+        _sideTop->setLayout({.width = {}, .height = Sizing::fixed(0)});
+        _sideEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         _name->setRole(TextRole::Heading);
         _name->setText(options.applicationName);
         _name->setTestId("shell_application");
@@ -75,6 +87,9 @@ public:
         _main->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _topBar->setSurface("toolbar");
         _topBar->setGap(3);
+        // Spacers at both ends pad the bar by its gap.
+        _topStart->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topBar->setTestId("shell_topbar");
         _title->setRole(TextRole::Heading);
         _title->setLayout({.width = Sizing::stretch(), .height = {}});
@@ -132,13 +147,19 @@ private:
     // Declared parent before child, so destruction takes the children first.
     std::unique_ptr<StackWidget> _root;
     std::unique_ptr<StackWidget> _sidebar;
+    std::unique_ptr<SpacerWidget> _sideStart;
+    std::unique_ptr<StackWidget> _side;
+    std::unique_ptr<SpacerWidget> _sideTop;
     std::unique_ptr<TextWidget> _name;
     std::unique_ptr<Navigator> _navigator;
+    std::unique_ptr<SpacerWidget> _sideEnd;
     std::unique_ptr<StackWidget> _main;
     std::unique_ptr<StackWidget> _topBar;
+    std::unique_ptr<SpacerWidget> _topStart;
     std::unique_ptr<TextWidget> _title;
     std::unique_ptr<TextWidget> _principal;
     std::unique_ptr<ButtonWidget> _signOut;
+    std::unique_ptr<SpacerWidget> _topEnd;
     std::unique_ptr<StackWidget> _page;
     std::unique_ptr<SpacerWidget> _top;
     std::unique_ptr<StackWidget> _padded;

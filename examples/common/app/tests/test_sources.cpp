@@ -103,7 +103,7 @@ TEST_CASE("Client shell: mounts the start screen, and the query's answer crosses
 
 // Mutation: mount the navigated screen from inside the click handler — the old screen is destroyed under its own
 // handler (ASan) or the mount order changes.
-TEST_CASE("Client shell: a document's navigate replaces the screen, after the handler returns",
+TEST_CASE("Client shell: a document's navigate opens the screen as a tab and shows it, after the handler returns",
           "[examples-common][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
@@ -117,8 +117,11 @@ TEST_CASE("Client shell: a document's navigate replaces the screen, after the ha
         backend.click(next.value());
         CHECK(log.mounted == std::vector<std::string>{"probe.home"});  // posted, not yet run
         CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
-        CHECK_FALSE(textOf(backend, "answer").has_value());
         CHECK(log.mounted == std::vector<std::string>{"probe.home", "probe.other"});
+        // Two tabs, the new one selected; the first keeps its screen, hidden.
+        auto const tabs = backend.find("Tabs", "selected", "1");
+        REQUIRE(tabs.has_value());
+        CHECK(textOf(backend, "answer").has_value());
     }
     source.close();
 }
@@ -445,4 +448,26 @@ TEST_CASE(
         }
         source.close();
     }
+}
+
+// Mutation: hide the frame whenever no sign-in happened (the probe has none, so its sidebar would never show).
+TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[examples-common][shell]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend backend;
+    LocalAppSource source{probe::app(), LocalSetup{}};
+    ShellLog log;
+    {
+        auto shell =
+            morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
+        auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
+        REQUIRE(sidebar.has_value());
+        CHECK(backend.prop(*sidebar, "visible") != "false");
+        auto const entry = backend.find("Button", "testId", "nav_probe.other");
+        REQUIRE(entry.has_value());
+        backend.click(*entry);
+        CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
+        CHECK(log.mounted == std::vector<std::string>{"probe.home", "probe.other"});
+        CHECK(log.problems.empty());
+    }
+    source.close();
 }

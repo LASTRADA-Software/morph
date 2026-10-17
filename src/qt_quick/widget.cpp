@@ -207,7 +207,12 @@ void ItemBase::showTestId(std::string_view testId) const {
 
 void ItemBase::showTooltip(std::string_view text) const { write("tooltip", toQString(text)); }
 
-void ItemBase::showSurface(std::string_view surface) const { write("surface", toQString(surface)); }
+void ItemBase::showSurface(std::string_view surface) const {
+    write("surface", toQString(surface));
+    if (auto const* const container = dynamic_cast<ContainerCore const*>(this)) {
+        container->passSchemeDown();
+    }
+}
 
 void ItemBase::takeChords(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) const {
     write("chords", toStringList(chords));
@@ -279,6 +284,20 @@ void ContainerCore::adopt(ItemBase& child) {
     }
     _children.push_back(&child);
     adopted(child);
+}
+
+void ContainerCore::passSchemeDown() const {
+    QObject* const inherited = scheme();
+    if (inherited == nullptr) {
+        return;
+    }
+    for (ItemBase* const child : _children) {
+        child->write("inheritedScheme", QVariant::fromValue(inherited));
+        auto const* const nested = dynamic_cast<ContainerCore const*>(child);
+        if (nested != nullptr && child->read("surface").toString().isEmpty()) {
+            nested->passSchemeDown();
+        }
+    }
 }
 
 void ContainerCore::release(ItemBase& child) noexcept {

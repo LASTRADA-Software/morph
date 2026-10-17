@@ -196,3 +196,15 @@ TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfa
     CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
     CHECK(theme->property("accent").value<QColor>() == QColor{"#1565c0"});
 }
+
+// Mutation: write the scheme only at adoption (the text keeps the theme's colour).
+TEST_CASE("qt_quick theme: a surface set after its children exist still colours them", "[qt_quick]") {
+    Scene scene;
+    auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto nested = scene.backend().createStack(sidebar.get(), ui::Axis::Vertical);
+    auto inside = scene.backend().createText(nested.get());
+    inside->setText("late");
+    sidebar->setSurface("sidebar");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("late")) == QColor{"#c9ccd6"});
+}

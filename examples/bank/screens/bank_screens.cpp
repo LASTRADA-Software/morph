@@ -47,34 +47,8 @@ ui::AnyHandle accountOptions(ui::AnyHandle const& accounts) {
     });
 }
 
-// The sidebar every signed-in screen shows: the other screens, and signing out.
-ui::Node sidebar(std::string_view current) {
-    struct Entry {
-        std::string_view screen;
-        std::string label;
-        std::string testId;
-    };
-    std::vector<Entry> const entries{{.screen = kAccounts, .label = "Accounts", .testId = "nav-accounts"},
-                                     {.screen = kMove, .label = "Move money", .testId = "nav-move"},
-                                     {.screen = kCards, .label = "Cards", .testId = "nav-cards"},
-                                     {.screen = kPayees, .label = "Payees", .testId = "nav-payees"},
-                                     {.screen = kLoans, .label = "Loans", .testId = "nav-loans"}};
-    std::vector<ui::Node> items;
-    items.reserve(entries.size() + 1);
-    for (Entry const& entry : entries) {
-        items.push_back(ui::button({.label = entry.label, .onClick = ui::navigate(std::string{entry.screen})})
-                            .testId(entry.testId)
-                            .enabled(entry.screen != current));
-    }
-    items.push_back(ui::button({.label = "Sign out", .onClick = {ui::signOut(), ui::navigate(std::string{kLogin})}})
-                        .testId("signOut"));
-    return ui::column(items, {.gap = 1});
-}
-
-// A signed-in screen: the sidebar, then its content.
-ui::Node page(std::string_view current, ui::Nodes const& content) {
-    return ui::row({sidebar(current), ui::column(content, {.gap = 2})}, {.gap = 4});
-}
+// A signed-in screen's content. The client's frame shows the navigator and signing out beside it.
+ui::Node page(std::string_view /*current*/, ui::Nodes const& content) { return ui::column(content, {.gap = 4}); }
 
 // Sign-in: a successful login or registration installs the principal it answered and opens the accounts.
 ui::Screen loginScreen() {

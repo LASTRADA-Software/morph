@@ -132,6 +132,9 @@ public:
 
     /// Appends @p child as the last child.
     void adopt(ItemBase& child);
+    /// Writes this container's scheme onto each child again, and on through the children that have no surface of
+    /// their own: what a surface set after the children were adopted needs, as a frame built in code does.
+    void passSchemeDown() const;
     /// Forgets @p child, which is being destroyed.
     void release(ItemBase& child) noexcept;
     /// Moves @p child before the child now at @p index; past the end means last.

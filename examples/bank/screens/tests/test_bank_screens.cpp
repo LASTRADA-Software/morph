@@ -120,8 +120,8 @@ TEST_CASE("bank screens: registering signs the customer in and opens their accou
     CHECK(harness.text("error").value_or("").empty());
     CHECK(harness.problems().empty());
 
-    // Signing out returns to the login.
-    harness.click("signOut");
+    // Signing out, from the client's frame, returns to the login.
+    harness.click("shell_signOut");
     REQUIRE(harness.waitFor([&harness] { return harness.mounted().size() == 3; }));
     CHECK(harness.mounted().back() == bank::screens::kLogin);
 }

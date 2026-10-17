@@ -38,7 +38,7 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     frame.setTitle("Bookmarks");
     frame.setPrincipal("alice");
 
-    int const sidebar = backend.find("Column", "testId", "shell_sidebar").value();
+    int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
     int const topBar = backend.find("Row", "testId", "shell_topbar").value();
     int const page = backend.find("Column", "testId", "shell_page").value();
     CHECK(backend.prop(sidebar, "surface") == "sidebar");
@@ -62,9 +62,9 @@ TEST_CASE("shell frame: signed out, the sidebar and the top bar are hidden", "[u
     int signOuts = 0;
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     frame.showSignedIn(false);
-    CHECK(backend.prop(backend.find("Column", "testId", "shell_sidebar").value(), "visible") == "false");
+    CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "false");
     CHECK(backend.prop(backend.find("Row", "testId", "shell_topbar").value(), "visible") == "false");
     CHECK_FALSE(backend.hasProp(backend.find("Column", "testId", "shell_page").value(), "visible"));
     frame.showSignedIn(true);
-    CHECK(backend.prop(backend.find("Column", "testId", "shell_sidebar").value(), "visible") == "true");
+    CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "true");
 }
