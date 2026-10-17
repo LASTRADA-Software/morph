@@ -32,7 +32,7 @@ MorphWidget {
         leftPadding: Theme.spaceOf(4)
         rightPadding: Theme.spaceOf(4)
         palette.buttonText: root.emphasis === 0 ? root.scheme.text : "white"
-        font.weight: root.emphasis === 0 ? Font.Normal : Font.DemiBold
+        font.weight: root.emphasis === 0 ? Font.Normal : Font.Bold
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.fill

@@ -211,7 +211,7 @@ The controls are Qt Quick Controls' `Basic` ones, drawn from the theme rather th
 (`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.controlHeight` tall with
 `Theme.radiusControl` corners and a border that takes the focus colour; a check box's indicator is accent-filled when
 checked; a tab bar underlines the current tab in the accent; a table's header is muted and its rows dense with a
-hairline between them; a panel is a card; a heading is `Theme.headingPixels`, semi-bold; and the window behind every
+hairline between them; a panel is a card; a heading is `Theme.headingPixels`, bold; and the window behind every
 surface is `Theme.background`.
 
 ## Components

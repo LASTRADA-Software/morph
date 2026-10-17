@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;font-family:"Segoe UI","Noto Sans","Helvetica Neue",system-ui,sans-serif;color:#1d1d1f;background:#f2f3f7}
+a{color:#1565c0}a:hover{color:#0d4f9e}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 14px;border-radius:6px;border:1px solid #c7c7cc;background:#ffffff;color:#1d1d1f;font:inherit;font-size:14px;cursor:pointer}
+.primary{background:#1565c0;border-color:#1565c0;color:#ffffff;font-weight:600}
+.primary:hover{background:#0f56a8}
+.input{height:32px;box-sizing:border-box;border:1px solid #c7c7cc;border-radius:6px;padding:0 12px;font:inherit;font-size:14px;background:#ffffff;color:#1d1d1f;width:100%}
+.input:focus{outline:none;border:2px solid #1565c0}
+</style>
+</helmet>
+<div style="min-height: 820px; background: #f2f3f7; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box">
+  <main style="width: 100%; max-width: 380px; background: #ffffff; border: 1px solid #e3e5ea; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1565c0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"></path></svg>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 600">Morph Bookmarks</h1>
+    </div>
+    <p style="margin: 0; font-size: 14px; color: #5c5c63">Sign in to keep, tag and share your links.</p>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="username" style="font-size: 13px; color: #5c5c63">Username</label>
+      <input id="username" class="input" value="alice" autocomplete="username">
+    </div>
+    <a class="btn primary" href="Main.dc.html" style="text-decoration: none; width: 100%; box-sizing: border-box">Sign in</a>
+    <p role="alert" style="margin: 0; font-size: 13px; color: #c62828">[A sign-in refusal shows here]</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

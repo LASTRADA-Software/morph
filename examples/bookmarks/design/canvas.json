@@ -1,0 +1,90 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Edit.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Edit a bookmark",
+      "w": 1280,
+      "x": 2720,
+      "y": 0
+    },
+    "Import.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Import and export",
+      "w": 1280,
+      "x": 2720,
+      "y": 1060
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Bookmarks",
+      "w": 1280,
+      "x": 1360,
+      "y": 0
+    },
+    "Shared.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Shared feed",
+      "w": 1280,
+      "x": 1360,
+      "y": 1060
+    },
+    "SignIn.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Sign in",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Tags.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "title": "Tags",
+      "w": 1280,
+      "x": 0,
+      "y": 1060
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-17T19:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "flow": {
+      "kind": "title1",
+      "maxW": 4000,
+      "text": "Morph Bookmarks — rung 1",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rows2": {
+      "kind": "title1",
+      "maxW": 4000,
+      "text": "Tags, the shared feed, import and export",
+      "w": 240,
+      "x": 0,
+      "y": 800
+    }
+  },
+  "order": [
+    "SignIn.dc.html",
+    "Main.dc.html",
+    "Edit.dc.html",
+    "Tags.dc.html",
+    "Shared.dc.html",
+    "Import.dc.html"
+  ],
+  "pages": [],
+  "title": "Morph Bookmarks"
+}
