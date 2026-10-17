@@ -21,7 +21,10 @@ MorphWidget {
         const panes = split.contentChildren
         const given = root.sizes && root.sizes.length === panes.length
         const total = root.axis === 0 ? split.height : split.width
-        if (!given && total <= 0)
+        // Without sizes, a content-sized splitter keeps each pane at its own size: an equal share of the panes' total
+        // would cut the widest one short.
+        const along = root.axis === 0 ? root.heightKind : root.widthKind
+        if (!given && (total <= 0 || along === 0))
             return
         for (let i = 0; i < panes.length; ++i) {
             const size = given ? root.sizes[i] * root.unit : total / Math.max(1, panes.length)

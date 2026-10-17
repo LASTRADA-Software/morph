@@ -137,8 +137,10 @@ value with `spacingStep`, so a backend never sees another. Each backend maps a s
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
-fills its width. Along the axis a stack packs its children at the start, `setGap` apart; only a `stretch` child takes
-spare length. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
+fills its width. A kind whose width is its label (a button, a badge, a checkbox) fills the line but draws at its
+natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
+start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
+size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
 
 ## Interfaces
 

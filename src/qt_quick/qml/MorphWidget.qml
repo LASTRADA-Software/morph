@@ -20,6 +20,9 @@ Item {
     // Whether a content-sized dimension fills the container: the container sets them, from its kind and axis.
     property bool fillsWidth: false
     property bool fillsHeight: false
+    // False for a kind whose width is its label (a button, a badge, a checkbox): it keeps that width at the start of
+    // the line it fills, as the terminal draws it.
+    property bool fillsAcross: true
     property string tooltip: ""
     // Whether C++ listens for the pointer coming to rest here.
     property bool hoverWatched: false
@@ -51,7 +54,7 @@ Item {
         return root.host ? root.host.ask(name, payload) : false
     }
 
-    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth)
+    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth && fillsAcross)
     Layout.fillHeight: heightKind === 2 || (heightKind === 0 && fillsHeight)
     Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1

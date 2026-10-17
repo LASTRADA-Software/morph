@@ -349,6 +349,12 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
     // In a column, a content child is as wide as the column; a fixed one keeps its width.
     CHECK(std::abs(Scene::itemOf(*input).width() - Scene::itemOf(*outer).width()) < 1.0);
     CHECK(Scene::itemOf(*narrow).width() == 10.0 * unit);
+    // A button keeps its natural width at the start of the line, as the terminal draws it.
+    auto label = scene.backend().createButton(column.get());
+    label->setLabel("Go on");
+    scene.settle();
+    CHECK(Scene::itemOf(*label).width() == Scene::itemOf(*label).implicitWidth());
+    CHECK(Scene::itemOf(*label).mapToScene(QPointF{0, 0}).x() == Scene::itemOf(*column).mapToScene(QPointF{0, 0}).x());
     // In a row, a content child is as tall as the row, and keeps its natural width.
     CHECK(Scene::itemOf(*button).height() == Scene::itemOf(*row).height());
     CHECK(Scene::itemOf(*button).height() > Scene::itemOf(*other).implicitHeight());

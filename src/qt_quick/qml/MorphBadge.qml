@@ -7,6 +7,8 @@ import QtQuick.Controls
 MorphWidget {
     id: root
 
+    fillsAcross: false
+
     property int tone: 0
     property string text: ""
     property string icon: ""

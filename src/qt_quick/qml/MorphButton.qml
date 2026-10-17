@@ -7,6 +7,8 @@ import QtQuick.Controls
 MorphWidget {
     id: root
 
+    fillsAcross: false
+
     property string label: ""
 
     // The widget's item is the one node a driver finds by test id, so it is the button: it carries the role, the

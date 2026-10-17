@@ -7,6 +7,8 @@ import QtQuick.Controls
 MorphField {
     id: root
 
+    fillsAcross: false
+
     property string label: ""
 
     control: box
