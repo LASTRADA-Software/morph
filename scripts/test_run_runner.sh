@@ -56,6 +56,7 @@ RUNNER_CPUS=2
 RUNNER_MEMORY=6g
 RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
+FASTCACHE_SCHEDULER=host.docker.internal:6675
 CMAKE_BUILD_PARALLEL_LEVEL=2
 CONF
 
@@ -123,7 +124,8 @@ else
 fi
 
 # ── resource caps and identity ───────────────────────────────────────────────
-for expected in '--cpus=2' '--memory=6g' 'lastrada-docker-3'; do
+for expected in '--cpus=2' '--memory=6g' 'lastrada-docker-3' \
+    'FASTCACHE_ADDR=host.docker.internal:6674' 'FASTCACHE_SCHEDULER=host.docker.internal:6675'; do
     if has "$expected"; then
         note "${expected} present"
     else
