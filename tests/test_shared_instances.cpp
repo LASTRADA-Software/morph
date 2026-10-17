@@ -1164,6 +1164,33 @@ TEST_CASE("an instance a local attach creates journals under its key, as a serve
     CHECK(log->entries("77").front().entityKey == "77");
 }
 
+// Mutation: journal a shared instance bound without a contextKey under the empty key instead of its primary,
+// or attach the default log to a keyless private instance whose factory attached none.
+TEST_CASE("a local bind journals a keyless shared instance under its primary, and leaves a keyless private one alone",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::journal::ScopedActionLog const installed{std::make_shared<morph::journal::InMemoryActionLog>(exec)};
+    morph::backend::LocalBackend backend{exec};
+    morph::model::detail::IModelHolder* made = nullptr;
+    auto const factory = [&made]() -> std::unique_ptr<morph::model::detail::IModelHolder> {
+        auto holder = std::make_unique<morph::model::detail::ModelHolder<ShiCounterModel>>();
+        made = holder.get();
+        return holder;
+    };
+
+    morph::testing::bindShared(backend, "SHI_CounterModel", factory, "p1");
+    REQUIRE(made != nullptr);
+    CHECK(made->hasActionLog());
+
+    made = nullptr;
+    morph::testing::bindNow(
+        backend,
+        morph::backend::detail::BindRequest{
+            .typeId = "SHI_CounterModel", .factory = factory, .contextKey = {}, .primary = {}, .current = {}});
+    REQUIRE(made != nullptr);
+    CHECK_FALSE(made->hasActionLog());
+}
+
 TEST_CASE("attach and instances stamp the verified principal", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<VerifyingAuthorizer>());
@@ -1776,4 +1803,17 @@ TEST_CASE("an anonymous shared instance is re-bound by a reconnect", "[shared-in
     raw->fireReconnect();
     CHECK(settle(creator.execute(ShiPeek{})).value == 0);
     CHECK_FALSE(creator.primary().has_value());
+}
+
+// Mutation: promote a private instance onto a key another instance is already filed under (the key moves to it).
+TEST_CASE("InstanceDirectory::promote refuses a key that is already filed", "[shared-instances]") {
+    morph::backend::detail::InstanceDirectory directory;
+    morph::backend::detail::DirectoryKey const key{"SHI_CounterModel", "a"};
+    morph::exec::detail::ModelId const filed{1};
+    morph::exec::detail::ModelId const loose{2};
+    directory.insertShared(filed, morph::model::detail::ModelFactory::create<ShiCounterModel>(), key);
+    directory.insertPrivate(loose, morph::model::detail::ModelFactory::create<ShiCounterModel>());
+
+    CHECK_FALSE(directory.promote(loose, key));
+    CHECK(directory.attach(key) == filed);
 }

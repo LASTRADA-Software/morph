@@ -93,3 +93,21 @@ TEST_CASE("MemoryFileStore bounds a file and a principal, and an upload that sta
     CHECK(store.append("ann", *first, 0, "x").error() == FileError::NotFound);
     CHECK(store.begin("ann", info(10)).has_value());
 }
+
+// Mutation: issue a file larger than the per-file cap (the reference comes back), or misname an error.
+TEST_CASE("file store: issuing a file over the per-file cap is too large, and every error has its text",
+          "[ui][file-store]") {
+    using morph::ui::FileError;
+    using morph::ui::fileErrorText;
+    MemoryFileStore store{
+        MemoryFileStoreOptions{.maxFileBytes = 4, .maxBytesPerPrincipal = 100, .uploadTtl = {}, .clock = {}}};
+    CHECK(store.issue("ann", FileInfo{.name = "big", .type = "text/plain", .size = 0}, std::string(5, 'x')).error() ==
+          FileError::TooLarge);
+    CHECK(store.issue("ann", FileInfo{.name = "ok", .type = "text/plain", .size = 0}, "1234").has_value());
+    CHECK(fileErrorText(FileError::NotFound) == "not found");
+    CHECK(fileErrorText(FileError::TooLarge) == "too large");
+    CHECK(fileErrorText(FileError::OverQuota) == "over quota");
+    CHECK(fileErrorText(FileError::BadOffset) == "bad offset");
+    CHECK(fileErrorText(FileError::Incomplete) == "incomplete");
+    CHECK(fileErrorText(static_cast<FileError>(200)) == "incomplete");
+}

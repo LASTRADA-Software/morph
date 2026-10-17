@@ -265,6 +265,15 @@ TEST_CASE("RawHandler: a token already stopped rejects without dispatching", "[b
     CHECK(rig.bridge->pendingCalls() == 0);
 }
 
+// Mutation: drop the error a Task handler's raw dispatch reports (the call resolves with an empty result).
+TEST_CASE("RawHandler: a Task handler that throws rejects the raw call with its error", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    auto reply = await(rig, handler.execute("Raw_TaskFail", "{}"));
+    REQUIRE(reply.error);
+    CHECK(message(reply.error) == "task refused");
+}
+
 // Typed counterpart: test_cancellation_policy.cpp, "Bridge::switchBackend is G2 for the outgoing backend's calls".
 TEST_CASE("RawHandler: cancelPending on a switch settles an in-flight raw call", "[bridge][raw]") {
     rawprobe::SleeperScope const sleeping;

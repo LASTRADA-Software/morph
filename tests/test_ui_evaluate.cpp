@@ -293,3 +293,33 @@ TEST_CASE("evaluatorOver resolves with the body's members, its field errors and 
     owner.drain();
     CHECK(refusal == "unauthorized");
 }
+
+// Mutation: let evaluationValue read a body from a refused reply (the transport's or server's reason is lost).
+TEST_CASE("evaluate: a reply that did not arrive, was refused or is not an evaluation is why there is no value",
+          "[ui][evaluate]") {
+    using morph::ui::evaluationValue;
+    CHECK(evaluationValue(std::unexpected(std::string{"no route"})).error() == "no route");
+    morph::wire::Envelope refused;
+    refused.kind = "err";
+    refused.message = "denied";
+    CHECK(evaluationValue(refused).error() == "denied");
+    morph::wire::Envelope garbled;
+    garbled.kind = "ok";
+    garbled.body = "{not json";
+    auto const notEvaluation = evaluationValue(garbled);
+    REQUIRE_FALSE(notEvaluation.has_value());
+    CHECK_FALSE(notEvaluation.error().empty());
+}
+
+// Mutation: evaluate a request that names no model or action (it reaches the dispatcher with empty names).
+TEST_CASE("ui-evaluate refuses a request that names no model and action", "[ui][evaluate]") {
+    Harness harness;
+    Envelope request;
+    request.kind = std::string{morph::ui::kEvaluateKind};
+    request.callId = 8;
+    request.session = as("tech");
+    request.body = "{}";
+    Envelope const reply = morph::wire::decode(harness.server->handleInline(morph::wire::encode(request)));
+    CHECK(reply.kind == "err");
+    CHECK(reply.message == "ui-evaluate names no modelType and actionType");
+}

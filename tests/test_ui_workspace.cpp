@@ -257,3 +257,50 @@ TEST_CASE("workspace: a refused mount opens nothing; a document's navigate opens
     REQUIRE(shell.tabs().size() == 1);
     CHECK(shell.tabs()[0].screenId == "home");
 }
+
+// Mutation: close the tab at a clamped index when the index is past the end, or let closeOthers close the kept one.
+TEST_CASE("workspace: close past the last tab answers false, and close others keeps the one named",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}).has_value());
+    REQUIRE(shell.open("note", note(1)).has_value());
+    REQUIRE(shell.open("note", note(2)).has_value());
+    harness.settle();
+
+    std::optional<bool> outcome;
+    shell.close(7, [&outcome](bool closed) { outcome = closed; });
+    CHECK(outcome == false);
+    CHECK(shell.tabs().size() == 3);
+    shell.close(9, {});  // no callback: nothing to answer
+    CHECK(shell.tabs().size() == 3);
+
+    outcome.reset();
+    shell.closeOthers(1, [&outcome](bool closed) { outcome = closed; });
+    harness.settle();
+    CHECK(outcome == true);
+    REQUIRE(shell.tabs().size() == 1);
+    CHECK(shell.tabs()[0].identity == Value{std::int64_t{1}});
+}
+
+// Mutation: walk with a single tab (it re-activates and re-records the only tab), or answer a close whose workspace
+// is gone (the callback runs on a destroyed shell).
+TEST_CASE("workspace: a walk needs two tabs, and a close answered after the workspace is gone does nothing",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    auto shell = std::make_unique<Workspace>(harness.runtime, harness.backend, host, catalog());
+    shell->next();  // no tabs
+    REQUIRE(shell->open("note", note(1)).has_value());
+    harness.settle();
+    shell->next();
+    shell->previous();
+    CHECK(shell->active() == 0U);
+
+    bool answered = false;
+    shell->closeAll([&answered](bool) { answered = true; });
+    shell.reset();
+    harness.settle();
+    CHECK_FALSE(answered);
+}

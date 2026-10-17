@@ -195,3 +195,26 @@ TEST_CASE("host vocabulary: a registration that cannot be honoured is refused", 
     CHECK_THROWS_AS(vocabulary.add(HostValue{.name = "n", .version = 1, .type = "int?", .initial = Value{}}),
                     std::invalid_argument);
 }
+
+// Mutation: run a command whose arguments are not a record (a scalar is taken as no arguments), or accept a command
+// name longer than a name may be.
+TEST_CASE("host vocabulary: arguments that are not a record are refused, and so is an overlong name", "[ui][host]") {
+    HostVocabulary vocabulary;
+    int runs = 0;
+    vocabulary.add(HostCommand{
+        .name = "beep", .version = 1, .args = {}, .safeForUntrusted = true, .run = [&runs](ValueRecord const&) {
+            ++runs;
+        }});
+    auto const scalar = vocabulary.run("beep", morph::ui::Value{"loud"});
+    CHECK(scalar.kind == morph::ui::HostCommandResult::Kind::Refused);
+    CHECK(scalar.reason == "the arguments of host command `beep` are a record");
+    CHECK(runs == 0);
+    CHECK(vocabulary.run("beep", morph::ui::Value{}).kind == morph::ui::HostCommandResult::Kind::Ran);
+    CHECK(runs == 1);
+    CHECK_THROWS_AS(vocabulary.add(HostCommand{.name = std::string(morph::ui::kMaxNameBytes + 1, 'n'),
+                                               .version = 1,
+                                               .args = {},
+                                               .safeForUntrusted = true,
+                                               .run = [](ValueRecord const&) {}}),
+                    std::invalid_argument);
+}

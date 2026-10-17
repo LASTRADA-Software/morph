@@ -349,3 +349,42 @@ TEST_CASE("navigator: pins are ordered, capped, reported, and prefetch on hover"
     CHECK(stored.back() == std::vector<std::string>{"lims.samples"});
     CHECK_FALSE(harness.backend.find("Button", "testId", "pin_admin.users").has_value());
 }
+
+// Mutation: show a translatable title's key instead of its fallback (the search for the fallback finds nothing).
+TEST_CASE("navigator: a translatable title shows its fallback, and a title of no text shows the id",
+          "[ui][workspace][navigator]") {
+    Harness harness;
+    auto const json = [](std::string_view text) {
+        auto parsed = morph::ui::parseJson(text);
+        REQUIRE(parsed.has_value());
+        return *std::move(parsed);
+    };
+    std::vector<CatalogEntry> entries{
+        CatalogEntry{.id = "lims.samples",
+                     .title = json(R"({"t":"lims.samples.title","fallback":"Samples"})"),
+                     .module = "Lab",
+                     .group = "Work"},
+        CatalogEntry{
+            .id = "lims.keyless", .title = json(R"({"t":"lims.keyless.title"})"), .module = "Lab", .group = "Work"},
+        CatalogEntry{.id = "lims.numbered", .title = json("7"), .module = "Lab", .group = "Work"}};
+    Navigator navigator{harness.backend, nullptr,
+                        NavigatorOptions{.entries = std::move(entries),
+                                         .titles = {},
+                                         .pins = {},
+                                         .maxPins = 4,
+                                         .onOpen = {},
+                                         .onPrefetch = {},
+                                         .onPins = {}}};
+    int const search = *harness.backend.find("TextInput", "testId", "navigator_search");
+    navigator.focusSearch();
+    CHECK(harness.backend.focused() == search);
+    CHECK(harness.backend.idOf(navigator.root()) > 0);
+
+    harness.backend.edit(search, "sampl");
+    CHECK(shown(harness, "nav_lims.samples"));
+    CHECK_FALSE(shown(harness, "nav_lims.keyless"));
+    harness.backend.edit(search, "keyless");
+    CHECK(shown(harness, "nav_lims.keyless"));
+    harness.backend.edit(search, "numbered");
+    CHECK(shown(harness, "nav_lims.numbered"));
+}

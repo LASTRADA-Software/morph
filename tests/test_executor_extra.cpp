@@ -75,3 +75,17 @@ TEST_CASE("morph::exec::ThreadPoolExecutor: non-std::exception throw in one task
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     REQUIRE(afterCount.load() == afterTasks);
 }
+
+// Mutation: have runOnce report a run without running the task, or runFor drop what it dequeued.
+TEST_CASE("MainThreadExecutor: runOnce runs one queued task, and runFor runs what is queued before it times out",
+          "[executor]") {
+    morph::exec::MainThreadExecutor loop;
+    CHECK_FALSE(loop.runOnce());
+    int ran = 0;
+    loop.post([&ran] { ++ran; });
+    loop.post([&ran] { ++ran; });
+    CHECK(loop.runOnce());
+    CHECK(ran == 1);
+    loop.runFor(std::chrono::milliseconds{20});
+    CHECK(ran == 2);
+}

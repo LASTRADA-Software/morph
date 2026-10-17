@@ -242,3 +242,59 @@ TEST_CASE("table: a completion after the committer is gone is ignored", "[table]
     late(std::vector<Cell>{std::int64_t{7}});
     CHECK(std::get<std::int64_t>(source->snapshot()->cell(0, 0)) == 50);
 }
+
+TEST_CASE("table: multiple selection toggles, ignores repeats and clears", "[table][selection]") {
+    SelectionOptions const options{
+        .mode = SelectionMode::Multiple, .pruneOnFilter = true, .tableMode = TableMode::Client};
+    auto selection = make(options);
+    CHECK(selection.options().pruneOnFilter);
+    CHECK(selection.select(key(1)));
+    CHECK(selection.select(key(1)));  // already selected: kept once
+    CHECK(selection.keys() == std::vector<RowId>{key(1)});
+    CHECK(selection.toggle(key(2)));
+    CHECK(selection.keys() == std::vector<RowId>{key(1), key(2)});
+    CHECK_FALSE(selection.deselect(key(3)));
+    CHECK(selection.selectedCount() == 2);
+    selection.clear();
+    CHECK(selection.selectedCount() == 0);
+    CHECK(selection.keys().empty());
+    CHECK_FALSE(selection.contains(key(1)));
+
+    Engine const engine{fiveRows()};
+    CHECK(Selection::activate(engine, 0, {}));  // no receiver: the row is still activatable
+}
+
+TEST_CASE("table: a completion called twice settles its edit once", "[table][edits]") {
+    auto const source = fiveRows();
+    std::vector<EditDone> pending;
+    int patches = 0;
+    struct Counting final : RowPatcher {
+        VectorSource* source = nullptr;
+        int* patches = nullptr;
+        bool patchRow(RowId const& row, std::vector<Cell> cells) override {
+            ++*patches;
+            return source->patchRow(row, std::move(cells));
+        }
+    } patcher;
+    patcher.source = source.get();
+    patcher.patches = &patches;
+    CellEdits edits{patcher, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }};
+    edits.commit(EditRequest{.row = key(0), .column = "c", .value = std::int64_t{1}});
+    REQUIRE(pending.size() == 1);
+    auto const done = pending.front();
+    done(std::vector<Cell>{std::int64_t{1}});
+    done(std::vector<Cell>{std::int64_t{2}});
+    CHECK(patches == 1);
+    CHECK(std::get<std::int64_t>(source->snapshot()->cell(0, 0)) == 1);
+}
+
+TEST_CASE("table: a field error without a column attaches to the edited cell", "[table][edits]") {
+    auto const source = fiveRows();
+    std::vector<EditDone> pending;
+    CellEdits edits{*source, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }};
+    edits.commit(EditRequest{.row = key(3), .column = "c", .value = std::string{"x"}});
+    REQUIRE(pending.size() == 1);
+    pending.front()(std::unexpected(FieldError{.column = {}, .message = "refused"}));
+    CHECK(edits.error(key(3), "c") == "refused");
+    CHECK_FALSE(edits.error(key(3), "").has_value());
+}

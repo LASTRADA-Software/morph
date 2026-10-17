@@ -553,3 +553,15 @@ TEST_CASE("encodeWsFrame draws a fresh mask key every call", "[net][frame]") {
     std::string const wireB = encodeWsFrame(WsOpcode::kText, "same", /*mask=*/true);
     CHECK(wireA.substr(2, 4) != wireB.substr(2, 4));  // bytes [2,6) are the mask key
 }
+
+// Mutation: drop the `!reasonUtf8.feed(...)` half of validateClosePayload's check (a reason holding a byte that can
+// never start a UTF-8 sequence is accepted, since nothing is left dangling for complete() to catch).
+TEST_CASE("WsFrameReader rejects a Close frame whose reason holds a byte that is never valid UTF-8", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(0x03));  // 1000, big-endian
+    payload.push_back(static_cast<char>(0xE8));
+    payload += "ok\xFF";  // 0xFF starts no UTF-8 sequence at all
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}

@@ -5,8 +5,10 @@
 #include <pthread.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -15,6 +17,10 @@
 #include <chrono>
 #include <csignal>
 #include <cstring>
+#include <exception>
+#include <fstream>
+#include <initializer_list>
+#include <limits>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <optional>
 #include <stdexcept>
@@ -750,4 +756,312 @@ TEST_CASE("pollUntil: signals mid-wait neither end the wait nor re-arm the full 
     CHECK(result.outcome == morph::net::detail::PollOutcome::kTimedOut);
     CHECK(elapsed >= std::chrono::milliseconds{300});
     CHECK(elapsed < std::chrono::milliseconds{1200});
+}
+
+// ── Signals delivered to a thread parked in a socket call ───────────────────
+//
+// Each case parks a helper thread in one blocking call, confirms from
+// /proc/self/task/<tid>/syscall that the thread is inside that very syscall,
+// and only then aims SIGUSR2 at it. The handler is installed without
+// SA_RESTART, so the kernel ends the call with EINTR instead of restarting it:
+// what the call does next is the behaviour under test. Linux-only: it reads
+// the kernel's per-thread syscall report.
+
+#ifdef __linux__
+namespace {
+
+// A signal handler can reach nothing but a global.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+std::atomic<int> gSocketInterrupts{0};
+
+void countSocketInterrupt(int /*signal*/) { gSocketInterrupts.fetch_add(1); }
+
+/// SIGUSR2 -> countSocketInterrupt, without SA_RESTART, for the guard's lifetime.
+class InterruptingSignal {
+public:
+    InterruptingSignal() {
+        struct sigaction action{};
+        action.sa_handler = countSocketInterrupt;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        _installed = ::sigaction(SIGUSR2, &action, &_previous) == 0;
+    }
+    InterruptingSignal(const InterruptingSignal&) = delete;
+    InterruptingSignal& operator=(const InterruptingSignal&) = delete;
+    InterruptingSignal(InterruptingSignal&&) = delete;
+    InterruptingSignal& operator=(InterruptingSignal&&) = delete;
+    ~InterruptingSignal() {
+        if (_installed) {
+            ::sigaction(SIGUSR2, &_previous, nullptr);
+        }
+    }
+    [[nodiscard]] bool installed() const { return _installed; }
+
+private:
+    struct sigaction _previous{};
+    bool _installed = false;
+};
+
+/// The syscall number thread @p tid is blocked in, or -1 while it runs (or
+/// when the kernel will not say).
+long currentSyscall(pid_t tid) {
+    std::ifstream file{"/proc/self/task/" + std::to_string(tid) + "/syscall"};
+    std::string first;
+    if (!(file >> first) || first == "running") {
+        return -1;
+    }
+    try {
+        return std::stol(first);
+    } catch (const std::exception&) {
+        return -1;
+    }
+}
+
+/// Waits up to 10s for thread @p tid to block in one of @p syscalls.
+bool waitUntilParkedIn(pid_t tid, std::initializer_list<long> syscalls) {
+    for (int i = 0; i < 1000; ++i) {
+        long const current = currentSyscall(tid);
+        if (std::ranges::find(syscalls, current) != syscalls.end()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    return false;
+}
+
+/// Sends SIGUSR2 to @p thread and waits up to 10s for its handler to have run.
+bool interrupt(std::thread& thread) {
+    int const before = gSocketInterrupts.load();
+    if (::pthread_kill(thread.native_handle(), SIGUSR2) != 0) {
+        return false;
+    }
+    for (int i = 0; i < 1000 && gSocketInterrupts.load() == before; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    return gSocketInterrupts.load() != before;
+}
+
+}  // namespace
+
+// Mutation: throw on EINTR in TcpSocket::accept instead of retrying (the parked accept reports the signal as a
+// failure and the connection is never taken).
+TEST_CASE("TcpSocket::accept: a signal while parked is retried, and the connection still taken", "[net][tcp][eintr]") {
+    InterruptingSignal const signal;
+    REQUIRE(signal.installed());
+    auto listener = TcpSocket::listen(0);
+
+    std::atomic<pid_t> tid{0};
+    TcpSocket serverSide;
+    std::exception_ptr failure;
+    std::thread acceptThread{[&] {
+        tid = ::gettid();
+        try {
+            serverSide = listener.accept();
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    }};
+    while (tid.load() == 0) {
+        std::this_thread::yield();
+    }
+    bool const parked = waitUntilParkedIn(tid.load(), {SYS_accept, SYS_accept4});
+    bool const interrupted = parked && interrupt(acceptThread);
+    // Bounded by shape: this connect is what satisfies the accept.
+    auto const clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    acceptThread.join();
+
+    REQUIRE(parked);
+    REQUIRE(interrupted);
+    REQUIRE(failure == nullptr);
+    CHECK(serverSide.valid());
+}
+
+// Mutation: throw on EINTR in TcpSocket::recvSome instead of retrying (the read reports the signal as a failure
+// rather than returning the bytes the peer sends next).
+TEST_CASE("TcpSocket::recvSome: a signal while parked is retried, and the bytes still read", "[net][tcp][eintr]") {
+    InterruptingSignal const signal;
+    REQUIRE(signal.installed());
+    auto listener = TcpSocket::listen(0);
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    auto clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    acceptThread.join();
+
+    std::atomic<pid_t> tid{0};
+    std::string received;
+    std::exception_ptr failure;
+    std::thread readThread{[&] {
+        tid = ::gettid();
+        try {
+            std::array<char, 16> buf{};
+            std::size_t const got = serverSide.recvSome(buf.data(), buf.size());
+            received.assign(buf.data(), got);
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    }};
+    while (tid.load() == 0) {
+        std::this_thread::yield();
+    }
+    bool const parked = waitUntilParkedIn(tid.load(), {SYS_recvfrom});
+    bool const interrupted = parked && interrupt(readThread);
+    std::string const message = "hi";
+    clientSide.sendAll(message.data(), message.size());
+    readThread.join();
+
+    REQUIRE(parked);
+    REQUIRE(interrupted);
+    REQUIRE(failure == nullptr);
+    CHECK(received == message);
+}
+
+// Mutation: throw on EINTR in TcpSocket::sendAll instead of retrying (the write stops part-way through and the peer
+// never receives the whole buffer).
+TEST_CASE("TcpSocket::sendAll: signals while parked on a full buffer still deliver every byte", "[net][tcp][eintr]") {
+    InterruptingSignal const signal;
+    REQUIRE(signal.installed());
+    auto listener = TcpSocket::listen(0);
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    auto clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    acceptThread.join();
+    int const small = 4096;
+    ::setsockopt(clientSide.nativeHandle(), SOL_SOCKET, SO_SNDBUF, &small, sizeof(small));
+    ::setsockopt(serverSide.nativeHandle(), SOL_SOCKET, SO_RCVBUF, &small, sizeof(small));
+
+    std::string payload(std::size_t{1024} * 1024, '\0');
+    for (std::size_t i = 0; i < payload.size(); ++i) {
+        payload[i] = static_cast<char>('a' + static_cast<char>(i % 26));
+    }
+    std::atomic<pid_t> tid{0};
+    std::exception_ptr failure;
+    std::thread sendThread{[&] {
+        tid = ::gettid();
+        try {
+            clientSide.sendAll(payload.data(), payload.size());
+        } catch (...) {
+            failure = std::current_exception();
+        }
+        // Ends the reader below at whatever was delivered, whole or not.
+        clientSide.shutdownBoth();
+    }};
+    while (tid.load() == 0) {
+        std::this_thread::yield();
+    }
+    // The first signal can land on a send that has already copied part of its
+    // buffer, which returns that count rather than EINTR. The second lands on
+    // the send that follows, which blocks before copying anything, so it is the
+    // one that gets EINTR.
+    bool parked = true;
+    bool interrupted = true;
+    for (int round = 0; round < 2; ++round) {
+        parked = parked && waitUntilParkedIn(tid.load(), {SYS_sendto});
+        interrupted = interrupted && parked && interrupt(sendThread);
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+    }
+
+    std::string received;
+    std::array<char, 65536> buf{};
+    while (received.size() < payload.size()) {
+        std::size_t const got = serverSide.recvSome(buf.data(), buf.size());
+        if (got == 0) {
+            break;
+        }
+        received.append(buf.data(), got);
+    }
+    sendThread.join();
+
+    REQUIRE(parked);
+    REQUIRE(interrupted);
+    REQUIRE(failure == nullptr);
+    CHECK(received == payload);
+}
+
+#endif  // __linux__
+
+// Mutation: drop the ECONNRESET arm from TcpSocket::recvSome (an abortive close throws instead of reading as a close).
+TEST_CASE("TcpSocket::recvSome: a peer's abortive close reads as an orderly one", "[net][tcp]") {
+    auto listener = TcpSocket::listen(0);
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    {
+        auto const clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+        acceptThread.join();
+        linger abortive{};
+        abortive.l_onoff = 1;
+        abortive.l_linger = 0;
+        REQUIRE(::setsockopt(clientSide.nativeHandle(), SOL_SOCKET, SO_LINGER, &abortive, sizeof(abortive)) == 0);
+        // clientSide destructs here: an RST, not a FIN.
+    }
+    std::array<char, 16> buf{};
+    CHECK(serverSide.recvSome(buf.data(), buf.size()) == 0U);
+}
+
+// Mutation: make setRecvTimeout set SO_SNDTIMEO (the receive is unbounded, and only the backstop's shutdown ends
+// it, with 0 instead of a throw).
+TEST_CASE("TcpSocket::setRecvTimeout bounds a receive from a peer that never writes", "[net][tcp]") {
+    auto listener = TcpSocket::listen(0);
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    auto const clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    acceptThread.join();
+
+    REQUIRE(serverSide.setRecvTimeout(std::chrono::milliseconds{1100}));
+    timeval applied{};
+    socklen_t appliedLen = sizeof(applied);
+    REQUIRE(::getsockopt(serverSide.nativeHandle(), SOL_SOCKET, SO_RCVTIMEO, &applied, &appliedLen) == 0);
+    CHECK(applied.tv_sec == 1);
+    CHECK(applied.tv_usec >= 99'000);  // the kernel rounds to its tick
+    CHECK(applied.tv_usec <= 101'000);
+
+    std::atomic<bool> done{false};
+    std::thread backstop{[&] {
+        for (int i = 0; i < 1000 && !done.load(); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        }
+        serverSide.shutdownBoth();
+    }};
+    std::array<char, 16> buf{};
+    bool threw = false;
+    try {
+        static_cast<void>(serverSide.recvSome(buf.data(), buf.size()));
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    done = true;
+    backstop.join();
+    CHECK(threw);
+}
+
+// Mutation: return std::nullopt from tryAccept for every errno (an accept on a socket that is not listening reads as
+// "nothing pending" instead of failing).
+TEST_CASE("TcpSocket::tryAccept: throws on a socket that is not listening", "[net][tcp]") {
+    auto listener = TcpSocket::listen(0);
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    auto clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    acceptThread.join();
+
+    // A connected socket: accept(2) fails with EINVAL, not EAGAIN.
+    REQUIRE_THROWS_WITH(clientSide.tryAccept(), Catch::Matchers::ContainsSubstring("TcpSocket::tryAccept"));
+}
+
+// Mutation: drop the `flags >= 0` check from setNonBlocking (an F_GETFL failure of -1 is OR-ed with O_NONBLOCK and
+// still reported through the F_SETFL result alone).
+TEST_CASE("TcpSocket::setNonBlocking reports failure for a descriptor fcntl rejects", "[net][tcp]") {
+    // Far above any RLIMIT_NOFILE, so no descriptor of this number can exist and
+    // nothing else in the process can be touched by mistake.
+    TcpSocket bogus{std::numeric_limits<int>::max() - 1};
+    bool const applied = bogus.setNonBlocking();
+    static_cast<void>(bogus.release());
+    CHECK_FALSE(applied);
+}
+
+// Mutation: treat an immediate connect() failure other than EINPROGRESS as success (a socket is returned for an
+// address TCP cannot reach).
+TEST_CASE("TcpSocket::connect: an address connect() refuses at once fails cleanly", "[net][tcp]") {
+    // TCP to a multicast address fails inside connect() itself, with ENETUNREACH,
+    // whatever the routing table holds: there is no handshake to wait for.
+    REQUIRE_THROWS_WITH(TcpSocket::connect("224.0.0.1", 80, std::chrono::milliseconds{2000}),
+                        Catch::Matchers::ContainsSubstring("could not connect"));
 }

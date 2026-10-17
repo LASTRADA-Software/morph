@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -1608,4 +1609,57 @@ TEST_CASE("SocketServer: close() from two threads at once runs twice on the loop
     CHECK(recorder.count("SocketServer::close") == 2U);
     CHECK(recorder.allPosted("SocketServer::close"));
     CHECK(wsServer.port() == 0U);
+}
+
+// Mutation: have port() read the core without checking it exists (the server built for a loop of its own has no
+// core until listen(), and dereferences a null one).
+// Mutation: drop the `listener` clause from Core::listen (a second listen() rebinds to an OS-chosen port, moving the
+// server off the one its clients were given).
+TEST_CASE("SocketServer: port() reads 0 before listen(), and a second listen() keeps the first port",
+          "[net][socket_server]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    CHECK(wsServer.port() == 0U);
+
+    REQUIRE(wsServer.listen());
+    std::uint16_t const first = wsServer.port();
+    REQUIRE(first != 0U);
+    CHECK_FALSE(wsServer.listen());
+    CHECK(wsServer.port() == first);
+
+    RawWsClient client{first};
+    client.send(morph::wire::makeRegister("NetEchoModel"));
+    CHECK(client.receive().kind == "ok");
+}
+
+// Mutation: drop the 64 KiB cap from readHeaderBlockAsync (the oversized request is read on until the handshake
+// timeout, far past the client's bounded wait for the close).
+TEST_CASE("SocketServer: a handshake request past 64 KiB is dropped without waiting for the handshake timeout",
+          "[net][socket_server]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer::Config cfg;
+    cfg.handshakeTimeout = std::chrono::seconds{120};
+    morph::net::SocketServer wsServer{*server, 0, cfg};
+    REQUIRE(wsServer.listen());
+
+    auto sock = morph::net::detail::TcpSocket::connect("127.0.0.1", wsServer.port(), std::chrono::milliseconds{2000});
+    // Header-shaped and never terminated; more than the cap plus one read chunk.
+    std::string const oversized(std::size_t{96} * 1024, 'A');
+    try {
+        sock.sendAll(oversized.data(), oversized.size());
+    } catch (const std::runtime_error&) {  // NOLINT(bugprone-empty-catch)
+        // The server may already have closed on the bytes it read: the outcome
+        // checked below either way.
+    }
+    REQUIRE(sock.setRecvTimeout(std::chrono::seconds{20}));
+    std::array<char, 64> buf{};
+    // The server closes on the cap: EOF, or a reset if it left unread bytes behind.
+    CHECK(sock.recvSome(buf.data(), buf.size()) == 0U);
+
+    // The accept flow keeps serving.
+    RawWsClient probe{wsServer.port()};
+    probe.send(morph::wire::makeRegister("NetEchoModel"));
+    CHECK(probe.receive().kind == "ok");
 }

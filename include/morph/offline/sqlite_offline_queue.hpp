@@ -549,20 +549,9 @@ private:
                 // deletes no row, and the item is stranded in the queue forever
                 // with no error ever reported.
                 //
-                // COVERAGE GAP, documented not closed: reaching this branch needs
-                // a second writer on the same underlying file to delete this
-                // exact row in the narrow window between the INSERT above and
-                // this SELECT -- a genuine cross-connection race, not reachable
-                // through this class's one owner or its own
-                // single-connection API at all. Unlike the drain()/prepare()/
-                // stepOrThrow() gaps closed elsewhere in this file via a
-                // second-connection helper, this window opens and closes within
-                // one function call on one thread, with no existing seam to pause
-                // mid-statement and no SQLite-level hook (commit hook / custom
-                // VFS) in this codebase to force it deterministically. A tight
-                // busy-loop second thread could occasionally win the race, but
-                // that is a fragile, non-deterministic test for one low-value
-                // branch arm -- left open and documented rather than forced.
+                // In production it takes a second writer deleting this exact row
+                // between the INSERT and this SELECT; a trigger that silently
+                // drops the insert reaches it deterministically in the tests.
                 throw SqliteOfflineQueueError{
                     std::string{"SqliteOfflineQueue: enqueue could not resolve the existing id "
                                 "for a deduplicated idempotency key: "} +

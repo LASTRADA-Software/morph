@@ -276,6 +276,11 @@ TEST_CASE("ui expressions: parseDecimal reads typed text as an exact decimal in 
     // A wrong kind is a mismatch, reported.
     CHECK(run(R"({"fn": "parseDecimal", "args": ["1", 19]})").isNull());
     CHECK(env.diagnostics.size() == 1);
+    StaticEnvironment fresh;
+    auto parsed = parseExpression(*parseJson(R"({"fn": "parseDecimal", "args": [{"lit": 5}, 2]})"));
+    REQUIRE(parsed.has_value());
+    CHECK(evaluate(**parsed, fresh).isNull());
+    CHECK(fresh.diagnostics.size() == 1);
 }
 
 // Mutation: make PermissiveResolver refuse refs -> the comprehension check of a plain ref fails.

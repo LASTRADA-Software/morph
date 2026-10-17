@@ -486,9 +486,9 @@ struct IModelHolder {
   own history back later, e.g. an activity-stream view) receive the same log
   instance a registry-constructed, remote/keyed attach populates the holder
   with — see [journal.md's "Attaching a log to remote
-  instances"](../journal/journal.md#attaching-a-log-to-remote-instances). A
-  model with no `attachActionLog` of its own is unaffected: the hook resolves
-  to the base's no-op body for it.
+  instances"](../journal/journal.md#attaching-a-log-to-remote-instances). For a
+  model with no `attachActionLog` of its own, `ModelHolder`'s override does
+  nothing, as the base default does for a holder that is not a `ModelHolder`.
 - `attachIdentity(primaryKey)` tells this instance its own stable primary key,
   once, at construction time — the registry-constructed counterpart of a
   model re-deriving its key from every keyed action's own payload. A no-op if
@@ -515,9 +515,10 @@ struct IModelHolder {
 
 ### `ModelHolder<Model>`
 
-Concrete holder that stores a `Model` by value. Inherits `BackendChangedMixin`
-so that backend-change notifications are forwarded automatically when `Model`
-declares `void onBackendChanged()`.
+Concrete holder that stores a `Model` by value. Inherits `BackendChangedMixin`, which adds
+`IBackendChangedSink` when `Model` declares `void onBackendChanged()`; the
+holder's one `onBackendChanged()` implements both that sink's and
+`IModelHolder`'s, forwarding to the model when it declares the member.
 
 ```cpp
 template <typename Model>

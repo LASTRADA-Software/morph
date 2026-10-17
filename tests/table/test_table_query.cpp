@@ -11,12 +11,16 @@
 //  - PageWindow::visible not skipping pages in flight: "the window fetches the
 //    pages around the visible rows" fails.
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <memory>
 #include <morph/forms/forms.hpp>
 #include <morph/table/query.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -316,4 +320,124 @@ TEST_CASE("table: a failed page shows its error until a reply arrives", "[table]
     CHECK(retry[0] == requests[0]);
     CHECK(window.accept(retry[0], Page<int>{.rows = std::vector<int>(10, 0), .total = 10, .offset = 0}));
     CHECK_FALSE(window.error().has_value());
+}
+
+TEST_CASE("table: every operand of a filter entry is bounded in length", "[table][query]") {
+    auto const rows = resultRows(1);
+    RowsSource<ResultRow> const source{std::make_shared<std::vector<ResultRow> const>(rows), byId()};
+    QueryLimits limits;
+    limits.maxTextLength = 4;
+    limits.maxGroupColumns = 2;
+    limits.maxEntries = 2;
+    limits.maxOffset = 100;
+    auto const code = [&](FilterSpec const& filters) {
+        auto const result = validate(TableQuery{.sort = {}, .filters = filters, .page = {}}, source.columns(), limits);
+        return result ? std::optional<TableErrorCode>{} : std::optional{result.error().code};
+    };
+    auto const longText = std::string{"12345"};
+    std::vector<FilterEntry> const tooLong{
+        FilterEntry{.eq = longText},
+        FilterEntry{.ne = longText},
+        FilterEntry{.lt = longText},
+        FilterEntry{.le = longText},
+        FilterEntry{.gt = longText},
+        FilterEntry{.ge = longText},
+        FilterEntry{.startsWith = longText},
+        FilterEntry{.endsWith = longText},
+        FilterEntry{.between = std::array<std::string, 2>{longText, "1"}},
+        FilterEntry{.between = std::array<std::string, 2>{"1", longText}},
+    };
+    for (auto const& entry : tooLong) {
+        CHECK(code(filterOn("mass", entry)) == TableErrorCode::LimitExceeded);
+    }
+    CHECK(code(filterOn("mass", FilterEntry{.between = std::array<std::string, 2>{"1", "2"}})) == std::nullopt);
+
+    FilterSpec excluded;
+    excluded.columns["analysis"].exclude.push_back(FilterEntry{.eq = longText});
+    CHECK(code(excluded) == TableErrorCode::LimitExceeded);
+
+    auto const group = [](std::vector<std::string> columns, std::vector<FilterEntry> include) {
+        FilterSpec spec;
+        spec.groups.push_back(
+            GroupFilter{.columns = std::move(columns), .combine = {}, .include = std::move(include)});
+        return spec;
+    };
+    CHECK(code(group({"analysis", "id", "mass"}, {FilterEntry{.eq = "a"}})) == TableErrorCode::LimitExceeded);
+    CHECK(code(group({"analysis"}, {FilterEntry{.eq = "a"}, FilterEntry{.eq = "b"}, FilterEntry{.eq = "c"}})) ==
+          TableErrorCode::LimitExceeded);
+    CHECK(code(group({"analysis"}, {FilterEntry{.contains = longText}})) == TableErrorCode::LimitExceeded);
+    CHECK(code(group({"analysis", "id"}, {FilterEntry{.contains = "pH"}})) == std::nullopt);
+
+    auto const offset =
+        validate(TableQuery{.sort = {}, .filters = {}, .page = {.offset = 101, .limit = 1}}, source.columns(), limits);
+    REQUIRE_FALSE(offset.has_value());
+    CHECK(offset.error().code == TableErrorCode::LimitExceeded);
+}
+
+TEST_CASE("table: a service that throws in apply is a typed error", "[table][query]") {
+    std::vector<std::vector<morph::table::Cell>> cells{{std::int64_t{2}}, {std::int64_t{1}}};
+    auto const source =
+        tabletest::makeSource({tabletest::col("c", morph::table::ColumnKind::Custom, "broken")}, std::move(cells));
+    ApplyOptions options;
+    options.services.comparators.emplace(
+        "broken", [](morph::table::Cell const&, morph::table::Cell const&) -> std::strong_ordering {
+            throw std::runtime_error{"comparator down"};
+        });
+    auto const page =
+        apply(*source, TableQuery{.sort = {{.column = "c", .dir = {}}}, .filters = {}, .page = {}}, options);
+    REQUIRE_FALSE(page.has_value());
+    CHECK(page.error().code == TableErrorCode::ServiceFailed);
+    CHECK(page.error().message.contains("comparator down"));
+}
+
+TEST_CASE("table: the window ignores a reply it does not await or that no longer fits", "[table][query]") {
+    PageWindow<int> window{10, 8};
+    auto const first = window.visible(0, 5);
+    REQUIRE(first.size() == 2);  // pages 0 and 1
+    CHECK(window.row(-1) == nullptr);
+
+    // A short reply with a known, larger total leaves page 0 incomplete.
+    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(4, 7), .total = 100, .offset = 0}));
+    CHECK(window.row(3) != nullptr);
+    CHECK(window.row(4) == nullptr);
+    CHECK_FALSE(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
+
+    // The rest of page 0 is fetched from where it ends; a stale reply for its
+    // start is taken off the flight but stores nothing.
+    auto const rest = window.visible(0, 5);
+    REQUIRE(rest.size() == 1);
+    CHECK(rest[0].request == PageRequest{.offset = 4, .limit = 6});
+    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
+    CHECK(*window.row(0) == 7);
+    CHECK(window.row(4) == nullptr);
+    auto const again = window.visible(0, 5);
+    REQUIRE(again.size() == 1);
+    CHECK(again[0].request == PageRequest{.offset = 4, .limit = 6});
+}
+
+TEST_CASE("table: the window evicts the page farthest from the visible rows", "[table][query]") {
+    PageWindow<int> window{10, 1};
+    auto const fetches = window.visible(0, 5);
+    REQUIRE(fetches.size() == 2);
+    CHECK(window.accept(fetches[0], Page<int>{.rows = std::vector<int>(10, 0), .total = 100, .offset = 0}));
+    CHECK(window.accept(fetches[1], Page<int>{.rows = std::vector<int>(10, 1), .total = 100, .offset = 10}));
+    CHECK(window.pagesHeld() == 1);
+    REQUIRE(window.row(0) != nullptr);
+    CHECK(*window.row(0) == 0);
+    CHECK(window.row(10) == nullptr);
+}
+
+TEST_CASE("table: with no total known, a short reply waits for the rest and an empty one ends the page",
+          "[table][query]") {
+    PageWindow<int> window{10, 8};
+    auto const first = window.visible(0, 5);
+    REQUIRE(first.size() == 2);
+    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(4, 7), .total = std::nullopt, .offset = 0}));
+    CHECK_FALSE(window.total().has_value());
+    auto const rest = window.visible(0, 5);
+    REQUIRE(rest.size() == 1);
+    CHECK(rest[0].request == PageRequest{.offset = 4, .limit = 6});
+    CHECK(window.accept(rest[0], Page<int>{.rows = {}, .total = std::nullopt, .offset = 4}));
+    CHECK(window.visible(0, 5).empty());  // page 0 is complete, page 1 still in flight
+    CHECK(window.row(4) == nullptr);
 }

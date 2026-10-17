@@ -120,3 +120,37 @@ TEST_CASE("a route is refused with the route and the reason", "[ui][route]") {
     CHECK_THAT(reason("lims.sample?sampleId=1&sampleId=2"), Catch::Matchers::ContainsSubstring("given twice"));
     CHECK_THAT(reason("lims.sample?sampleId"), Catch::Matchers::ContainsSubstring("without a value"));
 }
+
+// Mutation: read lowercase hex escapes as invalid, or drop a type's guard on a value of another kind.
+TEST_CASE("route: params of every routable type refuse a value of another kind, and escapes read either case",
+          "[ui][route]") {
+    namespace route = morph::ui::detail::route;
+    using morph::ui::Type;
+    using morph::ui::TypeKind;
+    using morph::ui::Value;
+    CHECK(route::decode("%2f%2F") == "//");
+    CHECK_FALSE(route::decode("%zz").has_value());
+    CHECK_FALSE(route::decode("%2").has_value());
+    for (TypeKind const kind : {TypeKind::Int, TypeKind::Bool, TypeKind::String, TypeKind::Decimal, TypeKind::Key}) {
+        CAPTURE(static_cast<int>(kind));
+        CHECK_FALSE(route::textOf(Type::of(kind), Value{morph::ui::ValueList{}}).has_value());
+    }
+    for (TypeKind const kind : {TypeKind::Any, TypeKind::Quantity, TypeKind::Timestamp, TypeKind::Record}) {
+        CHECK_FALSE(route::textOf(Type::of(kind), Value{std::int64_t{1}}).has_value());
+        CHECK_FALSE(route::valueOf(Type::of(kind), "1").has_value());
+    }
+    CHECK_FALSE(route::valueOf(Type::of(TypeKind::Key), "i:x").has_value());
+    CHECK_FALSE(route::valueOf(Type::of(TypeKind::Key), "s:%zz").has_value());
+    CHECK_FALSE(route::valueOf(Type::of(TypeKind::Key), "q:1").has_value());
+    CHECK_FALSE(route::valueOf(Type::of(TypeKind::String), "%zz").has_value());
+    CHECK_FALSE(route::valueOf(Type::of(TypeKind::Bool), "yes").has_value());
+    CHECK(route::valueOf(Type::of(TypeKind::Key), "s:a%20b") == Value{"a b"});
+}
+
+// Mutation: accept a param name whose escape does not decode (the param is looked up under garbage).
+TEST_CASE("a route whose param name does not decode is refused", "[ui][route]") {
+    Screens const screens;
+    auto const refused = morph::ui::parseRoute("lims.sample?%zzId=1", screens);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK_THAT(refused.error(), Catch::Matchers::ContainsSubstring("a param name that does not decode"));
+}

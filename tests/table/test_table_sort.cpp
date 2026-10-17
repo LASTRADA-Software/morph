@@ -340,3 +340,80 @@ TEST_CASE("table: a merge pass of narrow runs looks at the clock", "[table][sort
     auto const sorted = std::move(sort).take();
     CHECK(std::get<std::int64_t>(keys.cells[sorted.front()]) == 0);
 }
+
+TEST_CASE("table: a Key column sorts its integer keys", "[table][sort]") {
+    auto const source =
+        tabletest::column(ColumnKind::Key, {std::int64_t{30}, std::int64_t{10}, std::int64_t{20}, std::string{"x"}});
+    Sorted sorted{.source = source, .services = {}, .keys = {}};
+    CHECK(sorted.by({{"c", kAsc}}) == Rows{1, 2, 0, 3});
+    CHECK(sorted.by({{"c", kDesc}}) == Rows{0, 2, 1, 3});
+}
+
+TEST_CASE("table: a Text column orders other cells by their display text", "[table][sort]") {
+    auto const source = tabletest::column(ColumnKind::Text, {std::int64_t{10}, true, std::string{"b"}});
+    Sorted sorted{.source = source, .services = {}, .keys = {}};
+    CHECK(sorted.by({{"c", kAsc}}) == Rows{0, 2, 1});  // "10" < "b" < "true"
+    CHECK(sorted.keys[0].raw[1] == "true");
+}
+
+TEST_CASE("table: an Integer column reads whole decimals and integer text", "[table][sort]") {
+    auto const source = tabletest::column(
+        ColumnKind::Integer, {dec("5"), dec("2.5"), std::string{"3"}, std::string{"x"}, std::int64_t{4}, true});
+    Sorted sorted{.source = source, .services = {}, .keys = {}};
+    CHECK(sorted.by({{"c", kAsc}}) == Rows{2, 4, 0, 1, 3, 5});
+    CHECK(sorted.keys[0].ints[0] == 5);
+    CHECK(sorted.keys[0].states[1] == CellState::Invalid);
+}
+
+TEST_CASE("table: a cell of no readable alternative is invalid in every typed column", "[table][sort]") {
+    auto const decimal = tabletest::column(ColumnKind::Decimal, {true, dec("1")});
+    Sorted decimals{.source = decimal, .services = {}, .keys = {}};
+    CHECK(decimals.by({{"c", kAsc}}) == Rows{1, 0});
+
+    auto const number = tabletest::column(ColumnKind::Number, {dec("2.5"), true, 1.0});
+    Sorted numbers{.source = number, .services = {}, .keys = {}};
+    CHECK(numbers.by({{"c", kAsc}}) == Rows{2, 0, 1});
+    CHECK(numbers.keys[0].reals[0] == 2.5);
+
+    auto const date = tabletest::column(ColumnKind::Date, {true, std::int64_t{5}});
+    Sorted dates{.source = date, .services = {}, .keys = {}};
+    CHECK(dates.by({{"c", kAsc}}) == Rows{1, 0});
+}
+
+TEST_CASE("table: a Bool column reads 0 and 1 and the words true and false", "[table][sort]") {
+    auto const source = tabletest::column(
+        ColumnKind::Bool, {std::int64_t{1}, std::int64_t{0}, std::string{"maybe"}, std::string{"true"}});
+    Sorted sorted{.source = source, .services = {}, .keys = {}};
+    CHECK(sorted.by({{"c", kAsc}}) == Rows{1, 0, 3, 2});
+    CHECK(sorted.keys[0].ints[3] == 1);
+}
+
+TEST_CASE("table: a merge sort is done only once a run returned true", "[table][sort]") {
+    // 1,500 rows: the runs are sorted in one go, and a passed deadline stops
+    // the sort after the first merge pass, with wider runs still to merge.
+    constexpr std::int64_t kRows = 1500;
+    std::vector<Cell> cells;
+    cells.reserve(kRows);
+    for (std::int64_t i = 0; i < kRows; ++i) {
+        cells.emplace_back(kRows - i);
+    }
+    auto const source = tabletest::column(ColumnKind::Integer, cells);
+    Services const services;
+    auto keys = KeyColumn::forColumn(source->columns()[0], services, cells.size());
+    buildKeys(*source->snapshot(), 0, source->columns()[0], services, 0, cells.size(), keys);
+    Rows rows(cells.size());
+    std::ranges::iota(rows, 0U);
+    RowOrder const order{{{.keys = &keys, .dir = kAsc}}};
+    CHECK_FALSE(order.empty());
+    CHECK(RowOrder{}.empty());
+    ChunkedMergeSort sort{rows, order};
+    CHECK_FALSE(sort.done());
+    auto const passed = std::chrono::steady_clock::now() - std::chrono::seconds{1};
+    CHECK_FALSE(sort.run(passed, ::core::async::StopToken{}));
+    CHECK_FALSE(sort.done());
+    CHECK(sort.run(kNoDeadline, ::core::async::StopToken{}));
+    CHECK(sort.done());
+    auto const sorted = std::move(sort).take();
+    CHECK(sorted.front() == 1499U);
+    CHECK(sorted.back() == 0U);
+}

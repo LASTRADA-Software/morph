@@ -187,3 +187,42 @@ TEST_CASE("The inspector reads the reactive runtime's counters", "[ui][inspector
 }
 
 #endif
+
+namespace {
+
+constexpr std::string_view kSaving = R"({
+  "vocab": "ui/1", "id": "saving",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "mutations": { "save": { "model": "sample", "action": "Lims_Attach", "body": { "obj": {} } } },
+  "view": { "kind": "button", "testId": "save", "label": "Save", "onClick": [ { "run": "save" } ] } })";
+
+constexpr std::string_view kApp = R"({
+  "vocab": "ui/1", "id": "app",
+  "models": { "clients": { "type": "Lims_ClientModel" } },
+  "queries": { "clientList": { "model": "clients", "action": "Lims_ClientList" } } })";
+
+}  // namespace
+
+// Mutation: report a mutation as idle whatever its runs did, or leave the app document's queries out.
+TEST_CASE("The inspector follows a mutation from pending to fresh or error, and lists the app document's queries",
+          "[ui][inspector]") {
+    Harness harness;
+    auto const app = harness.interpreter.mountApp(morph::ui::testing::loadOrFail(kApp));
+    REQUIRE(app.has_value());
+    auto screen = harness.mount(kSaving);
+    Inspector const inspector{*screen};
+    CHECK(named(inspector.queries(), "clientList").scope == "app");
+
+    harness.backend.click(harness.byTestId("Button", "save"));
+    harness.settle();
+    CHECK(named(inspector.queries(), "save").state == "pending");
+    harness.reply(harness.dispatcher.last("Lims_Attach"), R"({"ok":true})");
+    CHECK(named(inspector.queries(), "save").state == "fresh");
+
+    harness.backend.click(harness.byTestId("Button", "save"));
+    harness.settle();
+    harness.fail(harness.dispatcher.last("Lims_Attach"));
+    InspectedQuery const failed = named(inspector.queries(), "save");
+    CHECK(failed.state == "error");
+    CHECK_FALSE(failed.lastError.empty());
+}

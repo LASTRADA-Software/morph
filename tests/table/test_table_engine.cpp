@@ -16,8 +16,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/table/engine.hpp>
+#include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -322,4 +325,94 @@ TEST_CASE("table: a column layout keeps one column visible and resets", "[table]
     CHECK(std::vector<std::string>(layout.order().begin(), layout.order().end()) ==
           std::vector<std::string>{"c", "b", "d"});
     CHECK(layout.visible() == std::vector<std::string>{"c", "d"});
+}
+
+TEST_CASE("table: a column layout shows a column again and keeps one visible through a rebuild", "[table][engine]") {
+    ColumnLayout layout{{"a", "b", "c"}};
+    CHECK(layout.setVisible("a", false));
+    CHECK(layout.setVisible("a", false));  // already hidden: hiding it again hides nothing more
+    CHECK(layout.visible() == std::vector<std::string>{"b", "c"});
+    CHECK(layout.setVisible("a", true));
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b", "c"});
+    CHECK_FALSE(layout.move("zzz", 0));
+
+    CHECK(layout.setVisible("a", false));
+    CHECK(layout.setVisible("b", false));
+    layout.rebuild({"a", "b"});  // the only visible column vanished
+    CHECK(layout.visible() == std::vector<std::string>{"a"});
+    layout.rebuild({});
+    CHECK(layout.order().empty());
+    CHECK(layout.visible().empty());
+}
+
+TEST_CASE("table: the view, its snapshot and the row index read back", "[table][engine]") {
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{30}, std::int64_t{10}, std::int64_t{20}});
+    Engine engine{source};
+    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    CHECK(std::vector<std::uint32_t>(engine.view().begin(), engine.view().end()) ==
+          std::vector<std::uint32_t>{1, 2, 0});
+    CHECK(engine.viewSnapshot().get() == source->snapshot().get());
+    CHECK(engine.viewRowOf(0) == 2U);
+    CHECK(engine.viewRowOf(1) == 0U);  // the index built for the first call answers this one
+    CHECK(engine.viewRowOf(3) == std::nullopt);
+}
+
+namespace {
+
+// A source that forwards to a VectorSource and lets the test notify any change.
+class NotifyingSource final : public DataSource {
+public:
+    explicit NotifyingSource(std::shared_ptr<VectorSource> rows) : _rows{std::move(rows)} {}
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _rows->columns(); }
+    [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override { return _rows->snapshot(); }
+    void subscribe(ChangeListener& listener) override { _listener = &listener; }
+    void unsubscribe(ChangeListener& /*listener*/) override { _listener = nullptr; }
+    void notify(RowChange const& change) const {
+        if (_listener != nullptr) {
+            _listener->rowsChanged(change);
+        }
+    }
+
+private:
+    std::shared_ptr<VectorSource> _rows;
+    ChangeListener* _listener = nullptr;
+};
+
+}  // namespace
+
+TEST_CASE("table: an update naming no rows starts no work", "[table][engine]") {
+    auto const source =
+        std::make_shared<NotifyingSource>(tabletest::column(ColumnKind::Integer, {std::int64_t{2}, std::int64_t{1}}));
+    Engine engine{source};
+    std::size_t changes = 0;
+    engine.onViewChange([&](ViewChange const&) { ++changes; });
+    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    REQUIRE(engine.stats().jobs == 1);
+    source->notify(RowChange{.kind = ChangeKind::Updated, .rows = {}});
+    CHECK(engine.stats().jobs == 1);
+    CHECK(changes == 1);
+    CHECK(viewKeys(engine) == std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::int64_t{0}}});
+}
+
+TEST_CASE("table: a repair applies a group filter to the updated rows", "[table][engine]") {
+    auto const source =
+        tabletest::makeSource({tabletest::col("a", ColumnKind::Text), tabletest::col("b", ColumnKind::Text),
+                               tabletest::col("n", ColumnKind::Integer)},
+                              {{std::string{"x1"}, std::string{"-"}, std::int64_t{3}},
+                               {std::string{"-"}, std::string{"-"}, std::int64_t{1}},
+                               {std::string{"-"}, std::string{"x2"}, std::int64_t{2}}});
+    Engine engine{source};
+    FollowingModel const model{engine};
+    FilterSpec spec;
+    spec.groups.push_back(
+        GroupFilter{.columns = {"a", "b"}, .combine = {}, .include = {FilterEntry{.contains = "x"}}});
+    REQUIRE(engine.setFilter(spec).has_value());
+    REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
+    CHECK(viewKeys(engine) == std::vector<RowId>{RowId{std::int64_t{2}}, RowId{std::int64_t{0}}});
+
+    source->updateRow(1, {std::string{"-"}, std::string{"x3"}, std::int64_t{1}});  // comes in through b
+    source->updateRow(0, {std::string{"-"}, std::string{"-"}, std::int64_t{3}});   // leaves: neither column has x
+    CHECK(engine.stats().repairs == 2);
+    CHECK(viewKeys(engine) == std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::int64_t{2}}});
+    CHECK(model.check());
 }

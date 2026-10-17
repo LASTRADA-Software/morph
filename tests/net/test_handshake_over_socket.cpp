@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
@@ -133,4 +134,70 @@ TEST_CASE("readHttpHeaderBlock throws once the header exceeds the 64 KiB safety 
     serverThread.join();
     REQUIRE(serverException != nullptr);
     REQUIRE_THROWS_WITH(std::rethrow_exception(serverException), Catch::Matchers::ContainsSubstring("64 KiB"));
+}
+
+// Mutation: skip waitReadableUntil when bounded (the read still succeeds, but the timeout case below blocks forever).
+TEST_CASE("readHttpHeaderBlock with a timeout returns a header that arrives within it", "[net][handshake][socket]") {
+    auto listener = TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    TcpSocket serverSide;
+    morph::net::detail::HandshakeReadResult result;
+    std::exception_ptr serverException;
+    std::thread serverThread{[&] {
+        serverSide = listener.accept();
+        try {
+            result = morph::net::detail::readHttpHeaderBlock(serverSide, std::chrono::seconds{20});
+        } catch (...) {
+            serverException = std::current_exception();
+        }
+    }};
+
+    auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
+    std::string const request = "GET / HTTP/1.1\r\nHost: x\r\n\r\ntail";
+    clientSide.sendAll(request.data(), request.size());
+
+    serverThread.join();
+    REQUIRE(serverException == nullptr);
+    CHECK(result.header == "GET / HTTP/1.1\r\nHost: x");
+    CHECK(result.leftover == "tail");
+}
+
+// Mutation: drop the kTimedOut throw from waitReadableUntil (recvSome then blocks on a peer that never writes, and
+// the read only ends when the client closes -- with "peer closed", not "timed out").
+TEST_CASE("readHttpHeaderBlock with a timeout throws once a silent peer lets it pass", "[net][handshake][socket]") {
+    auto listener = TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    TcpSocket serverSide;
+    std::exception_ptr serverException;
+    std::thread serverThread{[&] {
+        serverSide = listener.accept();
+        try {
+            static_cast<void>(morph::net::detail::readHttpHeaderBlock(serverSide, std::chrono::milliseconds{100}));
+        } catch (...) {
+            serverException = std::current_exception();
+        }
+    }};
+
+    // Connected and silent: sends a partial header and never the terminator.
+    auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
+    std::string const partial = "GET / HTTP/1.1\r\n";
+    clientSide.sendAll(partial.data(), partial.size());
+
+    // A read that ignored its deadline would block until the peer goes away:
+    // ending the connection after 10s turns that into a wrong message rather
+    // than a hung test.
+    std::atomic<bool> serverDone{false};
+    std::thread backstop{[&] {
+        for (int i = 0; i < 1000 && !serverDone.load(); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        }
+        clientSide.shutdownBoth();
+    }};
+    serverThread.join();
+    serverDone = true;
+    backstop.join();
+    REQUIRE(serverException != nullptr);
+    REQUIRE_THROWS_WITH(std::rethrow_exception(serverException), Catch::Matchers::ContainsSubstring("timed out"));
 }

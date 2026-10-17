@@ -447,3 +447,14 @@ TEST_CASE("Saturating arithmetic is noexcept even when the log sink throws", "[r
     // Still saturated correctly despite the sink failing.
     CHECK((whole(kMax) + whole(1)).numerator == kMax);
 }
+
+// Mutation: drop mulWouldOverflow's zero-divisor guard (0/0, which only a hand-written field can make, divides by
+// zero).
+TEST_CASE("mulWouldOverflow answers false for a 0/0 operand built by writing its fields", "[rational][checked]") {
+    Rational broken{};
+    broken.numerator = 0;
+    broken.denominator = 0;
+    const Rational zero{Numerator{0}, Denominator{1}, DecimalPlaces{0}};
+    CHECK_FALSE(broken.mulWouldOverflow(broken));
+    CHECK_FALSE(zero.mulWouldOverflow(broken));
+}

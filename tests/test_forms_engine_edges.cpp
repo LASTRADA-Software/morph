@@ -8,11 +8,16 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <morph/forms/detail/schema_name.hpp>
 #include <morph/forms/engine/detail/text.hpp>
 #include <morph/forms/engine/field_model.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/forms/engine/rules.hpp>
 #include <morph/forms/engine/values.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/forms/i18n.hpp>
+#include <morph/forms/instance_constraints.hpp>
+#include <morph/forms/layout.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <stdexcept>
@@ -612,4 +617,55 @@ TEST_CASE("engine edges: equals literals given as digits that are not an integer
     CHECK(literal(R"({"kind":"equals","fields":["a"],"valueText":"1.5","value":1.5})").contains(R"("num":3)"));
     CHECK(literal(R"({"kind":"equals","fields":["a"],"valueText":"x","value":"x"})").contains(R"("x")"));
     CHECK(literal(R"({"kind":"equals","fields":["a"],"value":{"num":1}})").contains("null"));
+}
+
+// Mutation: write a `FieldMeta` builder's argument to another member (the expected member stays at its default).
+TEST_CASE("forms: FieldMeta's unit, decimals and blankAs builders set their member at run time", "[forms][meta]") {
+    morph::forms::FieldMeta const base{.field = "mass"};
+    morph::forms::FieldMeta const withUnit = base.withUnit("mg");
+    CHECK(withUnit.unit == "mg");
+    CHECK(withUnit.field == "mass");
+    morph::forms::FieldMeta const withDecimals = base.withDecimals(morph::math::DecimalPlaces{3});
+    REQUIRE(withDecimals.decimals.has_value());
+    CHECK(withDecimals.decimals->value == 3);
+    CHECK(base.withBlankAs(morph::forms::BlankAs::Empty).blankAs == morph::forms::BlankAs::Empty);
+    CHECK(base.unit.empty());
+}
+
+// Mutation: drop appendDecimal's zero case (a zero width renders as nothing).
+TEST_CASE("forms: a schema shape tag appends text and decimal digits", "[forms][meta]") {
+    morph::forms::detail::ShapeTag tag;
+    tag.append("f");
+    tag.appendDecimal(128);
+    CHECK(tag.view() == "f128");
+    morph::forms::detail::ShapeTag zero;
+    zero.appendDecimal(0);
+    CHECK(zero.view() == "0");
+}
+
+// Mutation: let an out-of-range enum value name something other than its documented fallback.
+TEST_CASE("forms: a kind name outside its enum falls back to the documented name", "[forms][meta]") {
+    CHECK(morph::forms::i18n::fieldSlotName(static_cast<morph::forms::i18n::FieldSlot>(200)) == "label");
+    CHECK(morph::forms::i18n::fieldSlotName(morph::forms::i18n::FieldSlot::Placeholder) == "placeholder");
+    CHECK(morph::forms::groupKindName(static_cast<morph::forms::GroupKind>(200)) == "section");
+    CHECK(morph::forms::groupKindName(morph::forms::GroupKind::Accordion) == "accordion");
+    CHECK(morph::forms::violationKindName(static_cast<morph::forms::ConstraintViolationKind>(200)) == "unknown");
+    CHECK(morph::forms::violationKindName(morph::forms::ConstraintViolationKind::PrecisionExceeded) ==
+          "precisionExceeded");
+    CHECK(morph::forms::fieldKindName(static_cast<morph::forms::FieldKind>(200)) == "text");
+    CHECK(morph::forms::fieldKindName(morph::forms::FieldKind::ObjectArray) == "objectArray");
+}
+
+// Mutation: stop at a node that is not an object, has no kind or no fields (a later contradiction goes unreported).
+TEST_CASE("forms: an unsatisfiable conjunct is found past nodes that do not name fields", "[forms][rules]") {
+    glz::generic_u64 nodes{};
+    REQUIRE_FALSE(glz::read_json(nodes, R"([
+      7, {"fields":["a","b"]}, {"kind":"exactlyOneOf"}, {"kind":"engaged","fields":["a","b"]},
+      {"kind":"and"}, {"kind":"and","conditions":[{"kind":"mutuallyExclusive","fields":["a","b"]}]}])"));
+    std::vector<std::string_view> const required{"a", "b"};
+    auto const offender =
+        morph::forms::detail::findUnsatisfiableConjunct(nodes.get<glz::generic_u64::array_t>(), required);
+    REQUIRE(offender.has_value());
+    CHECK(offender->first == "mutuallyExclusive");
+    CHECK(offender->second == "a, b");
 }

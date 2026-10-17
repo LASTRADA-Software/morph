@@ -4,6 +4,7 @@
 #include <memory>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/session/session.hpp>
 #include <stdexcept>
 #include <string>
 
@@ -302,4 +303,31 @@ TEST_CASE("morph::model::detail::ActionDispatcher: different (model,action) pair
 
     // A different action name on same model should throw
     REQUIRE_THROWS_AS(dispatcher.dispatch("REG_RxModel", "REG_Unknown", *holder, "{}"), std::runtime_error);
+}
+
+namespace {
+
+struct PlainDraft {
+    int value = 0;
+};
+
+}  // namespace
+
+// Mutation: make an action without validate() never ready (a form over it could never submit).
+TEST_CASE("ActionValidator: an action without validate() is always ready", "[registry]") {
+    PlainDraft draft{};
+    draft.value = static_cast<int>(std::string{"run time"}.size());
+    CHECK(morph::model::ActionValidator<PlainDraft>::ready(draft));
+}
+
+// Mutation: answer the request id of no session as the last one installed (a dispatch's zones link to a stale id).
+TEST_CASE("currentRequestId is the installed session's request id, and empty with none", "[registry]") {
+    CHECK(morph::model::detail::currentRequestId().empty());
+    morph::session::Context context;
+    context.requestId = "req-17";
+    {
+        morph::session::detail::ScopedContext const installed{context};
+        CHECK(morph::model::detail::currentRequestId() == "req-17");
+    }
+    CHECK(morph::model::detail::currentRequestId().empty());
 }

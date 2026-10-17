@@ -137,3 +137,20 @@ TEST_CASE("A screen shown after the first in one move back adds an entry, as a r
     CHECK(memory.entries() == Entries{"start", "redirected"});
     CHECK(memory.index() == 1);
 }
+
+// Mutation: move past either end of the history, or report a followed address that is already current.
+TEST_CASE("memory history: back and forward stop at the ends, and following the current address reports nothing",
+          "[ui][route]") {
+    MemoryHistory memory;
+    std::vector<std::string> popped;
+    memory.onPop([&popped](std::string const& route) { popped.push_back(route); });
+    memory.push("a");
+    CHECK_FALSE(memory.forward());
+    memory.follow(memory.current());
+    CHECK(popped.empty());
+    while (memory.back()) {
+    }
+    CHECK_FALSE(memory.back());
+    memory.follow("b");
+    CHECK(popped.back() == "b");
+}

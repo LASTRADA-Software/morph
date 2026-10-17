@@ -11,13 +11,17 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <chrono>
+#include <compare>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <morph/table/edits.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
+#include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -260,4 +264,119 @@ TEST_CASE("table: destroying cell edits ends the edits they had in flight", "[ta
     pending.at(0)(std::vector<Cell>{Cell{std::int64_t{1000}}});  // ignored
     source->updateRow(0, {Cell{std::int64_t{-1}}});
     CHECK(engine.heldRows() == std::vector<RowId>{key(0)});
+}
+
+namespace {
+
+struct ProgressHook final : ProgressSink {
+    std::function<void()> then;
+    int calls = 0;
+    void progress(std::size_t /*done*/, std::size_t /*total*/) override {
+        ++calls;
+        if (then) {
+            then();
+        }
+    }
+};
+
+}  // namespace
+
+// Engine::ownerStep returns as soon as the progress sink destroyed the engine.
+TEST_CASE("table: an engine may be destroyed from its progress sink", "[table][reentrancy]") {
+    ManualExecutor owner;
+    auto const hook = std::make_shared<ProgressHook>();
+    Services services;
+    services.progress = hook;
+    auto engine = std::make_unique<Engine>(
+        integers(3000),
+        EngineOptions{
+            .owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}, .services = services});
+    hook->then = [&] { engine.reset(); };
+    REQUIRE(engine->setSort({{"n", SortDirection::Ascending}}).has_value());
+    drain(owner);
+    CHECK(engine == nullptr);
+    CHECK(hook->calls == 1);
+}
+
+// Engine::afterJob returns as soon as the work it started destroyed the
+// engine: here a table that shrank below the small-table size recomputes
+// inside afterJob, and its view-change handler destroys the engine.
+TEST_CASE("table: an engine may be destroyed by work started after a dropped job", "[table][reentrancy]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const source = integers(3000);
+    auto engine = std::make_unique<Engine>(source, EngineOptions{.owner = &owner, .worker = &worker});
+    std::vector<bool> pendingSeen;
+    engine->onPending([&](bool pending) { pendingSeen.push_back(pending); });
+    engine->onViewChange([&](ViewChange const&) { engine.reset(); });
+    REQUIRE(engine->setSort({{"n", SortDirection::Ascending}}).has_value());
+    source->setRows({key(0), key(1)}, {{Cell{std::int64_t{2}}}, {Cell{std::int64_t{1}}}});
+    owner.runAll();  // the flush stops the job
+    drain(owner, &worker);
+    CHECK(engine == nullptr);
+    CHECK(pendingSeen == std::vector<bool>{true});
+}
+
+// Engine::deliver returns before publishing when the settle scheduler
+// destroyed the engine.
+TEST_CASE("table: an engine may be destroyed from its settle scheduler", "[table][reentrancy]") {
+    ManualExecutor owner;
+    auto const source = integers(3);
+    std::unique_ptr<Engine> engine;
+    engine = std::make_unique<Engine>(
+        source, EngineOptions{.owner = &owner,
+                              .reorder = ReorderPolicy::Deferred,
+                              .scheduleSettle = [&](std::chrono::milliseconds, std::function<void()> const&) {
+                                  engine.reset();
+                              }});
+    int changes = 0;
+    engine->onViewChange([&](ViewChange const&) { ++changes; });
+    REQUIRE(engine->setSort({{"n", SortDirection::Ascending}}).has_value());
+    REQUIRE(changes == 1);
+    source->updateRow(0, {Cell{std::int64_t{100}}});
+    drain(owner);
+    CHECK(engine == nullptr);
+    CHECK(changes == 1);
+}
+
+// Engine::afterJob returns as soon as the layout of holds released during a
+// failed job destroyed the engine.
+TEST_CASE("table: an engine may be destroyed while holds released during a failed job are laid out",
+          "[table][reentrancy]") {
+    ManualExecutor owner;
+    ManualExecutor worker;
+    auto const armed = std::make_shared<bool>(false);
+    EngineOptions options{.owner = &owner,
+                          .worker = &worker,
+                          .reorder = ReorderPolicy::Deferred,
+                          .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}};
+    options.services.comparators.emplace("byValue", [armed](Cell const& left, Cell const& right) {
+        if (*armed) {
+            throw std::runtime_error{"comparator down"};
+        }
+        return std::get<std::int64_t>(left) <=> std::get<std::int64_t>(right);
+    });
+    std::vector<std::vector<Cell>> cells;
+    cells.reserve(3000);
+    for (std::int64_t i = 0; i < 3000; ++i) {
+        cells.push_back({Cell{i}, Cell{3000 - i}});
+    }
+    auto const source = tabletest::makeSource({col("n", ColumnKind::Integer), col("c", ColumnKind::Custom, "byValue")},
+                                              std::move(cells));
+    auto engine = std::make_unique<Engine>(source, options);
+    std::vector<bool> pendingSeen;
+    REQUIRE(engine->setSort({{"n", SortDirection::Ascending}}).has_value());
+    drain(owner, &worker);
+    source->updateRow(0, {Cell{std::int64_t{999'999}}, Cell{std::int64_t{0}}});
+    drain(owner, &worker);
+    REQUIRE(engine->heldRows().size() == 1);
+
+    *armed = true;
+    REQUIRE(engine->setSort({{"c", SortDirection::Ascending}}).has_value());
+    engine->settleNow();
+    engine->onPending([&](bool pending) { pendingSeen.push_back(pending); });
+    engine->onViewChange([&](ViewChange const&) { engine.reset(); });
+    drain(owner, &worker);
+    CHECK(engine == nullptr);
+    CHECK(pendingSeen.empty());
 }

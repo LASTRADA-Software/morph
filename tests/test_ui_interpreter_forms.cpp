@@ -3,11 +3,14 @@
 // The `form` node: a document's schema form, lowered through the forms engine (spec 5 §9, spec 2).
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstddef>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "ui_interpreter_support.hpp"
 
@@ -339,4 +342,54 @@ TEST_CASE("form node: a value of the record being edited keeps what the user typ
         h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"note":"stored again","rowIndex":2})");
         CHECK(note() == "stored again");
     }
+}
+
+// Mutation: build a form, collection or wizard from a catalog document that does not build (it throws, or shows an
+// empty engine instead of the report).
+TEST_CASE("form, collection and wizard nodes: a catalog document that does not build is reported",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    morph::ui::Catalog catalog = morph::ui::testing::corpusCatalog();
+    auto const corpusSchema = catalog.schema;
+    catalog.schema = [corpusSchema](std::string_view action) -> std::optional<std::string> {
+        if (action == "Lims_CaptureConcentration") {
+            return std::string{"{not a schema"};
+        }
+        return corpusSchema(action);
+    };
+    catalog.view = [](std::string_view) -> std::optional<std::string> { return std::string{R"({"v-kind":"nope"})"}; };
+    catalog.wizard = [](std::string_view action) -> std::optional<std::string> {
+        if (action == "Lims_ConfirmSample") {
+            return std::string{R"({"w-title":"Flow","w-steps":[{"action":"Lims_CaptureConcentration","title":"A"}]})"};
+        }
+        return std::string{R"({"w-steps":"none"})"};
+    };
+    morph::ui::Session session{h.runtime, morph::ui::SessionOptions{.scheduler = &h.scheduler,
+                                                                    .clock = [&h] { return h.scheduler.now(); },
+                                                                    .keepUnused = std::chrono::minutes{5},
+                                                                    .catalog = catalog,
+                                                                    .classify = {}}};
+    std::vector<std::string> reasons;
+    morph::ui::Interpreter interpreter{
+        session, h.dispatcher,
+        morph::ui::InterpreterOptions{.host = &h.host, .diagnostics = [&](morph::ui::Refusal const& refusal) {
+                                          reasons.push_back(refusal.reason);
+                                      }}};
+    auto const screen = interpreter.mount(morph::ui::testing::loadOrFail(R"({"vocab": "ui/1", "id": "broken",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration" },
+        { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" },
+        { "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" },
+        { "kind": "wizard", "model": "sample", "action": "Lims_ConfirmSample" } ] } })",
+                                                                         morph::ui::testing::corpusCatalog()),
+                                          {}, h.backend);
+    REQUIRE(screen.has_value());
+    h.settle();
+    REQUIRE(reasons.size() == 4);
+    CHECK(reasons.at(0).starts_with("the form of `Lims_CaptureConcentration` does not build: "));
+    CHECK(reasons.at(1).starts_with("the collection of `Lims_ListSamples` does not build: "));
+    CHECK(reasons.at(2).starts_with("the wizard of `Lims_CaptureConcentration` does not build: "));
+    CHECK(reasons.at(3) == "the wizard document of `Lims_ConfirmSample` starts with `Lims_CaptureConcentration`");
+    CHECK(h.dispatcher.calls.empty());
 }

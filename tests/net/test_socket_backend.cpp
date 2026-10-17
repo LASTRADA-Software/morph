@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -234,6 +236,31 @@ public:
                 return morph::wire::decode(frame.payload);
             }
         }
+    }
+
+    // Bounds every later read: a frame the backend never sends then fails the
+    // test with a timeout instead of parking it.
+    void boundReceives(std::chrono::milliseconds timeout) {
+        if (!_socket.setRecvTimeout(timeout)) {
+            throw std::runtime_error("FakeWsServer: could not bound the receive");
+        }
+    }
+
+    // Waits up to 20s for a client's connection to be pending on the listener,
+    // without accepting it.
+    [[nodiscard]] bool waitForPendingConnection() const {
+        return morph::net::detail::pollUntil(_listener.nativeHandle(), POLLIN,
+                                             std::chrono::steady_clock::now() + std::chrono::seconds{20})
+                   .outcome == morph::net::detail::PollOutcome::kReady;
+    }
+
+    // Bytes the kernel holds for this side that nothing has read yet.
+    [[nodiscard]] int unreadBytes() const {
+        int pending = 0;
+        if (::ioctl(_socket.nativeHandle(), FIONREAD, &pending) != 0) {
+            return -1;
+        }
+        return pending;
     }
 
     // Tears the connection down with an abortive RST (SO_LINGER{1,0}) instead
@@ -2910,4 +2937,411 @@ TEST_CASE("SocketBackend: cancelPending rejects a request still held for the fir
     REQUIRE(drainUntil(callerExec, answered.done));
     CHECK_FALSE(answered.reply.has_value());
     CHECK(answered.failure == "cancelled before connect");
+}
+
+// ── Negotiation, cancel and connect edges ───────────────────────────────────
+
+namespace {
+
+std::string fakeUrl(std::uint16_t port) { return "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)); }
+
+/// An `ok` reply to @p hello that advertises `"cancel"`, as a current server's does.
+std::string helloOkAdvertisingCancel(const morph::wire::Envelope& hello) {
+    std::string body;
+    if (glz::write_json(morph::wire::ProtocolRange{.capabilities = {std::string{morph::wire::kCapabilityCancel}}},
+                        body)) {
+        throw std::runtime_error("could not encode the hello reply");
+    }
+    return morph::wire::encode(morph::wire::makeOk(hello.callId, std::move(body)));
+}
+
+bool isDisconnected(const std::exception_ptr& failure) {
+    try {
+        std::rethrow_exception(failure);
+    } catch (const morph::backend::DisconnectedError&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+}  // namespace
+
+// Mutation: drop the zero-ModelId half of promoteModel's local guard (the call goes to the wire and, on a socket
+// that never connects, is rejected as disconnected instead of echoing the id).
+TEST_CASE("SocketBackend: promoteModel with a primary but a zero ModelId echoes the id without sending",
+          "[net][socket_backend][registration-surface]") {
+    morph::net::SocketBackend backend{"ws://127.0.0.1:9"};
+    morph::exec::MainThreadExecutor callerExec;
+    std::atomic<bool> done{false};
+    std::optional<morph::exec::detail::ModelId> echoed;
+    backend
+        .promoteModel(
+            morph::backend::detail::PromoteRequest{
+                .mid = morph::exec::detail::ModelId{0},
+                .typeId = "SbCounterModel",
+                .primary = "key",
+            },
+            callerExec)
+        .then([&](morph::exec::detail::ModelId mid) {
+            echoed = mid;
+            done = true;
+        })
+        .onError([&](const std::exception_ptr&) { done = true; });
+    REQUIRE(drainUntil(callerExec, done));
+    REQUIRE(echoed.has_value());
+    CHECK(echoed->v == 0U);
+}
+
+// Mutation: leave `negotiation` out of PendingControl::reject (the negotiation asked before the connect never
+// settles).
+// Mutation: drop the hello re-send from onConnected (the server reads nothing until the second negotiation, and the
+// first bounded receive times out).
+// Mutation: send the abandoned-execute cancel only for a stoppable call (no cancel reaches the server).
+TEST_CASE(
+    "SocketBackend: a negotiation asked before the connect is rejected, the connect then says hello itself, and "
+    "cancelPending cancels a plain execute under the backend's session",
+    "[net][socket_backend][cancel]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{fakeUrl(fake.port())};
+    morph::exec::MainThreadExecutor owner;
+
+    // Asked while the handshake cannot have completed: the fake has not accepted yet.
+    bool earlyRejectedAsDisconnected = false;
+    bool earlySettled = false;
+    backend.negotiateProtocolVersion(owner)
+        .then([&](morph::wire::ProtocolNegotiationResult) { earlySettled = true; })
+        .onError([&](const std::exception_ptr& failure) {
+            earlyRejectedAsDisconnected = isDisconnected(failure);
+            earlySettled = true;
+        });
+    backend.setSession(morph::session::Context{.principal = "alice"});
+    fake.acceptAndHandshake();
+    fake.boundReceives(std::chrono::seconds{10});
+    REQUIRE(backend.waitForConnected());
+    spinUntil(owner, [&] { return earlySettled; });
+    REQUIRE(earlyRejectedAsDisconnected);
+
+    // The connect re-sends hello on its own, settling nothing when answered.
+    auto const resent = fake.receiveEnvelope();
+    REQUIRE(resent.kind == "hello");
+    fake.sendFrame(morph::net::detail::WsOpcode::kText, helloOkAdvertisingCancel(resent));
+
+    // A second negotiation: answering it after the first proves the backend has
+    // read both replies, so it has learned the server honours "cancel".
+    std::optional<morph::wire::ProtocolNegotiationResult> result;
+    backend.negotiateProtocolVersion(owner)
+        .then([&](morph::wire::ProtocolNegotiationResult value) { result = value; })
+        .onError([](const std::exception_ptr&) {});
+    auto const asked = fake.receiveEnvelope();
+    REQUIRE(asked.kind == "hello");
+    fake.sendFrame(morph::net::detail::WsOpcode::kText, helloOkAdvertisingCancel(asked));
+    spinUntil(owner, [&] { return result.has_value(); });
+    REQUIRE(result == morph::wire::ProtocolNegotiationResult::Negotiated);
+
+    // An execute nothing can stop, abandoned by cancelPending.
+    std::string error;
+    auto call = echoCall();
+    call.session = morph::session::Context{.principal = "carol"};
+    backend.execute(morph::exec::detail::ModelId{7}, std::move(call), &owner)
+        .then([](const std::shared_ptr<void>&) {})
+        .onError([&](const std::exception_ptr& failure) {
+            try {
+                std::rethrow_exception(failure);
+            } catch (const std::exception& exc) {
+                error = exc.what();
+            }
+        });
+    auto const execute = fake.receiveEnvelope();
+    REQUIRE(execute.kind == "execute");
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"abandoned"}));
+
+    auto const cancel = fake.receiveEnvelope();
+    CHECK(cancel.kind == "cancel");
+    CHECK(cancel.cancelCallId == execute.callId);
+    // No stop source kept the execute's own session, so the backend's is used.
+    CHECK(cancel.session.principal == "alice");
+    spinUntil(owner, [&] { return !error.empty(); });
+    CHECK(error == "abandoned");
+}
+
+// Mutation: let interpretHelloReply's throw escape settleControl (the negotiation is never settled).
+TEST_CASE("SocketBackend: a hello the server refuses rejects the negotiation with the server's message",
+          "[net][socket_backend][cancel]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{fakeUrl(fake.port())};
+    fake.acceptAndHandshake();
+    fake.boundReceives(std::chrono::seconds{10});
+    REQUIRE(backend.waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+
+    std::string error;
+    backend.negotiateProtocolVersion(owner)
+        .then([](morph::wire::ProtocolNegotiationResult) {})
+        .onError([&](const std::exception_ptr& failure) {
+            try {
+                std::rethrow_exception(failure);
+            } catch (const std::exception& exc) {
+                error = exc.what();
+            }
+        });
+    auto const hello = fake.receiveEnvelope();
+    REQUIRE(hello.kind == "hello");
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeErr("protocol version unsupported", hello.callId)));
+    spinUntil(owner, [&] { return !error.empty(); });
+    CHECK_THAT(error, Catch::Matchers::ContainsSubstring("protocol version unsupported"));
+}
+
+// Mutation: skip the null check before calling ActionCall::deserializeResult (the reply calls through a null
+// function pointer).
+TEST_CASE("SocketBackend: an execute whose call carries no result deserializer is rejected, not called through",
+          "[net][socket_backend]") {
+    SharedLoopStack stack;
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    morph::exec::MainThreadExecutor owner;
+    auto call = echoCall();
+    call.deserializeResult = nullptr;
+    std::string error;
+    auto comp = stack.backend->execute(mid, std::move(call), &owner);
+    comp.then([](const std::shared_ptr<void>&) {}).onError([&](const std::exception_ptr& failure) {
+        try {
+            std::rethrow_exception(failure);
+        } catch (const std::exception& exc) {
+            error = exc.what();
+        }
+    });
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return !error.empty(); }));
+    CHECK(error == "ActionCall::deserializeResult is null");
+}
+
+// Mutation: send a cancel for whatever requestCancel finds, without the `!entry` return (the stop that the reply's
+// own continuation requests reaches the server as a cancel for a call already answered).
+TEST_CASE("SocketBackend: a stop requested by the reply's own continuation sends no cancel",
+          "[net][socket_backend][cancel]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{fakeUrl(fake.port())};
+    fake.acceptAndHandshake();
+    fake.boundReceives(std::chrono::seconds{10});
+    REQUIRE(backend.waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+
+    std::optional<morph::wire::ProtocolNegotiationResult> result;
+    backend.negotiateProtocolVersion(owner)
+        .then([&](morph::wire::ProtocolNegotiationResult value) { result = value; })
+        .onError([](const std::exception_ptr&) {});
+    auto const hello = fake.receiveEnvelope();
+    fake.sendFrame(morph::net::detail::WsOpcode::kText, helloOkAdvertisingCancel(hello));
+    spinUntil(owner, [&] { return result.has_value(); });
+    REQUIRE(result == morph::wire::ProtocolNegotiationResult::Negotiated);
+
+    // Delivered inline, so the continuation runs on the loop inside the reply's
+    // own settle -- while the call's stop callback is still registered. The
+    // stop it requests is the one that reaches requestCancel after the entry is
+    // gone.
+    struct InlineOwner final : morph::exec::IExecutor {
+        void post(std::function<void()> task) override {
+            core::async::ExecutorScope const scope{coreExecutor()};
+            task();
+        }
+    } inlineExec;
+    auto const stop = std::make_shared<core::async::StopSource>();
+    auto call = echoCall();
+    call.stopSource = stop;
+    std::atomic<bool> replied{false};
+    auto comp = backend.execute(morph::exec::detail::ModelId{7}, std::move(call), &inlineExec);
+    inlineExec.post([&comp, &replied, stop] {
+        comp.then([&replied, stop](const std::shared_ptr<void>&) {
+                static_cast<void>(stop->request_stop());
+                replied = true;
+            })
+            .onError([](const std::exception_ptr&) {});
+    });
+    auto const execute = fake.receiveEnvelope();
+    REQUIRE(execute.kind == "execute");
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(execute.callId, R"("7")")));
+    spinUntil([&] { return replied.load(); });
+    REQUIRE(replied.load());
+
+    // A marker sent after the posted cancel request has run: the next frame.
+    backend.deregisterModel(morph::exec::detail::ModelId{7});
+    CHECK(fake.receiveEnvelope().kind == "deregister");
+}
+
+// Mutation: drop the `reconnectExec != nullptr` clause from onConnected (the reconnect posts through a null
+// executor).
+TEST_CASE("SocketBackend: a reconnect handler installed without an executor is not run, and the reconnect completes",
+          "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+    std::atomic<bool> handlerRan{false};
+    std::unique_ptr<morph::net::SocketBackend> backend;
+    std::uint16_t port = 0;
+    {
+        morph::net::SocketServer first{*server, 0};
+        REQUIRE(first.listen());
+        port = first.port();
+        backend = std::make_unique<morph::net::SocketBackend>(fakeUrl(port), cfg);
+        REQUIRE(backend->waitForConnected());
+        backend->setReconnectHandler([&] { handlerRan = true; }, nullptr);
+    }
+    REQUIRE(waitForDisconnect(*backend));
+    morph::net::SocketServer restarted{*server, port};
+    REQUIRE(restarted.listen());
+    REQUIRE(backend->waitForConnected(std::chrono::seconds{10}));
+    // A round trip on the new connection: the connect that would have posted
+    // the handler is long done.
+    CHECK(backend->registerModel("SbEchoModel", nullptr).v != 0U);
+    CHECK_FALSE(handlerRan.load());
+    backend.reset();
+}
+
+// Mutation: drop the `timeout.count() > 0` guard in readHeaderBlockAsync (a zero bound arms a deadline that has
+// already passed, and the handshake the peer has not answered yet is cut off).
+// Mutation: drop the `sendTimeout.count() > 0` guard in writerFlow (the write the unread peer holds up is cut off
+// at once, and the connection drops).
+TEST_CASE("SocketBackend: zero handshake and send timeouts disable both bounds rather than expiring at once",
+          "[net][socket_backend]") {
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    cfg.handshakeTimeout = std::chrono::milliseconds{0};
+    cfg.sendTimeout = std::chrono::milliseconds{0};
+    // Shared so the test can count the loop's turns: a deadline armed at "now"
+    // fires on the turn after it is armed, so twenty turns are well past any
+    // bound a zero timeout could have armed -- counted, not timed.
+    morph::exec::IoLoop loop;
+    auto const turns = [&loop] {
+        for (int turn = 0; turn < 20; ++turn) {
+            loop.runAndWait([] {});
+        }
+    };
+    FakeWsServer fake;
+    auto backend = std::make_unique<morph::net::SocketBackend>(loop, fakeUrl(fake.port()), cfg);
+
+    // The dial has landed and the Upgrade request is the backend's next step;
+    // the answer is held back across the turns.
+    REQUIRE(fake.waitForPendingConnection());
+    turns();
+    fake.acceptAndHandshake();
+    REQUIRE(backend->waitForConnected());
+
+    // More than the loopback socket buffers hold, so the writer parks on a peer
+    // that is not reading; under the 8 MiB a reader accepts for one frame.
+    constexpr std::size_t kBody = std::size_t{7} * 1024 * 1024;
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    call.action = std::make_shared<std::string>(kBody, 'x');
+    call.serializeAction = [](const void* payload) { return *static_cast<const std::string*>(payload); };
+    call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
+    static_cast<void>(backend->execute(morph::exec::detail::ModelId{1}, std::move(call), nullptr));
+    turns();
+    // The write really is held up: most of the frame has not reached this side.
+    int const unread = fake.unreadBytes();
+    INFO("unread bytes on the peer: " << unread);
+    REQUIRE(unread >= 0);
+    REQUIRE(static_cast<std::size_t>(unread) < kBody);
+    CHECK(backend->waitForConnected(std::chrono::milliseconds{0}));
+
+    fake.boundReceives(std::chrono::seconds{10});
+    auto const frame = fake.receiveFrame();
+    CHECK(frame.opcode == morph::net::detail::WsOpcode::kText);
+    CHECK(frame.payload.size() > kBody);
+    backend.reset();
+}
+
+// Mutation: treat a handshake response that fails verification as verified (the backend reports connected to a
+// peer that never upgraded, and holds the bind for it).
+// Mutation: drop the `if (header)` guard (a peer that closes before answering dereferences an empty result).
+TEST_CASE("SocketBackend: a peer that does not complete the upgrade is a failed connect, and a bind is rejected",
+          "[net][socket_backend]") {
+    auto listener = morph::net::detail::TcpSocket::listen(0);
+    std::string response;
+    SECTION("a non-101 response") { response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"; }
+    SECTION("the peer closes before answering") {}
+
+    morph::net::SocketBackend backend{fakeUrl(listener.boundPort())};
+    {
+        auto peer = listener.accept();
+        static_cast<void>(morph::net::detail::readHttpHeaderBlock(peer, std::chrono::seconds{10}));
+        if (!response.empty()) {
+            peer.sendAll(response.data(), response.size());
+        }
+        // `peer` closes here.
+    }
+
+    morph::exec::MainThreadExecutor callerExec;
+    std::atomic<bool> done{false};
+    bool rejectedAsDisconnected = false;
+    backend.bindModel(privateBind("SbEchoModel"), callerExec)
+        .then([&](morph::exec::detail::ModelId) { done = true; })
+        .onError([&](const std::exception_ptr& failure) {
+            rejectedAsDisconnected = isDisconnected(failure);
+            done = true;
+        });
+    REQUIRE(drainUntil(callerExec, done, 2000));
+    CHECK(rejectedAsDisconnected);
+    CHECK_FALSE(backend.waitForConnected(std::chrono::milliseconds{0}));
+}
+
+// ── Destroyed before the loop turns ─────────────────────────────────────────
+//
+// On a caller-driven loop the test decides when the backend's posted work runs,
+// so it can destroy the backend between the posting and the running.
+
+// Mutation: drop `!closed` from startAttempt (a destroyed backend still dials, and the listener sees the connection).
+// Mutation: drop `!closed` from fileControl's queueing clause (the bind is queued on a closed core and never settles).
+TEST_CASE("SocketBackend: destroyed before its loop first turns, it neither dials nor holds a bind",
+          "[net][socket_backend][caller]") {
+    auto listener = morph::net::detail::TcpSocket::listen(0);
+    REQUIRE(listener.setNonBlocking());
+    morph::exec::IoLoop loop{morph::exec::IoLoopDriver::Caller};
+    morph::exec::MainThreadExecutor cbOwner;
+    auto backend = std::make_unique<morph::net::SocketBackend>(loop, fakeUrl(listener.boundPort()));
+
+    bool settled = false;
+    bool rejectedAsDisconnected = false;
+    auto bound = backend->bindModel(privateBind("SbEchoModel"), cbOwner);
+    bound.then([&](morph::exec::detail::ModelId) { settled = true; }).onError([&](const std::exception_ptr& failure) {
+        rejectedAsDisconnected = isDisconnected(failure);
+        settled = true;
+    });
+    // The close runs inline on the driving thread; the connect and the bind are
+    // still queued behind it.
+    backend.reset();
+
+    for (int turn = 0; turn < 50; ++turn) {
+        static_cast<void>(loop.loop().runOnce(std::chrono::milliseconds{5}));
+        static_cast<void>(cbOwner.runOnce());
+    }
+    CHECK(settled);
+    CHECK(rejectedAsDisconnected);
+    CHECK_FALSE(listener.tryAccept().has_value());
+}
+
+// Mutation: drop the `closed` check after the dial (the destroyed backend sends its Upgrade request on the socket it
+// dialed).
+TEST_CASE("SocketBackend: destroyed while its dial is in flight, it drops the socket without writing to it",
+          "[net][socket_backend][caller]") {
+    auto listener = morph::net::detail::TcpSocket::listen(0);
+    morph::exec::IoLoop loop{morph::exec::IoLoopDriver::Caller};
+    auto backend = std::make_unique<morph::net::SocketBackend>(loop, fakeUrl(listener.boundPort()));
+    // One turn: the attempt starts and parks on its dial.
+    static_cast<void>(loop.loop().runOnce(std::chrono::milliseconds{0}));
+    backend.reset();
+    for (int turn = 0; turn < 50; ++turn) {
+        static_cast<void>(loop.loop().runOnce(std::chrono::milliseconds{5}));
+    }
+
+    REQUIRE(morph::net::detail::pollUntil(listener.nativeHandle(), POLLIN,
+                                          std::chrono::steady_clock::now() + std::chrono::seconds{10})
+                .outcome == morph::net::detail::PollOutcome::kReady);
+    auto peer = listener.accept();
+    REQUIRE(peer.setRecvTimeout(std::chrono::seconds{10}));
+    std::array<char, 64> buf{};
+    CHECK(peer.recvSome(buf.data(), buf.size()) == 0U);
 }

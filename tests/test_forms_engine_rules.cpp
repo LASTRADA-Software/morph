@@ -261,3 +261,45 @@ TEST_CASE("RuleExpr: a presentation rule applies to every field it names, not on
     fields.values["d"] = valid(ui::Value{"y"});
     CHECK(morph::forms::gatingVerdict(rules, fields.lookup()) == Tri::True);
 }
+
+// Mutation: have when() or conditions() answer for the wrong kinds, or fields() drop a name.
+TEST_CASE("RuleExpr: fields, when and conditions expose the parsed operands of their kinds", "[forms-engine][rules]") {
+    RuleExpr const required = rule(R"({"kind":"requiredWhen","fields":["note","memo"],
+                                       "when":{"kind":"engaged","fields":["flag"]}})");
+    REQUIRE(required.fields().size() == 2);
+    CHECK(required.fields()[1] == "memo");
+    REQUIRE(required.when() != nullptr);
+    CHECK(required.when()->kind() == RuleExpr::Kind::Engaged);
+    CHECK(required.when()->fields().front() == "flag");
+    CHECK(required.conditions().empty());
+    // A child node carries no translation of its own, so evaluating it directly is Unknown.
+    Fields const fields{{{"flag", valid(ui::Value{"x"})}}};
+    CHECK(required.when()->evaluate(fields.lookup()) == Tri::Unknown);
+
+    RuleExpr const either = rule(R"({"kind":"or","conditions":[{"kind":"engaged","fields":["a"]},
+                                                                {"kind":"engaged","fields":["b"]}]})");
+    CHECK(either.when() == nullptr);
+    REQUIRE(either.conditions().size() == 2);
+    CHECK(either.conditions()[1].fields().front() == "b");
+    RuleExpr const negated = rule(R"({"kind":"not","condition":{"kind":"engaged","fields":["a"]}})");
+    CHECK(negated.conditions().size() == 1);
+    CHECK(rule(R"({"kind":"engaged","fields":["a"]})").conditions().empty());
+    CHECK(rule(R"({"kind":"visibleWhen","fields":["a"],"when":{"kind":"engaged","fields":["b"]}})").when() != nullptr);
+    CHECK(rule(R"({"kind":"readonlyWhen","fields":["a"],"when":{"kind":"engaged","fields":["b"]}})").when() !=
+          nullptr);
+}
+
+// Mutation: accept a rule whose translation the expression parser refuses (it would evaluate as Unknown forever).
+TEST_CASE("RuleExpr: a rule too large for expr/1 is a SchemaError", "[forms-engine][rules]") {
+    std::string json = R"({"kind":"atLeastOneOf","fields":[)";
+    for (int index = 0; index < 300; ++index) {
+        json += (index == 0 ? "\"f" : ",\"f") + std::to_string(index) + "\"";
+    }
+    json += "]}";
+    auto const dom = engine::parseJson(json);
+    REQUIRE(dom.has_value());
+    auto const parsed = RuleExpr::parse(*dom, "x-rules[1]");
+    REQUIRE_FALSE(parsed.has_value());
+    CHECK(parsed.error().path == "x-rules[1]");
+    CHECK(parsed.error().message.starts_with("the rule does not translate into an expression: "));
+}

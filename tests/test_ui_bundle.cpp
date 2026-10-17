@@ -316,3 +316,29 @@ TEST_CASE("parseFetchRequest takes one well-formed hash", "[ui-service][bundle]"
     REQUIRE(refusal(morph::ui::parseFetchRequest(R"({"!range":[0,1]})")) ==
             "the must-understand key `!range` in the ui-fetch request is not understood");
 }
+
+// Mutation: accept a ui-evaluate body that is not an object, or any number of field errors.
+TEST_CASE("bundle: a ui-evaluate reply needs an object body and a bounded number of field errors", "[ui][bundle]") {
+    using morph::ui::parseEvaluateReply;
+    CHECK(parseEvaluateReply(R"({"body":{"a":1},"errors":{"a":"bad"},"ready":false})").has_value());
+    CHECK(parseEvaluateReply(R"({"body":[1],"errors":{},"ready":true})").error() ==
+          "the ui-evaluate reply's body is not an object");
+    std::string many = R"({"body":{},"ready":false,"errors":{)";
+    for (std::size_t index = 0; index <= morph::ui::kMaxCatalogFacts; ++index) {
+        many += (index == 0 ? "\"f" : ",\"f") + std::to_string(index) + "\":\"x\"";
+    }
+    many += "}}";
+    auto const tooMany = parseEvaluateReply(many);
+    REQUIRE_FALSE(tooMany.has_value());
+    CHECK(tooMany.error().contains("field errors"));
+    CHECK_FALSE(parseEvaluateReply("{not json").has_value());
+}
+
+// Mutation: read a ui-file request of any length, or one that is not JSON, as a request.
+TEST_CASE("bundle: a ui-file request over the size bound, or not JSON, is refused", "[ui][bundle]") {
+    using morph::ui::parseFileRequest;
+    std::string const huge(morph::ui::kMaxFileRequestBytes + 1, ' ');
+    CHECK(parseFileRequest(huge).error().contains("is longer than"));
+    CHECK_FALSE(parseFileRequest("{not json").has_value());
+    CHECK(parseFileRequest(R"({"op":"read","ref":"r"})").has_value());
+}

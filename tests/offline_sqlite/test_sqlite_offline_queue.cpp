@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <cerrno>
 #include <chrono>
 #include <core/platform/Clock.hpp>
@@ -937,6 +938,90 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: writes from a pool thread and rea
         CHECK(recorder.allPosted("SqliteOfflineQueue::size"));
         CHECK(counted == std::size_t{0});
         CHECK(countedOnApp);
+    }
+    removeDbFiles(dbPath);
+}
+
+// ── A database file whose schema someone else created ──────────────────────
+//
+// `CREATE TABLE IF NOT EXISTS` leaves a table that is already there alone, so a
+// file created by another writer can carry a looser column or a trigger of its
+// own. These pre-create the table through a raw connection before the queue
+// opens the file.
+
+namespace {
+
+void execRaw(const std::filesystem::path& dbPath, const char* sql) {
+    sqlite3* raw = nullptr;
+    REQUIRE(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK);
+    auto const closeRaw = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>{raw, &sqlite3_close};
+    char* err = nullptr;
+    int const rc = sqlite3_exec(raw, sql, nullptr, nullptr, &err);
+    std::string const message = err != nullptr ? err : "";
+    sqlite3_free(err);
+    INFO(message);
+    REQUIRE(rc == SQLITE_OK);
+}
+
+}  // namespace
+
+// Mutation: return the lookup's column (0) when the dedup SELECT finds no row, instead of throwing (the caller gets an
+// id that names no row).
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: a keyed enqueue that inserts nothing and finds no existing row throws "
+    "rather than returning an id",
+    "[sqlite]") {
+    // A BEFORE INSERT trigger that RAISE(IGNORE)s skips the row without an
+    // error: the INSERT reports no change, exactly as a dedup hit does, but no
+    // row holds the key -- the state a second writer deleting the existing row
+    // between the INSERT and the lookup leaves behind.
+    auto const dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    execRaw(dbPath,
+            "CREATE TABLE morph_offline_queue ("
+            "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  payload         TEXT    NOT NULL,"
+            "  idempotency_key TEXT    NOT NULL DEFAULT '',"
+            "  attempts        INTEGER NOT NULL DEFAULT 0,"
+            "  enqueued_at     INTEGER NOT NULL);"
+            "CREATE TRIGGER swallow_ghost BEFORE INSERT ON morph_offline_queue "
+            "WHEN NEW.idempotency_key = 'ghost' BEGIN SELECT RAISE(IGNORE); END;");
+    {
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
+        REQUIRE_THROWS_WITH(queue.enqueue("payload", "ghost"),
+                            Catch::Matchers::ContainsSubstring("could not resolve the existing id"));
+        CHECK(queue.size() == 0U);
+        // Any other key still inserts.
+        auto const id = queue.enqueue("payload", "real");
+        auto const items = queue.drain();
+        REQUIRE(items.size() == 1U);
+        CHECK(items[0].id == id);
+    }
+    removeDbFiles(dbPath);
+}
+
+// Mutation: have textColumn's NULL arm return anything but an empty string (the legacy row drains with a key it
+// never had).
+TEST_CASE("morph::offline::SqliteOfflineQueue: a NULL idempotency key in a pre-existing row drains as empty",
+          "[sqlite]") {
+    auto const dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    execRaw(dbPath,
+            "CREATE TABLE morph_offline_queue ("
+            "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  payload         TEXT    NOT NULL,"
+            "  idempotency_key TEXT,"
+            "  attempts        INTEGER NOT NULL DEFAULT 0,"
+            "  enqueued_at     INTEGER NOT NULL);"
+            "INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
+            "VALUES ('legacy', NULL, 1, 0);");
+    {
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath};
+        auto const items = queue.drain();
+        REQUIRE(items.size() == 1U);
+        CHECK(items[0].payload == "legacy");
+        CHECK(items[0].idempotencyKey.empty());
+        CHECK(items[0].attempts == 1U);
     }
     removeDbFiles(dbPath);
 }

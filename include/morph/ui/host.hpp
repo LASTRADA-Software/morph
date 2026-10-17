@@ -941,11 +941,6 @@ private:
     bool setAppValue(std::string const& name, Value const& value) override {
         return _options.application != nullptr && _options.application->setAppValue(name, value);
     }
-    bool upload(Value const& file, std::function<void(Value)> progress,
-                std::function<void(std::expected<Value, std::string>)> done) override {
-        return _options.application != nullptr &&
-               _options.application->upload(file, std::move(progress), std::move(done));
-    }
     bool uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
                    std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr &&

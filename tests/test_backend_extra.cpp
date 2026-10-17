@@ -11,8 +11,10 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/testing/step_executor.hpp>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -577,4 +579,40 @@ TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind
     slot->finish(nullptr);
     REQUIRE(morph::testing::waitUntil([&] { return errors.load() == 1; }));
     CHECK_FALSE(queuedRan.load());
+}
+
+// Mutation: call a null serializeAction (undefined behaviour) instead of throwing the named error.
+TEST_CASE("ActionCall: serialising a call without serializeAction throws a named error", "[backend]") {
+    morph::backend::detail::ActionCall const call{};
+    CHECK_THROWS_AS(call.serializeBody(), std::runtime_error);
+}
+
+namespace {
+
+/// A local backend whose directory listing fails.
+class FailingListBackend final : public morph::backend::LocalBackend {
+public:
+    using LocalBackend::LocalBackend;
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        throw std::runtime_error{"directory down for " + typeId};
+    }
+};
+
+}  // namespace
+
+// Mutation: let instances() throw from listInstances instead of rejecting its Completion.
+TEST_CASE("IBackend::instances rejects its Completion when the listing throws", "[backend]") {
+    morph::testing::StepExecutor owner;
+    FailingListBackend backend{owner};
+    std::string failure;
+    auto completion = backend.instances("Some_Model", owner);
+    completion.onError([&failure](std::exception_ptr const& error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (std::exception const& thrown) {
+            failure = thrown.what();
+        }
+    });
+    owner.runAll();
+    CHECK(failure == "directory down for Some_Model");
 }
