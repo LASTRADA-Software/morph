@@ -164,7 +164,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [cl-debug, cl-release, clangcl-debug, clangcl-release]
+        # Release legs build without running tests and are the slowest jobs in
+        # the workflow, so pull requests get the two debug legs, which build
+        # and test, and master pushes add the release legs.
+        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["cl-debug", "clangcl-debug"]' || '["cl-debug", "cl-release", "clangcl-debug", "clangcl-release"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -301,7 +304,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [gcc-debug, gcc-release, clang-debug, clang-release]
+        # No gcc-debug leg: linux-qt configures gcc-debug with Qt on and runs
+        # the whole suite, which covers everything a plain gcc-debug leg would.
+        preset: [gcc-release, clang-debug, clang-release]
     steps:
       - uses: actions/checkout@v4
 
@@ -588,8 +593,8 @@ jobs:
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
       # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
       # silently skip them. QML, the fuzzers, and the ladder stay out of
-      # this matrix entirely — they are covered by linux-coverage and
-      # linux-all-features, and "a GUI stack under TSan is mostly noise".
+      # this matrix entirely — they are covered by linux-coverage and the
+      # nightly all-features job, and "a GUI stack under TSan is mostly noise".
       # morph::tui is built too: its event pump, its posted redraws and its
       # loop executor are where a terminal application's threading lives.
       #
@@ -640,7 +645,7 @@ jobs:
       - name: Test
         env:
           # Known-false-positive suppressions, the same treatment
-          # cmake/valgrind.supp already gets on the Valgrind job below. The
+          # cmake/valgrind.supp gets on the nightly Valgrind job. The
           # entries are libstdc++'s two refcounts for a shared exception --
           # exception_ptr's, and the COW string holding the message -- both
           # decremented inside an uninstrumented libstdc++.so.6, so TSan
@@ -1397,58 +1402,6 @@ jobs:
           key: sccache-gcc-debug-${{ github.sha }}
 
   # ── Linux: application ladder testkit (path-filtered) ─────────────────
-  linux-qt-quick:
-    name: Linux / Qt Quick renderer
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install GCC 15, ninja and catch2
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 libgl1-mesa-dev
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-
-      # morph::qt_quick needs Qt 6.5+ Quick, which Ubuntu 24.04's packages
-      # (6.4) do not provide.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      # Only the renderer and its suites: the examples and the core suites are
-      # other jobs' work.
-      - name: Configure (gcc-debug with MORPH_BUILD_QT_QUICK=ON)
-        run: |
-          cmake --preset gcc-debug \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_EXAMPLES=OFF
-
-      - name: Build
-        run: cmake --build build/gcc-debug --target morph_qt_quick_tests morph_qt_quick_frontend_tests
-
-      # `-L qt_quick` selects only the renderer's cases, qmllint over the
-      # MorphUi components among them, and `--no-tests=error` turns "selected
-      # nothing" red.
-      - name: Test (offscreen, software scene graph)
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build/gcc-debug -L qt_quick --no-tests=error --output-on-failure
-
   ladder-tests:
     name: Application ladder
     needs: probe-self-hosted
@@ -1503,7 +1456,9 @@ jobs:
           # correctly decided there was nothing to do. See
           # scripts/ladder_rungs.sh for what the non-rung half of the pattern
           # covers and why.
-          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)"
+          # tests/qt_quick/ is this job's too: it also runs the Qt Quick renderer's
+          # suites, which no other job builds.
+          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)|^tests/qt_quick/"
           echo "ladder path filter: $pattern"
           if echo "$changed" | grep -qE "$pattern"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -1786,6 +1741,16 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
+
+      # The Qt Quick renderer's suites, on the Qt this job installs (Ubuntu's
+      # packaged Qt is older than the 6.5 Qt Quick needs). `--no-tests=error`
+      # turns a configure that quietly dropped MORPH_BUILD_QT_QUICK red rather
+      # than green over nothing.
+      - name: Test (offscreen Qt platform, Qt Quick renderer suites)
+        if: "!cancelled() && steps.filter.outputs.run == 'true'"
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset gcc-debug -L qt_quick --no-tests=error --output-on-failure
 
       # ── The scenario corpus, against the servers just built ────────────
       # This step is the only place in CI that runs
@@ -2213,473 +2178,6 @@ jobs:
         with:
           path: /home/runner/.cache/sccache
           key: sccache-clang-asan-${{ github.sha }}
-
-  # ── Linux: every optional feature enabled at once ─────────────────────
-  # Every MORPH_BUILD_* option below is off by default, and until this job
-  # existed no CI configuration turned any of them on — so several thousand
-  # lines (morph::net, the Qt/QML forms renderer, the SQLite queue, the fuzz
-  # harnesses, the vetted-HMAC adapters, the soak/bench targets) were never
-  # compiled here, let alone tested. That is how a build that cannot configure
-  # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
-  # extension both reached master green. Enabling them together also proves
-  # they compose, which building each alone would not.
-  linux-all-features:
-    name: Linux / all optional features (${{ matrix.compiler }})
-    # Not on pull_request: this leg's own build (every MORPH_BUILD_* option,
-    # the whole ladder, the fuzz replay, --parallel ctest) runs 45min-1h+, the
-    # longest in this workflow. It still runs on every push to master/main --
-    # unchanged from before this line, so the "closes a real hole" and
-    # "the one leg exercising --parallel ctest" properties below keep their
-    # existing immediacy -- and .github/workflows/nightly-slow-checks.yml runs
-    # an independent copy against master on a schedule, so a gap between
-    # pushes is still covered, just not within a PR's own required checks.
-    if: github.event_name != 'pull_request'
-    needs: probe-self-hosted
-    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
-    env:
-      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
-      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
-      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
-      # name -- CompileCache.cmake declares it as a plain option(), which
-      # CMake never reads from the environment.
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Clang additionally builds the libFuzzer harnesses, which require it.
-          - compiler: clang
-            preset: clang-debug
-            fuzzers: 'ON'
-          - compiler: gcc
-            preset: gcc-debug
-            fuzzers: 'OFF'
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install toolchain and the non-Qt dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          # unixodbc-dev + libsqliteodbc: the application ladder (enabled in
-          # the configure step below) fetches the Lightweight ORM, whose CMake
-          # runs `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder
-          # fixtures open a real `DRIVER=SQLite3` connection at test time.
-          # Named explicitly rather than relied on from the runner image.
-          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt
-          # (examples/bank/CMakeLists.txt's comment on the same fetch) does
-          # `find_package(yaml-cpp)`/`find_package(libzip)` as system CONFIG
-          # packages, not through CPM — without these, Lightweight's configure
-          # fails with "could not find a package configuration file" the
-          # moment MORPH_BUILD_LADDER=ON pulls it in here.
-          sudo apt-get install -y ninja-build catch2 \
-            libsqlite3-dev libsodium-dev libssl-dev \
-            unixodbc-dev libsqliteodbc \
-            libyaml-cpp-dev libzip-dev \
-            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
-            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            sudo apt-get install -y gcc-15 g++-15
-            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-          else
-            # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
-            # bash`: see linux-compilers' identical install step for why the piped
-            # form reports success having installed nothing.
-            curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-            test -s /tmp/llvm.sh
-            sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
-          fi
-
-      # Not the distro's Qt: the ladder and MORPH_BUILD_QT_QUICK need 6.5+ and
-      # Ubuntu 24.04 still ships 6.4.2.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      # Keyed by preset alone, matching linux-compilers' cache: this matrix's
-      # gcc-debug/clang-debug legs (with every optional feature layered on
-      # top) share their core-library objects with linux-compilers' plain
-      # gcc-debug/clang-debug legs and every other job building the same
-      # preset (linux-qt, ladder-tests, valgrind for gcc-debug).
-
-      # Skipped on the self-hosted path: see linux-compilers' identical
-      # Restore/Install sccache steps for why (installing sccache
-      # unconditionally would permanently defeat fastcache-cc auto-install).
-      - name: Restore sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
-
-      - name: Install sccache
-        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
-      # MORPH_REQUIRE_VETTED_HMAC is deliberately combined with
-      # MORPH_BUILD_TESTS=ON (the preset default). docs/spec/security.md
-      # documents that pairing as supported; this is what keeps it that way.
-      - name: Configure (every optional feature ON)
-        run: |
-          EXTRA=""
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            EXTRA="-DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}"
-          fi
-          # shellcheck disable=SC2086
-          # MORPH_BUILD_LADDER belongs in this job by its own charter ("every
-          # MORPH_BUILD_* option … enabling them together also proves they
-          # compose"): it is the one leg with Qt ${{ env.QT_VERSION }} from
-          # aqtinstall, the ladder, Qt Quick and the bank example together.
-          # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
-          # Configure steps for why leaving it unset is what lets
-          # fastcache-cc be selected.
-          cmake --preset ${{ matrix.preset }} \
-            -DMORPH_BUILD_NET=ON \
-            -DMORPH_BUILD_TUI=ON \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_QT_QUICK=ON \
-            -DMORPH_BUILD_LADDER=ON \
-            -DMORPH_LADDER_RUNGS=all \
-            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
-            -DMORPH_BUILD_LOAD_TESTS=ON \
-            -DMORPH_BUILD_HMAC_EXAMPLES=ON \
-            -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
-            -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DMORPH_REQUIRE_VETTED_HMAC=ON \
-            $EXTRA \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
-
-      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
-      # catch_discover_tests() runs each Qt-linked test binary once at BUILD
-      # time to enumerate its cases (CatchAddTests.cmake), not only when
-      # ctest later executes them — a ladder_<rung>_tests binary aborts at
-      # that discovery step on this headless runner (no X server, xcb
-      # platform plugin fails to load) without it, before any real test ever
-      # runs. Only bites once MORPH_BUILD_LADDER=ON actually reaches a rung's
-      # own Qt-linked test binary, which is why this job's build only started
-      # failing here after the yaml-cpp/libzip configure gap (fixed earlier
-      # this branch) stopped masking it.
-      - name: Build
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset ${{ matrix.preset }}
-
-      # ── moc output that climbs out of the build tree ─────────────────
-      # Same gate as linux-qt, and for the same reason -- see its comment.
-      # This is the widest build it reaches: the clang leg is the only one that
-      # compiles moc output under -Weverything, where -Wshadow-header is what
-      # actually fires.
-      - name: Check no generated moc include ascends
-        run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
-
-      # Includes the fuzz *replay* tests on the clang leg: each committed seed
-      # and crash reproducer is replayed once and must not crash. This is a
-      # deterministic regression check, not a fuzzing campaign.
-      #
-      # ── --parallel: the one leg in this repository that runs ctest in
-      #    parallel, deliberately ─────────────────────────────────────────────
-      #
-      # Every other ctest invocation in .github/workflows/ is serial, which
-      # makes a whole class of defect invisible to CI by construction: two
-      # ctest cases sharing an on-disk database, a port, or a temp path cannot
-      # collide when only one runs at a time. Measured instance: bank's suites
-      # at 0/21 under `ctest -j 12` on a workstation and 21/21 serially, with
-      # CI green throughout, on every leg, for as long as the defect existed.
-      #
-      # This leg and not another: it is the only one whose ctest covers the
-      # bank suites *and* every ladder rung *and* Qt *and*
-      # the core suites, so it is the only place where one flag exposes the
-      # whole class rather than one corner of it. It also costs no new leg --
-      # a second job would add its own configure and build to every future PR,
-      # for the same coverage this already has.
-      #
-      # Measured, with the caveat stated rather than smoothed over. On a
-      # 12-core workstation, clang-debug with MORPH_BUILD_NET, MORPH_BUILD_QT
-      # and MORPH_BUILD_OFFLINE_SQLITE on -- 1898 tests, which is this tree's
-      # core/forms/net/qt/offline set but *not* the ladder or bank:
-      #
-      #     ctest                   1898/1898 passed, 275.06 s
-      #     ctest --parallel 12     1898/1898 passed,  98.25 s
-      #     ctest --parallel 12     1898/1898 passed, 127.53 s
-      #     ctest --parallel 12     1898/1898 passed,  78.80 s
-      #     ctest --parallel 4      1898/1898 passed, 109.38 s   (hosted vCPU count)
-      #
-      # So for the part that could be measured locally this is a saving, not a
-      # cost: the test step gets faster, and the leg's wall time with it. Bank,
-      # measured separately once its suites took per-case databases, is 21/21
-      # in 1.1 s parallel against 5.7 s serial.
-      #
-      # NOT measured, and this is the risk: the ladder rungs in parallel with
-      # each other. They declare RESOURCE_LOCK (cmake/morph_add_rung.cmake),
-      # which is what ctest --parallel consults to serialise the cases that
-      # need it -- a mechanism that exists precisely for this and that no other
-      # leg exercises. A `SQLite database is locked` in the ledger corpus is
-      # the shape of first bill to expect here.
-      #
-      # If this leg goes red or flaky on contention rather than on a real
-      # regression, the failing case is the finding -- file it, fix the
-      # isolation, and keep the flag. Dropping `--parallel` again puts the
-      # whole class back out of CI's sight, which is what this flag exists to
-      # prevent. $(nproc) rather than a literal: hosted runners give 4, the
-      # self-hosted fleet gives more, and the point is contention, not a number.
-      - name: Test (offscreen Qt platform, ctest in parallel)
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" --output-on-failure
-
-      # The tui suite ran at all. The step above passes just as well when
-      # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
-      # and morph_tui and its tests were never built: `-L tui` selects only the
-      # tui cases, and `--no-tests=error` turns "selected nothing" red.
-      - name: The tui suite was built and ran
-        if: "!cancelled()"
-        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
-
-      # A guard that never fires is indistinguishable from one that works, so
-      # assert the fuzz replay actually ran the committed crash reproducers
-      # rather than silently matching nothing (the `.txt`-vs-`.bin` glob bug).
-      # `!cancelled()`: this checks something the ctest step
-      # above cannot report on -- whether the replay matched the committed
-      # reproducers at all, the `.txt`-vs-`.bin` glob bug -- so skipping it
-      # when some unrelated test fails hides a guard going vacuous behind an
-      # unrelated red. Not `always()`; see ladder-tests' note. Still red on
-      # failure.
-      - name: Verify the fuzz replay covered the committed reproducers
-        if: "!cancelled() && matrix.fuzzers == 'ON'"
-        run: |
-          ctest --preset ${{ matrix.preset }} -R fuzz -V > fuzz-replay.log 2>&1
-          status=0
-          for finding in tests/fuzz/findings/*/*; do
-            if ! grep -qF "$(basename "$finding")" fuzz-replay.log; then
-              echo "::error::fuzz replay never referenced committed reproducer $finding"
-              status=1
-            fi
-          done
-          exit "$status"
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      #
-      # Guarded the same way as the Install/Restore sccache steps above:
-      # sccache is never installed on the self-hosted path.
-      - name: sccache stats
-        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: sccache --show-stats || true
-
-      # Cache statistics for this leg. The `sccache stats` step is skipped
-      # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
-      # it, so those legs ran with no cache reporting at all: exactly the
-      # "unfalsifiable" state the sccache step's own comment warns about, where
-      # a thrashing cache and a working one look identical from the outside and
-      # only the build duration hints at which one you have.
-      #
-      # The line that matters is
-      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
-      # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
-      # the build simply takes as long as a cold one, so no other signal in the
-      # job would reveal it.
-      #
-      # Mirror of the sccache step's condition, so exactly one of the two runs.
-      # `|| true` for the same reason it has one: a stats failure must never
-      # fail the job.
-      - name: fastcache-cc stats
-        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
-        run: |
-          FC="$(command -v fastcache-cc || true)"
-          if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
-          fi
-          if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
-            exit 0
-          fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
-          # This job's own numbers, not the runner's lifetime totals. The
-          # bare form is kept underneath because the whole-runner view is
-          # what shows eviction pressure across jobs, which a single job's
-          # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
-          echo "--- whole runner, all jobs (context for the above) ---"
-          "$FC" --show-stats || true
-
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps the property that makes the cache
-      # usable at all (only one branch ever writes, so no branch can delete
-      # another's entry) while collapsing the generations that actually blow
-      # the budget. Pull requests still restore, read-only, and get the full
-      # benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-
-  # ── Valgrind (memcheck) ───────────────────────────────────────────────
-  valgrind:
-    name: Valgrind memcheck
-    # Not on pull_request: this leg alone has run anywhere from ~15 minutes to
-    # over an hour on the runners available to this repo, the least
-    # predictable wait in this workflow. It still runs on every push to
-    # master/main -- unchanged from before this line -- and
-    # .github/workflows/nightly-slow-checks.yml runs an independent copy
-    # against master on a schedule, so a gap between pushes is still covered,
-    # just not within a PR's own required checks.
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install GCC 15, ninja, catch2, valgrind
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 valgrind
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
-
-      # Keyed by preset alone (gcc-debug), matching linux-compilers' cache:
-      # this job's gcc-debug+net+offline_sqlite build shares its
-      # core-library objects with every other job building plain gcc-debug.
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
-          restore-keys: sccache-gcc-debug-
-
-      - name: Install sccache
-        run: |
-          # `--fail` and a file rather than a pipe into tar: see
-          # linux-compilers' identical Install sccache step for why an
-          # unchecked download reports itself as "not in gzip format".
-          curl -sSL --fail -o /tmp/sccache.tar.gz \
-            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
-            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
-      # morph::net and the SQLite queue are where the raw pointers, manual
-      # buffers and C API calls live — precisely what memcheck is for — so they
-      # are built here rather than left to the default (Qt/QML stays out: it
-      # drags in a GUI stack whose own allocations dominate the report).
-      - name: Configure
-        run: |
-          cmake --preset gcc-debug \
-            -DMORPH_BUILD_NET=ON \
-            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      - name: Build
-        run: cmake --build --preset gcc-debug
-
-      - name: Run tests under Valgrind
-        run: |
-          status=0
-          for suite in tests/morph_tests tests/net/morph_net_tests tests/offline_sqlite/morph_offline_sqlite_tests; do
-            binary="build/gcc-debug/$suite"
-            if [ ! -x "$binary" ]; then
-              echo "::error::expected Valgrind suite $binary was not built"
-              exit 1
-            fi
-            echo "── memcheck: $suite ──"
-            # [oom-injector]/[issue108]: morph::testkit::OomInjector
-            # overrides the process-wide operator new/delete
-            # (tests/oom_injector.cpp) to force std::bad_alloc on demand --
-            # Valgrind's own memcheck instrumentation intercepts allocations
-            # at a layer this override does not reach, so the injector
-            # silently never fires under Valgrind (confirmed: even its own
-            # self-tests fail here). Skipped for this leg only; every other
-            # CI leg (plain clang/gcc, Windows) runs these tests normally.
-            EXTRA_ARGS=()
-            if [ "$suite" = "tests/morph_tests" ]; then
-              EXTRA_ARGS=("~[oom-injector]" "~[issue108]")
-            fi
-            # --fair-sched=yes: Valgrind runs one thread at a time, and by
-            # default a thread that yields can take the lock straight back.
-            # A test whose threads spin or yield while they wait for another
-            # thread then waits on luck. The strand drain-race case, removed
-            # with morph's own strand, did: 1982 s alone, 45 of master's 54
-            # minutes here, and past three hours on one run of #806; with a
-            # fair queue, 63 s. Kept for the next test that waits that way.
-            valgrind \
-              --fair-sched=yes \
-              --tool=memcheck \
-              --leak-check=full \
-              --show-leak-kinds=definite,indirect \
-              --errors-for-leak-kinds=definite,indirect \
-              --error-exitcode=1 \
-              --suppressions=cmake/valgrind.supp \
-              "$binary" "${EXTRA_ARGS[@]}" || status=1
-          done
-          exit "$status"
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      # Save only on a push to master. Writing a new per-commit entry from
-      # every run does not work here: with 16 cache-writing legs at 1 GB each,
-      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
-      # each other and entries rarely survive to be reused. Restricting writes
-      # to master keeps the property that makes the cache usable at all (only
-      # one branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that blow the budget. Pull requests still
-      # restore, read-only, and get the full benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-gcc-debug-${{ github.sha }}
 
   # ── clang-format (whole tree) ─────────────────────────────────────────
   #
