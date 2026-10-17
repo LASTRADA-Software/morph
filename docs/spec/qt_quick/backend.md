@@ -191,6 +191,9 @@ height), a splitter and a table row (neither, since they size their own children
 `MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
 start: a `GridLayout` given more length hands the spare to the gaps between its cells.
 
+The roots fill the window as one column: a root whose height stretches takes what the others leave, as on the
+terminal; without one, the roots keep their own heights at the top.
+
 A spacing step (a stack's or grid's `gap`, a panel's `padding`) is `Theme.spaceOf(step)` px, from the `space.0` …
 `space.5` tokens, not a number of units. A stale field is dimmed; a
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour

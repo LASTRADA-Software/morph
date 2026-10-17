@@ -385,3 +385,27 @@ TEST_CASE("qt_quick containers: a content-sized splitter is as large as its pane
     CHECK(Scene::itemOf(*splitter).implicitWidth() >= 40.0 * unit);
     CHECK(Scene::itemOf(*splitter).implicitWidth() < 40.0 * unit + 16.0);
 }
+
+TEST_CASE("qt_quick containers: a root that stretches in height fills the window; content roots sit at the top",
+          "[qt_quick]") {
+    Scene scene;
+    auto header = scene.backend().createText(nullptr);
+    header->setText("header");
+    auto frame = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    frame->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto inside = scene.backend().createText(frame.get());
+    inside->setText("inside");
+    scene.settle();
+    QQuickItem const& headerItem = Scene::itemOf(*header);
+    QQuickItem const& frameItem = Scene::itemOf(*frame);
+    CHECK(headerItem.mapToScene(QPointF{0, 0}).y() == 0.0);
+    CHECK(frameItem.mapToScene(QPointF{0, 0}).y() == headerItem.height());
+    CHECK(std::abs(frameItem.height() - (scene.window().height() - headerItem.height())) < 1.0);
+
+    // Without a stretching root, the roots keep their own heights at the top of the window.
+    frame->setVisible(false);
+    auto second = scene.backend().createText(nullptr);
+    second->setText("second");
+    scene.settle();
+    CHECK(Scene::itemOf(*second).mapToScene(QPointF{0, 0}).y() == headerItem.height());
+}
