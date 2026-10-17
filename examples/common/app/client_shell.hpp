@@ -15,9 +15,9 @@
 #include "app/app_source.hpp"
 
 /// @file
-/// What the generic client mounts once its source is open: one screen of the bundle at a time, through the
-/// library's `DocumentScreenHost`. It stands in for the application shell of spec 6 §5 and §7 (the app document,
-/// sign-in, menus and tabs), which the hosting layer provides; it is not a framework shell.
+/// What the generic client mounts once its source is open: the library's `ShellFrame` (the sidebar with the
+/// navigator, the top bar, the page) with a `Workspace` of tabs in its page, each a screen mounted through the
+/// library's `DocumentScreenHost`. Signed out, only the page shows, with the start screen.
 
 namespace morph::examples {
 
@@ -40,7 +40,7 @@ struct ClientShellOptions {
     ///        the screen. Borrowed: it outlives the shell; null keeps no history.
     ui::IHistory* history = nullptr;
     /// @brief Development mode (spec 5 §12): every second the shell polls the source's `ui-hello` digest, and when it
-    ///        changed, remounts the shown screen on its changed document, keeping its state. A shell built without
+    ///        changed, remounts every open tab whose document changed, keeping its state. A shell built without
     ///        the development tools never polls. A production client leaves it off: the digest is then read once.
     bool dev = false;
     /// @brief Called after each development reload with the ids of the screens it remounted; empty ignores it.
@@ -49,9 +49,11 @@ struct ClientShellOptions {
 
 /// @brief Mounts the client's shell for what @p source delivered.
 ///
-/// On a bundle: loads each screen of `source.screens()` with the source's catalog facts, mounts the start screen,
-/// and on a document's `navigate` replaces it with the screen asked for, from a task posted to the owner, never from
-/// inside the handler that asked. On a `ConnectError`, or when no screen can be mounted, shows why as text.
+/// On a bundle: loads each screen of `source.screens()` with the source's catalog facts, opens the start screen as a
+/// tab, and on a document's `navigate` or a navigator choice opens the screen asked for as a tab (or focuses the tab
+/// that shows it), from a task posted to the owner, never from inside the handler that asked. A sign-in or sign-out
+/// closes every tab and rebuilds the frame for the new catalog. On a `ConnectError`, or when no screen can be mounted,
+/// shows why as text.
 /// @param context The frontend's context.
 /// @param backend The view backend the screens mount on. Borrowed: it outlives the shell.
 /// @param opened  What the source delivered.

@@ -13,7 +13,7 @@ entries.
 | `include/morph/ui/service.hpp` | The server: `UiRegistry`, `ServedBundle`, `UiService` |
 | `include/morph/ui/service_client.hpp` | The client: `IBundleStore`, `MemoryBundleStore`, `VerifiedCache`, `UiClient`, `LoadedBundle` |
 | `include/morph/ui/dev_reload.hpp` | Development reload: `changedDocuments`, `reloadDocuments`, `MountedScreen`, `ReloadOutcome`, `DocumentMap` |
-| `include/morph/ui/dev_tools.hpp` | `MORPH_UI_DEV_TOOLS`, the switch that builds the development tools |
+| `include/morph/ui/dev_tools.hpp` | `DevelopmentTools`, whether a client runs in development mode |
 
 The seam it plugs into is `RemoteServer`'s envelope services ([`../core/backend.md`](../core/backend.md#envelope-services));
 the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui-services-kinds)).
@@ -324,12 +324,8 @@ keeps one poll in flight at a time, and once a changed bundle and its schemas ar
 ids to `reloadDocuments` with the shown screen and reports each refusal as a problem. Without development mode
 nothing polls, and the digest is read once per connection, by the `open` that loaded the bundle.
 
-**Release builds contain none of it.** The CMake option `MORPH_UI_DEV_TOOLS` defines the macro of the same name, 1
-or 0, on the `morph` target's interface, so every translation unit agrees on it (`morph/ui/dev_tools.hpp` gives 0
-when nothing defines it). It is off by default when `CMAKE_BUILD_TYPE` is `Release`, `MinSizeRel` or
-`RelWithDebInfo`, and on otherwise. With it off, the generic client compiles no poll and no reload, and a `--dev` it
-is given is reported and ignored. The library functions above are header-only and are emitted only where a client
-calls them.
+**In every build.** The reload is compiled into every client and runs only in development mode; nothing in the build
+turns it on or off. The library functions above are header-only and are emitted only where a client calls them.
 
 ## Not yet
 - **Several vocabulary versions of one screen.** There is one vocabulary version, `ui/1`; the registry keeps one

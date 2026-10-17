@@ -13,8 +13,7 @@
 
 namespace lims {
 
-/// @brief Macro-free strong id boilerplate, one struct per identity role —
-///        identical shape to `ledger::LedgerId` and kanban's `ProjectId`
+/// @brief Strong id boilerplate, one struct per identity role
 ///        (`std::optional<std::int64_t>` payload, `hasValue()`,
 ///        `fromOptional()`, `operator*()`, total ordering).
 #define LIMS_DEFINE_STRONG_ID(Name)                                                \
@@ -144,9 +143,7 @@ LIMS_DEFINE_STRONG_ID_WIRE(ConflictId);
 /// `lims.`-namespaced so it cannot collide with another rung's tag.
 ///
 /// One specialisation per id type, generated the same way the structs and
-/// their `glz::meta`s are, then undefined immediately after -- the same shape
-/// as `LEDGER_DEFINE_STRONG_ID_SHAPE_TAG`
-/// (`examples/ledger/include/ledger/core/types.hpp`), which this mirrors.
+/// their `glz::meta`s are, then undefined immediately after.
 #define LIMS_DEFINE_STRONG_ID_SHAPE_TAG(Name, Tag)                        \
     template <>                                                           \
     struct morph::model::PayloadShapeTag<lims::Name> {                    \

@@ -2,15 +2,11 @@
 
 // The development inspector (spec 6 §21; spec 6 §12, "Inspector"): it lists every mounted node with its evaluated
 // properties and every query with its key, state and age, logs the command lists a screen ran, reads the reactive
-// counters, and refetches only through the document's own `refetch` command. That a release build contains none of
-// it is measured on the built binaries, not here.
-
-#include <catch2/catch_test_macros.hpp>
-#include <morph/ui/dev_tools.hpp>
-
-#if MORPH_UI_DEV_TOOLS
+// counters, and refetches only through the document's own `refetch` command. A screen of a session not in
+// development mode records nothing and gives no inspector.
 
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <iterator>
@@ -44,6 +40,12 @@ constexpr std::string_view kInspected = R"({
     { "kind": "forEach", "rows": { "ref": "items" }, "key": { "row": "id" },
       "children": [ { "kind": "text", "testId": "row", "text": { "fn": "format", "args": [ "row {0}", { "row": "id" } ] } } ] } ] } })";
 
+Inspector inspectorOf(morph::ui::Screen& screen) {
+    std::optional<Inspector> inspector = Inspector::over(screen);
+    REQUIRE(inspector.has_value());
+    return *inspector;
+}
+
 std::vector<InspectedNode> ofKind(std::vector<InspectedNode> const& nodes, std::string_view kind) {
     std::vector<InspectedNode> out;
     std::ranges::copy_if(nodes, std::back_inserter(out),
@@ -65,7 +67,7 @@ TEST_CASE("The inspector lists every mounted node with its kind, id, testId and 
           "[ui][inspector]") {
     Harness harness;
     auto screen = harness.mount(kInspected);
-    Inspector const inspector{*screen};
+    Inspector const inspector = inspectorOf(*screen);
     CHECK(inspector.screenId() == "inspected");
 
     std::vector<InspectedNode> nodes = inspector.nodes();
@@ -96,7 +98,7 @@ TEST_CASE("The inspector lists every mounted node with its kind, id, testId and 
 TEST_CASE("The inspector lists every query with its key, state and age, and each mutation", "[ui][inspector]") {
     Harness harness;
     auto screen = harness.mount(kInspected);
-    Inspector const inspector{*screen};
+    Inspector const inspector = inspectorOf(*screen);
 
     std::vector<InspectedQuery> const queries = inspector.queries();
     REQUIRE(queries.size() == 3U);
@@ -134,7 +136,7 @@ TEST_CASE("The inspector refetches through the document's refetch command, and l
           "[ui][inspector]") {
     Harness harness;
     auto screen = harness.mount(kInspected);
-    Inspector inspector{*screen};
+    Inspector inspector = inspectorOf(*screen);
     harness.reply(0, R"({"name":"one"})");
 
     harness.backend.click(harness.byTestId("Button", "go"));
@@ -172,7 +174,7 @@ TEST_CASE("The inspector refetches through the document's refetch command, and l
 TEST_CASE("The inspector reads the reactive runtime's counters", "[ui][inspector]") {
     Harness harness;
     auto screen = harness.mount(kInspected);
-    Inspector const inspector{*screen};
+    Inspector const inspector = inspectorOf(*screen);
     morph::reactive::RuntimeStats const before = inspector.counters();
     harness.backend.click(harness.byTestId("Button", "go"));
     harness.settle();
@@ -208,7 +210,7 @@ TEST_CASE("The inspector follows a mutation from pending to fresh or error, and 
     auto const app = harness.interpreter.mountApp(morph::ui::testing::loadOrFail(kApp));
     REQUIRE(app.has_value());
     auto screen = harness.mount(kSaving);
-    Inspector const inspector{*screen};
+    Inspector const inspector = inspectorOf(*screen);
     CHECK(named(inspector.queries(), "clientList").scope == "app");
 
     harness.backend.click(harness.byTestId("Button", "save"));
@@ -225,4 +227,17 @@ TEST_CASE("The inspector follows a mutation from pending to fresh or error, and 
     CHECK_FALSE(failed.lastError.empty());
 }
 
-#endif
+TEST_CASE("A screen of a session not in development mode records nothing and gives no inspector", "[ui][inspector]") {
+    Harness off{morph::ui::DevelopmentTools::Off};
+    auto quiet = off.mount(kInspected);
+    CHECK_FALSE(Inspector::over(*quiet).has_value());
+
+    // The control: the same screen in development mode lists its nodes and logs a command list it ran.
+    Harness on{morph::ui::DevelopmentTools::On};
+    auto screen = on.mount(kInspected);
+    on.backend.click(on.byTestId("Button", "go"));
+    on.settle();
+    Inspector const inspector = inspectorOf(*screen);
+    CHECK_FALSE(inspector.nodes().empty());
+    CHECK_FALSE(inspector.commandLog().empty());
+}

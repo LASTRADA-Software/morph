@@ -92,7 +92,7 @@ namespace {
 /// async-signal-safe), so it does the one thing it is allowed to do — assign to
 /// a `volatile std::sig_atomic_t` — and a timer on the Qt thread turns that
 /// into a real `quit()`. Same shape, and the same reason, as
-/// `examples/pastebin/src/server/main.cpp`: without it the default `SIGINT`
+/// `examples/bookmarks/src/server/main.cpp`: without it the default `SIGINT`
 /// disposition would terminate the process outright and the shutdown path below
 /// would never run.
 volatile std::sig_atomic_t gStopRequested = 0;
@@ -107,8 +107,8 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 /// principal to install (`dto::AuthResult::principal`), and the *client* is
 /// what installs it — `bank::app::App::login()` calls
 /// `Bridge::setDefaultSession` with it. There is no signed artefact for a
-/// server to verify, so a `SigningAuthorizer` (what `bookmarks`, `kanban` and
-/// `ledger` install) would refuse every client bank ships, and inventing a
+/// server to verify, so a `SigningAuthorizer` (what `bookmarks` and `lims`
+/// install) would refuse every client bank ships, and inventing a
 /// token for the server alone would mean changing `AuthModel`'s wire results —
 /// a change to bank's GUI and CLI, made to suit a test transport.
 ///
@@ -239,9 +239,9 @@ int main(int argc, char** argv) {
 
         // Let connected clients' in-flight executes reply and close cleanly
         // before `server` and `pool` leave this scope. Bank runs no background
-        // job, so there is no sweep to drain afterwards — the rung servers that
-        // do (pastebin's expiry sweep, ledger's report runner) need a second
-        // step here and bank does not.
+        // job, so there is no sweep to drain afterwards — a rung server that
+        // does (bookmarks' metadata-fetch worker) needs a second step here and
+        // bank does not.
         static_cast<void>(wsServer.closeGracefully(std::chrono::seconds{2}));
     }
 

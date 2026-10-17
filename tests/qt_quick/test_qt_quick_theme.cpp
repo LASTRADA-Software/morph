@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QVariant>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
@@ -99,4 +101,110 @@ TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing tok
     CHECK(item.property("stale").toDouble() == 0.3);
     // The theme sets no muted colour: the MorphUi default stands.
     CHECK(item.property("muted").value<QColor>() == QColor{"#6e6e73"});
+}
+
+TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"background": {"$type": "color", "$value": "#101010"}},
+      "radius": {"$type": "dimension", "card": {"$value": {"value": 14, "unit": "px"}}},
+      "control": {"height": {"$type": "dimension", "$value": {"value": 40, "unit": "px"}}},
+      "elevation": {"card": {"$type": "shadow", "$value": {"color": "#11223344", "offsetX": {"value": 1, "unit": "px"},
+        "offsetY": {"value": 3, "unit": "px"}, "blur": {"value": 6, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("background").value<QColor>() == QColor{"#101010"});
+    CHECK(theme->property("radiusCard").toReal() == 14.0);
+    CHECK(theme->property("radiusControl").toReal() == 6.0);
+    CHECK(theme->property("controlHeight").toReal() == 40.0);
+    CHECK(theme->property("cardShadowColor").value<QColor>() == QColor::fromRgb(0x11, 0x22, 0x33, 0x44));
+    CHECK(theme->property("cardShadowOffsetY").toReal() == 3.0);
+    CHECK(theme->property("cardShadowBlur").toReal() == 6.0);
+}
+
+namespace {
+
+/// The background a surface draws: the widget's direct child Rectangle at z -1.
+QQuickItem const* surfaceBackground(QQuickItem const& item) {
+    for (QQuickItem const* const child : item.childItems()) {
+        if (child->z() == -1.0 && child->inherits("QQuickRectangle")) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick theme: a surface colours its subtree and draws its background", "[qt_quick]") {
+    Scene scene;
+    auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    sidebar->setSurface("sidebar");
+    auto inside = scene.backend().createText(sidebar.get());
+    inside->setText("inside");
+    auto card = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    card->setSurface("card");
+    auto outside = scene.backend().createText(nullptr);
+    outside->setText("outside");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#c9ccd6"});
+    CHECK(labelColor(Scene::itemOf(*outside), QStringLiteral("outside")) == QColor{"#1d1d1f"});
+    QQuickItem const* const sidebarBackground = surfaceBackground(Scene::itemOf(*sidebar));
+    REQUIRE(sidebarBackground != nullptr);
+    CHECK(sidebarBackground->isVisible());
+    CHECK(sidebarBackground->property("color").value<QColor>() == QColor{"#1f2430"});
+    QQuickItem const* const cardBackground = surfaceBackground(Scene::itemOf(*card));
+    REQUIRE(cardBackground != nullptr);
+    CHECK(cardBackground->property("color").value<QColor>() == QColor{"#ffffff"});
+    CHECK(cardBackground->property("radius").toReal() == 10.0);
+    QQuickItem const* const plain = surfaceBackground(Scene::itemOf(*outside));
+    CHECK((plain == nullptr || !plain->isVisible()));
+
+    // A theme's own surface of a built-in name replaces it, and every other role is the theme's.
+    auto const layer = ui::parseTokens(R"({"color": {"$type": "color", "surface": {"$value": "#123456"}}})");
+    REQUIRE(layer);
+    auto const resolved = ui::resolveTokens({&*layer});
+    REQUIRE(resolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*resolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    scene.settle();
+    CHECK(sidebarBackground->property("color").value<QColor>() == QColor{"#123456"});
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#1d1d1f"});
+}
+
+TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfaces", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, std::string, std::less<>> const themes{
+        {"theme/index.json",
+         R"({"vocab": "ui-theme/1", "base": "theme/base.json", "surfaces": {"sidebar": "theme/sidebar.json"}})"},
+        {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}}})"},
+        {"theme/sidebar.json", R"({"color": {"$type": "color", "surface": {"$value": "#102030"}}})"}};
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("accent").value<QColor>() == QColor{"#aa0055"});
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("surface").value<QColor>() == QColor{"#102030"});
+    // A role the surface does not set is the theme's: the base's accent.
+    CHECK(sidebar->property("accent").value<QColor>() == QColor{"#aa0055"});
+
+    // A bundle without a theme restores the defaults.
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    CHECK(theme->property("accent").value<QColor>() == QColor{"#1565c0"});
+}
+
+// Mutation: write the scheme only at adoption (the text keeps the theme's colour).
+TEST_CASE("qt_quick theme: a surface set after its children exist still colours them", "[qt_quick]") {
+    Scene scene;
+    auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const nested = scene.backend().createStack(sidebar.get(), ui::Axis::Vertical);
+    auto inside = scene.backend().createText(nested.get());
+    inside->setText("late");
+    sidebar->setSurface("sidebar");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("late")) == QColor{"#c9ccd6"});
 }

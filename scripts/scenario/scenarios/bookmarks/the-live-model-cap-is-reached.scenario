@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — the live-model cap, reached.
+# bookmarks (rung 1) — the live-model cap, reached.
 #
 # `bookmarks::app::App` installs a `LimitPolicy` with `maxLiveModels = 256`.
 # Its own comment says why: `BookmarksAuthorizer::authorizeRegister` is
@@ -28,9 +28,8 @@
 # report read.
 #
 # ── Why this rung ──────────────────────────────────────────────────────
-# `pastebin` installs no `LimitPolicy` at all, so its server has no cap to
-# reach. bookmarks, polls, kanban and ledger all install the same 256; this
-# file sits in the first of them.
+# bookmarks installs the cap (256 live models), so its server is one a
+# scenario can drive into it.
 #
 # Not a workflow, and not counted as one: it dispatches no domain action.
 #

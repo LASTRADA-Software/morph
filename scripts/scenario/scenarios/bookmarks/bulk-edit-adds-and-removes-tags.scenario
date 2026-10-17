@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — one action, many entities, one transaction.
+# bookmarks (rung 1) — one action, many entities, one transaction.
 #
 # examples/bookmarks/README.md's "What to implement" step 3 calls BulkEdit
 # "the first multi-entity atomic action; all-or-nothing against SQLite". This

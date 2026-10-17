@@ -230,7 +230,7 @@ PROTOCOL_VERSION = 1
 #:
 #:   * it exercises the decoder's tolerance of a maximal frame, which the short
 #:     form no longer does; and
-#:   * `scenarios/pastebin/malformed-envelope.scenario` asserts the server's
+#:   * `scenarios/bookmarks/malformed-envelope.scenario` asserts the server's
 #:     parse-error text by exact match, including a column offset and a
 #:     windowed snippet of the frame that failed. That frame is the one *this*
 #:     table produces, so its field order and completeness are load-bearing:
@@ -332,7 +332,7 @@ class Client:
         reply to this request and the only one it will get -- refusing it as a
         mismatch would make the decode-failure path unassertable from a
         scenario, which is precisely the path
-        `scenarios/pastebin/malformed-envelope.scenario` exists to pin. It is
+        `scenarios/bookmarks/malformed-envelope.scenario` exists to pin. It is
         accepted only in that exact shape: an `err` whose message names a
         decode failure. A zero `callId` on anything else is still a violation.
 

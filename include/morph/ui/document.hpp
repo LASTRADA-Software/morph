@@ -618,8 +618,11 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 /// @brief The keys of `text`.
 inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 4> kButtonKeys = {
-    {{"label", Shape::Expr}, {"icon", Shape::Expr}, {"onClick", Shape::Commands}, {"onActivate", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 5> kButtonKeys = {{{"label", Shape::Expr},
+                                                        {"icon", Shape::Expr},
+                                                        {"emphasis", Shape::Text},
+                                                        {"onClick", Shape::Commands},
+                                                        {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
 inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr},
                                                            {"placeholder", Shape::Expr},
@@ -2667,6 +2670,9 @@ private:
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
+        } else if (node.kind == "button") {
+            static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
+            checkChoice(node, "emphasis", kEmphasis);
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);

@@ -154,6 +154,7 @@
         "MORPH_BUILD_BANK_EXAMPLE": "ON",
         "MORPH_BUILD_HMAC_EXAMPLES": "ON",
         "MORPH_BUILD_QT": "ON",
+        "MORPH_BUILD_QT_QUICK": "ON",
         "MORPH_BUILD_TUI": "ON",
         "MORPH_BUILD_LADDER": "ON",
         "MORPH_LADDER_RUNGS": "all",

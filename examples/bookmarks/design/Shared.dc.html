@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shared feed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;font-family:"Segoe UI","Noto Sans","Helvetica Neue",system-ui,sans-serif;color:#1d1d1f;background:#f2f3f7}
+a{color:#1565c0}a:hover{color:#0d4f9e}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;color:#c9ccd6;text-decoration:none;font-size:14px}
+.nav:hover{background:#2a3040;color:#ffffff}
+.navOn{background:#2f3646;color:#ffffff;box-shadow:inset 3px 0 0 #4c8dff}
+.group{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7d8396;padding:14px 12px 6px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:6px;border:1px solid #c7c7cc;background:#ffffff;color:#1d1d1f;font:inherit;font-size:14px;cursor:pointer}
+.card{background:#ffffff;border:1px solid #e3e5ea;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.08);padding:18px 20px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;background:#e7effa;color:#174a85;font-size:12px}
+.who{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:14px;background:#2f3646;color:#ffffff;font-size:12px;font-weight:600}
+.muted{color:#5c5c63}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 820px; background: #f2f3f7">
+  <nav aria-label="Navigation" style="flex: 1 1 224px; max-width: 224px; min-width: 200px; background: #1f2430; color: #c9ccd6; padding: 16px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4c8dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"></path></svg>
+      <span style="font-weight: 600; color: #ffffff; font-size: 15px">Morph Bookmarks</span>
+    </div>
+    <div class="group">Library</div>
+    <a class="nav" href="Main.dc.html">Bookmarks</a>
+    <a class="nav navOn" href="Shared.dc.html" aria-current="page">Shared feed</a>
+    <a class="nav" href="Tags.dc.html">Tags</a>
+    <div class="group">Tools</div>
+    <a class="nav" href="Import.dc.html">Import and export</a>
+  </nav>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; background: #ffffff; border-bottom: 1px solid #e3e5ea">
+      <h1 style="margin: 0; font-size: 18px; font-weight: 600; flex: 1 1 auto">Shared feed</h1>
+      <span class="muted" style="font-size: 14px">alice</span>
+      <button class="btn" type="button">Sign out</button>
+    </header>
+
+    <main style="padding: 24px; display: flex; flex-direction: column; gap: 14px; max-width: 760px; box-sizing: border-box">
+      <p class="muted" style="margin: 0; font-size: 14px">What everyone has shared, newest first.</p>
+
+      <article class="card">
+        <a href="https://www.sqlite.org/lang_upsert.html" style="font-size: 16px; font-weight: 600; text-decoration: none">UPSERT in SQLite</a>
+        <span class="muted" style="font-size: 12px">sqlite.org/lang_upsert.html</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="tag">databases</span></div>
+      </article>
+
+      <article class="card">
+        <a href="https://www.stroustrup.com/tour3.html" style="font-size: 16px; font-weight: 600; text-decoration: none">A Tour of C++, third edition</a>
+        <span class="muted" style="font-size: 12px">stroustrup.com/tour3.html</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="tag">cpp</span><span class="tag">reading</span></div>
+      </article>
+
+      <article class="card">
+        <a href="https://designtokens.org/tr/2025.10/format/" style="font-size: 16px; font-weight: 600; text-decoration: none">Design Tokens Format Module 2025.10</a>
+        <span class="muted" style="font-size: 12px">designtokens.org/tr/2025.10/format</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="tag">design</span></div>
+      </article>
+
+      <div><button class="btn" type="button">Load more</button></div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

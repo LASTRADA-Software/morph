@@ -105,8 +105,8 @@ scalars, those two rules could not both be obeyed: a rung following rule 3
 could not use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` at all, and would have to
 hand-write `ModelKeyTraits`/`ActionKeyTraits` instead — each copy re-stating
 the `*id` unwrapping the macro exists to hide, and each dereferencing a
-possibly-empty strong id in the process. The three rungs whose entities carry
-strong ids (kanban, ledger, lims) use the macros.
+possibly-empty strong id in the process. lims, whose `SampleModel` keys on its
+`SampleId`, uses the macros.
 
 A strong id encodes as **whatever it wraps**, so it shares a directory entry
 with the raw key of the same value; the directory stays one map keyed on
@@ -121,16 +121,14 @@ where the caller can see it.
 A model may still declare `using PrimaryKey = …` in its own body, and that wins
 over the deduced type — *infer by default, declare to override*, the same rule
 the rest of `morph::forms` follows. It is useful only when the key type differs
-from the field's type. The case that occurs in practice is a model whose keyed
-actions do not all carry the *same* strong id: `ledger::LedgerModel` is named
-by six actions carrying a `LedgerId` and one carrying a `ReportJobId`, and
-`ledger::BudgetModel` by actions carrying a `LedgerId` and a `BudgetId`. Both
-key on the raw `std::int64_t` those ids share, declared in the model's own
-body, and use `BRIDGE_KEY_FROM` on every action purely for the unwrapping;
-deducing either strong id would make `primary()` claim a type that is wrong for
-the other actions. Where every keyed action names one entity — `BoardModel`,
-`SampleModel`, `RuleModel` — the deduced strong id is the right key type and
-nothing overrides it.
+from the field's type: a model whose keyed actions do not all carry the *same*
+strong id — say, most naming it by a `LedgerId` and one by a `ReportJobId`.
+Such a model keys on the raw `std::int64_t` those ids share, declared in its
+own body, and uses `BRIDGE_KEY_FROM` on every action purely for the
+unwrapping; deducing either strong id would make `primary()` claim a type that
+is wrong for the other actions. Where every keyed action names one entity —
+`SampleModel` — the deduced strong id is the right key type and nothing
+overrides it. No current example declares an override.
 
 ### Attachment is automatic
 

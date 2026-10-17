@@ -211,9 +211,7 @@ void App::fetchMetadataOnce() {
     }
 
     // `handler` is kept alive by every dispatched call's own completion, not
-    // by this function's stack frame — the identical pattern (and identical
-    // race) pastebin::app::App::sweepExpiredOnce() documents at length.
-    // `BridgeHandler::execute()` posts to the worker pool and returns
+    // by this function's stack frame. `BridgeHandler::execute()` posts to the worker pool and returns
     // immediately, so this loop routinely returns before RemoteServer has so
     // much as looked up the model instance for the first dispatch. A
     // `handler` destroyed synchronously here would deregister its instance

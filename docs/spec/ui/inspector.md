@@ -13,7 +13,7 @@ spec 6 §21's second tool and §12's "Inspector" test (`docs/superpowers/specs/2
 
 ## Contents
 
-- [Built only into development builds](#built-only-into-development-builds)
+- [Off unless development mode](#off-unless-development-mode)
 - [Read-only](#read-only)
 - [What it lists](#what-it-lists)
 - [Reaching the focused screen](#reaching-the-focused-screen)
@@ -21,25 +21,24 @@ spec 6 §21's second tool and §12's "Inspector" test (`docs/superpowers/specs/2
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
-## Built only into development builds
+## Off unless development mode
 
-Everything here except the reactive counters is compiled only when `MORPH_UI_DEV_TOOLS` is 1. That is the CMake option
-of the same name, defined on the `morph` target's interface and off by default for `Release`, `MinSizeRel` and
-`RelWithDebInfo` ([`service.md`](service.md#development-reload)). With it at 0:
+The inspector is in every build and on only in development mode. Development mode is a session option,
+`SessionOptions::developmentTools` (`DevelopmentTools::Off`, the default, or `On`, from
+`include/morph/ui/dev_tools.hpp`); the generic client sets it from `--dev` or `MORPH_UI_DEV=1`.
 
-- `inspector.hpp` and `qt_quick/inspector.hpp` declare nothing;
-- the screen records no nodes, scopes or command log;
-- `MountedShell::inspectFocused` does not exist;
-- `src/qt_quick/inspector.cpp` is not added to `morph_qt_quick`.
+- `ScreenCore` copies the option when it is made, since a session's options do not change after it is made.
+- With `On`, a screen records each node it lowers, each live scope and its latest `kCommandLogSize` command lists.
+- With `Off`, it records none of them: each record site is one comparison, and the prune of the node list does not run.
+- `Inspector::over(screen)` is the one way to make an inspector. It gives nothing for a screen of an `Off` session, so
+  `DocumentScreenHost::inspector(handle)` gives nothing for a closed handle, a foreign one, or a screen whose session
+  is `Off`, and a shell's `inspectFocused` then calls nothing.
+- The Qt Quick window and its shortcut exist only when `FrontendConfig::devTools` is `On`. A client sets that and the
+  session option together; a window over an `Off` session shows "no screen is shown".
 
-The library is header-only, so "compiled out" is a preprocessor switch, not a separate library. Every translation
-unit sees the same value, because it is on the target's interface, so a screen's layout never differs between two
-translation units.
-
-Check the claim on a client binary rather than assume it. Build the same Release configuration twice, with the switch
-off and then on. `nm -C morph_client | grep -i inspect` must find nothing in the first binary and the inspector's
-symbols in the second, and `strings` must find the window's QML text only in the second. The second build is the
-control: without it, an empty result could mean a stripped binary or a wrong pattern.
+Check it at run time: with `Off`, `Inspector::over` gives nothing for a mounted screen and Ctrl+Shift+I opens no
+window; with `On` (the control), the same screen lists its nodes and logs a command list it ran, and the shortcut opens
+the window.
 
 The reactive counters (`Runtime::stats()`) are kept in every build. They are a few increments per flush, they belong to
 the runtime rather than to the inspector, and a release binary can read them without the inspector.
@@ -125,7 +124,8 @@ a string in `src/qt_quick/inspector.cpp`, so it is not part of the `MorphUi` mod
 
 | Decision | Choice | Why |
 |---|---|---|
-| How a release build leaves it out | A preprocessor switch on the target's interface, plus a source file added only when it is on | The library is header-only: the only way to compile code out of every consumer is a macro they all see. A macro decided per translation unit would change `ScreenCore`'s layout between them. |
+| Where the switch lives | A session option, read once by each screen | A screen records through its session, and one session is one client's run, which is what development mode describes. Being in every build keeps the tools at hand in a release client, and gives every translation unit one `ScreenCore` layout. |
+| Where the Off check lives | `Inspector::over` | The rule is part of the inspector's contract, so the type that is handed out decides when it can be. |
 | What the inspector returns | Copies | A reference into a scope or a signal would let a caller write state. |
 | How it refetches | The document's own `refetch` command, as a user event | The spec allows writes only through commands a user could run. A direct `QueryRuntime::refetch` would skip the log and the user-event path. |
 | Where nodes come from | Recorded at lowering, held weakly | The view tree has no document kinds, ids or expressions. The document alone does not know which scopes are mounted, so a node is listed while the scope it was lowered in lives. |

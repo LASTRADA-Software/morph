@@ -10,13 +10,11 @@
 #                   `ladder-sanitizers` jobs match `git diff --name-only`
 #                   output against, to decide whether the ladder needs to run.
 #
-# Why this exists: the rung list used to be hand-copied into every consumer,
-# and every copy that was not load-bearing drifted. ci.yml's filter had stopped
-# at kanban (rung 4), so a change confined to examples/ledger/ or
-# examples/lims/ matched nothing and skipped both ladder jobs — silently, since
-# a filter that matches nothing reports success just as loudly as one that
-# matches everything. Deriving the regex here means it cannot fall
-# behind the list again.
+# Why this exists: a hand-copied rung list drifts in every copy that is not
+# load-bearing, and a path filter that stops short of a rung skips both ladder
+# jobs for a change confined to that rung — silently, since a filter that
+# matches nothing reports success just as loudly as one that matches
+# everything. Deriving the regex here means it cannot fall behind the list.
 #
 # Consumers that genuinely cannot call this (GitHub evaluates a workflow's
 # `on.*.paths` before any step runs; codecov.yml is read by Codecov, not by us)
@@ -33,10 +31,9 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 # only in instrumentation — cannot diverge.
 #
 #   examples/common/       the shared testkit/GUI/app libraries every rung links
-#   examples/forms/, examples/bank/, examples/client/
-#                          applications on server-defined screens whose screen
-#                          tests and render smoke this job runs, and the
-#                          generic client that links them
+#   examples/forms/, examples/client/
+#                          the forms lab, whose screen tests this job runs,
+#                          and the generic client that links every rung
 #   examples/CMakeLists.txt, examples/rungs.txt
 #                          which rungs get configured at all
 #   include/morph/         the library the ladder exists to exercise
@@ -65,7 +62,6 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 _extra_patterns=(
     'examples/common/'
     'examples/forms/'
-    'examples/bank/'
     'examples/client/'
     'examples/CMakeLists\.txt$'
     'examples/rungs\.txt$'

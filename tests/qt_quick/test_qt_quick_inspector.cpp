@@ -5,13 +5,9 @@
 // properties and every query with its key, state and age. A release build contains none of it; that is measured on
 // the built binaries, not here.
 
-#include <catch2/catch_test_macros.hpp>
-#include <morph/ui/dev_tools.hpp>
-
-#if MORPH_UI_DEV_TOOLS
-
 #include <QQuickWindow>
 #include <QTest>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -20,6 +16,7 @@
 #include <morph/reactive/testing/manual_scheduler.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -60,7 +57,8 @@ TEST_CASE("Inspector window: Ctrl+Shift+I opens it over the focused screen, list
                                                             .clock = [&scheduler] { return scheduler.now(); },
                                                             .keepUnused = std::chrono::minutes{5},
                                                             .catalog = corpusCatalog(),
-                                                            .classify = {}}};
+                                                            .classify = {},
+                                                            .developmentTools = ui::DevelopmentTools::On}};
     ScriptedDispatcher dispatcher{scene.owner()};
     RecordingHost host;
     ui::Interpreter interpreter{session, dispatcher, ui::InterpreterOptions{.host = &host}};
@@ -76,8 +74,9 @@ TEST_CASE("Inspector window: Ctrl+Shift+I opens it over the focused screen, list
     bool shown = true;
     InspectorWindow inspector{[&](std::function<void(ui::Inspector&)> const& visit) {
         if (shown) {
-            ui::Inspector focused{*screen};
-            visit(focused);
+            std::optional<ui::Inspector> focused = ui::Inspector::over(*screen);
+            REQUIRE(focused.has_value());
+            visit(*focused);
         }
     }};
     inspector.attachTo(scene.window());
@@ -116,5 +115,3 @@ TEST_CASE("Inspector window: Ctrl+Shift+I opens it over the focused screen, list
     CHECK(contains(inspector.text(), "no screen is shown"));
     CHECK_FALSE(contains(inspector.text(), "/view  column"));
 }
-
-#endif

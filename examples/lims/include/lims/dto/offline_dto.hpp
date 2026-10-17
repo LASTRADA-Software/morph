@@ -70,8 +70,8 @@ enum class ConflictResolution : std::uint8_t {
 /// thrown. Throwing would abort the replay of every later item in the queue
 /// and lose the very flag the run exists to raise — and
 /// `examples/IMPLEMENTATION.md`'s "never encode failure as a magic value" rule
-/// is about failures, which this is not: the two-enumerator `enum class` here
-/// is the same shape as `polls::Restored` and `polls::Finalized`.
+/// is about failures, which this is not: a conflict is an expected outcome of
+/// a replay, so it is an enumerator of the result.
 enum class ReplayOutcome : std::uint8_t {
     Applied,     ///< The update landed; the sample advanced.
     Conflicted,  ///< The update was flagged; the sample is unchanged.

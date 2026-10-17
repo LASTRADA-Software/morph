@@ -48,7 +48,7 @@ namespace morph::model {
 ///
 /// @tparam Tail Nullary callable returning `void`.
 /// @param tail The post-commit work to run.
-/// @param what Names the handler in the log line, e.g. `"[kanban::BoardModel] CreateColumn"`.
+/// @param what Names the handler in the log line, e.g. `"[bookmarks::BookmarkModel] BulkEdit"`.
 template <typename Tail>
     requires std::invocable<Tail> && std::is_void_v<std::invoke_result_t<Tail>>
 void runPostCommitTail(Tail&& tail, std::string_view what) noexcept {
@@ -125,8 +125,7 @@ concept BackendChangedNotifiable = requires(M& model) {
 /// @brief Concept satisfied by model types that expose a model-level
 ///        `attachActionLog(std::shared_ptr<IActionLog>, std::string)`.
 ///
-/// A small number of keyed/shared models (e.g. `kanban::BoardModel`) cannot
-/// rely on `IModelHolder::recordIfAttached`'s auto-append alone (that
+/// A small number of keyed/shared models cannot rely on `IModelHolder::recordIfAttached`'s auto-append alone (that
 /// mechanism serves plain fire-after-success journaling; a model that needs
 /// to read its own log back, e.g. for an activity-stream view, needs the
 /// *same* `IActionLog` instance available on `Model` itself, not only on the

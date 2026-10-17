@@ -30,9 +30,7 @@
 namespace bookmarks {
 
 // The one place each DTO-level string bound and the storage layer's real
-// column capacity are checked against each other -- the same discipline
-// `pastebin::kMaxSyntaxBytes`'s own assertion (`paste_model.cpp`)
-// established: widening a column without widening the constant, or the
+// column capacity are checked against each other: widening a column without widening the constant, or the
 // reverse, fails the build here rather than silently reopening either harm
 // (`SqlAnsiString`'s `_size{std::min(N, s.size())}` truncating a value that
 // `validate()` had already accepted, or `validate()` rejecting a value that
@@ -676,9 +674,9 @@ Ack BookmarkModel::execute(const RecordMetadata& action) {
     // skips the *row-owner* check every GUI-reachable action performs: the
     // worker acts on behalf of whichever principal owns the row, not on
     // behalf of itself, so filtering by owner here would make it able to
-    // update nothing at all. Mirrors pastebin::ExpirePaste's internal-only
-    // shape, including the deleted-before-processed no-op below (that
-    // action's "already gone" tolerance).
+    // update nothing at all. A bookmark deleted before the worker reached it
+    // is a no-op below, not an error: the fetch raced a user's delete, and
+    // the user's delete wins.
     //
     // What replaces the owner check is a *caller* check, and it has to live
     // here rather than in the authorizer: `authorizeInstance`'s

@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// A grid: children row-major in `columns` columns, `gap` units apart; a child's span widens it.
+// A grid: children row-major in `columns` columns, `gap` (a spacing step) apart; a child's span widens it.
 MorphWidget {
     id: root
 
@@ -18,7 +18,7 @@ MorphWidget {
         id: layout
         anchors.fill: parent
         columns: Math.max(1, root.columns)
-        rowSpacing: root.gap * Theme.unitHeight
-        columnSpacing: root.gap * Theme.unitWidth
+        rowSpacing: Theme.spaceOf(root.gap)
+        columnSpacing: Theme.spaceOf(root.gap)
     }
 }

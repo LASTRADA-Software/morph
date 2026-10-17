@@ -3,6 +3,7 @@
 #include "tui/layout.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -120,14 +121,15 @@ int crossExtent(ui::Sizing sizing, int space) {
     return std::max(0, space);
 }
 
-GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width) {
+GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap) {
     int const count = std::max(1, columns);
     GridPlan plan;
-    plan.gap = std::max(0, width.gap);
+    plan.columnGap = std::max(0, width.gap);
+    plan.rowGap = std::max(0, rowGap);
     std::vector<Item> const equal(static_cast<std::size_t>(count),
                                   Item{.sizing = ui::Sizing::stretch(1), .natural = 0});
-    plan.columnWidths = distribute(equal, Track{.length = width.length, .gap = plan.gap});
-    plan.columnX = edgesOf(plan.columnWidths, plan.gap);
+    plan.columnWidths = distribute(equal, Track{.length = width.length, .gap = plan.columnGap});
+    plan.columnX = edgesOf(plan.columnWidths, plan.columnGap);
 
     int column = 0;
     int row = 0;
@@ -147,7 +149,7 @@ GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width) {
         }
         column += span;
     }
-    plan.rowY = edgesOf(plan.rowHeights, plan.gap);
+    plan.rowY = edgesOf(plan.rowHeights, plan.rowGap);
     return plan;
 }
 
@@ -156,7 +158,7 @@ GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width) {
     auto const spanned =
         plan.columnWidths | std::views::drop(first) | std::views::take(static_cast<std::size_t>(slot.span));
     Wide const width =
-        std::accumulate(spanned.begin(), spanned.end(), Wide{0}) + (Wide{plan.gap} * std::max(0, slot.span - 1));
+        std::accumulate(spanned.begin(), spanned.end(), Wide{0}) + (Wide{plan.columnGap} * std::max(0, slot.span - 1));
     auto const row = static_cast<std::size_t>(slot.row);
     return ::core::tui::Rect{.x = plan.columnX.at(first),
                              .y = plan.rowY.at(row),
@@ -164,12 +166,20 @@ GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width) {
                              .height = plan.rowHeights.at(row)};
 }
 
-::core::tui::Rect pad(::core::tui::Rect area, int padding) {
-    Wide const inset = std::max(0, padding);
-    return ::core::tui::Rect{.x = saturate(area.x + inset),
-                             .y = saturate(area.y + inset),
-                             .width = saturate(std::max<Wide>(0, area.width - (2 * inset))),
-                             .height = saturate(std::max<Wide>(0, area.height - (2 * inset)))};
+::core::tui::Rect pad(::core::tui::Rect area, int vertical, int horizontal) {
+    Wide const rows = std::max(0, vertical);
+    Wide const columns = std::max(0, horizontal);
+    return ::core::tui::Rect{.x = saturate(area.x + columns),
+                             .y = saturate(area.y + rows),
+                             .width = saturate(std::max<Wide>(0, area.width - (2 * columns))),
+                             .height = saturate(std::max<Wide>(0, area.height - (2 * rows)))};
+}
+
+int stepCells(int step, ui::Axis axis) noexcept {
+    static constexpr std::array<int, ui::kMaxSpacingStep + 1> kRows{0, 0, 0, 1, 1, 2};
+    static constexpr std::array<int, ui::kMaxSpacingStep + 1> kColumns{0, 1, 1, 2, 2, 3};
+    auto const index = static_cast<std::size_t>(ui::spacingStep(step));
+    return axis == ui::Axis::Vertical ? kRows.at(index) : kColumns.at(index);
 }
 
 }  // namespace morph::tui::layout

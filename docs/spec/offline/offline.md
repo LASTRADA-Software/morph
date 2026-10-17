@@ -206,9 +206,9 @@ it, and a host must pick one:
 The two paragraphs above define the *contract* — dedup on a shared key. The
 mechanism is `morph::offline::IReplayLedger`
 (`include/morph/offline/replay_ledger.hpp`), and it lives in the framework
-because five rungs — `bookmarks`, `crm`, `kanban`, `ledger`, `lims` — across
-seven call sites otherwise each hand-write the same op-id-keyed table
-answering "has this already been applied?":
+because every host that dedups a retried write otherwise hand-writes the same
+op-id-keyed table answering "has this already been applied?" (`bookmarks`'
+import path is the ladder's consumer):
 
 ```cpp
 struct IReplayLedger {
@@ -243,15 +243,14 @@ contract, plus
 is promoted.
 
 **No base class for consumers.** A model holds or is handed an
-`IReplayLedger&`; it never derives from one — every occurrence in the rungs is
-a free function or a plain member, and a base-class design would be
-un-adoptable by all of them.
+`IReplayLedger&`; it never derives from one — a host's dedup table is
+typically a free function or a plain member, and a base-class design would be
+un-adoptable by those.
 
-**One mechanism, two response families.** The two shapes the seven occurrences
-split into — response-replay (kanban's/ledger's `StoreTransaction`, which
-returns the original stored result on a hit) and skip-only (lims's/
-bookmarks's/ledger's import path, which returns only "already applied,
-nothing to replay") — are not a fork in the interface. They are the same
+**One mechanism, two response families.** The two shapes a host's dedup takes —
+response-replay (a retried transfer that must return the original stored
+result on a hit) and skip-only (bookmarks's import path, which returns only
+"already applied, nothing to replay") — are not a fork in the interface. They are the same
 `lookup()` read by two different callers: what a hit *means* is the model's
 decision, not the ledger's. `morph::journal::IActionLog` already ships this
 exact contract for its own idempotency-key dedup (opaque key, non-empty keys
@@ -334,9 +333,9 @@ and throws `OfflineQueueFullError`, which a posted call could not return.
 
 **The queue's owner is its `SyncWorker`'s.** The drain calls `drain()`,
 `markDone()` and `setAttempts()` synchronously, so the queue belongs to the
-worker's owner or to the executor that strand runs over: kanban's
-`BoardBridge` gives its `SqliteOfflineQueue` the bridge's executor, and its
-worker the coordinator's strand over that same executor. The application's
+worker's owner or to the executor that strand runs over: a client gives its
+`SqliteOfflineQueue` the GUI executor, and its worker the coordinator's strand
+over that same executor. The application's
 `enqueue` on the GUI thread and the worker's drain are then tasks of one
 thread, and the queue needs no lock.
 
@@ -667,9 +666,9 @@ through a prepared statement and **logs a warning** if it is not `wal`;
 `journalMode()` exposes what it got.
 
 It deliberately does **not** throw. None of those modes is less durable than WAL
-once `synchronous` is set above — and an earlier revision that did throw made
-the queue unconstructible on an NFS home directory, which `examples/kanban`'s
-`enableOfflineQueue()` reaches with a user-supplied path.
+once `synchronous` is set above — and throwing would make the queue
+unconstructible on an NFS home directory, which a client that builds the queue
+from a user-supplied path reaches.
 
 `busy_timeout` buys a wait, not a guarantee: one owner running every statement
 makes `SQLITE_BUSY` unreachable for a single instance, so the timeout matters

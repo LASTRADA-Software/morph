@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bookmarks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;font-family:"Segoe UI","Noto Sans","Helvetica Neue",system-ui,sans-serif;color:#1d1d1f;background:#f2f3f7}
+a{color:#1565c0}a:hover{color:#0d4f9e}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;color:#c9ccd6;text-decoration:none;font-size:14px}
+.nav:hover{background:#2a3040;color:#ffffff}
+.navOn{background:#2f3646;color:#ffffff;box-shadow:inset 3px 0 0 #4c8dff}
+.group{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7d8396;padding:14px 12px 6px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:6px;border:1px solid #c7c7cc;background:#ffffff;color:#1d1d1f;font:inherit;font-size:14px;cursor:pointer}
+.btn:hover{background:#f4f4f6}
+.primary{background:#1565c0;border-color:#1565c0;color:#ffffff;font-weight:600}
+.primary:hover{background:#0f56a8}
+.danger{background:#c62828;border-color:#c62828;color:#ffffff;font-weight:600}
+.input{height:32px;box-sizing:border-box;border:1px solid #c7c7cc;border-radius:6px;padding:0 12px;font:inherit;font-size:14px;background:#ffffff;color:#1d1d1f}
+.input:focus{outline:none;border:2px solid #1565c0}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;background:#e7effa;color:#174a85;font-size:12px}
+.shared{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;background:#e8f5e9;color:#1e5e22;font-size:12px}
+.private{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;background:#e5e5ea;color:#4a4a50;font-size:12px}
+.th{font-size:12px;font-weight:600;color:#5c5c63;text-align:left;padding:10px 12px;border-bottom:1px solid #e3e5ea}
+.td{padding:10px 12px;border-bottom:1px solid #eceef2;font-size:14px;vertical-align:middle}
+.rowOn{background:#e8f1fd}
+.muted{color:#5c5c63}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 820px; background: #f2f3f7">
+  <nav aria-label="Navigation" style="flex: 1 1 224px; max-width: 224px; min-width: 200px; background: #1f2430; color: #c9ccd6; padding: 16px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4c8dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"></path></svg>
+      <span style="font-weight: 600; color: #ffffff; font-size: 15px">Morph Bookmarks</span>
+    </div>
+    <label for="navSearch" style="position: absolute; left: -9999px">Search screens</label>
+    <input id="navSearch" class="input" placeholder="Search…" style="background: #2a3040; border-color: #2f3646; color: #ffffff; margin: 0 4px 6px">
+    <div class="group">Library</div>
+    <a class="nav navOn" href="Main.dc.html" aria-current="page">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"></path></svg>Bookmarks
+    </a>
+    <a class="nav" href="Shared.dc.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><circle cx="17" cy="10" r="2.5"></circle><path d="M3 20c0-3 3-5 6-5s6 2 6 5M14 20c0-2 1.5-4 3.5-4S21 18 21 20"></path></svg>Shared feed
+    </a>
+    <a class="nav" href="Tags.dc.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"></path><circle cx="7.5" cy="8.5" r="1.5"></circle></svg>Tags
+    </a>
+    <div class="group">Tools</div>
+    <a class="nav" href="Import.dc.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"></path></svg>Import and export
+    </a>
+  </nav>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; background: #ffffff; border-bottom: 1px solid #e3e5ea">
+      <h1 style="margin: 0; font-size: 18px; font-weight: 600; flex: 1 1 auto">Bookmarks</h1>
+      <span class="muted" style="font-size: 14px">alice</span>
+      <button class="btn" type="button">Sign out</button>
+    </header>
+
+    <div style="display: flex; gap: 2px; padding: 0 24px; background: #ffffff; border-bottom: 1px solid #e3e5ea">
+      <span style="padding: 10px 14px; font-size: 14px; color: #1565c0; box-shadow: inset 0 -2px 0 #1565c0">Bookmarks</span>
+      <span class="muted" style="padding: 10px 14px; font-size: 14px">Tags</span>
+    </div>
+
+    <main style="padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 1080px; width: 100%; box-sizing: border-box">
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+        <label for="search" style="position: absolute; left: -9999px">Search bookmarks</label>
+        <input id="search" class="input" placeholder="Search titles, URLs and notes" style="flex: 1 1 280px">
+        <label for="tagFilter" style="position: absolute; left: -9999px">Tag</label>
+        <select id="tagFilter" class="input" style="flex: 0 0 160px">
+          <option>All tags</option><option>reading</option><option>cpp</option><option>design</option>
+        </select>
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px">
+          <input type="checkbox" style="width: 16px; height: 16px; accent-color: #1565c0"> Show archived
+        </label>
+        <a class="btn primary" href="Edit.dc.html" style="text-decoration: none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New bookmark
+        </a>
+      </div>
+
+      <section aria-label="Bookmarks" style="background: #ffffff; border: 1px solid #e3e5ea; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; min-width: 640px">
+          <thead>
+            <tr>
+              <th class="th" style="width: 36px"><input type="checkbox" aria-label="Select all" style="accent-color: #1565c0"></th>
+              <th class="th">Title</th>
+              <th class="th">Tags</th>
+              <th class="th" style="width: 92px">Visibility</th>
+              <th class="th" style="width: 104px">Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="rowOn">
+              <td class="td"><input type="checkbox" checked aria-label="Select A Tour of C++" style="accent-color: #1565c0"></td>
+              <td class="td"><div style="font-weight: 600">A Tour of C++, third edition</div><div class="muted" style="font-size: 12px">stroustrup.com/tour3.html</div></td>
+              <td class="td"><span style="display: inline-flex; gap: 6px; flex-wrap: wrap"><span class="tag">cpp</span><span class="tag">reading</span></span></td>
+              <td class="td"><span class="shared">Shared</span></td>
+              <td class="td muted">14 Oct</td>
+            </tr>
+            <tr>
+              <td class="td"><input type="checkbox" aria-label="Select Qt Quick Layouts" style="accent-color: #1565c0"></td>
+              <td class="td"><div style="font-weight: 600">Qt Quick Layouts overview</div><div class="muted" style="font-size: 12px">doc.qt.io/qt-6/qtquicklayouts-overview.html</div></td>
+              <td class="td"><span style="display: inline-flex; gap: 6px; flex-wrap: wrap"><span class="tag">qt</span><span class="tag">design</span></span></td>
+              <td class="td"><span class="private">Private</span></td>
+              <td class="td muted">12 Oct</td>
+            </tr>
+            <tr class="rowOn">
+              <td class="td"><input type="checkbox" checked aria-label="Select Design Tokens Format" style="accent-color: #1565c0"></td>
+              <td class="td"><div style="font-weight: 600">Design Tokens Format Module 2025.10</div><div class="muted" style="font-size: 12px">designtokens.org/tr/2025.10/format</div></td>
+              <td class="td"><span style="display: inline-flex; gap: 6px; flex-wrap: wrap"><span class="tag">design</span></span></td>
+              <td class="td"><span class="shared">Shared</span></td>
+              <td class="td muted">9 Oct</td>
+            </tr>
+            <tr>
+              <td class="td"><input type="checkbox" aria-label="Select SQLite WAL" style="accent-color: #1565c0"></td>
+              <td class="td"><div style="font-weight: 600">Write-Ahead Logging</div><div class="muted" style="font-size: 12px">sqlite.org/wal.html</div></td>
+              <td class="td"><span style="display: inline-flex; gap: 6px; flex-wrap: wrap"><span class="tag">databases</span><span class="tag">reading</span></span></td>
+              <td class="td"><span class="private">Private</span></td>
+              <td class="td muted">2 Oct</td>
+            </tr>
+            <tr>
+              <td class="td"><input type="checkbox" aria-label="Select Notcurses" style="accent-color: #1565c0"></td>
+              <td class="td"><div style="font-weight: 600">Terminal rendering, cell by cell</div><div class="muted" style="font-size: 12px">contour-terminal.org</div></td>
+              <td class="td"><span style="display: inline-flex; gap: 6px; flex-wrap: wrap"><span class="tag">terminal</span></span></td>
+              <td class="td"><span class="private">Private</span></td>
+              <td class="td muted">28 Sep</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+        <span class="muted" style="font-size: 14px; flex: 1 1 auto">5 bookmarks · 2 selected</span>
+        <button class="btn" type="button">Archive selected</button>
+        <button class="btn" type="button">Unarchive selected</button>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

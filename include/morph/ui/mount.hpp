@@ -494,7 +494,7 @@ private:
                        Common const& common, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         applyCommon(scope, widget, common);
-        widget.setGap(gap);
+        widget.setGap(spacingStep(gap));
         mountChildren(scope, children, widget);
         return widget;
     }
@@ -571,6 +571,9 @@ private:
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
+        if (spec.emphasis != ButtonEmphasis::Normal) {
+            widget.setEmphasis(spec.emphasis);
+        }
         widget.setOnClick(event(spec.onClick));
         return widget;
     }
@@ -641,7 +644,7 @@ private:
         GridWidget& widget = scope.adopt(_backend->createGrid(parent));
         applyCommon(scope, widget, spec.common);
         widget.setColumns(spec.columns);
-        widget.setGap(spec.gap);
+        widget.setGap(spacingStep(spec.gap));
         for (GridCell const& cell : spec.cells) {
             Widget* const child = mount(scope, cell.node, &widget);
             if (child != nullptr && cell.span != 1) {
@@ -661,7 +664,7 @@ private:
         PanelWidget& widget = scope.adopt(_backend->createPanel(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
-        widget.setPadding(spec.padding);
+        widget.setPadding(spacingStep(spec.padding));
         widget.setCollapsible(spec.collapsible);
         if (spec.collapsible) {
             widget.setOnToggle(inputEvent(spec.onToggle, controlled(scope, spec.collapsed, [&widget](bool collapsed) {
@@ -921,7 +924,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, ForEach const& spec, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
         applyCommon(scope, widget, spec.common);
-        widget.setGap(spec.gap);
+        widget.setGap(spacingStep(spec.gap));
         mountRows(scope, spec.model, widget, {});
         return widget;
     }

@@ -390,7 +390,7 @@ TEST_CASE("IModelHolder: recordIfAttached stamps timestampMs from the clock give
 // declares one matching the concept's exact shape, to exercise the == true
 // arm: IModelHolder::attachActionLog forwarding log/contextKey to the
 // wrapped model's own attachActionLog, the mechanism a keyed/shared model
-// (e.g. kanban::BoardModel) needs to read its own journal back for an
+// needs to read its own journal back for an
 // activity-stream-shaped view, since the type-erased holder's _actionLog is
 // otherwise never visible to Model::execute() itself.
 

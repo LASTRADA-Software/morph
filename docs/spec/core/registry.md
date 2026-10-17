@@ -1015,8 +1015,8 @@ overwhelming majority of those TUs never call.
 
 **A prior measurement** (clang 22.1.8, gcc 16.2.1, Linux, 12
 cores, compiler cache off, best of two): stripping only
-`examples/kanban/include/kanban/models/board_model.hpp`'s 17
-`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` lines cost **26.93 CPU-s** at
+the 17 `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` lines from one rung's
+model header cost **26.93 CPU-s** at
 `-O3 -c` and **2.63 CPU-s** at `-fsyntax-only`, on the rung's own real compile
 command -- the `-fsyntax-only`/`-O3` gap showing the cost is
 instantiate-and-optimise work, not parsing.

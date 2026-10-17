@@ -179,14 +179,13 @@ Two fields are held out of the list, and are each pinned by a case in
   `SocketBackend::dispatchIncomingEnvelope`. A peer that never sees the key has
   to *reconstruct* the id before it can match the frame at all.
 
-  This was not the original disposition. `callId` was omitted when zero, on the
-  argument that morph's `decode` default-initialises and so recovers the value
-  for free. That is true, and it is a statement about one decoder. The scenario
-  driver in `scripts/scenario/morph_scenario.py` is a second one, and it read an
-  absent key as Python's `None`, which matched neither its correlation check nor
-  its documented carve-out for the undecodable-envelope reply — so the whole
-  `pastebin` rung went red. The fix is at the source rather than in each
-  consumer: emitting the field unconditionally costs eleven bytes on the one
+  Omitting `callId` when zero would rest on the argument that morph's `decode`
+  default-initialises and so recovers the value for free. That is true, and it
+  is a statement about one decoder. The scenario driver in
+  `scripts/scenario/morph_scenario.py` is a second one, and it reads an absent
+  key as Python's `None`, which matches neither its correlation check nor its
+  documented carve-out for the undecodable-envelope reply. The fix is at the
+  source rather than in each consumer: emitting the field unconditionally costs eleven bytes on the one
   message shape that carries a zero id, and keeps "where does this frame go"
   answerable from the frame. Teaching every present and future client that
   absence means zero is the larger blast radius and the weaker invariant.

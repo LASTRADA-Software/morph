@@ -127,6 +127,19 @@ TEST_CASE("workspace: opening an identity that is open focuses its tab; a single
     CHECK(shell.tabs()[1].identity == Value{std::int64_t{2}});
 }
 
+// Mutation: leave the pages content-sized (a stretching screen cannot fill the page).
+TEST_CASE("workspace: the bar and each page stretch, so a stretching screen fills the page", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}) == 0U);
+    harness.settle();
+    int const bar = harness.backend.find("Tabs", "layout", "stretch(1)/stretch(1)").value();
+    std::vector<int> const pages = harness.backend.children(bar);
+    REQUIRE(pages.size() == 1U);
+    CHECK(harness.backend.prop(pages.front(), "layout") == "stretch(1)/stretch(1)");
+}
+
 // Mutation: never replace a placeholder (the draft is stacked as a second tab).
 TEST_CASE("workspace: a reuseEmpty placeholder without identity is replaced in place", "[ui][workspace]") {
     Harness harness;
@@ -303,4 +316,27 @@ TEST_CASE("workspace: a walk needs two tabs, and a close answered after the work
     shell.reset();
     harness.settle();
     CHECK_FALSE(answered);
+}
+
+// Mutation: let forceCloseAll ask the guard (the dirty draft keeps its tab).
+TEST_CASE("workspace: a tab's handle is reachable, and forceCloseAll closes every tab without asking",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, false};  // a guard that would keep every dirty screen open
+    int changes = 0;
+    WorkspaceOptions options = catalog();
+    options.onChanged = [&changes] { ++changes; };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
+    REQUIRE(shell.open("note", note(1)) == 0U);
+    REQUIRE(shell.open("draft", {}) == 1U);
+    harness.settle();
+    CHECK(changes >= 2);
+    REQUIRE(shell.handleOf(0) != nullptr);
+    CHECK(shell.handleOf(2) == nullptr);
+    CHECK(shell.activeHandle() == shell.handleOf(1));
+
+    shell.forceCloseAll();
+    harness.settle();
+    CHECK(shell.tabs().empty());
+    CHECK(shell.activeHandle() == nullptr);
 }

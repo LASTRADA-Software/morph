@@ -244,7 +244,6 @@ TEST_CASE("interpreter: a quantity's text is its number and its unit", "[ui][int
     CHECK(ui::detail::textOf(Value{true}, format) == "true");
 }
 
-#if MORPH_UI_DEV_TOOLS
 // Mutation: drop a case from commandKey (that command reports as `unknown`).
 TEST_CASE("interpreter: every command kind has its key, and an unknown one is `unknown`", "[ui][interpreter]") {
     using ui::CommandKind;
@@ -253,7 +252,6 @@ TEST_CASE("interpreter: every command kind has its key, and an unknown one is `u
     CHECK(commandKey(CommandKind::Seq) == "seq");
     CHECK(commandKey(static_cast<CommandKind>(250)) == "unknown");
 }
-#endif
 
 // Mutation: leave the user depth raised when a user event throws (later writes still count as the user's).
 TEST_CASE("Session::asUser restores the user depth when the body throws", "[ui][interpreter]") {

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The development inspector's window (spec 6 §21). Built only when MORPH_UI_DEV_TOOLS is on: the build adds this file
-// to morph_qt_quick only then, so a release client contains none of it.
+// The development inspector's window (spec 6 §21), opened over the focused screen in development mode.
 
 #include <QByteArray>
 #include <QEvent>

@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — the four ways a listing narrows, and how they combine.
+# bookmarks (rung 1) — the four ways a listing narrows, and how they combine.
 #
 # examples/bookmarks/README.md's "What to implement" step 2: search and list
 # with filters (tag, unread, archived, text) and pagination. Each filter is

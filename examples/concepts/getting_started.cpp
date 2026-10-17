@@ -18,8 +18,8 @@
 //   4. the payoff — the identical call site against a second backend that
 //      serialises through the wire protocol.
 //
-// `examples/pastebin` (rung 1 of the application ladder) is the same four
-// parts at real scale, with persistence, a GUI and a socket transport.
+// `examples/bookmarks` (rung 1 of the application ladder) is the same four
+// parts at real scale, with persistence, screens and a socket transport.
 //
 // Full design reference: docs/spec/core/bridge.md, docs/spec/core/completion.md,
 // docs/spec/core/executor.md, docs/spec/core/registry.md.

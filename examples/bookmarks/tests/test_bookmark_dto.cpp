@@ -22,8 +22,7 @@ TEST_CASE("CreateBookmark validate() requires a non-empty url within the length 
 }
 
 TEST_CASE("CreateBookmark's optionalFields excludes everything but url", "[bookmarks][dto]") {
-    // Mirrors CreatePaste::optionalFields's own test intent: a create with
-    // only a url must be schema-submittable without hand-typing every
+    // A create with only a url must be schema-submittable without hand-typing every
     // enum's default.
     using bookmarks::CreateBookmark;
     using bookmarks::EditBookmark;

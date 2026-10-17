@@ -84,9 +84,8 @@ namespace morph::ladder::testkit {
 /// this (hold `Config.maxSize` acquisitions live across the racy call, since
 /// `BoundedOverflow`'s `Return()` never idles more than `maxSize` at once,
 /// so that count is always enough regardless of the pool's prior state).
-/// Both `test_paste_model.cpp` (pastebin) and `test_bookmark_model.cpp`
-/// (bookmarks) use it for exactly this SQLITE_BUSY-under-a-short-timeout
-/// shape; reuse it for any future rung's equivalent test rather than relying
+/// `test_bookmark_model.cpp` (bookmarks) uses it for exactly this
+/// SQLITE_BUSY-under-a-short-timeout shape; reuse it for any future rung's equivalent test rather than relying
 /// on test ordering or a freshly-started process.
 class DbBusyFixture {
 public:

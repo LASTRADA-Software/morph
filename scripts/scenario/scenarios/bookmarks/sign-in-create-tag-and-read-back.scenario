@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — sign in, save a link, tag it, read it back.
+# bookmarks (rung 1) — sign in, save a link, tag it, read it back.
 #
 # examples/bookmarks/README.md's "What to implement" step 1: bookmark CRUD
 # plus tag assignment. This is the shortest complete journey the rung has, and

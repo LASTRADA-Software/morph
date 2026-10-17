@@ -12,9 +12,20 @@ MorphWidget {
     implicitWidth: column.implicitWidth
     implicitHeight: column.implicitHeight
 
+    // Whether a shown child stretches vertically. Without one, the column keeps its natural height and packs the
+    // children at the top: given more, a layout would hand the spare height to the space between them.
+    readonly property bool stretchesDown: {
+        for (const child of column.children) {
+            if (child.visible && child.heightKind === 2)
+                return true
+        }
+        return false
+    }
+
     ColumnLayout {
         id: column
-        anchors.fill: parent
+        width: root.width
+        height: root.stretchesDown ? root.height : implicitHeight
         spacing: 0
     }
 }

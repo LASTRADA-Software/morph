@@ -122,7 +122,7 @@ TEST_CASE("tui::layout::planGrid", "[tui][layout]") {
          {1}},
     }));
     INFO(testCase.name);
-    auto const plan = layout::planGrid(testCase.columns, testCase.cells, testCase.width);
+    auto const plan = layout::planGrid(testCase.columns, testCase.cells, testCase.width, testCase.width.gap);
     CHECK(plan.slots == testCase.slots);
     CHECK(plan.rowHeights == testCase.rowHeights);
 }
@@ -131,7 +131,7 @@ TEST_CASE("tui::layout::slotArea spans columns and the gaps between them", "[tui
     std::vector<layout::GridCell> const cells{{.span = 1, .naturalHeight = 1, .height = {}},
                                               {.span = 1, .naturalHeight = 1, .height = {}},
                                               {.span = 2, .naturalHeight = 1, .height = {}}};
-    auto const plan = layout::planGrid(2, cells, {.length = 21, .gap = 1});
+    auto const plan = layout::planGrid(2, cells, {.length = 21, .gap = 1}, 1);
     CHECK(plan.columnX == std::vector<int>{0, 11});
     CHECK(plan.columnWidths == std::vector<int>{10, 10});
     CHECK(plan.rowY == std::vector<int>{0, 2});
@@ -139,10 +139,37 @@ TEST_CASE("tui::layout::slotArea spans columns and the gaps between them", "[tui
     CHECK(layout::slotArea(plan, plan.slots.at(2)) == core::tui::Rect{.x = 0, .y = 2, .width = 21, .height = 1});
 }
 
+TEST_CASE("tui::layout::stepCells maps a spacing step to cells, rows half as many as columns", "[tui][layout]") {
+    std::vector<int> rows;
+    std::vector<int> columns;
+    for (int step = -1; step <= 6; ++step) {
+        rows.push_back(layout::stepCells(step, morph::ui::Axis::Vertical));
+        columns.push_back(layout::stepCells(step, morph::ui::Axis::Horizontal));
+    }
+    CHECK(rows == std::vector<int>{0, 0, 0, 0, 1, 1, 2, 2});
+    CHECK(columns == std::vector<int>{0, 0, 1, 1, 2, 2, 3, 3});
+}
+
+TEST_CASE("tui::layout::planGrid keeps a row gap apart from its column gap", "[tui][layout]") {
+    std::vector<layout::GridCell> const cells{{.span = 1, .naturalHeight = 2, .height = {}},
+                                              {.span = 1, .naturalHeight = 1, .height = {}},
+                                              {.span = 1, .naturalHeight = 1, .height = {}}};
+    auto const plan = layout::planGrid(2, cells, {.length = 22, .gap = 2}, 1);
+    CHECK(plan.columnGap == 2);
+    CHECK(plan.rowGap == 1);
+    CHECK(plan.columnX == std::vector<int>{0, 12});
+    CHECK(plan.rowY == std::vector<int>{0, 3});
+}
+
+TEST_CASE("tui::layout::pad insets rows and columns by their own amounts", "[tui][layout]") {
+    CHECK(layout::pad({.x = 0, .y = 0, .width = 10, .height = 6}, 1, 2) ==
+          core::tui::Rect{.x = 2, .y = 1, .width = 6, .height = 4});
+}
+
 TEST_CASE("tui::layout::pad", "[tui][layout]") {
-    CHECK(layout::pad({.x = 0, .y = 0, .width = 10, .height = 6}, 1) ==
+    CHECK(layout::pad({.x = 0, .y = 0, .width = 10, .height = 6}, 1, 1) ==
           core::tui::Rect{.x = 1, .y = 1, .width = 8, .height = 4});
-    CHECK(layout::pad({.x = 2, .y = 2, .width = 3, .height = 3}, 2) ==
+    CHECK(layout::pad({.x = 2, .y = 2, .width = 3, .height = 3}, 2, 2) ==
           core::tui::Rect{.x = 4, .y = 4, .width = 0, .height = 0});
 }
 
@@ -246,7 +273,7 @@ TEST_CASE("tui::layout::planGrid at the edges", "[tui][layout]") {
          {2, 1}},
     }));
     INFO(testCase.name);
-    auto const plan = layout::planGrid(testCase.columns, testCase.cells, testCase.width);
+    auto const plan = layout::planGrid(testCase.columns, testCase.cells, testCase.width, testCase.width.gap);
     CHECK(plan.slots == testCase.slots);
     CHECK(plan.rowHeights == testCase.rowHeights);
 }
@@ -256,15 +283,16 @@ TEST_CASE("tui::layout::planGrid geometry at the edges", "[tui][layout]") {
         std::vector<layout::GridCell> const cells{{.span = 1, .naturalHeight = 1, .height = {}},
                                                   {.span = 1, .naturalHeight = 1, .height = {}},
                                                   {.span = 2, .naturalHeight = 1, .height = {}}};
-        auto const plan = layout::planGrid(2, cells, {.length = 10, .gap = -3});
-        CHECK(plan.gap == 0);
+        auto const plan = layout::planGrid(2, cells, {.length = 10, .gap = -3}, -3);
+        CHECK(plan.columnGap == 0);
+        CHECK(plan.rowGap == 0);
         CHECK(plan.columnX == std::vector<int>{0, 5});
         CHECK(plan.columnWidths == std::vector<int>{5, 5});
         CHECK(plan.rowY == std::vector<int>{0, 1});
         CHECK(layout::slotArea(plan, plan.slots.at(2)) == core::tui::Rect{.x = 0, .y = 1, .width = 10, .height = 1});
     }
     SECTION("columns narrower than their gaps are empty and still advance") {
-        auto const plan = layout::planGrid(3, {}, {.length = 1, .gap = 1});
+        auto const plan = layout::planGrid(3, {}, {.length = 1, .gap = 1}, 1);
         CHECK(plan.columnWidths == std::vector<int>{0, 0, 0});
         CHECK(plan.columnX == std::vector<int>{0, 1, 2});
     }
@@ -272,19 +300,19 @@ TEST_CASE("tui::layout::planGrid geometry at the edges", "[tui][layout]") {
         std::vector<layout::GridCell> const cells{{.span = 1, .naturalHeight = kMaxInt, .height = {}},
                                                   {.span = 1, .naturalHeight = kMaxInt, .height = {}},
                                                   {.span = 1, .naturalHeight = 1, .height = {}}};
-        auto const plan = layout::planGrid(1, cells, {.length = 4, .gap = 1});
+        auto const plan = layout::planGrid(1, cells, {.length = 4, .gap = 1}, 1);
         CHECK(plan.rowY == std::vector<int>{0, kMaxInt, kMaxInt});
         std::vector<layout::GridCell> const spanning{{.span = 3, .naturalHeight = 1, .height = {}}};
-        auto const wide = layout::planGrid(3, spanning, {.length = 4, .gap = kMaxInt});
+        auto const wide = layout::planGrid(3, spanning, {.length = 4, .gap = kMaxInt}, kMaxInt);
         CHECK(wide.columnX == std::vector<int>{0, kMaxInt, kMaxInt});
         CHECK(layout::slotArea(wide, wide.slots.at(0)).width == kMaxInt);
     }
 }
 
 TEST_CASE("tui::layout::pad at the edges", "[tui][layout]") {
-    CHECK(layout::pad({.x = 0, .y = 0, .width = 4, .height = 4}, -1) ==
+    CHECK(layout::pad({.x = 0, .y = 0, .width = 4, .height = 4}, -1, -1) ==
           core::tui::Rect{.x = 0, .y = 0, .width = 4, .height = 4});
-    CHECK(layout::pad({.x = 1, .y = 1, .width = 4, .height = 4}, kMaxInt) ==
+    CHECK(layout::pad({.x = 1, .y = 1, .width = 4, .height = 4}, kMaxInt, kMaxInt) ==
           core::tui::Rect{.x = kMaxInt, .y = kMaxInt, .width = 0, .height = 0});
 }
 
@@ -441,6 +469,6 @@ TEST_CASE("tui::layout::planGrid holds its invariants on random input", "[tui][l
         }
         layout::Track const width{.length = draws.between(0, 60), .gap = draws.between(0, 2)};
         INFO("round " << round);
-        CHECK(gridViolation(columns, cells, width, layout::planGrid(columns, cells, width)).empty());
+        CHECK(gridViolation(columns, cells, width, layout::planGrid(columns, cells, width, width.gap)).empty());
     }
 }

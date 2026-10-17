@@ -12,7 +12,7 @@
 /// @file
 /// `SeededScript<Action>` -- the weighted action generator + per-burst
 /// invariant hook `examples/TESTING.md`'s "Multi-client stress harness"
-/// section names as rung 4's own obligation. Seed comes from
+/// section names. Seed comes from
 /// `MORPH_STRESS_SEED` if set (always printed on failure via a Catch2
 /// `INFO`), otherwise a caller-supplied default -- so a CI failure is
 /// reproducible by re-running with the same seed.

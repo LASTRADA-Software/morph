@@ -9,6 +9,7 @@
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -42,12 +43,28 @@ TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][wid
 TEST_CASE("tui widgets: a row lays out left to right, with its gap", "[tui][widgets]") {
     Harness harness{20, 2};
     auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
-    row->setGap(2);
+    // Step 3: two columns.
+    row->setGap(3);
     auto const left = harness.make<TextImpl>(row.get());
     left->setText("ab");
     auto const right = harness.make<TextImpl>(row.get());
     right->setText("cd");
     CHECK(harness.draw() == Rows{"ab  cd"});
+}
+
+TEST_CASE("tui widgets: a column's gap step is rows, half as many as a row's columns", "[tui][widgets]") {
+    for (auto const& [step, expected] :
+         std::vector<std::pair<int, Rows>>{{2, Rows{"ab", "cd"}}, {3, Rows{"ab", "", "cd"}}}) {
+        INFO("step " << step);
+        Harness harness{10, 3};
+        auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+        column->setGap(step);
+        auto const top = harness.make<TextImpl>(column.get());
+        top->setText("ab");
+        auto const bottom = harness.make<TextImpl>(column.get());
+        bottom->setText("cd");
+        CHECK(harness.draw() == expected);
+    }
 }
 
 TEST_CASE("tui widgets: a spacer takes the space its siblings leave", "[tui][widgets]") {
@@ -604,4 +621,43 @@ TEST_CASE("tui widgets: a press that reaches no widget ends a press that lost it
     CHECK(clicks == 0);
     CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
     CHECK(clicks == 1);
+}
+
+TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error colour", "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const plain = harness.make<ButtonImpl>(column.get());
+    plain->setLabel("Plain");
+    auto const primary = harness.make<ButtonImpl>(column.get());
+    primary->setLabel("Go");
+    primary->setEmphasis(ui::ButtonEmphasis::Primary);
+    auto const danger = harness.make<ButtonImpl>(column.get());
+    danger->setLabel("Drop");
+    danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 2).style.bold);
+    CHECK(buffer.at(1, 2).style.bold);
+    CHECK(buffer.at(2, 2).style.bold);
+    CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
+}
+
+TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const sidebar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    sidebar->setSurface("sidebar");
+    auto const inside = harness.make<TextImpl>(sidebar.get());
+    inside->setText("inside");
+    auto const card = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    card->setSurface("card");
+    auto const carded = harness.make<TextImpl>(card.get());
+    carded->setText("card");
+    auto const outside = harness.make<TextImpl>(column.get());
+    outside->setText("outside");
+    CHECK(harness.draw() == Rows{"inside", "card", "outside"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.inverse);
+    CHECK_FALSE(buffer.at(1, 0).style.inverse);
+    CHECK_FALSE(buffer.at(2, 0).style.inverse);
 }

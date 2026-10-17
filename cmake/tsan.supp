@@ -1,6 +1,6 @@
 # ThreadSanitizer suppressions for known false positives.
 #
-# Companion to cmake/valgrind.supp. Three places point
+# Companion to cmake/valgrind.supp. Two places point
 # `TSAN_OPTIONS=suppressions=` at this file, and they are the only places this
 # repository sets TSAN_OPTIONS at all:
 #
@@ -8,13 +8,12 @@
 #     `${sourceDir}` so it resolves from any working directory -- a relative
 #     path does not survive test discovery, which that preset's description
 #     explains at length;
-#   * the `Test` step of ci.yml's `linux-sanitizers` job;
-#   * the `Test` step of ci.yml's `kanban-tsan` job.
+#   * the `Test` step of ci.yml's `linux-sanitizers` job.
 #
-# All three carry the same value, and that value is
+# Both carry the same value, and that value is
 # `suppressions=<this file>:second_deadlock_stack=1` -- colon-joined, because a
 # second `TSAN_OPTIONS` key replaces the first and would silently drop this
-# file. Anything added here has to be added in all three, or a local
+# file. Anything added here has to be added in both, or a local
 # reproduction stops matching the CI run it is reproducing.
 #
 # ── What this file is not, and what second_deadlock_stack=1 buys ───────────
@@ -29,7 +28,7 @@
 #      TSAN_OPTIONS was set at the time is irrelevant to whether the warning
 #      could appear.
 #
-#   2. `second_deadlock_stack=1` **is** set, in all three places above, and
+#   2. `second_deadlock_stack=1` **is** set, in both places above, and
 #      what it buys is measured rather than assumed. A
 #      23-line standalone control -- two static mutexes taken in both orders,
 #      clang 22.1.8, x86-64 Linux -- reports the inversion either way and

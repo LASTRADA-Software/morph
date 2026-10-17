@@ -20,8 +20,8 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.tint(Theme.surface, Qt.alpha(Theme.tone(root.tone), 0.15))
-        border.color: Theme.tone(root.tone)
+        color: Qt.tint(root.scheme.surface, Qt.alpha(root.toneOf(root.tone), 0.15))
+        border.color: root.toneOf(root.tone)
     }
 
     RowLayout {

@@ -79,6 +79,9 @@ MorphWidget {
                     width: root.widths[index] !== undefined ? root.widths[index] : 0
                     text: modelData.label
                     font.bold: true
+                    color: root.scheme.muted
+                    topPadding: Theme.spaceOf(2)
+                    bottomPadding: Theme.spaceOf(2)
                     elide: Text.ElideRight
                 }
             }

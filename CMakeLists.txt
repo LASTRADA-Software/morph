@@ -35,9 +35,8 @@ option(MORPH_BUILD_LADDER "Build the application ladder's shared testkit/GUI inf
 
 # Cache list of rungs to build when MORPH_BUILD_LADDER=ON. "all" builds every
 # rung with a CMakeLists.txt under examples/<rung>/; a semicolon-separated
-# subset (e.g. "pastebin;bookmarks") builds only those. Rung 0 has no rung
-# folders yet, so this option exists but has nothing to select until rung 1
-# lands (see examples/TESTING.md, "Build system and CI").
+# subset (e.g. "bookmarks;lims") builds only those (see examples/TESTING.md,
+# "Build system and CI").
 set(MORPH_LADDER_RUNGS "all" CACHE STRING "Semicolon-separated list of ladder rungs to build, or \"all\"")
 
 if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
@@ -117,23 +116,6 @@ option(MORPH_CLIENT_ONLY
     OFF
 )
 
-# The UI development tools (spec 6 §21): the generic client's reload poll and
-# the inspector. A release build contains none of them, so the default is OFF
-# for Release, MinSizeRel and RelWithDebInfo and ON otherwise; turning it on
-# compiles them in, and a client still enables them at run time with --dev or
-# MORPH_UI_DEV=1. On the INTERFACE of the morph target, as MORPH_CLIENT_ONLY
-# is: the macro adds members to the interpreter's screen, so every translation
-# unit has to agree on it.
-if(CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel|RelWithDebInfo)$")
-    set(_morph_ui_dev_tools_default OFF)
-else()
-    set(_morph_ui_dev_tools_default ON)
-endif()
-option(MORPH_UI_DEV_TOOLS
-    "Build the UI development tools (document reload and the inspector) into clients; OFF by default in release build types"
-    ${_morph_ui_dev_tools_default}
-)
-unset(_morph_ui_dev_tools_default)
 
 # Both Qt consumers (the WebSocket backend and the Qt Quick frontend) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
@@ -441,11 +423,6 @@ endif()
 if(MORPH_CLIENT_ONLY)
     target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)
 endif()
-if(MORPH_UI_DEV_TOOLS)
-    target_compile_definitions(morph INTERFACE MORPH_UI_DEV_TOOLS=1)
-else()
-    target_compile_definitions(morph INTERFACE MORPH_UI_DEV_TOOLS=0)
-endif()
 if(MORPH_ENABLE_TRACY)
     target_compile_definitions(morph INTERFACE MORPH_TRACY_ENABLED)
     target_link_libraries(morph INTERFACE Tracy::TracyClient)
@@ -519,6 +496,7 @@ target_sources(morph
         include/morph/ui/author.hpp
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
+        include/morph/ui/button_emphasis.hpp
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
@@ -530,6 +508,8 @@ target_sources(morph
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
         include/morph/ui/service_client.hpp
+        include/morph/ui/shell_frame.hpp
+        include/morph/ui/explorer.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
@@ -789,11 +769,9 @@ unset(_morph_target_headers)
 unset(_morph_optional_components)
 
 # ── SQLite-backed durable offline queue: library target (optional) ──────────
-# Only the morph::offline_sqlite target itself is created here, deliberately
-# ahead of "Application ladder"'s add_subdirectory(examples) further below:
-# examples/kanban/CMakeLists.txt links morph::offline_sqlite (a namespaced
-# target, which CMake requires to already exist at the point it is named).
-# The tests/offline_sqlite subdirectory
+# Only the morph::offline_sqlite target itself is created here, ahead of the
+# examples: a namespaced target must already exist where it is named. The
+# tests/offline_sqlite subdirectory
 # that also depends on MORPH_BUILD_OFFLINE_SQLITE stays deferred to its
 # original spot, after the "Tests" section, since it links
 # Catch2::Catch2WithMain and that target only exists once Catch2 has been
@@ -919,7 +897,8 @@ if(MORPH_BUILD_EXAMPLES)
         add_subdirectory(examples/concepts)
     endif()
 
-    if(MORPH_BUILD_BANK_EXAMPLE)
+    # With the ladder on, bank is a rung and examples/CMakeLists.txt adds it.
+    if(MORPH_BUILD_BANK_EXAMPLE AND NOT MORPH_BUILD_LADDER)
         add_subdirectory(examples/bank)
     endif()
 

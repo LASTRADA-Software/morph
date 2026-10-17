@@ -652,7 +652,7 @@ framework's claims in this spec are tested against it, not against a description
   `resume` record of routes reopens the tabs; on WebAssembly, back and forward follow the history and
   a reload reopens the focused screen.
 - **Inspector:** it lists every mounted node with its evaluated properties and every query with its
-  key, state and age, and a release build contains none of it.
+  key, state and age, and outside development mode a screen records nothing and gives no inspector.
 - **Automation conformance:** on each platform with an automation interface, a generated screen
   exposes the names, roles and ids §6 promises.
 - **Port check:** an application's existing UI-automation suite, restricted to lookups by accessible
@@ -869,9 +869,9 @@ a string percent-encoded.
 
 ## 21. Development tools
 
-A client started in development mode (`--dev`, or `MORPH_UI_DEV=1`) adds two tools. Neither is built
-into a release client: the build option `MORPH_UI_DEV_TOOLS`, off by default in release build types,
-compiles them in, and development mode then turns them on at run time.
+A client started in development mode (`--dev`, or `MORPH_UI_DEV=1`) adds two tools. Both are in every
+client, release builds included, and development mode turns them on at run time; without it a client
+schedules no reload and its screens record nothing for the inspector.
 
 - **Reload.** Documents and components reload when the server's manifest changes (spec 5 §12,
   "Development reload").

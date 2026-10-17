@@ -120,18 +120,20 @@ apply_bigobj(bank_lib)
 # someone remembered.
 #
 # Instrumenting bank_lib does mean instrumenting the vendored Lightweight ORM
-# headers it compiles in. Measured rather than assumed: ci.yml's
-# `bank-sanitizers` job is the leg that runs this, and its banner records the
-# finding count (zero) and the build cost.
+# headers it compiles in; ci.yml's `ladder-sanitizers` job is the leg that runs
+# it, with every rung.
 #
 # All of the blocks below are required together, not one of them optional. An
 # instrumented bank_lib with an uninstrumented executable does not merely go
-# unchecked, it fails to link: measured by removing bank_tests' block alone,
+# unchecked, it fails to link: measured by removing ladder_bank_tests' block alone,
 #
 #     undefined reference to `__ubsan_handle_type_mismatch_v1_abort'
 #     clang++: error: linker command failed with exit code 1
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(bank_lib ${AF_SANITIZER})
+endif()
+if(AF_COVERAGE)
+    apply_coverage(bank_lib)
 endif()
 
 # ── CLI driver ───────────────────────────────────────────────────────────────
@@ -142,36 +144,28 @@ apply_bigobj(bank_cli)
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(bank_cli ${AF_SANITIZER})
 endif()
+# bank_lib is instrumented, and an executable that links an instrumented library must carry the profile runtime.
+if(AF_COVERAGE)
+    apply_coverage(bank_cli)
+endif()
 
 # ── ladder_bank_server: standalone server binary ─────────────────────────────
-# Named `ladder_bank_server` because that is the name the scenario tooling
-# derives from a rung name (`run_scenarios.py`'s `RungSpec.binary`,
-# `find_server()`); the prefix is that tool's convention, not a claim to a rung
-# number. Bank takes no rung number -- see examples/rungs.txt and
-# examples/LADDER.md.
+# Named `ladder_bank_server` because that is the name every rung's server has
+# and the name the scenario tooling derives from a rung name
+# (`run_scenarios.py`'s `RungSpec.binary`, `find_server()`). Bank is rung 2 --
+# see examples/rungs.txt and examples/LADDER.md.
 #
-# Written out here rather than obtained by calling morph_add_rung(). That macro
-# emits this exact block (cmake/morph_add_rung.cmake, "ladder_<rung>_server"),
-# but it links `morph::ladder_<rung>_lib` -- a target only the macro itself
-# creates -- and bank's library is `bank_lib`, built above against a different
-# dependency set (Lightweight/ODBC, and deliberately without apply_warnings()).
-# More decisively, calling the macro is not available to us: examples/rungs.txt
-# documents that "omitting a rung here while examples/<rung>/CMakeLists.txt
-# calls morph_add_rung() is a hard configure error, by design", so the call
-# would force bank into that file -- and with it into ladder CI, the sanitizer
-# and WASM matrices, codecov components and coverage.sh. Bank is deliberately
-# outside all of that, so this stays a local target: it gives bank a server
-# without making it a rung. Everything else here mirrors the macro's block line
-# for line.
+# Written out here rather than obtained by calling morph_add_rung(): the macro's
+# server links `morph::ladder_<rung>_lib`, a target only the macro creates, and
+# bank's library is `bank_lib`, built against a different dependency set
+# (Lightweight/ODBC, and without apply_warnings()). Everything else mirrors the
+# macro's block line for line. Bank is listed in examples/rungs.txt without
+# calling the macro, which that file allows.
 #
 # Gated on Qt because the transport is morph::qt's QtWebSocketServer, exactly
-# as the macro's version is.
-#
-# The gate is the *option*, not `TARGET morph::qt`: the root CMakeLists adds
-# examples/bank (line ~523) well before it creates morph::qt (line ~596), so a
-# TARGET check here is false even when Qt is on. Naming the target in
-# target_link_libraries is fine regardless -- CMake resolves link names at
-# generate time, by which point the alias exists.
+# as the macro's version is. The gate is the option rather than
+# `TARGET morph::qt`, since a build without the ladder adds examples/bank from
+# the root before morph::qt exists.
 if(MORPH_BUILD_QT)
     # Qt's imported targets are directory-scoped, so naming Qt6::Core below
     # needs a find_package in *this* directory even though the root already ran
@@ -199,7 +193,7 @@ if(MORPH_BUILD_TESTS)
     if(NOT Catch2_FOUND)
         message(WARNING "Catch2 not found; bank example tests will not be built.")
     else()
-        add_executable(bank_tests
+        add_executable(ladder_bank_tests
             tests/test_account.cpp
             tests/test_auth.cpp
             tests/test_transaction.cpp
@@ -223,31 +217,31 @@ if(MORPH_BUILD_TESTS)
         # Lightweight-backed queue in this example is measured against the same
         # suite, unedited -- that is the whole point of the conformance suite,
         # and a copy of it next to this example would measure nothing.
-        target_include_directories(bank_tests PRIVATE
+        target_include_directories(ladder_bank_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${PROJECT_SOURCE_DIR}/tests)
-        target_link_libraries(bank_tests PRIVATE bank_lib morph_test_main)
-        target_compile_features(bank_tests PRIVATE cxx_std_23)
-        apply_bigobj(bank_tests)
+        target_link_libraries(ladder_bank_tests PRIVATE bank_lib morph_test_main)
+        target_compile_features(ladder_bank_tests PRIVATE cxx_std_23)
+        apply_bigobj(ladder_bank_tests)
         # A ctest command, so this block is not optional: without it the
         # binary runs on a sanitizer leg carrying nothing, and
         # scripts/check_sanitizer_instrumentation.sh fails the job rather than
         # letting it report a clean run over an uninstrumented suite.
         if(DEFINED AF_SANITIZER)
-            apply_sanitizers(bank_tests ${AF_SANITIZER})
+            apply_sanitizers(ladder_bank_tests ${AF_SANITIZER})
+        endif()
+        if(AF_COVERAGE)
+            apply_coverage(ladder_bank_tests)
         endif()
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
-        # LABELS "bank" on all three bank suites. Bank is not a rung, so
-        # morph_add_rung()'s "ladder"/"ladder-<rung>" labels never
-        # reach it and nothing else distinguished a bank test from a core one
-        # -- which is what a leg that wants to run bank's suites and only
-        # bank's suites needs. Catch2 tags are not ctest labels (no
-        # catch_discover_tests call in this repository passes
-        # ADD_TAGS_AS_LABELS), so `-L bank` is the only selector available,
-        # and CMakePresets.json's base-test sets `noTestsAction: error`, so a
-        # label that stopped matching fails the leg instead of running nothing.
+        # The label `ladder-bank`, as on bank's screen suites, and the prefix
+        # `bank.`: CTest's -L is a regular expression, so `-L ladder` (the
+        # ladder legs) and `-L bank` both select these cases, and the prefix
+        # keeps their names distinct from every other rung's.
+        # CMakePresets.json's base-test sets `noTestsAction: error`, so a label
+        # that stopped matching fails the leg instead of running nothing.
         #
         # No RESOURCE_LOCK on any of the three calls, and that is a decision
         # rather than an oversight. catch_discover_tests registers one ctest
@@ -265,8 +259,9 @@ if(MORPH_BUILD_TESTS)
         # concurrently. Measured: 0/21 at -j 12 before, 21/21 at -j 12 after,
         # in 1.1s against the same suite's 5.7s serial -- which is what a lock
         # would have pinned every developer run to.
-        catch_discover_tests(bank_tests
+        catch_discover_tests(ladder_bank_tests
             DISCOVERY_MODE PRE_TEST
-            PROPERTIES LABELS "bank")
+            TEST_PREFIX "bank."
+            PROPERTIES LABELS "ladder-bank")
     endif()
 endif()

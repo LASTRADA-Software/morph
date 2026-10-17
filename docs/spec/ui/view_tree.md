@@ -50,6 +50,12 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 | `accepts` | `std::function<bool(Key const&)>` | empty | Which keys a drop target takes; empty takes every key. Used only when `onDrop` is set |
 | `onDrop` | `std::function<void(Key)>` | empty | Set: the widget is a drop target, called with the dropped key |
 
+A `gap` (Column, Row, Grid, ForEach) or `padding` (Panel) is a **spacing step**, 0 to `kMaxSpacingStep` (5), not a
+size: how far apart two things sit is a coarser question than how wide one is, and a step means the same on both
+frontends. The mount clamps a value outside the range with `spacingStep` and passes only the step to the backend,
+which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the terminal;
+[`backend_contract.md`](backend_contract.md#containers)).
+
 ## Props
 
 `Prop<T>` holds a constant or a slot:

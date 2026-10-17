@@ -155,6 +155,10 @@ public:
     /// @brief Sets what activation calls (Enter, Space or a click).
     /// @param onClick The handler; empty does nothing.
     virtual void setOnClick(Action onClick) = 0;
+
+    /// @brief Sets how much the button stands out. The mount calls it only for another value than `Normal`.
+    /// @param emphasis The emphasis.
+    virtual void setEmphasis(ButtonEmphasis emphasis) = 0;
 };
 
 /// @brief An editable text field.
@@ -265,7 +269,7 @@ public:
 class StackWidget : public ContainerWidget {
 public:
     /// @brief Sets the space between children.
-    /// @param gap Backend units.
+    /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
 };
 
@@ -277,7 +281,7 @@ public:
     virtual void setColumns(int columns) = 0;
 
     /// @brief Sets the space between cells.
-    /// @param gap Backend units.
+    /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
 
     /// @brief Sets how many columns a child spans; a child spans one until this is called.
@@ -297,7 +301,7 @@ public:
     virtual void setTitle(std::string_view title) = 0;
 
     /// @brief Sets the space between frame and content.
-    /// @param padding Backend units.
+    /// @param padding A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setPadding(int padding) = 0;
 
     /// @brief Sets whether the user can collapse the panel.

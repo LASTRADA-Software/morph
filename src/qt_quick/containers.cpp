@@ -16,7 +16,8 @@ namespace morph::qt_quick::detail {
 
 StackImpl::StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis)
     : ContainerItemWidget{context, QStringLiteral("MorphStack"), parent,
-                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}} {}
+                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}},
+      _axis{axis} {}
 
 void StackImpl::setGap(int gap) { write("gap", gap); }
 

@@ -520,9 +520,9 @@ one entry.
 
 **Why not `UnitTraits::bounds`.** That is a decode-side check keyed by
 **unit**, not by field ([`checkQuantityBounds`](#pre-decode-wire-validation--checkquantitybounds)),
-so a floor declared for `CreatePaste::burnAfterReads` would equally constrain
-`PasteView::readCount` — the same `Quantity` type over the same unit, which
-legitimately starts at 0. It also has no integrality vocabulary, and never
+so a floor declared for a create action's `burnAfterReads` would equally
+constrain a view's `readCount` — the same `Quantity` type over the same unit,
+which legitimately starts at 0. It also has no integrality vocabulary, and never
 touches `schemaJson<A>()`.
 
 **Where the keys land, and why it matters.** On the **property node**, beside

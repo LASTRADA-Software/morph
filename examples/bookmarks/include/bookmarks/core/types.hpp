@@ -12,16 +12,14 @@
 #include <utility>
 
 /// @file
-/// Bookmarks' strong id/protocol-scalar types. `BookmarkId`/`TagId` are the
-/// numeric-surrogate-key sibling of `pastebin::PasteId` (which wraps a
-/// string, since a paste's id *is* its animal-name primary key) —
-/// bookmarks' primary keys are ordinary auto-incrementing integers (bank's
-/// convention, `Light::PrimaryKey::ServerSideAutoIncrement`), so the
-/// wrapped payload is `std::int64_t`, not `std::string`. Same
-/// `hasValue()`-capable shape and the same `fromOptional` factory
-/// (`examples/pastebin/include/pastebin/core/types.hpp`'s own doc comment
-/// explains why it exists as a named factory rather than a second
-/// same-arity constructor).
+/// Bookmarks' strong id/protocol-scalar types. Bookmarks' primary keys are
+/// ordinary auto-incrementing integers (`Light::PrimaryKey::ServerSideAutoIncrement`),
+/// so `BookmarkId`/`TagId` wrap a `std::int64_t`. Each is `hasValue()`-capable
+/// and has a `fromOptional` factory: a named factory rather than a second
+/// constructor, because a payload-taking and an optional-taking constructor
+/// of the same arity are equal-rank conversion candidates for some arguments
+/// (a string literal, for the string-payloaded `ImportOpId`), which would make
+/// construction ambiguous.
 
 namespace bookmarks {
 
@@ -150,7 +148,7 @@ struct ChangesCursor {
 /// @brief Idempotency key for one chunk of an `ImportBookmarks` call
 ///        (`IMPLEMENTATION.md` rule 3's protocol-scalars row: op-ids /
 ///        idempotency keys get a named opaque newtype). String-payload,
-///        client-chosen, opaque — same shape as `pastebin::PasteId`.
+///        client-chosen, opaque.
 struct ImportOpId {
     std::optional<std::string> value;
 
@@ -170,7 +168,7 @@ struct ImportOpId {
 };
 
 /// @brief Trivial, fieldless acknowledgement result for actions with
-///        nothing else to return. Mirrors `pastebin::Ack`.
+///        nothing else to return.
 struct Ack {};
 
 }  // namespace bookmarks

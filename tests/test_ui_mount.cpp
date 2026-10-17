@@ -103,6 +103,45 @@ TEST_CASE("ui::Mounted: a constant tree is built once and makes no reactive node
     CHECK(owner.pending() == 0);
 }
 
+TEST_CASE("ui::Mounted: a gap or padding reaches the backend as a spacing step in 0..5", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column({.children = {ui::row({.children = {ui::text({.text = "a"})}, .gap = -3}),
+                                 ui::grid({.columns = 1, .cells = {{.node = ui::text({.text = "b"})}}, .gap = 7}),
+                                 ui::panel({.title = "c", .padding = 6, .child = ui::text({.text = "d"})}),
+                                 ui::panel({.title = "e", .padding = 3, .child = ui::text({.text = "f"})})},
+                    .gap = 99})};
+    CHECK(backend.dump() ==
+          "Column#1 gap=5\n"
+          "  Row#2 gap=0\n"
+          "    Text#3 role=Normal text=a\n"
+          "  Grid#4 columns=1 gap=5\n"
+          "    Text#5 role=Normal text=b\n"
+          "  Panel#6 collapsible=false padding=5 title=c\n"
+          "    Text#7 role=Normal text=d\n"
+          "  Panel#8 collapsible=false padding=3 title=e\n"
+          "    Text#9 role=Normal text=f\n");
+}
+
+TEST_CASE("ui::Mounted: a button's emphasis reaches the backend only when it is not Normal", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::row({.children = {ui::button({.label = "Plain"}),
+                              ui::button({.label = "Go", .emphasis = ui::ButtonEmphasis::Primary}),
+                              ui::button({.label = "Drop", .emphasis = ui::ButtonEmphasis::Danger})}})};
+    CHECK(backend.dump() ==
+          "Row#1 gap=0\n"
+          "  Button#2 label=Plain\n"
+          "  Button#3 emphasis=Primary label=Go\n"
+          "  Button#4 emphasis=Danger label=Drop\n");
+}
+
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {
     Owner owner;
     Runtime runtime{owner};

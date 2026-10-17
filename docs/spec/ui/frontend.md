@@ -62,7 +62,8 @@ Where the screens and the models are. `main` builds one from its arguments; the 
 Every call is made on the context's owner, and every callback is called there.
 
 - `ui::Bundle` carries the application's id, the manifest's SHA-256 digest, and every document — the screens, the
-  app shell, and the app document (`app`) when there is one — by id, as verified JSON text. The document model and
+  app shell, and the app document (`app`) when there is one — by id, as verified JSON text, and in `themes` the theme
+  index and token files by id ([`theme.md`](theme.md#surfaces)). The document model and
   the interpreter read it; the seam only carries it from the source to the shell. A remote source gets it from
   `ui::UiClient` ([`service.md`](service.md#the-client)), which fills `manifestDigest` with the digest's 64
   hexadecimal digits.

@@ -17,8 +17,8 @@ coverage:
     # never claimed the whole library is 100% covered — only "models" (and
     # now the ladder's hand-written GUI/testkit code, see the component
     # below) carry that promise. Note that no status in this file blocks
-    # today -- see the components below for why the ladder's gates are
-    # informational while rungs 5-8 are still being built (morph#133).
+    # today: the ladder's components are informational because the ladder
+    # is a detector, and its coverage rule is a target, not a gate.
     project:
       default:
         informational: true
@@ -276,92 +276,13 @@ component_management:
           target: 95%
           informational: true
 
-    # Rung 1, pastebin.
-    #
-    # What is actually measured, precisely — the `paths` glob below is
-    # `examples/pastebin/**`, but a component can only score files the
-    # uploaded report contains, and that report is whatever
-    # `scripts/coverage.sh` names in its `SOURCES` array. For this rung that
-    # is `include/`, `src/` and `screens/`: the DTOs, the model and app
-    # bootstrap, and the screen documents. `tests/` is excluded for the same reason
-    # examples/common's is: a suite scoring its own test code inflates the
-    # number it is supposed to police.
-    #
-    # Same reasoning as the component above for the target: 96%, not a
-    # literal 100%, because of a measured ceiling rather than an intentional
-    # gap. Measured with `llvm-cov report` over that denominator:
-    # 442/450 lines = 98.22%. Every one of the eight missed lines is
-    # accounted for:
-    #   * units.hpp (2) — the `default:` arm of `UnitTraits<Unit>::meta`'s
-    #     switch. `Unit` has exactly one enumerator, so that arm is
-    #     unreachable without undefined behavior; it exists because the
-    #     repo's warning policy requires a switch default.
-    #   * src/app/app.cpp (4) — `sweepExpiredOnce()`'s `.onError` branch,
-    #     which logs an `ExpirePaste` that failed to dispatch. Provoking a
-    #     dispatch failure through a `SimulatedRemoteBackend` needs the
-    #     fault-injection proxy that lands at rung 4; until then there is no
-    #     honest way to reach it.
-    #   * src/models/paste_model.cpp (2) — the `rows.empty()` guard in
-    #     `execute(GetPaste)`'s read-back, taken when the row vanishes
-    #     between an `UPDATE` that just matched it and a `SELECT` in the same
-    #     transaction, while that transaction holds the write lock. The
-    #     source documents it as unreachable in practice and treats it as
-    #     "gone" rather than asserting.
-    # 96%, not something nearer the 98.22% ceiling, for two reasons: it leaves
-    # a margin below that ceiling rather than sitting on it, and the ceiling
-    # is not perfectly stable — `paste_model.cpp` scores 2 or 3 missed lines
-    # depending on the run, because the two `DbBusyFixture` store-error cases
-    # race a real SQLite lock and which classifier branch they land in is
-    # genuinely timing-dependent. A target within a line or two of the ceiling
-    # would flake on that alone. 96% still fails long before a real,
-    # newly-introduced gap could hide behind these eight lines.
-    - component_id: pastebin
-      name: "application ladder rung 1 (examples/pastebin)"
-      paths:
-        - examples/pastebin/**
-      statuses:
-        - type: project
-          target: 95%
-          informational: true
-        - type: patch
-          target: 95%
-          informational: true
-
-    # Rungs 2-4, added with morph#141/#142 -- the change that first put them
-    # into the coverage report at all. Before it, scripts/coverage.sh named
-    # only rung 1, so bookmarks, polls and kanban (~15k lines of models,
-    # presenters and QML adapters) contributed nothing to any number and were
-    # gated by nothing.
-    #
-    # Their measured coverage when they entered the report:
-    #
-    #     ladder (examples/common)   95.85%
-    #     pastebin (rung 1)          95.99%
-    #     bookmarks (rung 2)         86.79%
-    #     polls (rung 3)             85.99%
-    #     kanban (rung 4)            85.09%
-    #
-    # The ~10-point split is not a coincidence: the two components that had a
-    # gate watching them sit near 96%, and the three that never did sit near
-    # 85%. That is the clearest evidence in this repo that a visible number
-    # changes what gets written.
-    #
-    # Every status here is `informational: true` deliberately. These rungs are
-    # below where they should be, and a blocking gate today would stop work on
-    # rungs 5-8 to pay down debt from rungs 2-4 -- the wrong order. The
-    # decision is: finish building the ladder, then raise these. Informational
-    # statuses still post the number on every PR, so the gap stays visible
-    # while it is being carried rather than quietly forgotten, and flipping
-    # `informational` to `false` later is a one-line change per component once
-    # the numbers support it.
-    #
-    # Targets are set at each rung's measured floor rather than an aspiration:
-    # an informational status is a *reference line*, and a line drawn where
-    # coverage actually is makes a regression legible immediately. An
-    # aspirational target would show every PR as failing-but-ignored, which
-    # reads as noise and gets tuned out.
+    # One component per rung, scoped to the rung's DTOs, models and screens
+    # (bookmarks) or to its models (bank, lims), each informational with its
+    # target at the rung's measured floor: an informational status is a
+    # reference line, and a line drawn where coverage is makes a regression
+    # legible at once, where an aspirational one would read as noise.
     - component_id: bookmarks
-      name: "application ladder rung 2 (examples/bookmarks)"
+      name: "application ladder rung 1 (examples/bookmarks)"
       paths:
         - examples/bookmarks/**
       statuses:
@@ -372,140 +293,23 @@ component_management:
           target: 86%
           informational: true
 
-    - component_id: polls
-      name: "application ladder rung 3 (examples/polls)"
+    # Bank's models. `auto` compares each upload with its base until the
+    # rung's first measured floor replaces it.
+    - component_id: bank
+      name: "application ladder rung 2 (examples/bank models)"
       paths:
-        - examples/polls/**
+        - examples/bank/src/models/**
+        - examples/bank/include/bank/models/**
       statuses:
         - type: project
-          target: 85%
+          target: auto
           informational: true
         - type: patch
-          target: 85%
+          target: auto
           informational: true
 
-    - component_id: kanban
-      name: "application ladder rung 4 (examples/kanban)"
-      paths:
-        - examples/kanban/**
-      statuses:
-        - type: project
-          target: 85%
-          informational: true
-        - type: patch
-          target: 85%
-          informational: true
-
-    # Rung 5, ledger. Scoped to the rung's models -- what
-    # examples/IMPLEMENTATION.md rule 5's bar actually names -- rather than the
-    # whole rung directory, so the number describes domain logic rather than
-    # being diluted by presenters and QML adapters that have their own tests.
-    #
-    # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
-    # rounded report percentage) over the full ledger suite:
-    #
-    #     src/models/ledger_model.cpp            611/688   88.81%
-    #     src/models/budget_model.cpp            187/211   88.63%
-    #     src/models/rule_model.cpp               69/79    87.34%
-    #     include/ledger/models/ledger_model.hpp  15/21    71.43%
-    #     include/ledger/models/budget_model.hpp  12/12   100.00%
-    #     include/ledger/models/rule_model.hpp     1/1    100.00%
-    #     ------------------------------------------------------
-    #     total                                  895/1012  88.44%
-    #
-    # Target 87%, a small margin below that ceiling so an ordinary refactor
-    # does not trip it while a real regression does.
-    #
-    # `informational: true`, deviating from this rung's own plan (Task 25 says
-    # `false`). That plan predates the decision recorded in morph#133: every
-    # ladder gate is informational until the ladder is built, then raised
-    # together. Making rung 5 the single blocking component -- while rungs 2-4
-    # sit informational near 85% -- would invert that policy and gate the
-    # newest code most strictly precisely because it is newest.
-    #
-    # Measuring this honestly was worth doing rather than rounding past: the
-    # first measurement put rule_model.cpp at 60.76%, which turned out to be
-    # two documented obligations nothing verified -- Task 11's empty-principal
-    # refusal and Task 11a's self-journaling, both claimed by the rung and
-    # neither executed. Covering them moved the file to 87.34% and the
-    # component from 86.36% to 88.44%.
-    - component_id: ledger
-      name: "application ladder rung 5 (examples/ledger models)"
-      paths:
-        - examples/ledger/src/models/**
-        - examples/ledger/include/ledger/models/**
-      statuses:
-        - type: project
-          target: 87%
-          informational: true
-        - type: patch
-          target: 87%
-          informational: true
-
-    # Rung 6, lims. Scoped to the rung's models, like ledger's above and for
-    # the same reason: the number then describes domain logic rather than
-    # being diluted by presenters and QML adapters that have their own suites.
-    #
-    # NOTE: neither this component nor ledger's could score anything until
-    # rung 6 also fixed scripts/coverage.sh, whose hand-copied rung list had
-    # drifted from CMake's and named only rungs 1-4. ledger's component was
-    # matching a set of files no uploaded report contained -- silently
-    # reporting nothing rather than failing. Fixed by rung 6, and structurally
-    # closed by morph#179: coverage.sh now reads examples/rungs.txt (the single
-    # authoritative rung list) instead of restating it.
-    #
-    # The components in this file are the other half of that pair, and are the
-    # one thing here that still has to be written by hand -- Codecov reads this
-    # file on its own service, so nothing in the repository can generate it.
-    # A gate used to fail the build if any rung in examples/rungs.txt had no
-    # `component_id` here. It was removed with the meta-gates, so the two are
-    # kept in step by hand now.
-    #
-    # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
-    # rounded report percentage) over the full lims suite:
-    #
-    #     src/models/sample_model.cpp             666/671   99.25%
-    #     src/models/analysis_catalog_model.cpp   182/186   97.85%
-    #     include/lims/models/sample_model.hpp      7/7    100.00%
-    #     -------------------------------------------------------
-    #     total                                   855/864   98.96%
-    #
-    # The remaining misses are three defensive guards, each unreachable
-    # through the model's own API rather than merely untested:
-    #   * sample_model.cpp, `alreadyDecided`'s empty-key guard --
-    #     `QueuedCapture::validate()` refuses an empty `operationKey` before
-    #     any dispatch path reaches the lookup, so the guard only fires for a
-    #     caller that bypassed validation entirely.
-    #   * analysis_catalog_model.cpp, `renderSchemaFor`'s "not JSON we can
-    #     patch" arm -- the input is `morph::forms::schemaJson<A>()`, which
-    #     either produces valid JSON or an empty string; there is no input a
-    #     caller can supply.
-    #   * analysis_catalog_model.cpp, `GetAnalysisVersion`'s "version's
-    #     analysis is missing" arm -- `lims_analysis_versions.analysis_id` is
-    #     a declared foreign key, so a version row with no analysis row cannot
-    #     exist while the constraint is enforced.
-    # Each is kept rather than deleted because each turns an impossible state
-    # into a typed error instead of a dereference; none is reachable by a test
-    # that does not first disable the very thing making it impossible.
-    #
-    # Target 97%, a margin below the 98.96% ceiling so an ordinary refactor
-    # does not trip it while a real regression does. `informational: true`,
-    # consistent with every other ladder component (morph#133): the ladder's
-    # gates are raised together once it is built, not one rung at a time with
-    # the newest code gated most strictly.
-    #
-    # Measuring this honestly was worth doing rather than rounding past, twice
-    # over. The first measurement came in at 93.27%, and the gap was not
-    # padding: it included `AnalysisCatalogModel::attachActionLog`, never
-    # called by any test, so the catalogue's whole journaling path was
-    # unverified -- and the audit trail's own classifier, whose
-    # `VerifyResult` branch was dead because verifications were being
-    # journaled under an *empty* entity key. That second one was a real
-    # defect, not a coverage artifact: a sample's audit trail silently omitted
-    # the second pair of eyes. Fixed by rekeying the journal to the result's
-    # own sample, and pinned by a test.
     - component_id: lims
-      name: "application ladder rung 6 (examples/lims models)"
+      name: "application ladder rung 3 (examples/lims models)"
       paths:
         - examples/lims/src/models/**
         - examples/lims/include/lims/models/**
@@ -515,62 +319,6 @@ component_management:
           informational: true
         - type: patch
           target: 97%
-          informational: true
-
-    # Rung 7, crm. Scoped to the rung's models, like ledger's and lims's above
-    # and for the same reason.
-    #
-    # Measured, from `llvm-cov export`'s JSON (covered/total, not the rounded
-    # report percentage) over the full crm suite (176 tests):
-    #
-    #     src/models/account_model.cpp             355/377   94.16%
-    #     src/models/authz.cpp                      28/28   100.00%
-    #     src/models/contact_model.cpp             130/150   86.67%
-    #     src/models/custom_field_model.cpp         94/102   92.16%
-    #     src/models/lead_model.cpp                156/170   91.76%
-    #     src/models/opportunity_model.cpp         397/435   91.26%
-    #     src/models/quote_model.cpp               209/238   87.82%
-    #     src/models/saved_view_model.cpp           84/88    95.45%
-    #     include/crm/models/*.hpp                  15/28    53.57%
-    #     ---------------------------------------------------------
-    #     total                                   1468/1616  90.84%
-    #
-    # Target 89%, a margin below the 90.84% measurement on the same terms as
-    # ledger's and lims's above, and `informational: true` like every other
-    # ladder component (morph#133).
-    #
-    # Re-measured after morph#403 and morph#426, on a profile with zero foreign
-    # roots: 1488/1616 = 92.08% lines, of which quote_model.cpp is now
-    # 222/238 93.28% (GetQuote, previously driven by nothing). By Codecov's own
-    # arithmetic -- which is what this target is checked against, and which
-    # counts a line with a one-sided branch as a partial rather than a hit --
-    # the component reads 87.15%: 1390 hits, 128 misses, 77 partials.
-    #
-    # The per-miss audit this entry used to lack is now written, in
-    # examples/crm/README.md's "What the uncovered lines in crm's models are".
-    # Its result is that crm is unlike ledger and lims: 92 of the 141 lines it
-    # classified are the rung's own ValidationError/NotFound rejection paths on
-    # 25 actions, reachable from the wire and simply untested, and only 4 are
-    # unreachable-by-design. That is not a ceiling and must not be recorded as
-    # one (morph#412).
-    #
-    # `ContactModel::attachActionLog` and `SavedViewModel::attachActionLog` are
-    # no longer called by no test: both models gained the "journals its edits
-    # against the attached identity" case their four siblings had, and no
-    # defect was found on either -- both journal both mutations, under the
-    # attached key, with the caller's principal. Recorded as a negative result
-    # against the lims precedent, rather than left implying an open finding.
-    - component_id: crm
-      name: "application ladder rung 7 (examples/crm models)"
-      paths:
-        - examples/crm/src/models/**
-        - examples/crm/include/crm/models/**
-      statuses:
-        - type: project
-          target: 89%
-          informational: true
-        - type: patch
-          target: 89%
           informational: true
 
 # Always post the coverage-comparison comment on a PR, even on the first upload
@@ -596,7 +344,7 @@ comment:
 # Nothing in examples/ other than examples/common and the built rungs ever
 # gets compiled by the coverage job's configure (MORPH_BUILD_LADDER builds
 # examples/common's targets plus each rung named by MORPH_LADDER_RUNGS), so
-# bank/forms/concepts/etc. never produce coverage data here in the first
+# forms/concepts/etc. never produce coverage data here in the first
 # place; excluding them explicitly documents the intent rather than relying
 # on that as an accident of what happens to be built. A rung's own test
 # sources are excluded for the same reason examples/common's are: a suite
@@ -604,7 +352,7 @@ comment:
 ignore:
   - "tests/**"
   - "src/**"
-  - "examples/bank/**"
+  - "examples/bank/memory/**"
   - "examples/forms/**"
   - "examples/concepts/**"
   - "examples/vetted_hmac/**"
@@ -612,10 +360,7 @@ ignore:
   - "examples/common/testkit/test_*.cpp"
   - "examples/common/testkit/testkit_main.cpp"
   # Each rung's own test sources, on the same terms as examples/common's.
-  - "examples/pastebin/tests/**"
   - "examples/bookmarks/tests/**"
-  - "examples/polls/tests/**"
-  - "examples/kanban/tests/**"
-  - "examples/ledger/tests/**"
+  - "examples/bank/tests/**"
+  - "examples/bank/screens/tests/**"
   - "examples/lims/tests/**"
-  - "examples/crm/tests/**"

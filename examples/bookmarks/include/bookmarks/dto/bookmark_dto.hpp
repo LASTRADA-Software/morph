@@ -13,8 +13,7 @@
 /// @file
 /// Bookmark wire DTOs. `RecordMetadata` is the one action a GUI client never
 /// sends — it is dispatched exclusively by the app-layer metadata-fetch
-/// worker's internal client (Task 12), the same "internal-only" shape
-/// `pastebin::ExpirePaste` established.
+/// worker's internal client (Task 12).
 
 namespace bookmarks {
 
@@ -51,8 +50,9 @@ struct CreateBookmark {
     Visibility visibility = Visibility::Private;
 
     /// @brief Every member but `url` may be omitted from a schema-driven
-    ///        submission — see `pastebin::CreatePaste::optionalFields`'s
-    ///        doc comment for why this list exists at all.
+    ///        submission. Every reflected member is `required` in
+    ///        `schemaJson<A>()` unless it is a `std::optional` or is named
+    ///        here, so this list is what lets "empty" mean "not given".
     ///
     /// `title` belongs here for a reason the rest do not: this member's own
     /// comment above says "empty = not yet known; the metadata worker fills
@@ -148,7 +148,7 @@ struct BookmarkView {
 
 /// @brief One row of `ListBookmarks`'/`GetChangesSince`'s result —
 ///        deliberately narrower than `BookmarkView`: a listing must not
-///        leak `notes` (mirrors `pastebin::PasteSummary`'s non-leak rule).
+///        leak `notes`, which only the owner's full view carries.
 struct BookmarkSummary {
     BookmarkId id;
     std::string url;
@@ -179,8 +179,8 @@ struct ListBookmarksResult {
     Cursor nextCursor;  // empty = no further page
 };
 
-/// @brief Minimal changes-since poll (README's rung-3 event-pattern
-///        preview): every bookmark this owner touched (created, edited,
+/// @brief Minimal changes-since poll (the README's event-polling answer):
+///        every bookmark this owner touched (created, edited,
 ///        archived/unarchived, or metadata-recorded) since @p since.
 struct GetChangesSince {
     ChangesCursor since;  // empty = every bookmark ever (first poll)
@@ -204,8 +204,7 @@ struct GetChangesSinceResult {
 
 /// @brief Internal-only: the metadata-fetch worker's write-back
 ///        (`app::MetadataFetchWorker`, Task 12). Never dispatched by a GUI
-///        client — mirrors `pastebin::ExpirePaste`'s "internal-only"
-///        convention exactly.
+///        client.
 struct RecordMetadata {
     BookmarkId id;
     std::string title;        // empty = the fetch found no <title>
@@ -218,11 +217,9 @@ struct RecordMetadata {
 
 }  // namespace bookmarks
 
-/// @brief Reflects `Visibility` as readable strings — same rationale and
-///        `glz::enumerate` shape as `pastebin`'s enum reflections
-///        (`glz::meta<pastebin::Visibility>`'s doc comment has the full
-///        argument: a bare ordinal degrades the schema writer's `$defs`
-///        entry to an any-type union).
+/// @brief Reflects `Visibility` as readable strings. Without a `glz::meta`
+///        a bare ordinal degrades the schema writer's `$defs` entry to an
+///        any-type union, and a renderer could not draw a closed choice.
 template <>
 struct glz::meta<bookmarks::Visibility> {
     using enum bookmarks::Visibility;

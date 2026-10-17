@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Extension-bag spike (examples/LADDER.md, no-app spike 4; examples/crm/README.md
-// steps 9-10, "the endgame"). Feasibility probe, not application code — this file
-// answers one question and its findings are recorded in
-// examples/crm/EXTENSION-BAG-SPIKE.md; nothing here ships as part of any rung.
+// Extension-bag spike: a feasibility probe, not application code. It answers one
+// question, and nothing here ships as part of any application.
 //
 // The question: can a morph model carry an open extension bag (fields added at
 // *runtime*, past the compiled C++ action struct) that appears in served schema,
@@ -16,13 +14,12 @@
 //                property node for the new field for later callers?
 //   2. forms   — does the shipped QML renderer need any change to show it?
 //                (checked structurally here — QML itself isn't exercised by a
-//                Catch2 unit test; see the finding doc for how this was verified.)
+//                Catch2 unit test.)
 //   3. decode  — does the field's *value* survive dispatch decode, or does the
 //                framework's lenient "unknown key" reader silently drop it?
 //   4. journal — does a recorded entry replay the custom field's value back?
 //
-// Result headline (full writeup: examples/crm/EXTENSION-BAG-SPIKE.md): the
-// journal and the renderers need no framework change at all — the journal is
+// Result: the journal and the renderers need no framework change at all — the journal is
 // payload-shape-agnostic, and a form renders any schema property generically. Schema growth and decode preservation
 // are both reachable using primitives the framework already ships but morph itself never plumbs together:
 // glz::generic_u64 (already used internally for schema-DOM manipulation, see
@@ -31,6 +28,13 @@
 // nowhere else in morph) to route an unrecognised wire key into a map member
 // instead of dropping it. No new morph-owned Value type or dispatch change was
 // needed for this probe to work.
+//
+// The cost: glaze wires unknown_read/unknown_write only into the
+// glz::meta<T>::value object path, not the pure-reflection path every other
+// action uses. Without an explicit `value = glz::object(...)` listing the
+// action's compiled members, the read compiles and the write path fails
+// write.hpp's "unknown_write type not handled" static_assert. An action that
+// opts into an extension bag therefore lists its own members by hand.
 //
 // Model/action types need external (file-scope) linkage, not an anonymous
 // namespace — glaze's reflection mangles a name for the type and needs it to
@@ -60,13 +64,14 @@ using morph::journal::LogEntry;
 // ── The extension-bag Value type ─────────────────────────────────────────────
 //
 // Deliberately narrow for this probe: string | double | bool. A unit-bearing
-// Quantity-in-bag and a Choice-in-bag are stretch goals explicitly deferred to
-// any real 7b build (crm/README.md's DoD doesn't require them of the spike).
+// Quantity-in-bag would need its decimal places and unit to travel with the
+// value, and a Choice-in-bag the same referential re-check a compiled lookup
+// field needs; neither is part of the question this probe answers.
 // glz::generic_u64 (glaze's own JSON-DOM variant, already a morph dependency and
 // already used the same way inside forms.hpp for schema manipulation) is reused
-// directly rather than inventing a parallel morph::forms::Value — see the finding
-// doc for why that reuse is judged fine for a spike but not necessarily for a
-// real 7b.
+// directly rather than inventing a parallel morph::forms::Value: enough for a
+// probe, though a production extension bag would want a Value type that can
+// carry that metadata.
 using EB_Value = glz::generic_u64;
 
 // ── The runtime custom-field registry ────────────────────────────────────────
@@ -134,9 +139,8 @@ struct EB_UpdateContact {
         }
         // Custom-field required-ness, checked by hand against the live
         // registry — schemaJson<A>()'s own `required` array is a function of
-        // the compiled type (round-5 ground truth, examples/crm/README.md) and
-        // cannot express this, so a model that opts into an extension bag is
-        // responsible for its own required check. See the finding doc.
+        // the compiled type and cannot express this, so a model that opts into
+        // an extension bag is responsible for its own required check.
         for (auto const& field : ebRegistry().fields()) {
             if (field.required && !extra.contains(field.name)) {
                 return false;
@@ -166,10 +170,9 @@ struct EB_UpdateContact {
 // (glz::reflectable<T>, no glz::meta at all) path every other action in this
 // codebase relies on. This is itself a finding: an action opting into an
 // extension bag gives up pure reflection and must hand-list its own compiled
-// members here — see the finding doc for what that costs a real 7b (every
-// BRIDGE_REGISTER_ACTION-registered action would need this if the framework
-// grew this into a real feature, likely via a new opt-in macro rather than
-// asking every author to hand-write glz::object()).
+// members here. Every action that opted in would pay that, so a framework
+// feature built on this would more likely generate the glz::object() through
+// an opt-in registration macro than ask each author to hand-write it.
 template <>
 struct glz::meta<EB_UpdateContact> {
     using T = EB_UpdateContact;
@@ -205,8 +208,8 @@ BRIDGE_REGISTER_ACTION(EB_ContactModel, EB_UpdateContact, "EB_UpdateContact")
 // Mirrors morph::forms::InstanceConstraints::decorate()'s idiom exactly
 // (instance_constraints.hpp): read the compiled schemaJson<A>() into a
 // glz::generic_u64 DOM, mutate `properties`, write back out. The difference
-// from InstanceConstraints — and the gap the round-5 ground truth in
-// crm/README.md names — is that decorate() only overwrites *values* on
+// from InstanceConstraints — and the gap the framework has no seam for — is
+// that decorate() only overwrites *values* on
 // *existing* property keys, while this adds a whole new property node the
 // compiled type never declared. Not memoised, for the same reason
 // instanceSchemaJson<A>() isn't: the result varies with the registry's current
@@ -321,8 +324,8 @@ TEST_CASE("Extension-bag spike: without the unknown_read hook, an extra wire key
     // glz::meta above). EB_PlainNoBag has no unknown_read hook; decoded with
     // the same lenient options BRIDGE_REGISTER_ACTION's fromJson uses
     // (error_on_unknown_keys = false), it drops any key it doesn't recognise —
-    // this is the concrete mechanism behind crm/README.md's "Compiled C++
-    // action structs cannot grow members" line.
+    // this is the concrete mechanism by which a compiled C++ action struct
+    // cannot grow members.
     static constexpr glz::opts kLenientRead{.error_on_unknown_keys = false};
 
     EB_PlainNoBag action{};

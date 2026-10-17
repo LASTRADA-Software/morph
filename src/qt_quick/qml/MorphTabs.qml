@@ -30,15 +30,40 @@ MorphWidget {
             id: bar
             Layout.fillWidth: true
             currentIndex: -1
+            background: Rectangle {
+                color: "transparent"
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: 1
+                    color: root.scheme.border
+                }
+            }
 
             Repeater {
                 model: root.labels
 
                 TabButton {
+                    id: tab
                     required property int index
                     required property string modelData
                     text: modelData
                     width: implicitWidth
+                    leftPadding: Theme.spaceOf(4)
+                    rightPadding: Theme.spaceOf(4)
+                    palette.buttonText: tab.checked ? root.scheme.accent : root.scheme.muted
+                    background: Rectangle {
+                        color: "transparent"
+
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: 2
+                            visible: tab.checked
+                            color: root.scheme.accent
+                        }
+                    }
                     onClicked: root.fire("select", index)
                 }
             }

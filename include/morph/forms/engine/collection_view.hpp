@@ -108,7 +108,7 @@ namespace detail::engine {
         button.common.testId = "collectionAction_" + action.action;
         children.push_back(ui::button(std::move(button)));
     }
-    return ui::row(ui::Row{.children = std::move(children), .gap = 1});
+    return ui::row(ui::Row{.children = std::move(children), .gap = 4});
 }
 
 /// @brief A row's built-in buttons: Open (with a row action) and each row action.
@@ -133,7 +133,7 @@ namespace detail::engine {
         button.common.testId = "rowAction_" + action.action + "_" + rowKey;
         buttons.push_back(ui::button(std::move(button)));
     }
-    return ui::row(ui::Row{.children = std::move(buttons), .gap = 1});
+    return ui::row(ui::Row{.children = std::move(buttons), .gap = 4});
 }
 
 /// @brief The rows table's activation and selection: activating a row opens it when the view has a row action; in a
@@ -239,8 +239,8 @@ namespace detail::engine {
         .child = ui::column(ui::Column{
             .children = {ui::text(std::move(message)),
                          ui::row(ui::Row{.children = {ui::button(std::move(accept)), ui::button(std::move(cancel))},
-                                         .gap = 1})},
-            .gap = 1}),
+                                         .gap = 4})},
+            .gap = 4}),
         .onDismiss = [view] { view->cancelConfirm(); },
     };
     dialog.common.testId = "confirmDialog";
@@ -305,14 +305,14 @@ namespace detail::engine {
             list.push_back(ui::dialog(std::move(dialog)));
         }
     }
-    ui::Node column = ui::column(ui::Column{.children = std::move(list), .gap = 1});
+    ui::Node column = ui::column(ui::Column{.children = std::move(list), .gap = 4});
     if (editor == nullptr || !masterDetail) {
         return column;
     }
     ui::Column detail{.children = {formView(*editor, shared->form)}};
     detail.common.visible = [view] { return view->openRow().has_value(); };
     detail.common.testId = "detailForm";
-    return ui::row(ui::Row{.children = {std::move(column), ui::column(std::move(detail))}, .gap = 2});
+    return ui::row(ui::Row{.children = {std::move(column), ui::column(std::move(detail))}, .gap = 5});
 }
 
 }  // namespace morph::forms

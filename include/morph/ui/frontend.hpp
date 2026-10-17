@@ -22,7 +22,6 @@
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/scheduler.hpp"
-#include "dev_tools.hpp"
 
 /// @file
 /// @brief The frontend seam: `main` picks a frontend at runtime, and the frontend runs whatever an `AppSource`
@@ -36,9 +35,7 @@ class IoLoop;
 
 namespace morph::ui {
 
-#if MORPH_UI_DEV_TOOLS
 class Inspector;
-#endif
 
 /// @brief Timers on the frontend's owner executor; see `reactive::Scheduler`.
 using Scheduler = reactive::Scheduler;
@@ -100,6 +97,9 @@ struct Bundle {
     /// @brief Every document of the bundle, by id, as its JSON text: the screens, the app shell, and the app document
     ///        (`app`) when the bundle has one.
     std::map<std::string, std::string, std::less<>> documents;
+    /// @brief The theme's files, by id, as their JSON text: the theme index and the token files it names; empty when
+    ///        the bundle has no theme.
+    std::map<std::string, std::string, std::less<>> themes;
 };
 
 /// @brief Why a source could not be opened.
@@ -382,13 +382,11 @@ public:
     MountedShell(MountedShell&&) = delete;
     MountedShell& operator=(MountedShell&&) = delete;
 
-#if MORPH_UI_DEV_TOOLS
     /// @brief Hands the development inspector over the focused screen to @p visit, before returning (spec 6 §21).
     ///        A frontend's inspector window calls it each time it shows the screen. The default has no screen to
     ///        inspect and calls nothing.
     /// @param visit Called at most once, with the inspector; it must not keep it past the call.
     virtual void inspectFocused(std::function<void(Inspector& inspector)> const& visit) { static_cast<void>(visit); }
-#endif
 };
 
 /// @brief Mounts the shell for what the source delivered. Called once, on the owner; it may return null to mount

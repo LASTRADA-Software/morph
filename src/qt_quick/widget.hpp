@@ -115,6 +115,12 @@ private:
 ///
 /// A child's item is appended to `contentFor(child)`; `move` applies `ui::ContainerWidget::moveChild` as one
 /// stacking-order change, which the Qt Quick layouts follow, so a moved child keeps its item and its state.
+/// Which way a container's content-sized children fill it: across its axis, as the backend contract asks.
+struct CrossFill {
+    bool width = false;   ///< A child whose width is content takes the container's width.
+    bool height = false;  ///< A child whose height is content takes the container's height.
+};
+
 class ContainerCore {
 public:
     ContainerCore() = default;
@@ -126,6 +132,9 @@ public:
 
     /// Appends @p child as the last child.
     void adopt(ItemBase& child);
+    /// Writes this container's scheme onto each child again, and on through the children that have no surface of
+    /// their own: what a surface set after the children were adopted needs, as a frame built in code does.
+    void passSchemeDown() const;
     /// Forgets @p child, which is being destroyed.
     void release(ItemBase& child) noexcept;
     /// Moves @p child before the child now at @p index; past the end means last.
@@ -141,6 +150,11 @@ protected:
     /// Shows @p child, now at @p destination in `children()`, in its new place: a stacking-order change by default.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a move's two places, in the order moveChild gives them.
     virtual void reorder(ItemBase& child, std::size_t origin, std::size_t destination);
+    /// Which way a content-sized child fills this container; written on each child as it is adopted. A container that
+    /// shows its children one above the other fills their width, which is the default.
+    [[nodiscard]] virtual CrossFill crossFill() const noexcept { return CrossFill{.width = true, .height = false}; }
+    /// The colour scheme this container's children inherit: its item's `scheme`, or null when it has none.
+    [[nodiscard]] virtual QObject* scheme() const = 0;
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.
@@ -237,6 +251,7 @@ protected:
         static_cast<void>(child);
         return qobject_cast<QQuickItem*>(this->part("content"));
     }
+    [[nodiscard]] QObject* scheme() const override { return this->part("scheme"); }
 };
 // NOLINTEND(portability-template-virtual-member-function)
 

@@ -3,6 +3,7 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QPointF>
 #include <QQuickItem>
 #include <QStringList>
 #include <QVariantList>
@@ -10,7 +11,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/shell_frame.hpp>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <vector>
 
@@ -244,4 +248,192 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     QPointF const shown = last.mapToItem(&area, QPointF{0, 0});
     CHECK(shown.y() >= 0);
     CHECK(shown.y() + last.height() <= area.height() + 1);
+}
+
+namespace {
+
+/// The scene-space distance from the bottom of @p above to the top of @p below.
+qreal verticalGap(QQuickItem const& above, QQuickItem const& below) {
+    return below.mapToScene(QPointF{0, 0}).y() - (above.mapToScene(QPointF{0, 0}).y() + above.height());
+}
+
+/// The scene-space distance from the right of @p left to the left of @p right.
+qreal horizontalGap(QQuickItem const& left, QQuickItem const& right) {
+    return right.mapToScene(QPointF{0, 0}).x() - (left.mapToScene(QPointF{0, 0}).x() + left.width());
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick containers: a stack's gap is its spacing step's distance on the theme's scale", "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setGap(2);
+    auto title = scene.backend().createText(column.get());
+    title->setText("Title");
+    auto const first = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto const second = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*title), Scene::itemOf(*first)) == 8.0);
+    CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 8.0);
+
+    auto row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+    row->setGap(5);
+    auto left = scene.backend().createButton(row.get());
+    auto right = scene.backend().createButton(row.get());
+    left->setLabel("Left");
+    right->setLabel("Right");
+    scene.settle();
+    CHECK(horizontalGap(Scene::itemOf(*left), Scene::itemOf(*right)) == 24.0);
+}
+
+TEST_CASE("qt_quick containers: a grid's gap and a panel's padding are spacing steps", "[qt_quick]") {
+    Scene scene;
+    auto grid = scene.backend().createGrid(nullptr);
+    grid->setColumns(2);
+    grid->setGap(1);
+    auto a = scene.backend().createText(grid.get());
+    auto b = scene.backend().createText(grid.get());
+    auto c = scene.backend().createText(grid.get());
+    a->setText("a");
+    b->setText("b");
+    c->setText("c");
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setPadding(3);
+    auto inside = scene.backend().createText(panel.get());
+    inside->setText("inside");
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*a), Scene::itemOf(*c)) == 4.0);
+    CHECK(Scene::itemOf(*b).mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*a).mapToScene(QPointF{0, 0}).x() >=
+          Scene::itemOf(*a).width() + 4.0);
+    // The frame's one-pixel border, then the step's 12 px.
+    CHECK(Scene::itemOf(*inside).mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*panel).mapToScene(QPointF{0, 0}).x() ==
+          13.0);
+}
+
+TEST_CASE("qt_quick containers: a theme's space token sets what a spacing step is", "[qt_quick]") {
+    Scene scene;
+    auto const tokens =
+        ui::parseTokens(R"({"space": {"$type": "dimension", "2": {"$value": {"value": 20, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setGap(2);
+    auto first = scene.backend().createText(column.get());
+    auto second = scene.backend().createText(column.get());
+    first->setText("first");
+    second->setText("second");
+    scene.settle();
+    CHECK(verticalGap(Scene::itemOf(*first), Scene::itemOf(*second)) == 20.0);
+}
+
+TEST_CASE("qt_quick containers: a content child fills its container across the axis", "[qt_quick]") {
+    Scene scene;
+    auto outer = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    outer->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
+    auto const column = scene.backend().createStack(outer.get(), ui::Axis::Vertical);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto narrow = scene.backend().createButton(column.get());
+    narrow->setLabel("Narrow");
+    narrow->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    auto const row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+    auto tall = scene.backend().createText(row.get());
+    tall->setText("one\ntwo\nthree");
+    auto button = scene.backend().createButton(row.get());
+    button->setLabel("Go");
+    auto other = scene.backend().createButton(row.get());
+    other->setLabel("Stop");
+    scene.settle();
+
+    qreal const unit = Scene::itemOf(*outer).width() / 40.0;
+    // In a column, a content child is as wide as the column; a fixed one keeps its width.
+    CHECK(std::abs(Scene::itemOf(*input).width() - Scene::itemOf(*outer).width()) < 1.0);
+    CHECK(Scene::itemOf(*narrow).width() == 10.0 * unit);
+    // A button keeps its natural width at the start of the line, as the terminal draws it.
+    auto label = scene.backend().createButton(column.get());
+    label->setLabel("Go on");
+    scene.settle();
+    CHECK(std::abs(Scene::itemOf(*label).width() - Scene::itemOf(*label).implicitWidth()) < 1.0);
+    CHECK(Scene::itemOf(*label).mapToScene(QPointF{0, 0}).x() == Scene::itemOf(*column).mapToScene(QPointF{0, 0}).x());
+    // In a row, a content child is as tall as the row, and keeps its natural width.
+    CHECK(Scene::itemOf(*button).height() == Scene::itemOf(*row).height());
+    CHECK(Scene::itemOf(*button).height() > Scene::itemOf(*other).implicitHeight());
+    CHECK(std::abs(Scene::itemOf(*button).width() - Scene::itemOf(*button).implicitWidth()) < 1.0);
+    // The row packs its children at the start rather than spreading them.
+    CHECK(horizontalGap(Scene::itemOf(*button), Scene::itemOf(*other)) == 0.0);
+}
+
+TEST_CASE("qt_quick containers: a content-sized splitter is as large as its panes", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto splitter = scene.backend().createSplitter(row.get(), ui::Axis::Horizontal);
+    auto left = scene.backend().createText(splitter.get());
+    auto right = scene.backend().createText(splitter.get());
+    left->setText("Left");
+    right->setText("Right");
+    scene.settle();
+    QQuickItem const& leftItem = Scene::itemOf(*left);
+    QQuickItem const& rightItem = Scene::itemOf(*right);
+    CHECK(Scene::itemOf(*splitter).width() >= leftItem.implicitWidth() + rightItem.implicitWidth());
+    CHECK(Scene::itemOf(*splitter).height() >= leftItem.implicitHeight());
+    CHECK(rightItem.mapToScene(QPointF{0, 0}).x() >=
+          leftItem.mapToScene(QPointF{0, 0}).x() + leftItem.implicitWidth());
+
+    splitter->setSizes({10, 30});
+    scene.settle();
+    qreal const unit = Scene::itemOf(*splitter).property("unit").toReal();
+    CHECK(Scene::itemOf(*splitter).implicitWidth() >= 40.0 * unit);
+    CHECK(Scene::itemOf(*splitter).implicitWidth() < (40.0 * unit) + 16.0);
+}
+
+TEST_CASE("qt_quick containers: a root that stretches in height fills the window; content roots sit at the top",
+          "[qt_quick]") {
+    Scene scene;
+    auto header = scene.backend().createText(nullptr);
+    header->setText("header");
+    auto frame = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    frame->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto inside = scene.backend().createText(frame.get());
+    inside->setText("inside");
+    scene.settle();
+    QQuickItem const& headerItem = Scene::itemOf(*header);
+    QQuickItem const& frameItem = Scene::itemOf(*frame);
+    CHECK(headerItem.mapToScene(QPointF{0, 0}).y() == 0.0);
+    CHECK(frameItem.mapToScene(QPointF{0, 0}).y() == headerItem.height());
+    CHECK(std::abs(frameItem.height() - (scene.window().height() - headerItem.height())) < 1.0);
+
+    // Without a stretching root, the roots keep their own heights at the top of the window.
+    frame->setVisible(false);
+    auto second = scene.backend().createText(nullptr);
+    second->setText("second");
+    scene.settle();
+    CHECK(Scene::itemOf(*second).mapToScene(QPointF{0, 0}).y() == headerItem.height());
+}
+
+TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28 units wide", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    auto content = scene.backend().createText(&frame.page());
+    content->setText("content");
+    scene.settle();
+    auto const itemFor = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    QQuickItem const& root = itemFor("shell");
+    QQuickItem const& sidebar = itemFor("shell_sidebar");
+    CHECK(std::abs(root.width() - scene.window().width()) < 1.0);
+    CHECK(std::abs(root.height() - scene.window().height()) < 1.0);
+    CHECK(std::abs(sidebar.width() - (28.0 * unit)) < 1.0);
+    CHECK(std::abs(sidebar.height() - scene.window().height()) < 1.0);
+    // The content sits right of the sidebar, inside the page's padding (step 4, 16 px).
+    CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x() >= sidebar.width() + 16.0);
 }

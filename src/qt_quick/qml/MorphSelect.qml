@@ -43,6 +43,12 @@ MorphField {
         id: combo
         visible: !root.radio
         width: root.controlWidth
+        palette.buttonText: root.scheme.text
+        palette.text: root.scheme.text
+        background: MorphInputBackground {
+            scheme: root.scheme
+            focused: combo.visualFocus || combo.popup.visible
+        }
         model: root.options
         currentIndex: -1
         // Declared, as the text input's field declares them.

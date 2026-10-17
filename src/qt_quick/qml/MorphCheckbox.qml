@@ -7,6 +7,8 @@ import QtQuick.Controls
 MorphField {
     id: root
 
+    fillsAcross: false
+
     property string label: ""
 
     control: box
@@ -18,6 +20,25 @@ MorphField {
         id: box
         width: root.controlWidth
         text: root.label
+        palette.windowText: root.scheme.text
+        indicator: Rectangle {
+            x: box.leftPadding
+            y: (box.height - height) / 2
+            implicitWidth: Theme.unitHeight
+            implicitHeight: Theme.unitHeight
+            radius: Theme.radiusControl / 2
+            color: box.checked ? root.scheme.accent : root.scheme.surface
+            border.width: box.visualFocus ? 2 : 1
+            border.color: box.visualFocus ? root.scheme.focus : box.checked ? root.scheme.accent : root.scheme.border
+
+            Text {
+                anchors.centerIn: parent
+                visible: box.checked
+                text: "✓"
+                color: "white"
+                font.pixelSize: parent.height * 0.75
+            }
+        }
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

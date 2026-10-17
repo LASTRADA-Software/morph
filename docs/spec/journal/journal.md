@@ -163,7 +163,7 @@ worth paying here and *not* worth paying for `model.hpp`'s `strand.hpp` include
 costs 1.56 CPU-s per translation unit.
 
 **What it does not buy, stated plainly.** The build-level saving this points at
-— ~90 CPU-s, ~8.7% of a kanban rung — is **not** realised by the split alone,
+— ~90 CPU-s, ~8.7% of one rung's build when measured — is **not** realised by the split alone,
 and this section should not be read as claiming it. Inside morph, every path to
 a `Bridge` goes through `core/registry.hpp`, which includes `forms/forms.hpp`,
 which includes glaze regardless; a TU that dispatches still pays. What the
@@ -604,8 +604,8 @@ owner, or on the thread that constructed the log when that thread was outside
 every executor's task (a GUI thread, a test body). That second half is sound
 only when the owner's tasks run on that same thread; an application whose log
 is owned by a strand over a pool constructs it on its main thread and calls its
-synchronous verbs only from the owner's tasks (kanban's `GetActivity` awaits
-`entries(owner, key)`).
+synchronous verbs only from the owner's tasks (an activity-feed action
+awaiting `entries(owner, key)`, for instance).
 
 **Why one shape for all three.** A log written from many models' strands and
 read by the application is an aggregate, and an aggregate needs a lock or an
@@ -1011,9 +1011,8 @@ further action — needs two things from the journal that a plain, uncascaded
 action does not: a durable link back to what caused it, and a way for the
 mutation that *produced* the cascade to avoid re-producing it a second time
 when the trigger is replayed. Both are framework primitives, not app-specific
-code; the first real consumer is `examples/kanban`'s automation-rules engine
-(design spec `docs/superpowers/specs/2026-08-16-kanban-rung4-design.md` §9),
-but neither piece is kanban-specific.
+code, and neither is specific to any one application. No example journals a
+cascade today; an automation-rules engine is the shape that would.
 
 ### `LogEntry::causalParentId`
 
@@ -1035,7 +1034,7 @@ assigns it, and reuse that same identity as every cascaded entry's
 `causalParentId`. `morph::journal` does not mint this identity itself — there
 is no framework-side "trigger id" concept beyond the field that carries it;
 the scheme for generating and threading it through is entirely the
-application's (or, for kanban, the rules engine's) responsibility.
+application's responsibility.
 
 **Additive, per the [data-at-rest contract](#data-at-rest-contract).**
 `causalParentId` is optional/defaulted exactly like `idempotencyKey` and every
@@ -1166,14 +1165,13 @@ config.logProvider = provider;          // given to the RemoteServer constructor
   auto-append), never a model instance's own state, since a registry-
   constructed model is always default-constructed and never otherwise
   touched. A model with no `attachActionLog` of its own is unaffected — the
-  hook resolves to a no-op for it, exactly as before this existed. First
-  exercised by `kanban::BoardModel` (rung 4).
+  hook resolves to a no-op for it.
 - **Configuring.** The provider is a `ServerConfig` field, fixed at
   construction; a server with none attaches no log. It is called only on the
   server strand, one call at a time, so it needs no synchronisation of its own.
   The log it returns is appended to from each instance's own strand, so it is
-  an aggregate with an owner of its own ([One owner](#one-owner)): kanban's
-  App owns its log with a strand over its worker pool.
+  an aggregate with an owner of its own ([One owner](#one-owner)): an
+  application typically owns its log with a strand over its worker pool.
 
 This is the only recording path for a genuinely remote topology: recording is
 server-side, keyed by the per-instance identity the client chose. See
