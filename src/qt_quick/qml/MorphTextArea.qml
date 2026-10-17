@@ -28,6 +28,14 @@ MorphField {
     TextArea {
         id: area
         width: root.controlWidth
+        color: root.scheme.text
+        placeholderTextColor: root.scheme.muted
+        padding: Theme.spaceOf(3)
+        background: MorphInputBackground {
+            scheme: root.scheme
+            focused: area.activeFocus
+            implicitHeight: Theme.controlHeight * 2
+        }
         readOnly: root.readOnly
         placeholderText: root.placeholder
         wrapMode: TextEdit.Wrap

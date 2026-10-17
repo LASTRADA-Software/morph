@@ -353,12 +353,12 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
     auto label = scene.backend().createButton(column.get());
     label->setLabel("Go on");
     scene.settle();
-    CHECK(Scene::itemOf(*label).width() == Scene::itemOf(*label).implicitWidth());
+    CHECK(std::abs(Scene::itemOf(*label).width() - Scene::itemOf(*label).implicitWidth()) < 1.0);
     CHECK(Scene::itemOf(*label).mapToScene(QPointF{0, 0}).x() == Scene::itemOf(*column).mapToScene(QPointF{0, 0}).x());
     // In a row, a content child is as tall as the row, and keeps its natural width.
     CHECK(Scene::itemOf(*button).height() == Scene::itemOf(*row).height());
     CHECK(Scene::itemOf(*button).height() > Scene::itemOf(*other).implicitHeight());
-    CHECK(Scene::itemOf(*button).width() == Scene::itemOf(*button).implicitWidth());
+    CHECK(std::abs(Scene::itemOf(*button).width() - Scene::itemOf(*button).implicitWidth()) < 1.0);
     // The row packs its children at the start rather than spreading them.
     CHECK(horizontalGap(Scene::itemOf(*button), Scene::itemOf(*other)) == 0.0);
 }

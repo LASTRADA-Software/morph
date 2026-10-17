@@ -126,9 +126,10 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         unset.emplace_back("space");
     }
     for (auto const& [name, surface] : surfaces) {
-        QObject* scheme = nullptr;
-        QMetaObject::invokeMethod(theme, "scheme", Qt::DirectConnection, qReturnArg(scheme),
-                                  QString::fromStdString(name));
+        QVariant made;
+        QMetaObject::invokeMethod(theme, "schemeObject", Qt::DirectConnection, qReturnArg(made),
+                                  QVariant{QString::fromStdString(name)});
+        auto* const scheme = made.value<QObject*>();
         if (scheme == nullptr) {
             unset.push_back(name);
             continue;

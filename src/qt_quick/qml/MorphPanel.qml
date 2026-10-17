@@ -23,7 +23,9 @@ MorphWidget {
         anchors.fill: parent
         implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
         implicitHeight: inner.implicitHeight + 2 * Theme.spaceOf(root.padding) + 2
-        color: "transparent"
+        // A panel is drawn as a card on its scheme's surface.
+        color: root.scheme.surface
+        radius: Theme.radiusCard
         border.color: root.scheme.border
 
         ColumnLayout {

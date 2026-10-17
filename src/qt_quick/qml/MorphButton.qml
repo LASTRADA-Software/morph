@@ -25,6 +25,15 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
+        leftPadding: Theme.spaceOf(4)
+        rightPadding: Theme.spaceOf(4)
+        palette.buttonText: root.scheme.text
+        background: MorphButtonBackground {
+            scheme: root.scheme
+            hovered: button.hovered
+            pressed: button.down
+            focused: button.visualFocus
+        }
         Accessible.ignored: true
         onClicked: root.fire("click", undefined)
         Keys.onReturnPressed: root.fire("click", undefined)

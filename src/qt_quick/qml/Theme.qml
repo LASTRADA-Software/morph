@@ -52,38 +52,89 @@ QtObject {
         return space[Math.max(0, Math.min(space.length - 1, step))]
     }
 
-    // The built-in surfaces: the page screens sit on, a raised card, the dark navigator column and the top bar. A theme
-    // index's surface of the same name replaces one, and any other name gets a scheme of its own (`scheme`).
+    // The theme's own scheme, and the built-in surfaces: the page screens sit on, a raised card, the dark navigator
+    // column and the top bar. A role a built-in surface does not set follows the theme's. A theme index's surface of
+    // the same name replaces one, and any other name gets a scheme of its own (`scheme`).
+    readonly property MorphScheme themeScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
     readonly property MorphScheme pageScheme: MorphScheme {
-        base: theme
         surface: theme.background
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
     }
     readonly property MorphScheme cardScheme: MorphScheme {
-        base: theme
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
     }
     readonly property MorphScheme sidebarScheme: MorphScheme {
-        base: theme
         surface: "#1f2430"
         text: "#c9ccd6"
         muted: "#7d8396"
         accent: "#4c8dff"
+        focus: theme.focus
         selection: "#2f3646"
         border: "#2f3646"
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
     }
     readonly property MorphScheme toolbarScheme: MorphScheme {
-        base: theme
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
         border: "#e3e5ea"
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
     }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {
         MorphScheme {}
     }
 
-    // The scheme of a surface name: a built-in one, one a theme declared, or, for the empty name, the theme itself.
-    function scheme(name: string): QtObject {
+    // The scheme of a surface name: a built-in one, one a theme declared, or, for the empty name, the theme's own.
+    function scheme(name: string): MorphScheme {
         switch (name) {
         case "":
-            return theme
+            return themeScheme
         case "page":
             return pageScheme
         case "card":
@@ -94,9 +145,14 @@ QtObject {
             return toolbarScheme
         default:
             if (!(name in extraSchemes))
-                extraSchemes[name] = schemeComponent.createObject(theme, {base: theme})
-            return extraSchemes[name]
+                extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
+            return extraSchemes[name] as MorphScheme
         }
+    }
+
+    // The same, for applyTheme: a function C++ calls returns its value as a QVariant only when it declares no types.
+    function schemeObject(name) {
+        return scheme(name)
     }
 
     // Whether a surface name is one the theme draws a background for.

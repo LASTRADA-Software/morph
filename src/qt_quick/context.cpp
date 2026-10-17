@@ -43,12 +43,13 @@ protected:
         static_cast<void>(child);
         return _column;
     }
-    // The roots draw with the theme itself.
+    // The roots draw with the theme's own scheme.
     [[nodiscard]] QObject* scheme() const override {
         QQmlEngine* const engine = _column != nullptr ? qmlEngine(_column) : nullptr;
-        return engine != nullptr
-                   ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
-                   : nullptr;
+        QObject* const theme =
+            engine != nullptr ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
+                              : nullptr;
+        return theme != nullptr ? theme->property("themeScheme").value<QObject*>() : nullptr;
     }
 
 private:

@@ -32,6 +32,14 @@ MorphField {
         TextField {
             id: pathField
             Layout.fillWidth: true
+            color: root.scheme.text
+            placeholderTextColor: root.scheme.muted
+            leftPadding: Theme.spaceOf(3)
+            rightPadding: Theme.spaceOf(3)
+            background: MorphInputBackground {
+                scheme: root.scheme
+                focused: pathField.activeFocus
+            }
             readOnly: true
             text: root.path
             Accessible.role: root.accessibleRole
@@ -40,7 +48,15 @@ MorphField {
         }
 
         Button {
+            id: browse
             text: root.save ? qsTr("Save as…") : qsTr("Browse…")
+            palette.buttonText: root.scheme.text
+            background: MorphButtonBackground {
+                scheme: root.scheme
+                hovered: browse.hovered
+                pressed: browse.down
+                focused: browse.visualFocus
+            }
             Accessible.role: Accessible.Button
             Accessible.name: text
             enabled: !root.readOnly

@@ -33,6 +33,8 @@ qt_add_qml_module(morph_qt_quick_qml
     QML_FILES
         qml/Theme.qml
         qml/MorphScheme.qml
+        qml/MorphInputBackground.qml
+        qml/MorphButtonBackground.qml
         qml/MorphWidget.qml
         qml/MorphField.qml
         qml/MorphRoots.qml

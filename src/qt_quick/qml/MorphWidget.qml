@@ -40,8 +40,8 @@ Item {
     property string surface: ""
     // The colour roles this widget draws with: its own surface's scheme when it has a surface, else the one its
     // container passed down when it adopted it (the theme's at the roots).
-    property QtObject inheritedScheme: Theme
-    readonly property QtObject scheme: surface !== "" ? Theme.scheme(surface) : inheritedScheme
+    property MorphScheme inheritedScheme: Theme.themeScheme
+    readonly property MorphScheme scheme: surface !== "" ? Theme.scheme(surface) : inheritedScheme
     // A drag key as text (`i:<int64>` or `s:<text>`); empty when the widget cannot be dragged.
     property string dragKey: ""
     property bool dropEnabled: false

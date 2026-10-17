@@ -20,6 +20,12 @@ Item {
 
     anchors.fill: parent
 
+    // The window behind every surface.
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.background
+    }
+
     ColumnLayout {
         id: column
         anchors.left: parent.left

@@ -207,7 +207,12 @@ A spacing step (a stack's or grid's `gap`, a panel's `padding`) is `Theme.spaceO
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour
 roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
 tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
-The style is Qt Quick Controls' `Basic`.
+The controls are Qt Quick Controls' `Basic` ones, drawn from the theme rather than with that style's look: an input
+(`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.controlHeight` tall with
+`Theme.radiusControl` corners and a border that takes the focus colour; a check box's indicator is accent-filled when
+checked; a tab bar underlines the current tab in the accent; a table's header is muted and its rows dense with a
+hairline between them; a panel is a card; a heading is `Theme.headingPixels`, semi-bold; and the window behind every
+surface is `Theme.background`.
 
 ## Components
 
