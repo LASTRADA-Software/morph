@@ -697,9 +697,7 @@ namespace {
 /// @brief Installs a short SQLite `busy_timeout` on every connection opened
 ///        while it is alive, and restores the default afterwards.
 ///
-/// Identical shape to `test_paste_model.cpp`'s helper of the same name
-/// (rung 1) -- test-only, one file's own concern, not yet promoted. See that
-/// file's doc comment for why the post-connected hook (rather than a
+/// Test-only, this file's own concern. The post-connected hook (rather than a
 /// connection-string `Timeout=` override) is the seam that actually works:
 /// `Lightweight::SqlConnection::PostConnect()` unconditionally issues
 /// `PRAGMA busy_timeout = 60000` on every new SQLite connection, which would
@@ -725,9 +723,9 @@ public:
 
 TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts the batch", "[bookmarks][model]") {
     // DoD: "Bulk edit is atomic under injected mid-batch failure." A real
-    // mid-transaction failure, not a mock -- mirrors test_paste_model.cpp's
-    // proven DbBusyFixture/ScopedShortBusyTimeout recipe exactly (finding
-    // 018's resolved mechanism for the SQLITE_BUSY class, rung 1).
+    // mid-transaction failure, not a mock: DbBusyFixture holds a real write
+    // transaction open on a second connection, and ScopedShortBusyTimeout
+    // makes the collision an immediate SQLITE_BUSY instead of a minute's wait.
     DbFixture fixture;
     bookmarks::BookmarkModel seedModel;
     bookmarks::BookmarkId id1;

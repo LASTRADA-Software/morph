@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# bookmarks — rung 2 of the application ladder (examples/bookmarks/README.md).
+# bookmarks — rung 1 of the application ladder (examples/bookmarks/README.md).
 # All target wiring lives in morph_add_rung() (cmake/morph_add_rung.cmake);
 # this file only adds the sources it does not glob.
 

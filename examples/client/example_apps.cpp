@@ -17,34 +17,10 @@
 #endif
 #endif
 
-#if MORPH_CLIENT_HAS_LEDGER
-#include <ledger_screens.hpp>
-
-#include "ledger/db/database.hpp"
-#endif
-
-#if MORPH_CLIENT_HAS_KANBAN
-#include <kanban_screens.hpp>
-
-#include "kanban/db/database.hpp"
-#endif
-
-#if MORPH_CLIENT_HAS_POLLS
-#include <polls_screens.hpp>
-
-#include "polls/db/database.hpp"
-#endif
-
 #if MORPH_CLIENT_HAS_BOOKMARKS
 #include <bookmarks_screens.hpp>
 
 #include "bookmarks/db/database.hpp"
-#endif
-
-#if MORPH_CLIENT_HAS_PASTEBIN
-#include <pastebin_screens.hpp>
-
-#include "pastebin/db/database.hpp"
 #endif
 
 #if MORPH_CLIENT_HAS_LIMS
@@ -72,41 +48,12 @@ std::vector<LocalApp> localApps() {
                             }});
 #endif
 #endif
-#if MORPH_CLIENT_HAS_LEDGER
-    apps.push_back(
-        LocalApp{.name = "ledger", .bundle = &ledger::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                     std::string const file = setup.db.empty() ? std::string{"ledger.db"} : setup.db;
-                     ledger::db::setup("DRIVER=SQLite3;Database=" + file);
-                     ledger::screens::prepareLocal();
-                 }});
-#endif
-#if MORPH_CLIENT_HAS_KANBAN
-    apps.push_back(
-        LocalApp{.name = "kanban", .bundle = &kanban::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                     std::string const file = setup.db.empty() ? std::string{"kanban.db"} : setup.db;
-                     kanban::db::setup("DRIVER=SQLite3;Database=" + file);
-                     kanban::screens::prepareLocal();
-                 }});
-#endif
-#if MORPH_CLIENT_HAS_POLLS
-    apps.push_back(LocalApp{.name = "polls", .bundle = &polls::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                                std::string const file = setup.db.empty() ? std::string{"polls.db"} : setup.db;
-                                polls::db::setup("DRIVER=SQLite3;Database=" + file);
-                            }});
-#endif
 #if MORPH_CLIENT_HAS_BOOKMARKS
     apps.push_back(
         LocalApp{.name = "bookmarks", .bundle = &bookmarks::screens::bundle, .setUp = [](LocalSetup const& setup) {
                      std::string const file = setup.db.empty() ? std::string{"bookmarks.db"} : setup.db;
                      bookmarks::db::setup("DRIVER=SQLite3;Database=" + file);
                      bookmarks::screens::prepareLocal();
-                 }});
-#endif
-#if MORPH_CLIENT_HAS_PASTEBIN
-    apps.push_back(
-        LocalApp{.name = "pastebin", .bundle = &pastebin::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                     std::string const file = setup.db.empty() ? std::string{"pastebin.db"} : setup.db;
-                     pastebin::db::setup("DRIVER=SQLite3;Database=" + file);
                  }});
 #endif
 #if MORPH_CLIENT_HAS_LIMS

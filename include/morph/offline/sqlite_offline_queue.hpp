@@ -397,11 +397,9 @@ private:
                 // without the shared-memory WAL needs (NFS, CIFS/SMB, some overlay,
                 // 9p and Docker mounts). All of those persist correctly through the
                 // rollback journal -- whose durability is exactly what the
-                // `synchronous` pragma above now guarantees regardless of mode. The
-                // real call sites are not hypothetical either: kanban's
-                // `enableOfflineQueue()` builds one of these from a user-supplied
-                // path, so a throw here means an NFS home directory cannot open the
-                // app at all.
+                // `synchronous` pragma above now guarantees regardless of mode. A
+                // client that builds one of these from a user-supplied path would
+                // otherwise be unable to start at all from an NFS home directory.
                 {
                     detail::StatementGuard const guard{prepare("PRAGMA journal_mode;")};
                     if (sqlite3_step(guard.get()) != SQLITE_ROW) {

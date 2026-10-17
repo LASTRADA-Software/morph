@@ -1,4 +1,4 @@
-# pastebin (rung 1) — an envelope the server cannot decode at all.
+# bookmarks (rung 1) — an envelope the server cannot decode at all.
 #
 # Every other refusal in this corpus is the server declining something it
 # understood. This one is the layer below: `morph::wire::decode` failing on
@@ -18,11 +18,15 @@
 #
 # Not a workflow, and not counted as one.
 #
-# Re-runnable: nothing here writes anything.
+# Re-runnable: the one bookmark it writes is new on every run.
 
-model PasteModel
+client auth model=Bookmarks_AuthModel
 
-client prober
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client prober model=BookmarkModel
 
 # ── A string where the envelope wants a number ─────────────────────────
 # The exact message, asserted in full rather than by prefix. Three things make
@@ -62,9 +66,12 @@ expect err message !~ "envelope decode failed"
 
 # ── The connection survives all of it ──────────────────────────────────
 # A decode failure is answered, not hung up on -- which is what lets a client
-# with one bad frame recover instead of reconnecting.
-do CreatePaste content="after the malformed frames" syntax=plaintext
-expect ok capture paste=$.id
+# with one bad frame recover instead of reconnecting. The session is set only
+# now, so the malformed frames above carry none and their exact text holds.
+session principal=$who token=$token
 
-do GetPaste id=$paste
-expect ok field content == "after the malformed frames"
+do CreateBookmark url="https://example.com/after-malformed" title="after the malformed frames" tags=[]
+expect ok capture mark=$.id
+
+do GetBookmark id=$mark
+expect ok field title == "after the malformed frames"

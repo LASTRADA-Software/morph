@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — a sign-in that fails, is retried, and then authorizes
+# bookmarks (rung 1) — a sign-in that fails, is retried, and then authorizes
 # work; and the same work refused when the session is wrong.
 #
 #   BOOKMARKS_TOKEN_SECRET=... BOOKMARKS_PORT=0 ladder_bookmarks_server

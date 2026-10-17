@@ -6,10 +6,9 @@
 #include <vector>
 
 /// @file
-/// The N-client convergence assertion `examples/TESTING.md` names as rung
-/// 3's obligation but polls never built (design spec §6) -- absorbed into
-/// rung 4's own scope, since kanban's "two clients' queues replaying
-/// interleaved" DoD item needs it regardless of original ownership.
+/// The N-client convergence check `examples/TESTING.md`'s "Multi-client
+/// stress harness" section names: several clients' fingerprints, compared
+/// until they agree or the attempt budget runs out.
 
 namespace morph::ladder::testkit {
 

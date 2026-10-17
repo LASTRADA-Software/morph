@@ -58,9 +58,7 @@ using morph::model::payloadShapeString;
 // A named namespace, not an anonymous one: glaze's traditional reflection
 // derives member names from a pointer-to-member mangling that requires the
 // reflected type to have linkage, so a payload struct declared in an anonymous
-// namespace does not compile -- see ledger's identical fixture namespace
-// (`examples/ledger/tests/test_ledger_payload_shape.cpp`) for the same
-// rationale, spelled out in full there.
+// namespace does not compile.
 namespace bookmarks_payload_shape_fixtures {
 
 /// @brief `RenameTag` with its `id` field *retyped* from `TagId` to

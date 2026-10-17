@@ -90,14 +90,14 @@
 # One directory up, at `examples/`, is not available and should not be: a
 # config there governs every rung's src/, include/ and screens/ together, which
 # is the shape in which a narrow suppression quietly becomes a wide one. That
-# holds regardless of how narrow this key is -- the file would be reaching seven
-# rungs' production code on the strength of an argument made about the bank
-# example. Nothing gates that placement any more, so it is a rule to keep by
+# holds regardless of how narrow this key is -- the file would be reaching
+# every rung's production code on the strength of an argument made about the
+# bank example. Nothing gates that placement any more, so it is a rule to keep by
 # hand.
 #
-# That leaves the other 59 declarations -- 13 in crm's `db/`, 12 in ledger's,
-# 11 in kanban's, 9 in lims', 6 in polls', 5 in bookmarks', 1 in pastebin's,
-# and 2 in examples/common/testkit/ -- unexempted and, today, unreported:
+# The other rungs' header trees carry the same exemption in their own
+# `include/.clang-tidy`. That leaves the 2 declarations in
+# examples/common/testkit/ unexempted and, today, unreported:
 # clang-tidy-diff analyses only changed lines, so a declaration nobody has
 # touched is never judged. They are latent, not fixed, and
 # deliberately left to the rung that owns each one rather than settled from

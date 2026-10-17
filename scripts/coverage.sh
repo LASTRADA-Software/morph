@@ -30,7 +30,7 @@ MANIFEST="$OUT/coverage_objects.txt"
 # contributed zero files to the uploaded report, and both
 # sqlite_offline_queue.hpp's 57.04% and include/morph/qt's 13 lines were
 # measured with their own suites absent. That was the third time: rungs 2-4
-# were never added, and the rung list drifted past ledger and lims -- the same
+# were never added, and the rung list drifted past two later rungs -- the same
 # defect in the same file, both times fixed by deleting the copy and reading an
 # authoritative list instead.
 #
@@ -171,9 +171,8 @@ coverage_object_built() {
 # The rung names are read from examples/rungs.txt, the ladder's single
 # authoritative list, rather than restated here. This used to be a hand-copy
 # of the list examples/CMakeLists.txt used to hold inline, and it had drifted:
-# ledger (rung 5) and lims (rung 6) were both missing, so neither contributed
-# a single line to any uploaded report -- and codecov.yml's `ledger`
-# component, added with a carefully measured 87% target, was scoring a set of
+# two rungs were missing, so neither contributed a single line to any
+# uploaded report -- and one rung's codecov.yml component, added with a carefully measured 87% target, was scoring a set of
 # files the report did not contain. A component that matches nothing does not
 # fail; it silently reports nothing, which is the same shape of defect this
 # list's own comment above warns about, and the same one that left CI's ladder
@@ -199,8 +198,7 @@ done <<< "$_MORPH_LADDER_RUNGS"
 # proper; examples/common is the ladder's hand-written GUI/testkit code
 # (examples/IMPLEMENTATION.md rule 5 — presenter/BackendRig/etc. logic is
 # real coverage of morph's own client stack, per examples/TESTING.md's
-# "round-7 T4 reframe"). examples/pastebin (rung 1) adds the first real rung
-# models — the sole subject of rule 5's own 100% bar — plus its hand-written
+# "round-7 T4 reframe"). Each rung adds its models — the sole subject of rule 5's own 100% bar — plus its hand-written
 # presenter/QML-adapter layer, held to the same bar as examples/common's for
 # the same reason. AUTOMOC's generated
 # mocs_compilation.cpp lives under $OUT (the build tree), never under a
@@ -233,7 +231,7 @@ done
 # examples/common/testkit/ mixes real, reusable test-support headers
 # (backend_rig.hpp, db_fixture.hpp, strand_interleaver.hpp, ...) with actual
 # Catch2 test files (test_event_poller.cpp, test_presenter.cpp, ...) in the
-# same directory — unlike include/morph and examples/pastebin's SOURCES
+# same directory — unlike include/morph and the rungs' SOURCES
 # entries above, which contain no test files at all. `SOURCES+=(examples/
 # common)` swept both in indiscriminately: a TEST_CASE body's own untaken
 # assertion/lambda branches (a REQUIRE's fail arm, a "must not run" callback
@@ -268,7 +266,7 @@ rm -f "${PROFILES[@]}"
 # another checkout is gone by the time they run and every path left is under
 # this tree by construction. A shared compiler cache can serve objects built in
 # another worktree, and their coverage mappings name that worktree -- 246 of
-# 688 records in the run that found it, taking the whole of crm's src models
+# 688 records in the run that found it, taking the whole of one rung's src models
 # out of the report while its tests ran and passed. The cause is
 # removed at configure time (cmake/compiler_options.cmake defaults
 # USE_COMPILER_CACHE to OFF under AF_COVERAGE); this is the check that the

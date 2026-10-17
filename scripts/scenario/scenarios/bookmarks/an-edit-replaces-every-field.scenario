@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — EditBookmark is a whole-record replace, not a patch.
+# bookmarks (rung 1) — EditBookmark is a whole-record replace, not a patch.
 #
 # examples/bookmarks/README.md's "What to implement" step 1 lists edit among
 # the CRUD, and the DTO tells the rest: EditBookmark carries url, title,

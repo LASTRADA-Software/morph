@@ -16,7 +16,8 @@
 // `required` array and the `x-rules` list all come from the
 // `CaptureConcentration` struct and are byte-identical for every version. A
 // version wanting a different shape cannot be served at all — which is the
-// boundary rung 7's runtime custom fields will run into head-on.
+// boundary runtime-defined custom fields run into head-on
+// (tests/test_extension_bag_spike.cpp).
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>

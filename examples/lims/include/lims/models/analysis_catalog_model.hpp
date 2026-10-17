@@ -46,8 +46,7 @@ public:
     /// @brief Attaches a durable action log and this instance's identity, so
     ///        every mutating `execute()` records a `LogEntry`.
     ///
-    /// Same reason `ledger::RuleModel::attachActionLog` exists: a
-    /// plain-constructed model never goes through the registry/dispatcher
+    /// A plain-constructed model never goes through the registry/dispatcher
     /// path, so the framework's own auto-append never fires for it.
     /// @param log Sink entries are forwarded to.
     /// @param entityKey Stable identity stamped onto every entry.
@@ -56,8 +55,7 @@ public:
 private:
     /// @brief This instance's own journal (inert until `attachActionLog`).
     ///
-    /// A shared helper rather than a fourth hand-rolled copy of the
-    /// `logAction` shape ledger and kanban each carry — see
+    /// A shared helper rather than a hand-rolled `logAction` — see
     /// `lims::SelfJournal`'s file comment for why models have to do this
     /// themselves at all.
     SelfJournal _journal;

@@ -11,8 +11,8 @@
 
 /// @file
 /// The strand interleaver's companion harness to the fault proxy
-/// (examples/TESTING.md): without it, strand-ordering bugs (kanban's
-/// MoveTaskPosition centerpiece) are probabilistic stress runs rather than
+/// (examples/TESTING.md): without it, strand-ordering bugs (two concurrent
+/// moves reordering one list, say) are probabilistic stress runs rather than
 /// reproducible interleavings. Sits underneath morph's strands as their base
 /// IExecutor so a test controls exactly which posted task runs next.
 ///

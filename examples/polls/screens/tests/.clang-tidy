@@ -1,9 +1,0 @@
-# Test idiom, not a defect: Catch2's REQUIRE(a == b) expands to a chained comparison. The reasoning, and why the
-# file is per directory, is in examples/common/testkit/.clang-tidy.
-# bugprone-unchecked-optional-access cannot see through REQUIRE(opt.has_value()), so the access on the next line is
-# flagged as unguarded; the framework's tests/.clang-tidy turns it off for the same reason.
-Checks: '-bugprone-chained-comparison,-bugprone-unchecked-optional-access'
-CheckOptions:
-  - key:   readability-function-cognitive-complexity.IgnoreMacros
-    value: "true"
-InheritParentConfig: true

@@ -4,7 +4,7 @@
 #include <string>
 
 /// @file
-/// Process-wide database lifecycle for the lims rung (rung 6), mirroring
+/// Process-wide database lifecycle for the lims rung (rung 3), mirroring
 /// bank::db's exact three-function split (examples/bank/include/bank/db/
 /// database.hpp) — Lightweight resolves its connection from a
 /// process-global default, and each model opens its own `DataMapper`
@@ -12,8 +12,8 @@
 /// call `setup()` (or `configure()`/`applyMigrations()` individually) --
 /// they use `morph::ladder::testkit::DbFixture`, which configures its own
 /// connection and applies migrations independently, per the ladder-wide
-/// test convention (see polls::db::setup's doc comment for the same
-/// stated rule in a sibling rung).
+/// test convention: a test that ran the production bootstrap would re-point
+/// the process-global connection the fixture already owns.
 
 namespace lims::db {
 

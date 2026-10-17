@@ -31,9 +31,9 @@
 /// non-authenticating authorizer returns `nullopt` from `authenticate()`, and
 /// `RemoteServer` then **clears** `Context::principal` before dispatch rather
 /// than passing the client's unverified claim through — so there is no
-/// identity for a role check to key on at all. `polls::auth::PollsAuthorizer`
-/// can derive from `AllowAllAuthorizer` precisely because it gates nothing on
-/// identity; this rung cannot.
+/// identity for a role check to key on at all. An authorizer that gates
+/// nothing on identity can derive from `AllowAllAuthorizer`; this rung's
+/// cannot.
 ///
 /// @par Where the roles come from
 /// From a caller-supplied `RoleLookup`, which production wires to the

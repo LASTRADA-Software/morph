@@ -518,17 +518,14 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SelectProject, "SelectProject", 
 // `OpenSample` is the action that names a sample, so it defines the model's
 // key. `BRIDGE_MODEL_KEY` deduces the key *type* from the member it is handed,
 // which makes `PrimaryKeyOf<SampleModel>` `lims::SampleId` itself -- the strong
-// id examples/IMPLEMENTATION.md rule 3 requires -- rather than the unwrapped
-// `std::int64_t` this rung declared by hand while `morph::model::ModelKey`
-// still admitted only `std::integral`/`std::string`. That restriction is what
-// forced the hand-written specialisations here, in `ledger::LedgerModel` and
-// in `kanban::BoardModel`. The concept admits a strong id wrapping a raw key,
-// so no rung carries such a block any more.
+// id examples/IMPLEMENTATION.md rule 3 requires -- rather than an unwrapped
+// `std::int64_t`: `morph::model::ModelKey` admits a strong id wrapping a raw
+// key, so no hand-written key specialisation is needed.
 //
-// Their bodies did `keyToString(*action.sampleId)` -- `operator*` on a
-// possibly-disengaged `std::optional`, undefined behaviour for an action
-// carrying an empty id, which handed back whatever the union held and routed
-// the caller to an arbitrary instance. `morph::model::keyToString` refuses an
+// Unwrapping by hand -- `keyToString(*action.sampleId)` -- would apply
+// `operator*` to a possibly-disengaged `std::optional`: undefined behaviour
+// for an action carrying an empty id, handing back whatever the union held
+// and routing the caller to an arbitrary instance. `morph::model::keyToString` refuses an
 // empty strong id instead. Key extraction runs *before* `SampleModel::execute`
 // ever sees the action (`BridgeHandler::execute`, include/morph/core/
 // bridge.hpp), so this is the only place that rejection can happen -- and that

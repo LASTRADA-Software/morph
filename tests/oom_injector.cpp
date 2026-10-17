@@ -55,7 +55,7 @@
 // No CI leg escapes the first branch, which is what makes the paragraph above
 // true of CI and not merely of this machine: every sanitizer build in this
 // repository is clang (linux-sanitizers' clang-asan/clang-tsan/clang-ubsan
-// matrix, ladder-sanitizers, kanban-tsan and the bank leg), the Windows legs
+// matrix and ladder-sanitizers), the Windows legs
 // (cl-*, clangcl-*) enable no sanitizer at all, and clang 22 -- the major
 // ci.yml's CLANG_VERSION pins -- defines both macros. Verified by compiling a
 // probe carrying this exact #if/#elif chain with clang++ 22.1.8: it reports

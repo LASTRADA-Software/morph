@@ -28,9 +28,8 @@ namespace bookmarks::app {
 /// deployment mode — that stays `examples/common/gui::AppContext`'s job on
 /// the client side; this is exclusively the server side.
 ///
-/// Mirrors `pastebin::app::App` (rung 1) closely and on purpose, including
-/// its declaration-order-for-teardown-safety rule (see the private section)
-/// and its internal-client pattern for background work: the metadata-fetch
+/// Two rules shape it: declaration order for teardown safety (see the private
+/// section), and the internal-client pattern for background work: the metadata-fetch
 /// worker dispatches `RecordMetadata` through a `Bridge` over
 /// `SimulatedRemoteBackend{*server()}`, a first-class client of the same
 /// `RemoteServer` a real socket client talks to
@@ -138,8 +137,7 @@ public:
     /// @brief Whether any `RecordMetadata` dispatched by a previous
     ///        `fetchMetadataOnce()` has not settled yet.
     ///
-    /// The settle seam a test needs before letting an `App` go, identical in
-    /// contract to `pastebin::app::App::sweepInFlight()`: observing the
+    /// The settle seam a test needs before letting an `App` go: observing the
     /// *effect* of a pass (the titles are set) is not the same as the
     /// dispatches having settled, because the update happens on a worker
     /// thread while each call's completion callback is delivered later, on
@@ -167,8 +165,7 @@ public:
 
 private:
     // Declaration order is load-bearing, and `_fetchExecutor` comes first on
-    // purpose — the identical hazard pastebin::app::App documents at length.
-    // Members are destroyed in reverse, so this is the *last* thing to go. A
+    // purpose. Members are destroyed in reverse, so this is the *last* thing to go. A
     // pass's RecordMetadata runs on `_pool`, and the worker thread that
     // finishes it resolves the completion by calling `post()` on the executor
     // the call was issued with. With the executor declared after the pool

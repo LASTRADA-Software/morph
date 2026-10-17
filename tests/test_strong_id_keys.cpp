@@ -34,8 +34,8 @@
 // BRIDGE_REGISTER_* macros specialise templates at global scope.
 // NOLINTBEGIN(misc-use-internal-linkage)
 
-/// Optional-backed strong id, the `pastebin::PasteId` shape: `operator*`
-/// returns a reference, and emptiness is a disengaged optional.
+/// Optional-backed strong id over a string payload (the `bookmarks::ImportOpId`
+/// shape): `operator*` returns a reference, and emptiness is a disengaged optional.
 struct SikNameId {
     std::optional<std::string> value;
 
@@ -48,8 +48,7 @@ struct SikNameId {
     [[nodiscard]] auto operator<=>(const SikNameId&) const noexcept = default;
 };
 
-/// Sentinel-backed strong id, the `polls::OptionId` shape: `operator*` returns
-/// **by value**, and `0` means empty. Deliberately a different shape from
+/// Sentinel-backed strong id: `operator*` returns **by value**, and `0` means empty. Deliberately a different shape from
 /// `SikNameId` -- a concept that only admitted one of them would leave half the
 /// ladder still hand-writing traits.
 struct SikRowId {

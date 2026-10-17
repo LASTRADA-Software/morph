@@ -647,8 +647,8 @@ endfunction()
 # The damage is not mis-attribution. scripts/coverage.sh filters by *relative*
 # path, so a record rooted in another worktree matches no filter and is
 # dropped: in the run that found this, 246 of 688 records were foreign and all
-# eight of examples/crm/src/models/*.cpp appeared only under the foreign root,
-# so codecov.yml's entire crm src component was missing from the report while
+# eight of one rung's src/models/*.cpp appeared only under the foreign root,
+# so that rung's entire codecov.yml src component was missing from the report while
 # its tests ran and passed. llvm-cov additionally discards function records it
 # cannot reconcile, because the same header arriving under two roots hashes two
 # ways.

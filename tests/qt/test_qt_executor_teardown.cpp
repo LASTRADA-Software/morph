@@ -134,9 +134,9 @@ TEST_CASE("A nested Completion chain outliving its QtExecutor does not use it af
 
 // ── The consequence of dropping: in-flight counters ──────────────────────────
 //
-// The rung apps (bookmarks' `_fetchInFlight`, pastebin's `_sweepInFlight`)
-// track outstanding dispatches with a `shared_ptr<atomic<int>>` that each
-// completion callback decrements. Because the decrement lives *inside* the
+// A rung app (bookmarks' `_fetchInFlight`, for one) tracks outstanding
+// dispatches with a `shared_ptr<atomic<int>>` that each completion callback
+// decrements. Because the decrement lives *inside* the
 // `.then`/`.onError` body, and the `_alive` guard returns before invoking that
 // body, a dropped completion never decrements -- the queued lambda simply
 // releases its `shared_ptr` copy. The counter is therefore only meaningful

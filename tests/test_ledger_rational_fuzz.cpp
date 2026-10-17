@@ -17,16 +17,15 @@ TEST_CASE("Rational addition is exact, and blind to decimalPlaces", "[ledger][ra
     // reduced to a common scale". They are not reduced to a common scale, and
     // nothing here reaches the zero-sum check: `Rational::operator+` adds
     // numerators and propagates `std::max` of the two precisions, so under
-    // ledger's minor-unit encoding these two are -$50.00 and +$0.50 and they
+    // a minor-unit encoding these two are -$50.00 and +$0.50 and they
     // "cancel" only because the addition cannot see the scales.
     //
     // What the case actually measures -- and now says -- is that `Rational`
     // arithmetic is exact and scale-blind. That is a property of the value
-    // type, not a guarantee about the ledger's invariant. The invariant is
-    // made sound by `LedgerModel` restating every leg onto its account
-    // currency's scale *before* summing, and the false-accept and
-    // false-reject cases are pinned where the model can actually be driven,
-    // in `examples/ledger/tests/test_ledger_model.cpp`.
+    // type, not a guarantee about a ledger's invariant. A zero-sum check is
+    // made sound only by a model restating every leg onto its account
+    // currency's scale *before* summing; its false-accept and false-reject
+    // cases belong with that model, not with the value type.
     Rational a{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}};
     Rational b{Numerator{5000}, Denominator{1}, DecimalPlaces{4}};
     auto sum = a + b;

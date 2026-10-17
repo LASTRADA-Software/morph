@@ -18,9 +18,9 @@
 /// @endcode
 ///
 /// @par No `--seed`, and why
-/// `pastebin`'s server ships one; this one does not, deliberately. Every
-/// action in this rung is scoped to `session::current()->principal`, so
-/// seeding by calling a model directly — the shape rung 1 used — would have
+/// This server ships none, deliberately. Every action in this rung is
+/// scoped to `session::current()->principal`, so seeding by calling a model
+/// directly would have
 /// to install a thread-local session itself, i.e. reach into
 /// `morph::session::detail::ScopedContext`, a `detail::` namespace with no
 /// public seam for this — exactly the class of reach-in
@@ -30,8 +30,8 @@
 /// existed for them; adding a new reach-in here from an *example* would be a
 /// step backward, not forward. The alternative — an internal client with a
 /// minted service token, the shape `App`'s own metadata worker uses — is
-/// real infrastructure that `LADDER.md` already assigns to rung 4's
-/// `action_driver` generators. Demo data is therefore created through the
+/// real infrastructure that belongs with the testkit's `action_driver`
+/// generators, not in a server main. Demo data is therefore created through the
 /// client, which also exercises the path a user actually takes.
 
 #include <QCoreApplication>
@@ -74,8 +74,7 @@ namespace {
 /// into a real `quit()`. This exists so the shutdown path below is actually
 /// *reachable*: a demo server is stopped with Ctrl-C, and the default `SIGINT`
 /// disposition would terminate the process outright, so `exec()` would never
-/// return and `App`'s destructor would never run at all. Identical in shape to
-/// `pastebin`'s own server main.
+/// return and `App`'s destructor would never run at all.
 volatile std::sig_atomic_t gStopRequested = 0;
 
 extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
@@ -91,8 +90,7 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 /// grounds that `fetchInFlight()` is a test-only concern; that is not what the
 /// header says, and it is not true of a *server*: the fetch timer fires every
 /// five seconds by default, so a `SIGTERM` landing mid-pass is an ordinary
-/// event, not an exotic one. The drain is therefore kept, exactly as
-/// `pastebin::app::App::sweepInFlight()`'s consumer keeps its own. Bounded by
+/// event, not an exotic one. The drain is therefore kept. Bounded by
 /// @p budget so a wedged dispatch cannot hang shutdown forever; overrunning it
 /// is strictly better than not draining at all, and is reported.
 ///

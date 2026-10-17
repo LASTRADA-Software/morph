@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — the failing half of the atomic bulk action.
+# bookmarks (rung 1) — the failing half of the atomic bulk action.
 #
 # examples/bookmarks/README.md's definition of done: "Bulk edit is atomic
 # under injected mid-batch failure." The injected failure available to a wire

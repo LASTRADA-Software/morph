@@ -35,9 +35,8 @@ option(MORPH_BUILD_LADDER "Build the application ladder's shared testkit/GUI inf
 
 # Cache list of rungs to build when MORPH_BUILD_LADDER=ON. "all" builds every
 # rung with a CMakeLists.txt under examples/<rung>/; a semicolon-separated
-# subset (e.g. "pastebin;bookmarks") builds only those. Rung 0 has no rung
-# folders yet, so this option exists but has nothing to select until rung 1
-# lands (see examples/TESTING.md, "Build system and CI").
+# subset (e.g. "bookmarks;lims") builds only those (see examples/TESTING.md,
+# "Build system and CI").
 set(MORPH_LADDER_RUNGS "all" CACHE STRING "Semicolon-separated list of ladder rungs to build, or \"all\"")
 
 if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
@@ -789,11 +788,9 @@ unset(_morph_target_headers)
 unset(_morph_optional_components)
 
 # ── SQLite-backed durable offline queue: library target (optional) ──────────
-# Only the morph::offline_sqlite target itself is created here, deliberately
-# ahead of "Application ladder"'s add_subdirectory(examples) further below:
-# examples/kanban/CMakeLists.txt links morph::offline_sqlite (a namespaced
-# target, which CMake requires to already exist at the point it is named).
-# The tests/offline_sqlite subdirectory
+# Only the morph::offline_sqlite target itself is created here, ahead of the
+# examples: a namespaced target must already exist where it is named. The
+# tests/offline_sqlite subdirectory
 # that also depends on MORPH_BUILD_OFFLINE_SQLITE stays deferred to its
 # original spot, after the "Tests" section, since it links
 # Catch2::Catch2WithMain and that target only exists once Catch2 has been
@@ -919,7 +916,8 @@ if(MORPH_BUILD_EXAMPLES)
         add_subdirectory(examples/concepts)
     endif()
 
-    if(MORPH_BUILD_BANK_EXAMPLE)
+    # With the ladder on, bank is a rung and examples/CMakeLists.txt adds it.
+    if(MORPH_BUILD_BANK_EXAMPLE AND NOT MORPH_BUILD_LADDER)
         add_subdirectory(examples/bank)
     endif()
 

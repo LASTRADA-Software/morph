@@ -118,8 +118,7 @@ endif()
 # Header entries are not compiled; they only join the AUTOMOC scan. This is
 # the same remedy, for the same reason, that cmake/morph_add_rung.cmake
 # already applies to every rung -- its _lib_headers glob exists because a
-# rung splits include/<rung>/app/app.hpp from src/app/app.cpp, and
-# pastebin::app::App is where this repository last hit it.
+# rung splits include/<rung>/app/app.hpp from src/app/app.cpp.
 add_library(morph_ladder_testkit STATIC
     testkit_src/fault_proxy.cpp
     testkit/fault_proxy.hpp
@@ -137,11 +136,10 @@ set_target_properties(morph_ladder_testkit PROPERTIES AUTOMOC ON)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_testkit)
 endif()
-# AF_SANITIZER: BackendRig and
-# DbFixture live in this target, and BoardModel's strand-serialized dispatch
-# (the thing kanban-tsan's stress test actually exercises) runs through the
-# testkit's own pump/rig plumbing, so it needs instrumentation exactly as
-# much as ladder_<rung>_tests itself does.
+# AF_SANITIZER: BackendRig and DbFixture live in this target, and a rung's
+# strand-serialized dispatch runs through the testkit's own pump/rig
+# plumbing, so it needs instrumentation exactly as much as
+# ladder_<rung>_tests itself does.
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_ladder_testkit ${AF_SANITIZER})
 endif()

@@ -17,15 +17,12 @@
 /// path (`morph::model::detail::IModelHolder::recordIfAttached`). A model
 /// constructed directly — which is how every ladder unit test constructs one,
 /// and how `examples/IMPLEMENTATION.md` rule 5 requires models to be tested —
-/// never goes through a holder, so nothing appends for it. Every rung that
-/// wanted a journal has therefore hand-rolled the same
-/// `attachActionLog`/`logAction` pair inside the model
-/// (`ledger::LedgerModel`, `ledger::BudgetModel`, `ledger::RuleModel`,
-/// `kanban::BoardModel`, `lims::AnalysisCatalogModel`). This header is *not* a
-/// sixth copy of that shape: it is the one place this rung's two models share
-/// it, so `SampleModel` adds no second copy of its own.
+/// never goes through a holder, so nothing appends for it. A model that wants
+/// a journal therefore carries an `attachActionLog`/`logAction` pair of its
+/// own. This header is the one place this rung's two models share that
+/// shape, so neither `SampleModel` nor `AnalysisCatalogModel` carries a copy.
 ///
-/// It also records **failures**, which none of the hand-rolled copies do. A
+/// It also records **failures**. A
 /// 21 CFR Part 11-style audit trail has to show the rejected attempt — "who
 /// tried to publish an unverified sample, and when" is exactly the question
 /// such a trail exists to answer — so a rejected transition appends an entry

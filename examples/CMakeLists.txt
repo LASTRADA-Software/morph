@@ -24,9 +24,6 @@ add_subdirectory(common)
 # Rung directories register themselves here as they gain CMakeLists.txt files
 # (rung 1 onward). MORPH_LADDER_RUNGS == "all" or a semicolon list selects
 # which are configured — see examples/TESTING.md, "Build system and CI".
-# No rung exists yet at rung 0, so this loop currently has nothing to do; it
-# is real, working selection logic (not a placeholder) that the first rung's
-# CMakeLists.txt addition activates without needing to touch this file again.
 #
 # The rung names themselves are NOT written here. They live in
 # examples/rungs.txt, which CI's path-filter steps and scripts/coverage.sh also
@@ -93,7 +90,9 @@ foreach(_rung ${_morph_known_rungs})
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_rung}/CMakeLists.txt")
         continue()
     endif()
-    if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST MORPH_LADDER_RUNGS)
+    # MORPH_BUILD_BANK_EXAMPLE asks for bank whichever rungs are selected; the root adds it only without the ladder.
+    if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST MORPH_LADDER_RUNGS
+       OR (_rung STREQUAL "bank" AND MORPH_BUILD_BANK_EXAMPLE))
         add_subdirectory(${_rung})
     endif()
 endforeach()
