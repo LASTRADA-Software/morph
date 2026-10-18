@@ -1594,8 +1594,10 @@ The server side counts each connection's backlog; the client side routes
 does with both.
 
 - **One writer per connection.** `SocketServer` opens the connection's scope
-  when it accepts it and at once hands `RemoteServer` a `ConnectionWriter` for
-  it. `write` encodes the envelope as a frame on the server strand and posts it
+  when it accepts it, and hands `RemoteServer` a `ConnectionWriter` for it only
+  once the handshake's `101` response is queued. A frame queued earlier would
+  reach the peer ahead of the `101` and break the handshake; until then the
+  connection has no writer, so what the server posts to it is dropped. `write` encodes the envelope as a frame on the server strand and posts it
   to the loop, as a reply's frame is posted from the replying thread; it
   throws only when the loop is gone. Neither callable keeps the connection
   alive: they hold a weak reference to it, and the server drops them when the

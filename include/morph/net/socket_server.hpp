@@ -297,7 +297,6 @@ private:
             };
             auto client = std::make_shared<Client>(Client{.conn = std::move(conn), .cid = cid, .done = false});
             clients.push_back(client);
-            server->setConnectionWriter(cid, writerFor(client));
             loop.loop().spawn(clientFlow(shared_from_this(), client));
         }
 
@@ -408,6 +407,12 @@ private:
                     static_cast<void>(::morph::net::detail::enqueueFrame(
                         connection, ::morph::net::detail::buildServerHandshakeResponse(request.key)));
                     leftover = std::move(header->leftover);
+                    // Only now: a frame the server posted earlier would be
+                    // queued ahead of the 101 and break the handshake. Until
+                    // here the server has no writer, and drops what it posts.
+                    if (self->server != nullptr) {
+                        self->server->setConnectionWriter(client->cid, self->writerFor(client));
+                    }
                 } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
                     // A malformed Upgrade request: the connection ends below.
                 }

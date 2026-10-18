@@ -5,6 +5,7 @@
 // routing and connect handler.
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -30,6 +31,7 @@
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -449,10 +451,75 @@ TEST_CASE("net_replies_written_leave_no_backlog", "[push][channel]") {
     CHECK(::morph::wire::encode(got) == event);
 }
 
+TEST_CASE("net_event_posted_during_the_handshake_is_dropped", "[push][channel]") {
+    // Connection ids are sequential, so a fan-out can name a connection still
+    // in its handshake. Nothing may reach the peer ahead of the `101`.
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
+    ::morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    std::uint16_t const port = wsServer.port();
+
+    // Find the accepted connection's id without guessing when the accept ran:
+    // probes take ids in sequence, and the one a probe skips is the
+    // connection's.
+    auto previous = nextConnectionId(*server) - 1;
+    auto socket = ::morph::net::detail::TcpSocket::connect("127.0.0.1", port, 2000ms);
+    ::morph::backend::ConnectionId cid = 0;
+    REQUIRE(::morph::testing::waitUntil([&] {
+        auto const probe = server->openConnection();
+        server->closeConnection(probe);
+        if (probe != previous + 1) {
+            cid = previous + 1;
+            return true;
+        }
+        previous = probe;
+        return false;
+    }));
+
+    server->post(cid, ::morph::wire::encode(::morph::wire::makeEvent("changes", R"({"when":"handshake"})")));
+    pollfd early{.fd = socket.nativeHandle(), .events = POLLIN, .revents = 0};
+    CHECK(::poll(&early, 1, 300) == 0);  // nothing is sent before the Upgrade request
+
+    ::morph::net::detail::ParsedWsUrl const url{.host = "127.0.0.1", .port = port, .path = "/"};
+    std::string const key = ::morph::net::detail::generateClientKey();
+    std::string const upgrade = ::morph::net::detail::buildClientHandshakeRequest(url, key);
+    socket.sendAll(upgrade.data(), upgrade.size());
+    REQUIRE(socket.setRecvTimeout(5000ms));
+    std::string received;
+    std::array<char, 4096> buf{};
+    while (received.find("\r\n\r\n") == std::string::npos) {
+        std::size_t const got = socket.recvSome(buf.data(), buf.size());
+        REQUIRE(got != 0);
+        received.append(buf.data(), got);
+    }
+    CHECK(received.starts_with("HTTP/1.1 101"));
+
+    // The pre-handshake event never arrives: the first frame is the one
+    // posted after the handshake.
+    auto const after = ::morph::wire::encode(::morph::wire::makeEvent("changes", R"({"when":"after"})"));
+    server->post(cid, after);
+    ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/false};
+    reader.feed(received.substr(received.find("\r\n\r\n") + 4));
+    std::optional<::morph::net::detail::WsFrame> frame;
+    while (!(frame = reader.tryExtractFrame())) {
+        std::size_t const got = socket.recvSome(buf.data(), buf.size());
+        REQUIRE(got != 0);
+        reader.feed(std::string_view{buf.data(), got});
+    }
+    CHECK(frame->payload == after);
+}
+
 TEST_CASE("net_backlog_holds_events_and_drain_sends_resync", "[push][channel]") {
-    // A reader that stops reading while 8 MiB of replies are queued for it:
+    // A reader that stops reading while 16 MiB of replies are queued for it:
     // an event posted then is held back, and once the reader catches up the
     // drain sends one `resync` in its place.
+    //
+    // Assumes the kernel's loopback buffers (the server's send buffer and the
+    // client's receive window, shrunk to 2 KiB) absorb far less than 15 MiB,
+    // so more than `kEventBacklogHigh` is still in the transport's backlog
+    // when the event is posted. Were the kernel to take nearly everything,
+    // the event would be delivered and this test would fail, not pass.
     ::morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
     ::morph::net::SocketServer wsServer{*server, 0};
@@ -465,7 +532,7 @@ TEST_CASE("net_backlog_holds_events_and_drain_sends_resync", "[push][channel]") 
     auto const reg = client.receive();
     REQUIRE(reg.kind == "ok");
 
-    constexpr int kReplies = 64;
+    constexpr int kReplies = 128;
     for (int i = 0; i < kReplies; ++i) {
         client.send(executeEnvelope(static_cast<std::uint64_t>(i + 1), reg.modelId, "PnBig", R"({"size":131072})"));
     }

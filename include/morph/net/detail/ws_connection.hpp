@@ -18,8 +18,8 @@
 #include <string_view>
 #include <utility>
 
+#include "../../core/connection_writer.hpp"
 #include "../../core/profiler.hpp"
-#include "../../core/remote.hpp"
 #include "ws_handshake.hpp"
 
 /// @file
