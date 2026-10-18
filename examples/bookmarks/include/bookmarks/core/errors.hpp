@@ -33,7 +33,8 @@ struct ValidationError : BookmarksError {
 };
 
 /// @brief A write lost a race: the target row changed between this
-///        client's read and its write (a compare-and-swap conflict), or a `MergeTags`/rename would collide with an existing tag name.
+///        client's read and its write (a compare-and-swap conflict), or a `MergeTags`/rename would collide with an
+///        existing tag name.
 struct Conflict : BookmarksError {
     using BookmarksError::BookmarksError;
 };

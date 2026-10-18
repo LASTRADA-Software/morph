@@ -651,7 +651,7 @@ private:
                     entry.button = _backend->createButton(model.column.get());
                     entry.button->setLabel(action);
                     entry.button->setTestId("explorer_action_" + action);
-                    entry.button->setOnClick([this, action = action] { select(action); });
+                    entry.button->setOnClick([this, id = action] { select(id); });
                     model.actions.push_back(std::move(entry));
                 }
             } else {
@@ -841,7 +841,7 @@ private:
                 ButtonWidget& button = keep(_backend->createButton(&row));
                 button.setLabel("Open");
                 button.setTestId("explorer_open_" + std::to_string(index));
-                button.setOnClick([this, screenId = screenId] { open(screenId); });
+                button.setOnClick([this, target = screenId] { open(target); });
             }
             ++index;
         }

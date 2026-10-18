@@ -48,9 +48,8 @@ struct SikNameId {
     [[nodiscard]] auto operator<=>(const SikNameId&) const noexcept = default;
 };
 
-/// Sentinel-backed strong id: `operator*` returns **by value**, and `0` means empty. Deliberately a different shape from
-/// `SikNameId` -- a concept that only admitted one of them would leave half the
-/// ladder still hand-writing traits.
+/// Sentinel-backed strong id: `operator*` returns **by value**, and `0` means empty. Deliberately a different shape
+/// from `SikNameId` -- a concept that only admitted one of them would leave half the ladder still hand-writing traits.
 struct SikRowId {
     std::int64_t value{0};
 

@@ -2062,8 +2062,10 @@ jobs:
           # default is the concrete way -- every examples/ source
           # would silently become "not built by this configure" and stop being
           # analysed, and this gate would go green having read 40% less code.
+          # The three rungs and their shared code are about 110 of the ~130
+          # examples/ entries; without the ladder the rest is ~25, far under 100.
           MIN_ENTRIES = 600
-          MIN_EXAMPLES_ENTRIES = 200
+          MIN_EXAMPLES_ENTRIES = 100
 
           # How many database entries a changed header is allowed to borrow flags from
           # before this script gives up on it. Candidates are tried nearest-first (by

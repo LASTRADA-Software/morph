@@ -111,8 +111,8 @@ ui::Screen bookmarksScreen() {
         auto const refreshed = ui::Commands{ui::refetch(bookmarks), ui::refetch(tags)};
         auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
         auto const knownTags =
-            ui::map(tags.value().at(&ListTagsResult::tags), "t", [](ui::Handle<ui::Any> const& tag) {
-                return ui::obj({{"key", tag.at("name")}, {"label", tag.at("name")}});
+            ui::map(tags.value().at(&ListTagsResult::tags), "t", [](ui::Handle<ui::Any> const& entry) {
+                return ui::obj({{"key", entry.at("name")}, {"label", entry.at("name")}});
             });
         auto const bulk = [&](std::string const& op) {
             return ui::run(archive, {{&BulkEdit::ids, list.selection()}, {&BulkEdit::archive, ui::AnyHandle{op}}});

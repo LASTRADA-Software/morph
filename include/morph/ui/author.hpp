@@ -25,12 +25,12 @@
 #include "../core/model_key.hpp"
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
-#include "button_emphasis.hpp"
 #include "../detail/reflected_member.hpp"
 #include "../ui/document.hpp"
 #include "../ui/value.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
+#include "button_emphasis.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
