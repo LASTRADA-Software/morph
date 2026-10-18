@@ -48,6 +48,7 @@ and react to backend changes.
 - [Connection scopes](#connection-scopes)
 - [Writing to a connection](#writing-to-a-connection)
 - [Watches](#watches)
+- [Fan-out](#fan-out)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -956,7 +957,7 @@ limit:
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
+| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is not sent as a reply, via a shared once-flag; if it succeeds, its changes still reach the watching connections, the caller included ([Fan-out](#fan-out)) — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
 | `maxLiveModels` | `0` (unbounded) | Checked on the server strand before `register` constructs a new instance, and again after the construction and before the insert (the construction is host code that may itself register through `handleInline`); over the cap → `err "too many models"`. Exact: nothing else inserts between the check and the insert. A shared `register`/`attach` that finds its key already live takes a reference and is not counted against the cap. |
 | `maxInFlightExecutes` | `0` (unbounded) | The in-flight count, server-strand state, incremented when an `execute` is admitted and decremented (posted back to the strand) when its reply is sent — success, exception, or timeout, whichever resolves the call first; at the cap → `err "server busy"`, no dispatch. Exact, for the same reason. |
 
@@ -1166,6 +1167,45 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   as does a failed `write` or `backlog()` read on its writer: a connection that
   cannot be written to is sent no events, and its client sends the whole set
   again when it reconnects.
+
+### Fan-out
+
+After an `execute` succeeds, the server tells every connection that watches
+what it changed. Every executing message takes this path: the `execute` kind,
+offline replays (which arrive as executes), and anything else that dispatches
+through `dispatchExecute`.
+
+- **The model strand derives.** `finishRemote`, on success only and before the
+  reply, calls `effects::deriveChanges(actionType, result, ranOn)`. `ranOn` is
+  the instance the action ran on: its model type, its id, and, for a keyed
+  shared instance, the primary of the directory key it held when the execute
+  was admitted (`RemoteRun::sharedKey`; empty for a private instance). Changes
+  that are not empty are posted to the server strand as
+  `fanOut(changes, caller)`, where `caller` is the execute's connection
+  (`RemoteRun::cid`). The reply is written exactly as without fan-out. A failed
+  execute derives nothing. A derivation that throws is logged; the reply and
+  the action gate's release still follow.
+- **The server strand finds the recipients.** A record topic goes to every
+  connection `watchersOf(record)` names, and a keyed shared instance's topic to
+  every connection `watchersOf(modelType, primary)` names, **the caller
+  included**. The caller may never see its own reply: an execute the
+  `executeTimeout` answered first but that succeeded, a reply the client
+  discarded, a replay whose reply went to the offline worker. A private
+  instance's topic goes only to the connection whose scope holds the instance,
+  whether or not it is the caller, and needs no watch. A connection that has
+  not negotiated events (`eventsNegotiated(cid)`) is sent nothing.
+- **One event per recipient.** Each recipient gets one `changes` event whose
+  `ChangesBody` holds only the topics it is sent: its watched records, with the
+  keys derived, and its instance topics as `InstanceTopic{modelType, primary,
+  instance}`. Before it is encoded, the body passes through
+  `RemoteServer::reauthorise(cid, body)`, the one place a recipient's topics
+  are narrowed; it keeps every topic, since each watch was authorised when it
+  was admitted. The event is then written as `post` writes: dropped above
+  `wire::kMaxEnvelopeBytes`, held back behind a full backlog.
+- **The registries are read at construction.** Every `RemoteServer`
+  constructor reads the record and effects registries once, so a process whose
+  declarations are invalid fails with `EffectsRegistrationError` when the server
+  is built, not at its first successful execute.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
@@ -2270,7 +2310,7 @@ server: each call is a loop task, so the loop serialises them.
 | `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer, default `ServerConfig`. |
 | `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. Default `ServerConfig`. |
 | `RemoteServer(workerPool, config, dispatcher, registry)` | Allow-all authorizer, `config` fixed for the server's life. Throws `std::invalid_argument` if `config.minProtocolVersion > config.maxProtocolVersion`. Calls `config.healthHandler` once before returning. |
-| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. |
+| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. Every constructor reads the record and effects registries and throws `EffectsRegistrationError` if they are invalid. |
 | `handle(msg, reply)` | Async: decodes on the calling thread, posts to the server strand, calls `reply` once from a pool thread. Unscoped (`cid == 0`). Callable from any thread; calls from one thread are handled in call order — see [Per-model execute ordering](#per-model-execute-ordering). |
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
@@ -2280,6 +2320,7 @@ server: each call is a loop task, so the loop serialises them.
 | `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
 | `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
 | `watchTable() const` | Server strand only (debug-asserted). The `detail::WatchTable` of every open connection's watches, read-only. See [Watches](#watches). |
+| `fanOut(changes, caller)` | Server strand only (debug-asserted). Sends each connection that watches a topic of `changes`, or whose scope holds a private instance in it, one `changes` event with the topics it is sent; `caller` included, connections without negotiated events skipped. A successful `execute` posts it. See [Fan-out](#fan-out). |
 | `eventsNegotiated(cid) const` | Server strand only (debug-asserted). Whether `cid` negotiated events: the `ConnectionFacts::events` a service set for it. `false` for `0`, an unknown `cid` or a closed one. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |

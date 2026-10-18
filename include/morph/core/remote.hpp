@@ -12,6 +12,7 @@
 #include <functional>
 #include <iterator>
 #include <latch>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -29,6 +30,7 @@
 #include "../core/backend.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
+#include "changes.hpp"
 #include "completion.hpp"
 #include "connection_writer.hpp"
 #include "detail/owner_probe.hpp"
@@ -53,6 +55,9 @@ struct LimitPolicy {
     /// @brief Max wall-clock time a single `execute` may take before the server
     ///        sends an `err "timeout"` reply and discards the eventual strand
     ///        result. `0` = no timeout (today's behavior).
+    ///
+    /// A handler that succeeds after the timeout answered still tells the
+    /// connections watching what it changed, the caller included, by event.
     ///
     /// An ordinary handler is never interrupted — it keeps running to
     /// completion on its strand, so this bounds the *caller's wait*, not the
@@ -365,6 +370,9 @@ public:
     ///                   singleton. Borrowed: it must outlive this server.
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     explicit RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                           ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
                               ::morph::model::detail::defaultDispatcher(),
@@ -383,6 +391,9 @@ public:
     ///                   singleton. Borrowed: it must outlive this server.
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                  std::shared_ptr<::morph::session::IAuthorizer> authorizer,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
@@ -404,6 +415,9 @@ public:
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultDispatcher(),
@@ -429,6 +443,9 @@ public:
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                  std::shared_ptr<::morph::session::IAuthorizer> authorizer, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
@@ -444,6 +461,10 @@ public:
           _executeTimeouts{_config.limits.executeTimeout.count() > 0
                                ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
                                : nullptr} {
+        // The first read of the record and effects registries: an invalid
+        // declaration fails the server's construction rather than its first
+        // successful execute, whose changes are derived from them.
+        static_cast<void>(::morph::effects::detail::resolved());
         if (_config.healthHandler) {
             _config.healthHandler(HealthStatus{.ready = true, .liveModels = 0, .inFlight = 0});
         }
@@ -661,10 +682,7 @@ public:
     /// @param cid      Connection to write to.
     /// @param envelope The encoded envelope (via `wire::encode`).
     void post(ConnectionId cid, std::string envelope) {
-        if (envelope.size() > ::morph::wire::kMaxEnvelopeBytes) {
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::eventOversize, 1.0);
-            ::morph::log::logWarn("[post] envelope for connection {} dropped: {} bytes exceeds {}", cid,
-                                  envelope.size(), ::morph::wire::kMaxEnvelopeBytes);
+        if (oversized(cid, envelope)) {
             return;
         }
         if (cid == 0) {
@@ -719,6 +737,61 @@ public:
     [[nodiscard]] detail::WatchTable const& watchTable() const {
         assert(_strand.runningHere() && "RemoteServer::watchTable runs on the server strand");
         return _watches;
+    }
+
+    /// @brief Tells every connection watching what @p changes names that it
+    ///        changed, as one `changes` event per connection.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. A successful `execute` posts its changes here.
+    ///
+    /// A record topic, and the instance topic of a keyed shared instance, go
+    /// to every connection watching them, @p caller included: the caller
+    /// may never see its own reply (it timed out, the client discarded it, or
+    /// it went to an offline replay). A private instance's topic goes to the
+    /// connection whose scope holds that instance, which needs no watch, and
+    /// to no other. A connection that has not negotiated events is sent
+    /// nothing. Each connection's event holds only the topics it is sent, and
+    /// passes through `post`'s backlog hold-back and size cap.
+    /// @param changes What one execute changed, from `effects::deriveChanges`.
+    /// @param caller  Connection the execute arrived on; `0` for unscoped.
+    void fanOut(::morph::effects::Changes changes, ConnectionId caller) {
+        assert(_strand.runningHere() && "RemoteServer::fanOut runs on the server strand");
+        noteOwner("RemoteServer::fanOut");
+        std::map<ConnectionId, ::morph::wire::ChangesBody> bodies;
+        for (auto const& change : changes.records) {
+            for (ConnectionId const cid : _watches.watchersOf(change.record)) {
+                if (eventsNegotiated(cid)) {
+                    bodies[cid].records.push_back(change);
+                }
+            }
+        }
+        for (auto& change : changes.instances) {
+            auto const recipients = change.primary.empty()
+                                        ? scopesHolding(::morph::exec::detail::ModelId{change.instance}, caller)
+                                        : _watches.watchersOf(change.modelType, change.primary);
+            ::morph::wire::InstanceTopic const topic{
+                .modelType = std::move(change.modelType), .primary = std::move(change.primary),
+                .instance = change.instance};
+            for (ConnectionId const cid : recipients) {
+                if (eventsNegotiated(cid)) {
+                    bodies[cid].instances.push_back(topic);
+                }
+            }
+        }
+        for (auto& [cid, body] : bodies) {
+            reauthorise(cid, body);
+            if (body.records.empty() && body.instances.empty()) {
+                continue;
+            }
+            std::string payload;
+            (void)glz::write_json(body, payload);
+            auto envelope =
+                ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
+            if (!oversized(cid, envelope)) {
+                postHere(cid, std::move(envelope));
+            }
+        }
     }
 
     /// @brief The server strand, as an executor.
@@ -931,6 +1004,52 @@ private:
         }
         return _facts[cid];
     }
+
+    /// @brief Whether @p envelope exceeds `wire::kMaxEnvelopeBytes`; such an
+    ///        envelope is counted as `Metric::eventOversize`, logged, and not sent.
+    /// @param cid      Connection it was meant for.
+    /// @param envelope The encoded envelope.
+    /// @return `true` when it must be dropped.
+    static bool oversized(ConnectionId cid, std::string const& envelope) {
+        if (envelope.size() <= ::morph::wire::kMaxEnvelopeBytes) {
+            return false;
+        }
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::eventOversize, 1.0);
+        ::morph::log::logWarn("[post] envelope for connection {} dropped: {} bytes exceeds {}", cid, envelope.size(),
+                              ::morph::wire::kMaxEnvelopeBytes);
+        return true;
+    }
+
+    /// @brief The connections whose scope holds @p mid. On the server strand.
+    ///
+    /// A private instance is held by the one connection that registered it;
+    /// @p caller is asked first because it usually is that connection.
+    /// @param mid    Instance.
+    /// @param caller Connection to ask first; `0` for none.
+    /// @return The connections, at most one for a private instance.
+    [[nodiscard]] std::vector<ConnectionId> scopesHolding(::morph::exec::detail::ModelId mid,
+                                                          ConnectionId caller) const {
+        if (auto const own = _connectionScopes.find(caller);
+            own != _connectionScopes.end() && own->second.contains(mid)) {
+            return {caller};
+        }
+        std::vector<ConnectionId> holders;
+        for (auto const& [cid, scope] : _connectionScopes) {
+            if (scope.contains(mid)) {
+                holders.push_back(cid);
+            }
+        }
+        return holders;
+    }
+
+    /// @brief Narrows @p body to the topics connection @p cid may still be
+    ///        sent. On the server strand.
+    ///
+    /// Every topic is kept: each was authorised when its watch was admitted,
+    /// and a private instance's topic goes only to the connection holding it.
+    /// @param cid  Recipient.
+    /// @param body The topics `fanOut` chose for it; narrowed in place.
+    static void reauthorise([[maybe_unused]] ConnectionId cid, [[maybe_unused]] ::morph::wire::ChangesBody& body) {}
 
     /// @brief Body of `post`. On the server strand.
     /// @param cid      Connection to write to.
@@ -2001,6 +2120,8 @@ private:
         run.timeoutHandle = timeoutHandle;
         run.stopSource = std::move(stopSource);
         run.mid = mid;
+        run.cid = cid;
+        run.sharedKey = inst->sharedKey;
         // Posted in this strand's order, which is the order `handle()` was
         // called in; the model's strand runs its tasks in the order they were
         // posted. That is the whole of per-model execute ordering.
@@ -2067,6 +2188,10 @@ private:
         /// Null without an `executeTimeout`.
         std::shared_ptr<::core::async::StopSource> stopSource;
         ::morph::exec::detail::ModelId mid{};
+        /// Connection the execute arrived on; `0` for unscoped.
+        ConnectionId cid{0};
+        /// The instance's directory key at admission; empty for a private instance.
+        std::optional<detail::DirectoryKey> sharedKey;
         std::chrono::steady_clock::time_point start;
         ::morph::observe::SpanId spanId{};
     };
@@ -2142,6 +2267,34 @@ private:
         }
     }
 
+    /// Derives what a successful execute changed and posts it to `fanOut` on
+    /// the server strand. On the model's strand, before the reply, so it runs
+    /// whether or not the caller is still waiting for that reply.
+    ///
+    /// A failure here is logged and goes no further: the reply and the action
+    /// gate's release still follow.
+    /// @param run    The finished execute.
+    /// @param result Its result JSON.
+    static void postChanges(RemoteRun const& run, std::string_view result) {
+        try {
+            auto changes = ::morph::effects::deriveChanges(
+                run.env.actionType, result,
+                ::morph::effects::InstanceChange{.modelType = run.env.modelType,
+                                                 .instance = run.mid.v,
+                                                 .primary = run.sharedKey ? run.sharedKey->second : std::string{}});
+            if (changes.empty()) {
+                return;
+            }
+            run.self->_strand.postTask([self = run.self, changes = std::move(changes), caller = run.cid]() mutable {
+                self->fanOut(std::move(changes), caller);
+            });
+        } catch (const std::exception& exc) {
+            ::morph::log::logError("[fanOut] changes of {} not derived: {}", run.env.actionType, exc.what());
+        } catch (...) {
+            ::morph::log::logError("[fanOut] changes of {} not derived: unknown exception", run.env.actionType);
+        }
+    }
+
     /// Records a finished execute, replies, and leaves the action gate so the
     /// next execute on the instance can start. On the strand.
     static void finishRemote(RemoteRun& run, std::string result, const std::exception_ptr& error) {
@@ -2167,6 +2320,7 @@ private:
             {{"modelType", run.env.modelType}, {"actionType", run.env.actionType}}};
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
         if (succeeded) {
+            postChanges(run, result);
             run.complete(::morph::wire::encode(::morph::wire::makeOk(run.env.callId, std::move(result))));
         } else {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);

@@ -5,11 +5,14 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <latch>
+#include <map>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/records.hpp>
 #include <morph/core/remote.hpp>
@@ -20,8 +23,11 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#include "test_support.hpp"
 
 // Glaze reflects member names through an external-linkage object, so these types cannot sit in an
 // anonymous namespace.
@@ -60,6 +66,61 @@ struct SecretModel {
     SecretList execute(ListSecrets const& /*action*/) { return {}; }
 };
 
+struct FanRow {
+    std::int64_t id{};
+    std::string name;
+};
+
+struct FanRowList {
+    std::vector<FanRow> rows;
+};
+
+struct FanOther {
+    std::int64_t id{};
+};
+
+struct FanOtherList {
+    std::vector<FanOther> rows;
+};
+
+/// Edits one row and returns it.
+struct EditFanRow {
+    std::int64_t id{};
+};
+
+/// Edits one row after `delayMs`, so an execute timeout can answer first.
+struct SlowEditFanRow {
+    std::int64_t id{};
+    int delayMs{};
+};
+
+/// Declares it edits rows, then fails.
+struct FailFanRow {
+    std::int64_t id{};
+};
+
+/// Reads the other record type; only there so a connection can watch it.
+struct ListFanOthers {
+    int limit{};
+};
+
+/// Changes the instance's own state.
+struct TouchFan {
+    int by{};
+};
+
+struct FanModel {
+    int touched = 0;
+    FanRowList execute(EditFanRow const& action) { return {.rows = {{.id = action.id, .name = "edited"}}}; }
+    FanRowList execute(SlowEditFanRow const& action) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{action.delayMs});
+        return {.rows = {{.id = action.id, .name = "slow"}}};
+    }
+    FanRowList execute(FailFanRow const& /*action*/) { throw std::runtime_error("edit failed"); }
+    FanOtherList execute(ListFanOthers const& /*action*/) { return {}; }
+    int execute(TouchFan const& action) { return touched += action.by; }
+};
+
 }  // namespace push_watch_test
 
 using namespace push_watch_test;
@@ -70,6 +131,19 @@ BRIDGE_REGISTER_MODEL(RowModel, "T_WatchRowModel")
 BRIDGE_REGISTER_ACTION(RowModel, ListRows, "T_WatchListRows")
 BRIDGE_REGISTER_MODEL(SecretModel, "T_WatchSecretModel")
 BRIDGE_REGISTER_ACTION(SecretModel, ListSecrets, "T_WatchListSecrets")
+
+BRIDGE_REGISTER_RECORD(FanRow, "T_FanRow")
+BRIDGE_REGISTER_RECORD(FanOther, "T_FanOther")
+BRIDGE_REGISTER_MODEL(FanModel, "T_FanModel")
+BRIDGE_REGISTER_ACTION(FanModel, EditFanRow, "T_FanEdit")
+BRIDGE_REGISTER_EFFECTS(EditFanRow, morph::effects::updates<FanRow>)
+BRIDGE_REGISTER_ACTION(FanModel, SlowEditFanRow, "T_FanSlowEdit")
+BRIDGE_REGISTER_EFFECTS(SlowEditFanRow, morph::effects::updates<FanRow>)
+BRIDGE_REGISTER_ACTION(FanModel, FailFanRow, "T_FanFail")
+BRIDGE_REGISTER_EFFECTS(FailFanRow, morph::effects::updates<FanRow>)
+BRIDGE_REGISTER_ACTION(FanModel, ListFanOthers, "T_FanListOthers")
+BRIDGE_REGISTER_ACTION(FanModel, TouchFan, "T_FanTouch")
+BRIDGE_REGISTER_EFFECTS(TouchFan, morph::effects::changesInstance)
 
 namespace {
 
@@ -477,4 +551,296 @@ TEST_CASE("unwatch_of_unwatched_topic_is_ok", "[push][watch]") {
     CHECK(rig.send(bare, ::morph::wire::kUnwatchKind, records({"T_WatchRow"})).kind == "ok");
     CHECK(rig.send(cid, ::morph::wire::kUnwatchKind, instance("T_WatchRowModel", "never")).kind == "ok");
     CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+}
+
+// ── Fan-out: what a successful execute tells the watching connections ───────
+
+namespace {
+
+constexpr std::string_view kFanModel = "T_FanModel";
+constexpr std::string_view kFanHello = "t-fan-hello";
+
+/// Negotiates events for the connection a `t-fan-hello` arrives on, as the UI
+/// service's `ui-hello` does.
+class FanHello final : public ::morph::backend::IEnvelopeService {
+public:
+    using IEnvelopeService::handle;
+
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind == kFanHello; }
+
+    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& /*authorizer*/) override {
+        return ::morph::wire::encode(::morph::wire::makeOk(request.callId));
+    }
+
+    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& authorizer,
+                                     ::morph::backend::ConnectionFacts& facts) override {
+        facts.events = true;
+        return handle(request, authorizer);
+    }
+};
+
+/// What the server wrote to one connection's writer: events only, since
+/// replies go to the reply callback.
+struct EventWire {
+    std::mutex mtx;
+    std::vector<std::string> sent;
+
+    ::morph::backend::ConnectionWriter writer() {
+        return {.write =
+                    [this](std::string frame) {
+                        std::scoped_lock const lock{mtx};
+                        sent.push_back(std::move(frame));
+                    },
+                .backlog = [] { return std::size_t{0}; }};
+    }
+
+    std::vector<std::string> snapshot() {
+        std::scoped_lock const lock{mtx};
+        return sent;
+    }
+
+    /// The `changes` payloads received, decoded.
+    std::vector<::morph::wire::ChangesBody> changes() {
+        std::vector<::morph::wire::ChangesBody> bodies;
+        for (auto const& frame : snapshot()) {
+            auto const env = ::morph::wire::decode(frame);
+            REQUIRE(env.kind == ::morph::wire::kEventKind);
+            ::morph::wire::EventBody event;
+            REQUIRE_FALSE(glz::read_json(event, env.body));
+            REQUIRE(event.topic == ::morph::wire::kChangesTopic);
+            auto body = ::morph::wire::readChangesBody(event.payload.str);
+            REQUIRE(body);
+            bodies.push_back(std::move(*body));
+        }
+        return bodies;
+    }
+};
+
+struct FanRig {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    std::shared_ptr<RemoteServer> server;
+    std::map<ConnectionId, std::unique_ptr<EventWire>> wires;
+
+    explicit FanRig(std::chrono::milliseconds executeTimeout = std::chrono::milliseconds{0}) {
+        ::morph::backend::ServerConfig config;
+        config.limits.executeTimeout = executeTimeout;
+        config.services.push_back(std::make_shared<FanHello>());
+        server = std::make_shared<RemoteServer>(pool, std::move(config));
+    }
+
+    /// Opens a connection with a writer, negotiating events when @p events.
+    ConnectionId connect(bool events = true) {
+        auto const cid = server->openConnection();
+        auto& wire = wires[cid];
+        wire = std::make_unique<EventWire>();
+        server->setConnectionWriter(cid, wire->writer());
+        if (events) {
+            ::morph::wire::Envelope hello;
+            hello.kind = std::string{kFanHello};
+            hello.callId = 1;
+            REQUIRE(::morph::wire::decode(server->handleInline(::morph::wire::encode(hello), cid)).kind == "ok");
+        }
+        return cid;
+    }
+
+    EventWire& wire(ConnectionId cid) { return *wires.at(cid); }
+
+    void watch(ConnectionId cid, ::morph::wire::WatchBody const& body) {
+        ::morph::wire::Envelope env;
+        env.kind = std::string{::morph::wire::kWatchKind};
+        env.callId = 2;
+        env.body = glz::write_json(body).value_or(std::string{});
+        auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(env), cid));
+        REQUIRE(reply.kind == "ok");
+        auto const parsed = ::morph::wire::readWatchReply(reply.body);
+        REQUIRE(parsed);
+        REQUIRE(parsed->refusedRecords.empty());
+        REQUIRE(parsed->refusedInstances.empty());
+    }
+
+    /// Registers a private instance on @p cid, or a keyed shared one when @p primary is set.
+    std::uint64_t create(ConnectionId cid, std::string primary = {}) {
+        auto const env = primary.empty() ? ::morph::wire::makeRegister(std::string{kFanModel})
+                                         : ::morph::wire::makeRegisterShared(std::string{kFanModel}, primary);
+        auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(env), cid));
+        REQUIRE(reply.kind == "ok");
+        REQUIRE(reply.modelId != 0U);
+        return reply.modelId;
+    }
+
+    /// Executes @p actionType with @p body on @p modelId through @p cid and
+    /// waits for the reply.
+    ::morph::wire::Envelope execute(ConnectionId cid, std::uint64_t modelId, std::string_view actionType,
+                                    std::string body) {
+        ::morph::wire::Envelope env;
+        env.kind = "execute";
+        env.callId = 9;
+        env.modelId = modelId;
+        env.modelType = std::string{kFanModel};
+        env.actionType = std::string{actionType};
+        env.body = std::move(body);
+        auto waiter = std::make_shared<::morph::testing::WaitReply>();
+        server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, cid);
+        REQUIRE(waiter->await());
+        return waiter->env;
+    }
+
+    /// Runs every task already posted to the server strand.
+    void flush() {
+        std::latch done{1};
+        server->strand().post([&done] { done.count_down(); });
+        done.wait();
+    }
+};
+
+/// The keys of @p change, as raw JSON text.
+std::vector<std::string> keysOf(::morph::effects::RecordChange const& change) {
+    std::vector<std::string> keys;
+    if (change.keys) {
+        for (auto const& key : *change.keys) {
+            keys.push_back(key.str);
+        }
+    }
+    return keys;
+}
+
+}  // namespace
+
+TEST_CASE("two_watchers_both_receive_caller_included", "[push][watch]") {
+    FanRig rig;
+    auto const caller = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(caller, records({"T_FanRow"}));
+    rig.watch(other, records({"T_FanRow"}));
+    auto const mid = rig.create(caller);
+
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":5})").kind == "ok");
+    rig.flush();
+
+    for (auto const cid : {caller, other}) {
+        auto const bodies = rig.wire(cid).changes();
+        REQUIRE(bodies.size() == 1U);
+        REQUIRE(bodies.front().records.size() == 1U);
+        CHECK(bodies.front().records.front().record == "T_FanRow");
+        CHECK(keysOf(bodies.front().records.front()) == std::vector<std::string>{"5"});
+        CHECK(bodies.front().instances.empty());
+    }
+}
+
+TEST_CASE("unwatched_type_posts_nothing", "[push][watch]") {
+    FanRig rig;
+    auto const caller = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(other, records({"T_FanOther"}));
+    auto const mid = rig.create(caller);
+
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":5})").kind == "ok");
+    // A reader changes nothing, so it posts nothing either.
+    CHECK(rig.execute(caller, mid, "T_FanListOthers", R"({"limit":1})").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(caller).snapshot().empty());
+    CHECK(rig.wire(other).snapshot().empty());
+}
+
+TEST_CASE("unnegotiated_connection_receives_nothing", "[push][watch]") {
+    FanRig rig;
+    auto const negotiated = rig.connect();
+    auto const silent = rig.connect(false);
+    rig.watch(negotiated, records({"T_FanRow"}));
+    rig.watch(silent, records({"T_FanRow"}));
+    auto const mid = rig.create(silent);
+
+    CHECK(rig.execute(silent, mid, "T_FanEdit", R"({"id":3})").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(silent).snapshot().empty());
+    CHECK(rig.wire(negotiated).changes().size() == 1U);
+}
+
+TEST_CASE("private_instance_change_only_to_owner", "[push][watch]") {
+    FanRig rig;
+    auto const owner = rig.connect();
+    auto const stranger = rig.connect();
+    auto const mid = rig.create(owner);
+    // The stranger watches a keyed topic of the same type; a private instance
+    // never matches it.
+    rig.watch(stranger, instance(std::string{kFanModel}, "k"));
+
+    // Run by a connection that does not own the instance: the owner is told,
+    // the caller is not.
+    CHECK(rig.execute(stranger, mid, "T_FanTouch", R"({"by":1})").kind == "ok");
+    CHECK(rig.execute(owner, mid, "T_FanTouch", R"({"by":1})").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(stranger).snapshot().empty());
+    auto const bodies = rig.wire(owner).changes();
+    REQUIRE(bodies.size() == 2U);
+    for (auto const& body : bodies) {
+        CHECK(body.records.empty());
+        REQUIRE(body.instances.size() == 1U);
+        CHECK(body.instances.front().modelType == kFanModel);
+        CHECK(body.instances.front().primary.empty());
+        CHECK(body.instances.front().instance == mid);
+    }
+}
+
+TEST_CASE("keyed_instance_created_later_reaches_watcher", "[push][watch]") {
+    FanRig rig;
+    auto const watcher = rig.connect();
+    auto const caller = rig.connect();
+    auto const bystander = rig.connect();
+    // Watched before any connection has created the instance.
+    rig.watch(watcher, instance(std::string{kFanModel}, "k1"));
+    rig.watch(bystander, instance(std::string{kFanModel}, "k2"));
+
+    auto const mid = rig.create(caller, "k1");
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":2})").kind == "ok");
+    rig.flush();
+
+    auto const bodies = rig.wire(watcher).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().instances.size() == 1U);
+    CHECK(bodies.front().instances.front().modelType == kFanModel);
+    CHECK(bodies.front().instances.front().primary == "k1");
+    CHECK(bodies.front().instances.front().instance == mid);
+    // The caller does not watch the key, and a keyed instance has no owner to tell.
+    CHECK(rig.wire(caller).snapshot().empty());
+    CHECK(rig.wire(bystander).snapshot().empty());
+}
+
+TEST_CASE("timed_out_call_still_reaches_caller_as_event", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{10}};
+    auto const caller = rig.connect();
+    rig.watch(caller, records({"T_FanRow"}));
+    auto const mid = rig.create(caller);
+
+    auto const reply = rig.execute(caller, mid, "T_FanSlowEdit", R"({"id":8,"delayMs":50})");
+    REQUIRE(reply.kind == "err");
+    CHECK(reply.message == "timeout");
+    CHECK(rig.wire(caller).snapshot().empty());
+
+    // The handler finishes after the timeout answered; its change still arrives.
+    REQUIRE(::morph::testing::waitUntil([&] { return !rig.wire(caller).snapshot().empty(); }));
+    auto const bodies = rig.wire(caller).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().records.size() == 1U);
+    CHECK(keysOf(bodies.front().records.front()) == std::vector<std::string>{"8"});
+}
+
+TEST_CASE("failed_execute_posts_nothing", "[push][watch]") {
+    FanRig rig;
+    auto const caller = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(caller, records({"T_FanRow"}));
+    rig.watch(other, records({"T_FanRow"}));
+    auto const mid = rig.create(caller);
+
+    CHECK(rig.execute(caller, mid, "T_FanFail", R"({"id":5})").kind == "err");
+    rig.flush();
+
+    CHECK(rig.wire(caller).snapshot().empty());
+    CHECK(rig.wire(other).snapshot().empty());
 }
