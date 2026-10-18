@@ -50,10 +50,15 @@ struct PnEcho {
 struct PnBig {
     int size = 0;
 };
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): the model's strand counts, the test thread reads.
+inline std::atomic<int> pnBigRuns{0};
 struct PnModel {
     int execute(PnEcho action) { return action.value; }
-    // NOLINTNEXTLINE(modernize-return-braced-init-list): braces would pick the initializer_list constructor.
-    std::string execute(PnBig action) { return std::string(static_cast<std::size_t>(action.size), 'x'); }
+    std::string execute(PnBig action) {
+        pnBigRuns.fetch_add(1);
+        // NOLINTNEXTLINE(modernize-return-braced-init-list): braces would pick the initializer_list constructor.
+        return std::string(static_cast<std::size_t>(action.size), 'x');
+    }
 };
 // NOLINTEND(misc-use-internal-linkage)
 
@@ -538,10 +543,13 @@ TEST_CASE("net_backlog_holds_events_and_drain_sends_resync", "[push][channel]") 
     REQUIRE(reg.kind == "ok");
 
     constexpr int kReplies = 128;
+    pnBigRuns.store(0);
     for (int i = 0; i < kReplies; ++i) {
         client.send(executeEnvelope(static_cast<std::uint64_t>(i + 1), reg.modelId, "PnBig", R"({"size":131072})"));
     }
-    // Every reply has been handed to the transport once none is in flight.
+    // Every execute has run, and then every reply has been handed to the transport once none is in flight. The
+    // drain alone is not enough: it can find nothing in flight before the server has read every request.
+    REQUIRE(::morph::testing::waitUntil([] { return pnBigRuns.load() == kReplies; }));
     REQUIRE(::morph::testing::awaitAnswer([&](auto& owner) { return server->drainedWithin(20s, owner); }));
     server->post(cid, ::morph::wire::encode(::morph::wire::makeEvent("changes", R"({"held":true})")));
 
