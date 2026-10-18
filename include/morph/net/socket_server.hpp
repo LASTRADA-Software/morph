@@ -304,10 +304,10 @@ private:
         /// backlog read. Neither keeps the connection: the server may hold
         /// them until it learns the connection is gone.
         [[nodiscard]] ::morph::backend::ConnectionWriter writerFor(std::shared_ptr<Client> const& client) const {
-            std::weak_ptr<Client> weak = client;
+            std::weak_ptr<Client> const weak = client;
             auto const counter = client->conn->pending;
             return {.write =
-                        [loopHandle = loop.weak(), weak, counter](std::string envelope) {
+                        [loopHandle = loop.weak(), weak, counter](std::string const& envelope) {
                             if (!sendEnvelope(loopHandle, weak, counter, envelope)) {
                                 throw std::runtime_error("the connection's I/O loop is gone");
                             }

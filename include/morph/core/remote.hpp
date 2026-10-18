@@ -794,23 +794,7 @@ public:
             }
         }
         for (auto& change : changes.instances) {
-            ::morph::exec::detail::ModelId const mid{change.instance};
-            if (change.primary.empty()) {
-                // Keyed after admission: the topic is the key it holds now.
-                if (auto const* inst = _instances.find(mid); inst != nullptr && inst->sharedKey) {
-                    change.primary = inst->sharedKey->second;
-                }
-            }
-            auto const recipients =
-                change.primary.empty() ? scopesHolding(mid) : _watches.watchersOf(change.modelType, change.primary);
-            ::morph::wire::InstanceTopic const topic{.modelType = std::move(change.modelType),
-                                                     .primary = std::move(change.primary),
-                                                     .instance = change.instance};
-            for (ConnectionId const cid : recipients) {
-                if (eventsNegotiated(cid)) {
-                    bodies[cid].instances.push_back(topic);
-                }
-            }
+            addInstanceTopic(std::move(change), bodies);
         }
         Authentications authentications;
         for (auto& [cid, body] : bodies) {
@@ -1104,6 +1088,34 @@ private:
         return found->second;
     }
 
+    /// @brief Adds one changed instance's topic to the body of every connection
+    ///        it reaches, for `fanOut`. On the server strand.
+    ///
+    /// An instance is matched by the directory key it holds now; a private one
+    /// reaches the scopes that hold it.
+    /// @param change The changed instance.
+    /// @param bodies Each recipient's share of the fan-out; extended in place.
+    void addInstanceTopic(::morph::effects::InstanceChange change,
+                          std::map<ConnectionId, ::morph::wire::ChangesBody>& bodies) {
+        ::morph::exec::detail::ModelId const mid{change.instance};
+        if (change.primary.empty()) {
+            // Keyed after admission: the topic is the key it holds now.
+            if (auto const* inst = _instances.find(mid); inst != nullptr && inst->sharedKey) {
+                change.primary = inst->sharedKey->second;
+            }
+        }
+        auto const recipients =
+            change.primary.empty() ? scopesHolding(mid) : _watches.watchersOf(change.modelType, change.primary);
+        ::morph::wire::InstanceTopic const topic{.modelType = std::move(change.modelType),
+                                                 .primary = std::move(change.primary),
+                                                 .instance = change.instance};
+        for (ConnectionId const cid : recipients) {
+            if (eventsNegotiated(cid)) {
+                bodies[cid].instances.push_back(topic);
+            }
+        }
+    }
+
     /// @brief Narrows @p body to the topics connection @p cid may still be
     ///        sent, re-authorising each watch by the rule that admitted it.
     ///        On the server strand.
@@ -1160,13 +1172,8 @@ private:
                 dropped = true;
                 continue;
             }
-            bool const keepsKeys = cid == caller || (!callerPrincipal.empty() && watch->principal == callerPrincipal);
-            if (!keepsKeys) {
-                auto const* info = ::morph::effects::recordNamed(change.record);
-                if (info != nullptr && info->privateKeys) {
-                    change.keys.reset();
-                }
-            }
+            bool const writer = cid == caller || (!callerPrincipal.empty() && watch->principal == callerPrincipal);
+            hidePrivateKeys(change, writer);
             records.push_back(std::move(change));
         }
         body.records = std::move(records);
@@ -1190,6 +1197,21 @@ private:
         }
         body.instances = std::move(instances);
         return dropped;
+    }
+
+    /// @brief Drops @p change's keys when its record is registered with
+    ///        `morph::record::privateKeys` and the recipient is not the writer.
+    /// @param change The change for one recipient; narrowed in place.
+    /// @param writer True when the recipient is the execute's own connection, or
+    ///        watches as the execute's verified principal.
+    static void hidePrivateKeys(::morph::effects::RecordChange& change, bool writer) {
+        if (writer) {
+            return;
+        }
+        auto const* info = ::morph::effects::recordNamed(change.record);
+        if (info != nullptr && info->privateKeys) {
+            change.keys.reset();
+        }
     }
 
     /// @brief Sends @p cid one `resync` event, owed because the server dropped
@@ -1257,6 +1279,7 @@ private:
     /// `resync`) and a later window is open, or when the connection closed.
     /// @param cid    Connection whose window closed.
     /// @param window The number its `queueChanges` gave the window.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a connection, then its window's number; swapped, nothing matches and nothing is sent.
     void closeWindow(ConnectionId cid, std::uint64_t window) {
         noteOwner("RemoteServer::closeWindow");
         auto found = _writers.find(cid);
@@ -2832,7 +2855,7 @@ public:
             return;
         }
         _server.setConnectionWriter(
-            _cid, ConnectionWriter{.write = [inbox = _inbox](std::string frame) { inbox->receive(frame); },
+            _cid, ConnectionWriter{.write = [inbox = _inbox](std::string const& frame) { inbox->receive(frame); },
                                    .backlog = [] { return std::size_t{0}; }});
     }
 
@@ -3142,7 +3165,7 @@ private:
         /// @param next   New handler; empty clears it.
         /// @param target Executor it is posted to.
         void set(std::function<void(::morph::wire::EventBody)> next, ::morph::exec::IExecutor* target) {
-            std::lock_guard lock{mutex};
+            std::scoped_lock const lock{mutex};
             handler =
                 next ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(next)) : nullptr;
             exec = target;
@@ -3154,7 +3177,7 @@ private:
             std::shared_ptr<std::function<void(::morph::wire::EventBody)>> current;
             ::morph::exec::IExecutor* target = nullptr;
             {
-                std::lock_guard lock{mutex};
+                std::scoped_lock const lock{mutex};
                 current = handler;
                 target = exec;
             }

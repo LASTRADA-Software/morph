@@ -117,7 +117,7 @@ private:
         if (inserted) {
             _records.push_back(Entry{.record = change.record, .whole = false, .keys = {}, .seen = {}});
         }
-        Entry& entry = _records[found->second];
+        Entry& entry = _records.at(found->second);
         if (entry.whole) {
             return;
         }

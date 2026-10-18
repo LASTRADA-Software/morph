@@ -38,6 +38,7 @@ struct PcfGateAction {
 };
 /// Open while the model's action may finish; closed, the action holds, so a
 /// call stays pending for as long as a test needs it.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): a flag shared between the test thread and the running action.
 inline std::atomic<bool> pcfGateOpen{true};
 struct PcfGateModel {
     int execute(PcfGateAction /*action*/) {
@@ -107,6 +108,8 @@ struct GateClosed {
     ~GateClosed() { pcfGateOpen.store(true); }
     GateClosed(const GateClosed&) = delete;
     GateClosed& operator=(const GateClosed&) = delete;
+    GateClosed(GateClosed&&) = delete;
+    GateClosed& operator=(GateClosed&&) = delete;
 };
 
 inline std::string eventJson(std::size_t n) { return "{\"n\":" + std::to_string(n) + "}"; }
@@ -200,7 +203,8 @@ inline void channelConformance(const FixtureFactory& make) {
 
             constexpr std::size_t kEvents = 50;
             for (std::size_t n = 0; n < kEvents; ++n) {
-                fx.server->post(fx.cid, ::morph::wire::encode(::morph::wire::makeEvent("changes", detail::eventJson(n))));
+                fx.server->post(fx.cid,
+                                ::morph::wire::encode(::morph::wire::makeEvent("changes", detail::eventJson(n))));
             }
             REQUIRE(fx.waitFor([&] { return log.size() == kEvents; }));
             auto const got = log.snapshot();

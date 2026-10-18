@@ -235,8 +235,10 @@ struct SecretGuard final : ::morph::session::IAuthorizer {
                                          std::string_view actionType, std::uint64_t modelId,
                                          std::string_view ownerPrincipal) const override {
         std::scoped_lock const lock{mtx};
-        instanceQuestions.push_back(
-            {std::string{modelType}, std::string{actionType}, modelId, std::string{ownerPrincipal}});
+        instanceQuestions.push_back({.modelType = std::string{modelType},
+                                     .actionType = std::string{actionType},
+                                     .modelId = modelId,
+                                     .owner = std::string{ownerPrincipal}});
         return modelType != kSecretModel;
     }
 };
@@ -621,6 +623,7 @@ namespace {
 
 /// Sends an `execute` of @p actionType on @p modelId of @p modelType through
 /// @p cid, signed with @p token, and waits for the reply.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a model type, then an action type; swapped, the server refuses an unknown model.
 ::morph::wire::Envelope executeOn(Rig& rig, ConnectionId cid, std::string_view modelType, std::string_view actionType,
                                   std::uint64_t modelId, std::string const& token) {
     ::morph::wire::Envelope env;
@@ -823,7 +826,9 @@ struct EventWire {
     }
 
     /// How many `resync` events were received.
-    std::size_t resyncs() { return static_cast<std::size_t>(std::ranges::count(topics(), ::morph::wire::kResyncTopic)); }
+    std::size_t resyncs() {
+        return static_cast<std::size_t>(std::ranges::count(topics(), ::morph::wire::kResyncTopic));
+    }
 
     /// The `changes` payloads received, decoded; `resync` events are skipped.
     std::vector<::morph::wire::ChangesBody> changes() {
@@ -896,9 +901,10 @@ struct FanRig {
     }
 
     /// Registers a private instance on @p cid, or a keyed shared one when @p primary is set.
-    std::uint64_t create(ConnectionId cid, std::string primary = {}, std::string const& token = {}) {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a key, then an optional token; swapped, the register is refused.
+    std::uint64_t create(ConnectionId cid, std::string const& primary = {}, std::string const& token = {}) {
         auto env = primary.empty() ? ::morph::wire::makeRegister(std::string{kFanModel})
-                                         : ::morph::wire::makeRegisterShared(std::string{kFanModel}, primary);
+                                   : ::morph::wire::makeRegisterShared(std::string{kFanModel}, primary);
         env.session.token = token;
         auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(env), cid));
         REQUIRE(reply.kind == "ok");
@@ -906,20 +912,22 @@ struct FanRig {
         return reply.modelId;
     }
 
-    /// Executes @p actionType with @p body on @p modelId through @p cid and
-    /// waits for the reply.
-    ::morph::wire::Envelope execute(ConnectionId cid, std::uint64_t modelId, std::string_view actionType,
+    /// Executes @p actionType with @p body on @p instance through @p connection
+    /// and waits for the reply.
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters): the envelope's fields in wire order; swapped, the server refuses it.
+    ::morph::wire::Envelope execute(ConnectionId connection, std::uint64_t instance, std::string_view actionType,
                                     std::string body, std::string const& token = {}) {
+        // NOLINTEND(bugprone-easily-swappable-parameters)
         ::morph::wire::Envelope env;
         env.kind = "execute";
         env.session.token = token;
         env.callId = 9;
-        env.modelId = modelId;
+        env.modelId = instance;
         env.modelType = std::string{kFanModel};
         env.actionType = std::string{actionType};
         env.body = std::move(body);
         auto waiter = std::make_shared<::morph::testing::WaitReply>();
-        server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, cid);
+        server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, connection);
         REQUIRE(waiter->await());
         return waiter->env;
     }
@@ -1371,7 +1379,8 @@ TEST_CASE("expired_session_drop_is_one_resync", "[push][watch]") {
     FanRig rig{std::chrono::milliseconds{0}, guard};
     auto const caller = rig.connect();
     auto const watcher = rig.connect();
-    rig.watch(watcher, {.records = {"T_FanRow"}, .instances = {{.modelType = std::string{kFanModel}, .primary = "k1"}}},
+    rig.watch(watcher,
+              {.records = {"T_FanRow"}, .instances = {{.modelType = std::string{kFanModel}, .primary = "k1"}}},
               "carol");
     auto const mid = rig.create(caller, "k1", "alice");
 
@@ -1469,7 +1478,7 @@ using ::morph::backend::detail::ChangeCoalescer;
     if (!keys.empty()) {
         change.keys.emplace();
         for (auto const& key : keys) {
-            change.keys->push_back(glz::raw_json{key});
+            change.keys->emplace_back(key);
         }
     }
     return {.records = {std::move(change)}, .instances = {}};

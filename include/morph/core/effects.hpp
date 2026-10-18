@@ -348,8 +348,8 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolve(std::vector<record::RecordInfo> records,
-                                      model::detail::ActionResultSlotMap const& resultSlots, EffectsMap const& declared,
-                                      std::vector<std::string> const& slotConflicts) {
+                                      model::detail::ActionResultSlotMap const& resultSlots,
+                                      EffectsMap const& declared, std::vector<std::string> const& slotConflicts) {
     std::vector<std::string> problems;
 
     // An identical registration, as a record registered in a header gives once per translation unit, is
@@ -359,8 +359,9 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         auto const sameType = std::ranges::find(distinct, info.type, &record::RecordInfo::type);
         if (sameType != distinct.end()) {
             if (sameType->name != info.name) {
-                problems.push_back(std::string{"type "} + info.type.name() + " is registered under two record names (`" +
-                                   sameType->name + "` and `" + info.name + "`)");
+                problems.push_back(std::string{"type "} + info.type.name() +
+                                   " is registered under two record names (`" + sameType->name + "` and `" +
+                                   info.name + "`)");
             } else if (!sameRegistration(*sameType, info)) {
                 problems.push_back("record `" + info.name + "` is registered twice with different options");
             }
@@ -433,9 +434,8 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
             continue;
         }
         auto const& declaration = declarations.front();
-        if (declaration.size() > 1 && std::ranges::any_of(declaration, [](DeclaredEffect const& effect) {
-                return effect.kind == Kind::None;
-            })) {
+        if (declaration.size() > 1 &&
+            std::ranges::any_of(declaration, [](DeclaredEffect const& effect) { return effect.kind == Kind::None; })) {
             problems.push_back("action `" + actionId + "` declares none together with other effects");
             continue;
         }

@@ -5,8 +5,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <expected>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
 #include <optional>
@@ -638,7 +638,7 @@ struct EventBody {
     if (payloadJson.empty()) {
         payloadJson = "null";
     }
-    EventBody body{std::string{topic}, glz::raw_json{std::move(payloadJson)}};
+    EventBody body{.topic = std::string{topic}, .payload = glz::raw_json{std::move(payloadJson)}};
     env.body = glz::write_json(body).value_or(std::string{});
     return env;
 }
@@ -712,12 +712,13 @@ template <class T>
     }
     T out{};
     static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
-    if (auto ec = glz::read<kLenient>(out, json)) {
-        return std::unexpected(std::string{what} + ": " + glz::format_error(ec, json));
+    if (auto const error = glz::read<kLenient>(out, json)) {
+        return std::unexpected(std::string{what} + ": " + glz::format_error(error, json));
     }
     return out;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a name, then how a refusal describes it; swapped, only the message reads oddly.
 [[nodiscard]] inline std::optional<std::string> checkTopicName(std::string_view name, std::string_view what) {
     if (name.size() > kMaxTopicNameBytes) {
         return std::string{what} + " is longer than " + std::to_string(kMaxTopicNameBytes) + " bytes";
@@ -816,7 +817,8 @@ template <class T>
             return std::unexpected(*reason);
         }
         if (change.keys && change.keys->size() > effects::kMaxChangeKeys) {
-            return std::unexpected("a record's keys list more than " + std::to_string(effects::kMaxChangeKeys) + " keys");
+            return std::unexpected("a record's keys list more than " + std::to_string(effects::kMaxChangeKeys) +
+                                   " keys");
         }
     }
     if (auto reason = detail::checkInstances(body->instances, "an instance topic")) {

@@ -108,6 +108,7 @@ std::string wsUrl(std::uint16_t port) { return "ws://127.0.0.1:" + std::to_strin
 /// A raw WebSocket client against a real `SocketServer`.
 class RawClient {
 public:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a port, then an optional buffer size every caller names in a comment.
     explicit RawClient(std::uint16_t port, int receiveBuffer = 0) : _reader{/*expectMasked=*/false} {
         _socket = ::morph::net::detail::TcpSocket::connect("127.0.0.1", port, 2000ms);
         if (receiveBuffer > 0) {
@@ -165,6 +166,7 @@ struct LoopConnectionGuard {
     }
 };
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the envelope's fields in wire order; swapped, the server refuses an unknown model.
 ::morph::wire::Envelope executeEnvelope(std::uint64_t callId, std::uint64_t modelId, std::string_view action,
                                         std::string body) {
     ::morph::wire::Envelope env;
@@ -399,7 +401,7 @@ TEST_CASE("net_closing_a_connection_releases_what_it_still_held", "[push][channe
         conn->onDrained = [&drained] { drained.fetch_add(1); };
         // Nothing reads the peer: most of 4 MiB stays queued.
         for (int i = 0; i < 64; ++i) {
-            std::string const frame(64 * 1024, 'q');
+            std::string const frame(std::size_t{64} * 1024, 'q');
             conn->pending->fetch_add(frame.size());
             static_cast<void>(::morph::net::detail::enqueueFrame(conn, frame, frame.size()));
         }
@@ -489,7 +491,7 @@ TEST_CASE("net_event_posted_during_the_handshake_is_dropped", "[push][channel]")
     REQUIRE(socket.setRecvTimeout(5000ms));
     std::string received;
     std::array<char, 4096> buf{};
-    while (received.find("\r\n\r\n") == std::string::npos) {
+    while (!received.contains("\r\n\r\n")) {
         std::size_t const got = socket.recvSome(buf.data(), buf.size());
         REQUIRE(got != 0);
         received.append(buf.data(), got);
@@ -560,10 +562,9 @@ TEST_CASE("net_channel_conformance", "[push][channel]") {
         ::morph::net::SocketBackend backend{wsUrl(wsServer.port())};
         REQUIRE(backend.waitForConnected());
         ::morph::testing::push::ChannelFixture fixture{
-            .server = server.get(),
-            .cid = cid,
-            .backend = &backend,
-            .waitFor = [](const std::function<bool()>& done) { return ::morph::testing::waitUntil(done); }};
+            .server = server.get(), .cid = cid, .backend = &backend, .waitFor = [](const std::function<bool()>& done) {
+                return ::morph::testing::waitUntil(done);
+            }};
         body(fixture);
     });
 }

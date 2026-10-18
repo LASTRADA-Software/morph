@@ -14,6 +14,7 @@
 #include <morph/ui/service.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ui_service_support.hpp"
@@ -126,8 +127,8 @@ TEST_CASE("catalog_facts_carry_effects_and_records", "[push][catalog]") {
 
     auto const& edit = facts.actions.at("T_CatalogEdit");
     REQUIRE(edit.effects.has_value());
-    REQUIRE(*edit.effects == std::vector<morph::ui::ActionEffect>{{"updates", "T_CatalogEntry"},
-                                                                  {"changes", "T_CatalogEntry"}});
+    REQUIRE(*edit.effects ==
+            std::vector<morph::ui::ActionEffect>{{"updates", "T_CatalogEntry"}, {"changes", "T_CatalogEntry"}});
     REQUIRE(edit.records.size() == 1U);
     CHECK(edit.records.front().record == "T_CatalogEntry");
     CHECK(edit.records.front().keyField == std::optional<std::string>{"id"});
@@ -163,8 +164,8 @@ TEST_CASE("ui_catalog_reply_round_trips_effects", "[push][catalog]") {
     CHECK(edit.effects == reply.actions->at("T_CatalogEdit").effects);
     CHECK(edit.records == reply.actions->at("T_CatalogEdit").records);
     CHECK_FALSE(parsed->actions->at("T_CatalogList").effects.has_value());
-    CHECK(text.find(R"("effects":[{"kind":"updates","record":"T_CatalogEntry"})") != std::string::npos);
-    CHECK(text.find(R"({"kind":"changesInstance"})") != std::string::npos);
+    CHECK(text.contains(R"("effects":[{"kind":"updates","record":"T_CatalogEntry"})"));
+    CHECK(text.contains(R"({"kind":"changesInstance"})"));
 }
 
 TEST_CASE("old_reply_without_fields_reads_as_reads", "[push][catalog]") {
@@ -234,7 +235,8 @@ TEST_CASE("hello_events_round_trip_on_the_wire", "[push][catalog]") {
 TEST_CASE("watch_body_round_trips_and_is_bounded", "[push][catalog]") {
     morph::wire::WatchBody body;
     body.records = {"Entry", "Tag"};
-    body.instances = {{"Editor", "k1", 0}, {"Editor", "", 7}};
+    body.instances = {{.modelType = "Editor", .primary = "k1", .instance = 0},
+                      {.modelType = "Editor", .primary = "", .instance = 7}};
     body.replace = true;
     auto const text = glz::write_json(body).value_or("");
     auto const back = morph::wire::readWatchBody(text);
@@ -260,7 +262,7 @@ TEST_CASE("watch_body_round_trips_and_is_bounded", "[push][catalog]") {
     }
     SECTION("an over-long instance list or name is refused") {
         morph::wire::WatchBody big;
-        big.instances.assign(morph::wire::kMaxWatchTopics + 1, {"M", "", 0});
+        big.instances.assign(morph::wire::kMaxWatchTopics + 1, {.modelType = "M", .primary = "", .instance = 0});
         CHECK_FALSE(morph::wire::readWatchBody(glz::write_json(big).value_or("")));
         morph::wire::WatchBody longName;
         longName.records = {std::string(morph::wire::kMaxTopicNameBytes + 1, 'x')};
@@ -275,7 +277,7 @@ TEST_CASE("watch_body_round_trips_and_is_bounded", "[push][catalog]") {
 TEST_CASE("watch_reply_round_trips", "[push][catalog]") {
     morph::wire::WatchReply reply;
     reply.refusedRecords = {"Secret"};
-    reply.refusedInstances = {{"Editor", "p", 3}};
+    reply.refusedInstances = {{.modelType = "Editor", .primary = "p", .instance = 3}};
     auto const back = morph::wire::readWatchReply(glz::write_json(reply).value_or(""));
     REQUIRE(back);
     CHECK(back->refusedRecords == reply.refusedRecords);
@@ -289,8 +291,8 @@ TEST_CASE("watch_reply_round_trips", "[push][catalog]") {
 }
 
 TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
-    auto const text = R"({"records":[{"record":"Entry","keys":[1,"b"]},{"record":"Tag"}],)"
-                      R"("instances":[{"modelType":"Editor","primary":"p","instance":9}]})";
+    std::string_view const text = R"({"records":[{"record":"Entry","keys":[1,"b"]},{"record":"Tag"}],)"
+                                  R"("instances":[{"modelType":"Editor","primary":"p","instance":9}]})";
     auto const back = morph::wire::readChangesBody(text);
     REQUIRE(back);
     REQUIRE(back->records.size() == 2);
@@ -301,7 +303,7 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
     CHECK(back->instances[0].instance == 9);
 
     SECTION("it is the payload makeEvent carries") {
-        auto const env = morph::wire::makeEvent(morph::wire::kChangesTopic, text);
+        auto const env = morph::wire::makeEvent(morph::wire::kChangesTopic, std::string{text});
         morph::wire::EventBody event;
         REQUIRE_FALSE(glz::read_json(event, env.body));
         CHECK(event.topic == "changes");
@@ -310,7 +312,7 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
     SECTION("exactly the key bound is accepted") {
         std::string keys = "[";
         for (std::size_t i = 0; i < morph::effects::kMaxChangeKeys; ++i) {
-            keys += (i ? ",1" : "1");
+            keys += (i != 0 ? ",1" : "1");
         }
         keys += "]";
         auto const at = morph::wire::readChangesBody(R"({"records":[{"record":"E","keys":)" + keys + "}]}");
@@ -320,7 +322,7 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
     SECTION("too many keys in one record is refused") {
         std::string keys = "[";
         for (std::size_t i = 0; i <= morph::effects::kMaxChangeKeys; ++i) {
-            keys += (i ? ",1" : "1");
+            keys += (i != 0 ? ",1" : "1");
         }
         keys += "]";
         CHECK_FALSE(morph::wire::readChangesBody(R"({"records":[{"record":"E","keys":)" + keys + "}]}"));
@@ -328,7 +330,7 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
     SECTION("too many records is refused") {
         std::string records = "[";
         for (std::size_t i = 0; i <= morph::wire::kMaxWatchTopics; ++i) {
-            records += (i ? R"(,{"record":"R"})" : R"({"record":"R"})");
+            records += (i != 0 ? R"(,{"record":"R"})" : R"({"record":"R"})");
         }
         records += "]";
         CHECK_FALSE(morph::wire::readChangesBody(R"({"records":)" + records + "}"));

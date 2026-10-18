@@ -188,7 +188,8 @@ public:
         if (connection == _connections.end()) {
             return nullptr;
         }
-        auto const found = connection->second.instances.find(InstanceKey{std::string{modelType}, std::string{primary}});
+        auto const found =
+            connection->second.instances.find(InstanceKey{std::string{modelType}, std::string{primary}});
         return found == connection->second.instances.end() ? nullptr : found->second.get();
     }
 

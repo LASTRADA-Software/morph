@@ -3121,10 +3121,12 @@ TEST_CASE("qt_event_is_routed_before_reply_matching", "[push][channel]") {
         },
         200);
     REQUIRE(log.size() == 2);
-    pumpUntil([&] {
-        owner.drain();
-        return false;
-    }, 5);
+    pumpUntil(
+        [&] {
+            owner.drain();
+            return false;
+        },
+        5);
     CHECK(result.load() == -1);
     CHECK_FALSE(failed.load());
 
@@ -3185,16 +3187,16 @@ TEST_CASE("qt_stalled_peer_closed_after_send_timeout", "[push][channel]") {
 
     std::mutex logMtx;
     std::vector<std::pair<std::chrono::steady_clock::time_point, std::string>> logged;
-    morph::log::ScopedLoggerOverride guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
-                                               std::scoped_lock const lock{logMtx};
-                                               logged.emplace_back(std::chrono::steady_clock::now(),
-                                                                   std::string{msg});
-                                           },
-                                           morph::log::LogLevel::debug};
+    morph::log::ScopedLoggerOverride const guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
+                                                     std::scoped_lock const lock{logMtx};
+                                                     logged.emplace_back(std::chrono::steady_clock::now(),
+                                                                         std::string{msg});
+                                                 },
+                                                 morph::log::LogLevel::debug};
     auto findLogged = [&](std::string_view needle) -> std::optional<std::chrono::steady_clock::time_point> {
         std::scoped_lock const lock{logMtx};
         for (auto const& [when, msg] : logged) {
-            if (msg.find(needle) != std::string::npos) {
+            if (msg.contains(needle)) {
                 return when;
             }
         }
@@ -3313,6 +3315,7 @@ public:
     void resume() { _socket->setReadBufferSize(0); }
 
     /// Pumps and reads until @p count whole text messages have arrived.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a message count, then an optional pump bound; swapped, the read ends early and the check after it fails.
     std::vector<std::string> readMessages(std::size_t count, int maxIterations = 500) {
         pumpUntil(
             [&] {
@@ -3331,16 +3334,18 @@ private:
             if (_buffer.size() < 2) {
                 return;
             }
-            auto const* data = reinterpret_cast<unsigned char const*>(_buffer.constData());
-            bool const fin = (data[0] & 0x80U) != 0;
-            unsigned const opcode = data[0] & 0x0FU;
-            std::uint64_t length = data[1] & 0x7FU;
+            auto const byteAt = [this](qsizetype index) {
+                return std::uint64_t{static_cast<unsigned char>(_buffer.at(index))};
+            };
+            bool const fin = (byteAt(0) & 0x80U) != 0;
+            auto const opcode = byteAt(0) & 0x0FU;
+            std::uint64_t length = byteAt(1) & 0x7FU;
             qsizetype header = 2;
             if (length == 126) {
                 if (_buffer.size() < 4) {
                     return;
                 }
-                length = (std::uint64_t{data[2]} << 8U) | data[3];
+                length = (byteAt(2) << 8U) | byteAt(3);
                 header = 4;
             } else if (length == 127) {
                 if (_buffer.size() < 10) {
@@ -3348,7 +3353,7 @@ private:
                 }
                 length = 0;
                 for (int i = 0; i < 8; ++i) {
-                    length = (length << 8U) | data[2 + i];
+                    length = (length << 8U) | byteAt(2 + i);
                 }
                 header = 10;
             }
@@ -3357,7 +3362,7 @@ private:
                 return;
             }
             if (opcode == 0x1 || opcode == 0x0) {
-                _partial.append(_buffer.constData() + header, static_cast<std::size_t>(length));
+                _partial += _buffer.sliced(header, static_cast<qsizetype>(length)).toStdString();
                 if (fin) {
                     _messages.push_back(std::move(_partial));
                     _partial.clear();
@@ -3414,8 +3419,8 @@ TEST_CASE("qt_stalled_reader_is_held_back_then_resynced", "[push][channel]") {
     CHECK(morph::wire::decode(got[0]).kind == "event");
     auto const second = morph::wire::decode(got[1]);
     UNSCOPED_INFO("second message: " << got[1].substr(0, 120));
-    CHECK(second.body.find(R"("topic":"resync")") != std::string::npos);
-    CHECK(second.body.find("held") == std::string::npos);
+    CHECK(second.body.contains(R"("topic":"resync")"));
+    CHECK_FALSE(second.body.contains("held"));
 }
 
 TEST_CASE("qt_stalled_peer_closed_after_send_timeout_wss", "[push][channel]") {
@@ -3427,16 +3432,16 @@ TEST_CASE("qt_stalled_peer_closed_after_send_timeout_wss", "[push][channel]") {
 
     std::mutex logMtx;
     std::vector<std::pair<std::chrono::steady_clock::time_point, std::string>> logged;
-    morph::log::ScopedLoggerOverride guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
-                                               std::scoped_lock const lock{logMtx};
-                                               logged.emplace_back(std::chrono::steady_clock::now(),
-                                                                   std::string{msg});
-                                           },
-                                           morph::log::LogLevel::debug};
+    morph::log::ScopedLoggerOverride const guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
+                                                     std::scoped_lock const lock{logMtx};
+                                                     logged.emplace_back(std::chrono::steady_clock::now(),
+                                                                         std::string{msg});
+                                                 },
+                                                 morph::log::LogLevel::debug};
     auto findLogged = [&](std::string_view needle) -> std::optional<std::chrono::steady_clock::time_point> {
         std::scoped_lock const lock{logMtx};
         for (auto const& [when, msg] : logged) {
-            if (msg.find(needle) != std::string::npos) {
+            if (msg.contains(needle)) {
                 return when;
             }
         }
@@ -3496,13 +3501,11 @@ TEST_CASE("qt_channel_conformance", "[push][channel]") {
         auto const cid = nextQtConnectionId(*server);
         morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(wsServer.port())}};
         REQUIRE(backend.waitForConnected());
-        morph::testing::push::ChannelFixture fixture{.server = server.get(),
-                                                     .cid = cid,
-                                                     .backend = &backend,
-                                                     .waitFor = [](const std::function<bool()>& done) {
-                                                         pumpUntil(done, 300);
-                                                         return done();
-                                                     }};
+        morph::testing::push::ChannelFixture fixture{
+            .server = server.get(), .cid = cid, .backend = &backend, .waitFor = [](const std::function<bool()>& done) {
+                pumpUntil(done, 300);
+                return done();
+            }};
         body(fixture);
     });
 }

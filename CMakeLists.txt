@@ -607,6 +607,8 @@ target_sources(morph
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
         include/morph/core/detail/result_walker.hpp
+        include/morph/core/detail/watch_table.hpp
+        include/morph/core/detail/change_coalescer.hpp
         include/morph/forms/detail/session_common.hpp
         include/morph/forms/detail/schema_name.hpp
         include/morph/forms/engine/detail/text.hpp

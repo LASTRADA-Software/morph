@@ -134,9 +134,9 @@ template <typename Result>
         } else if (effect.kind == ::morph::effects::Kind::ChangesInstance) {
             kind = "changesInstance";
         }
-        out.push_back(ActionEffect{.kind = std::string{kind},
-                                   .record = effect.record.empty() ? std::nullopt
-                                                                   : std::optional<std::string>{effect.record}});
+        out.push_back(
+            ActionEffect{.kind = std::string{kind},
+                         .record = effect.record.empty() ? std::nullopt : std::optional<std::string>{effect.record}});
     }
     return out;
 }
@@ -199,17 +199,16 @@ struct CatalogFacts {
     void action() {
         model<Model>();
         auto const actionId = std::string{::morph::model::ActionTraits<Action>::typeId()};
-        actions.emplace(actionId,
-                        ActionInfo{
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .calculatedFields = ActionFacts<Action>::calculatedFields(),
-                            .secretFields = ActionFacts<Action>::secretFields(),
-                            .credential = ActionFacts<Action>::credential,
-                            .listFields = detail::listFields<::morph::model::HandlerResultT<
-                                decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
-                            .effects = detail::effectsInfo(actionId),
-                            .records = detail::recordsInfo(actionId),
-                        });
+        actions.emplace(actionId, ActionInfo{
+                                      .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                      .calculatedFields = ActionFacts<Action>::calculatedFields(),
+                                      .secretFields = ActionFacts<Action>::secretFields(),
+                                      .credential = ActionFacts<Action>::credential,
+                                      .listFields = detail::listFields<::morph::model::HandlerResultT<
+                                          decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
+                                      .effects = detail::effectsInfo(actionId),
+                                      .records = detail::recordsInfo(actionId),
+                                  });
     }
 
     /// @brief The facts as a `ui::Catalog`.

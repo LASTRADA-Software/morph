@@ -221,9 +221,10 @@ void QtWebSocketServer::onNewConnection() {
     if (_wsServer.secureMode() == QWebSocketServer::SecureMode) {
         state.tls = findTlsSocket(socket);
         if (state.tls.isNull()) {
-            ::morph::log::logWarn("[QtWebSocketServer] connection {}: TLS socket not found; its backlog counts "
-                                  "only plaintext not yet encrypted, so a slow reader is not held back",
-                                  state.cid);
+            ::morph::log::logWarn(
+                "[QtWebSocketServer] connection {}: TLS socket not found; its backlog counts "
+                "only plaintext not yet encrypted, so a slow reader is not held back",
+                state.cid);
         }
     }
 #endif
@@ -255,8 +256,7 @@ void QtWebSocketServer::onNewConnection() {
 }
 
 bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server, QPointer<QWebSocket> const& socket,
-                                      std::shared_ptr<std::atomic<std::size_t>> const& backlog,
-                                      std::string envelope) {
+                                      std::shared_ptr<std::atomic<std::size_t>> const& backlog, std::string envelope) {
     auto* app = QCoreApplication::instance();
     if (app == nullptr) {
         return false;

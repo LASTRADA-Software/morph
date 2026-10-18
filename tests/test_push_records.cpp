@@ -104,8 +104,10 @@ struct WalkerModel {
 
 template <>
 struct glz::meta<push_records_test::Opaque> {
+    // NOLINTBEGIN(readability-identifier-naming): glaze looks these names up.
     static constexpr bool custom_read = true;
     static constexpr bool custom_write = true;
+    // NOLINTEND(readability-identifier-naming)
 };
 
 template <>
@@ -133,7 +135,8 @@ BRIDGE_REGISTER_ACTION(WalkerModel, CountRows, "T_WalkerCountRows")
 
 namespace {
 [[maybe_unused]] bool const walkerSameFirst = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
-[[maybe_unused]] bool const walkerSameSecond = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
+[[maybe_unused]] bool const walkerSameSecond =
+    morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
 }  // namespace
 
 namespace {
@@ -280,6 +283,11 @@ TEST_CASE("action_result_second_type_under_one_id_is_a_conflict", "[push][record
         morph::model::closeRegistrationPhase();
     }
     struct Restore {
+        Restore() = default;
+        Restore(Restore const&) = delete;
+        Restore& operator=(Restore const&) = delete;
+        Restore(Restore&&) = delete;
+        Restore& operator=(Restore&&) = delete;
         ~Restore() {
             morph::model::detail::mutableActionResultSlots().erase("T_WalkerConflict");
             std::erase(morph::model::detail::mutableActionResultConflicts(), std::string{"T_WalkerConflict"});

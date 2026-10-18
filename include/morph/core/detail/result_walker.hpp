@@ -89,7 +89,7 @@ template <typename T>
 consteval bool hasAnonymousName() {
     constexpr std::string_view name = glz::type_name<T>;
     return name.contains("(anonymous namespace)") || name.contains("{anonymous}") ||
-           name.contains("`anonymous namespace'");
+           name.contains("`anonymous namespace'") || name.contains("`anonymous-namespace'");
 }
 
 /// @brief A type whose members the walker visits: one glaze writes as an object, member by member.
@@ -135,7 +135,7 @@ void visitMembers(Walk& walk, std::string const& path, std::index_sequence<I...>
         using Member = std::remove_cvref_t<decltype(morph::detail::reflectedMember<Index>(std::declval<T&>()))>;
         if constexpr (mayHoldSlots<Member>()) {
             constexpr std::string_view key = glz::reflect<T>::keys[Index];
-            visit<Member>(walk, path.empty() ? std::string{key} : path + "." + std::string{key});
+            result_walker::visit<Member>(walk, path.empty() ? std::string{key} : path + "." + std::string{key});
         }
     };
     (member.template operator()<I>(), ...);
@@ -148,7 +148,7 @@ void visitMembers(Walk& walk, std::string const& path, std::index_sequence<I...>
 template <typename T>
 void visit(Walk& walk, std::string const& path) {
     if constexpr (!std::is_void_v<typename Element<T>::type>) {
-        visit<std::remove_cvref_t<typename Element<T>::type>>(walk, path);
+        result_walker::visit<std::remove_cvref_t<typename Element<T>::type>>(walk, path);
     } else if constexpr (Object<T>) {
         std::type_index const self{typeid(T)};
         if (std::ranges::find(walk.onPath, self) != walk.onPath.end()) {

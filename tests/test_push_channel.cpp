@@ -63,7 +63,7 @@ TEST_CASE("reply_router_routes_event_before_call_match", "[push][channel]") {
     table.insert(0, 7);
 
     int calls = 0;
-    auto const handler = [&](::morph::wire::EventBody) { ++calls; };
+    auto const handler = [&](::morph::wire::EventBody const& /*event*/) { ++calls; };
     CHECK(routeEvent(::morph::wire::makeEvent("resync", "null"), handler));
     CHECK(calls == 1);
     CHECK(table.size() == 1);  // the pending callId 0 is untouched
@@ -78,7 +78,7 @@ TEST_CASE("reply_router_drops_malformed_event_and_event_without_handler", "[push
     bad.kind = "event";
     bad.body = "not json";
     int calls = 0;
-    CHECK(routeEvent(bad, [&](::morph::wire::EventBody) { ++calls; }));
+    CHECK(routeEvent(bad, [&](::morph::wire::EventBody const& /*event*/) { ++calls; }));
     CHECK(calls == 0);
     CHECK(routeEvent(::morph::wire::makeEvent("changes", "{}"), {}));
 }
@@ -88,18 +88,18 @@ TEST_CASE("local_backend_deliver_event_reaches_handler_on_exec", "[push][channel
     InlineExec cb;
     ::morph::backend::LocalBackend backend{pool};
 
-    backend.deliverEvent({"changes", {"{}"}});  // no handler: dropped
+    backend.deliverEvent({.topic = "changes", .payload = {"{}"}});  // no handler: dropped
     CHECK(cb.posted == 0);
 
     std::vector<std::string> topics;
-    backend.setEventHandler([&](::morph::wire::EventBody e) { topics.push_back(e.topic); }, &cb);
-    backend.deliverEvent({"changes", {"{}"}});
-    backend.deliverEvent({"resync", {"null"}});
+    backend.setEventHandler([&](::morph::wire::EventBody const& event) { topics.push_back(event.topic); }, &cb);
+    backend.deliverEvent({.topic = "changes", .payload = {"{}"}});
+    backend.deliverEvent({.topic = "resync", .payload = {"null"}});
     CHECK(cb.posted == 2);
     CHECK(topics == std::vector<std::string>{"changes", "resync"});
 
     backend.setEventHandler(nullptr, nullptr);
-    backend.deliverEvent({"changes", {"{}"}});
+    backend.deliverEvent({.topic = "changes", .payload = {"{}"}});
     CHECK(topics.size() == 2);
 }
 
@@ -355,8 +355,7 @@ TEST_CASE("throwing_backlog_read_is_caught_like_a_throwing_write", "[push][chann
     {
         std::scoped_lock const lock{logMtx};
         auto const reported = std::ranges::count_if(lines, [cid](const std::string& line) {
-            return line.find("write to connection " + std::to_string(cid) + " failed: counter gone") !=
-                   std::string::npos;
+            return line.contains("write to connection " + std::to_string(cid) + " failed: counter gone");
         });
         CHECK(reported == 1);
     }
@@ -375,10 +374,9 @@ TEST_CASE("simulated_backend_channel_conformance", "[push][channel]") {
         auto const cid = server->openConnection();
         ::morph::backend::SimulatedRemoteBackend backend{*server, cid};
         ::morph::testing::push::ChannelFixture fixture{
-            .server = server.get(),
-            .cid = cid,
-            .backend = &backend,
-            .waitFor = [](const std::function<bool()>& done) { return ::morph::testing::waitUntil(done); }};
+            .server = server.get(), .cid = cid, .backend = &backend, .waitFor = [](const std::function<bool()>& done) {
+                return ::morph::testing::waitUntil(done);
+            }};
         body(fixture);
     });
 }

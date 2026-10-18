@@ -12,6 +12,7 @@
 #include <typeindex>
 #include <utility>
 #include <vector>
+
 #include "../detail/reflected_member.hpp"
 #include "model_key.hpp"
 #include "registry.hpp"
@@ -187,9 +188,7 @@ inline std::vector<RecordInfo>& mutableRecordRegistry() {
 
 /// @brief The records declared so far, raw and unvalidated.
 /// @return The entries in registration order.
-inline std::vector<RecordInfo> const& recordRegistry() {
-    return mutableRecordRegistry();
-}
+inline std::vector<RecordInfo> const& recordRegistry() { return mutableRecordRegistry(); }
 
 /// @brief Static-init helper for `BRIDGE_REGISTER_RECORD`.
 /// @tparam T The record type.
@@ -209,9 +208,8 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
     info.privateKeys = (std::is_same_v<Opts, privateKeys> || ... || false);
     auto const addSources = []<typename O>(RecordInfo& target) {
         if constexpr (IsDerivedFrom<O>::value) {
-            []<typename... S>(RecordInfo& out, derivedFrom<S...>) {
-                (out.derivedFrom.emplace_back(typeid(S)), ...);
-            }(target, O{});
+            []<typename... S>(RecordInfo& out, derivedFrom<S...>) { (out.derivedFrom.emplace_back(typeid(S)), ...); }(
+                target, O{});
         }
     };
     (addSources.template operator()<Opts>(info), ...);
@@ -234,9 +232,9 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
 #ifdef MORPH_CLIENT_ONLY
 #define BRIDGE_REGISTER_RECORD(T, NAME, ...)
 #else
-#define BRIDGE_REGISTER_RECORD(T, NAME, ...)                                                             \
-    namespace {                                                                                          \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_record_reg_, __COUNTER__) =                     \
-        morph::record::detail::registerRecordOnce<T __VA_OPT__(, ) __VA_ARGS__>(NAME);                   \
+#define BRIDGE_REGISTER_RECORD(T, NAME, ...)                                           \
+    namespace {                                                                        \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_record_reg_, __COUNTER__) =   \
+        morph::record::detail::registerRecordOnce<T __VA_OPT__(, ) __VA_ARGS__>(NAME); \
     }
 #endif

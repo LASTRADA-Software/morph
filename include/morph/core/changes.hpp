@@ -32,7 +32,7 @@ inline void collectKey(ResultJson const& value, std::string_view keyField, std::
         return;
     }
     auto const& members = value.get_object();
-    auto const key = members.find(keyField);
+    auto const* const key = members.find(keyField);
     if (key == members.end()) {
         return;
     }
@@ -47,6 +47,7 @@ inline void collectKey(ResultJson const& value, std::string_view keyField, std::
 /// @param value The value at the end of a path.
 /// @param keyField The record's key member.
 /// @param out Where to append.
+// NOLINTNEXTLINE(misc-no-recursion): an array nests records to any depth, and the walk follows it.
 inline void collectKeysAtLeaf(ResultJson const& value, std::string_view keyField, std::vector<glz::raw_json>& out) {
     if (value.is_array()) {
         for (auto const& element : value.get_array()) {
@@ -72,6 +73,7 @@ inline void collectKeysAtLeaf(ResultJson const& value, std::string_view keyField
 /// @param path The dot-joined member names; `""` is the value itself.
 /// @param keyField The record's key member.
 /// @param out Where to append.
+// NOLINTNEXTLINE(misc-no-recursion): one call per path segment or nested array, bounded by the result's depth.
 inline void collectKeysAtPath(ResultJson const& value, std::string_view path, std::string_view keyField,
                               std::vector<glz::raw_json>& out) {
     if (path.empty()) {
@@ -91,7 +93,7 @@ inline void collectKeysAtPath(ResultJson const& value, std::string_view path, st
     auto const segment = path.substr(0, dot);
     auto const rest = dot == std::string_view::npos ? std::string_view{} : path.substr(dot + 1);
     auto const& members = value.get_object();
-    if (auto const next = members.find(segment); next != members.end()) {
+    if (auto const* const next = members.find(segment); next != members.end()) {
         collectKeysAtPath(next->second, rest, keyField, out);
         return;
     }
@@ -140,8 +142,10 @@ inline void addDerivedChanges(Resolved const& resolved, std::string const& sourc
     std::vector<std::type_index> reached{root->type};
     // A record is visited once, which also ends a walk over records that share a source.
     for (std::size_t next = 0; next < reached.size(); ++next) {
+        // A copy, not a reference: the loop below appends to `reached`.
+        auto const current = reached.at(next);
         for (auto const& candidate : resolved.records) {
-            if (std::ranges::find(candidate.derivedFrom, reached[next]) == candidate.derivedFrom.end() ||
+            if (std::ranges::find(candidate.derivedFrom, current) == candidate.derivedFrom.end() ||
                 std::ranges::find(reached, candidate.type) != reached.end()) {
                 continue;
             }
@@ -151,12 +155,53 @@ inline void addDerivedChanges(Resolved const& resolved, std::string const& sourc
     }
 }
 
+/// @brief Adds the change an execute's instance makes, unless it is already there.
+/// @param changes Where to add.
+/// @param ranOn The instance the action ran on.
+inline void addInstanceChange(Changes& changes, InstanceChange const& ranOn) {
+    auto const same = [&](InstanceChange const& have) {
+        return have.modelType == ranOn.modelType && have.instance == ranOn.instance && have.primary == ranOn.primary;
+    };
+    if (std::ranges::none_of(changes.instances, same)) {
+        changes.instances.push_back(ranOn);
+    }
+}
+
+/// @brief Adds the change an `updates<R>` effect makes: the keys of the `R` rows found in the result.
+///
+/// A result that does not parse, or a record without a key, cannot name rows: the whole type is reported,
+/// which over-notifies but never misses.
+/// @param resolved The resolved registries.
+/// @param actionId The action's id.
+/// @param record The updated record's wire name.
+/// @param parsed The parsed result, or `nullptr` when it did not parse.
+/// @param changes Where to add.
+inline void addUpdatesChange(Resolved const& resolved, std::string_view actionId, std::string const& record,
+                             ResultJson const* parsed, Changes& changes) {
+    auto const* const info = resolved.recordNamed(record);
+    if (parsed == nullptr || info == nullptr || !info->keyField) {
+        addRecordChange(changes, record, std::nullopt);
+        return;
+    }
+    std::vector<glz::raw_json> keys;
+    for (auto const& held : resolved.recordsOf(actionId)) {
+        if (held.record != record) {
+            continue;
+        }
+        for (auto const& path : held.paths) {
+            collectKeysAtPath(*parsed, path, *info->keyField, keys);
+        }
+    }
+    addRecordChange(changes, record, std::move(keys));
+}
+
 /// @brief See `morph::effects::deriveChanges`, over given registries.
 /// @param resolved The resolved registries.
 /// @param actionId The action's id.
 /// @param resultJson The action's result as JSON.
 /// @param ranOn The instance the action ran on.
 /// @return The changes.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an id, then a JSON document; swapped, no effects are found.
 [[nodiscard]] inline Changes deriveChangesFrom(Resolved const& resolved, std::string_view actionId,
                                                std::string_view resultJson, InstanceChange const& ranOn) {
     Changes changes;
@@ -164,54 +209,36 @@ inline void addDerivedChanges(Resolved const& resolved, std::string const& sourc
     if (!declared) {
         return changes;
     }
+    // The result is parsed once, and only when an `updates` effect needs its rows.
     std::optional<ResultJson> parsed;
     bool parseTried = false;
+    auto const parsedResult = [&]() -> ResultJson const* {
+        if (!parseTried) {
+            parseTried = true;
+            ResultJson tree;
+            if (!glz::read_json(tree, resultJson)) {
+                parsed = std::move(tree);
+            }
+        }
+        return parsed ? &*parsed : nullptr;
+    };
     for (auto const& effect : *declared) {
         switch (effect.kind) {
-        case Kind::None:
-            break;
-        case Kind::ChangesInstance:
-            if (std::ranges::none_of(changes.instances, [&](InstanceChange const& have) {
-                    return have.modelType == ranOn.modelType && have.instance == ranOn.instance &&
-                           have.primary == ranOn.primary;
-                })) {
-                changes.instances.push_back(ranOn);
-            }
-            break;
-        case Kind::Changes:
-            addRecordChange(changes, effect.record, std::nullopt);
-            addDerivedChanges(resolved, effect.record, changes);
-            break;
-        case Kind::Updates: {
-            if (!parseTried) {
-                parseTried = true;
-                ResultJson tree;
-                if (!glz::read_json(tree, resultJson)) {
-                    parsed = std::move(tree);
-                }
-            }
-            auto const* const info = resolved.recordNamed(effect.record);
-            // A result that does not parse, or a record without a key, cannot name rows: the whole type
-            // is reported, which over-notifies but never misses.
-            if (!parsed || info == nullptr || !info->keyField) {
+            case Kind::None:
+                break;
+            case Kind::ChangesInstance:
+                addInstanceChange(changes, ranOn);
+                break;
+            case Kind::Changes:
                 addRecordChange(changes, effect.record, std::nullopt);
-            } else {
-                std::vector<glz::raw_json> keys;
-                for (auto const& held : resolved.recordsOf(actionId)) {
-                    if (held.record != effect.record) {
-                        continue;
-                    }
-                    for (auto const& path : held.paths) {
-                        collectKeysAtPath(*parsed, path, *info->keyField, keys);
-                    }
-                }
-                addRecordChange(changes, effect.record, std::move(keys));
-            }
-            addDerivedChanges(resolved, effect.record, changes);
-            break;
-        }
-        default:
-            break;
+                addDerivedChanges(resolved, effect.record, changes);
+                break;
+            case Kind::Updates:
+                addUpdatesChange(resolved, actionId, effect.record, parsedResult(), changes);
+                addDerivedChanges(resolved, effect.record, changes);
+                break;
+            default:
+                break;
         }
     }
     // A record naming more rows than a reader accepts is reported whole: it over-notifies, never misses.

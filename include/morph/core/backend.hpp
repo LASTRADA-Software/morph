@@ -1126,9 +1126,9 @@ public:
     /// @param exec    Executor the handler is posted to. Borrowed: it must outlive the installation.
     void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
                          ::morph::exec::IExecutor* exec) override {
-        std::lock_guard lock{_eventMutex};
-        _eventHandler = handler ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(handler))
-                                : nullptr;
+        std::scoped_lock const lock{_eventMutex};
+        _eventHandler =
+            handler ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(handler)) : nullptr;
         _eventExec = exec;
     }
 
@@ -1143,14 +1143,15 @@ public:
         std::shared_ptr<std::function<void(::morph::wire::EventBody)>> handler;
         ::morph::exec::IExecutor* exec = nullptr;
         {
-            std::lock_guard lock{_eventMutex};
+            std::scoped_lock const lock{_eventMutex};
             handler = _eventHandler;
             exec = _eventExec;
         }
         if (!handler || exec == nullptr) {
             return;
         }
-        exec->post([handler = std::move(handler), event = std::move(event)]() mutable { (*handler)(std::move(event)); });
+        exec->post(
+            [handler = std::move(handler), event = std::move(event)]() mutable { (*handler)(std::move(event)); });
     }
 
     LocalBackend(const LocalBackend&) = delete;
