@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cassert>
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -64,11 +65,14 @@ namespace detail {
 /// @tparam T An option.
 template <typename T>
 struct KeyOption {
+    /// True for a `key<>` option.
     static constexpr bool value = false;
 };
 template <auto Member>
 struct KeyOption<key<Member>> {
+    /// True for a `key<>` option.
     static constexpr bool value = true;
+    /// The member pointer the option names.
     static constexpr auto member = Member;
 };
 
@@ -90,6 +94,7 @@ struct MemberType<Member Class::*> {
 
 /// @brief Whether a key member's raw type is `std::string`, looking through a wrapped strong id.
 /// @tparam K The key member's type.
+/// @return True when the raw key type is `std::string`.
 template <typename K>
 constexpr bool keyTypeIsString() {
     using Plain = std::remove_cvref_t<K>;
@@ -126,6 +131,7 @@ template <typename Class, typename Member>
 
 /// @brief The index of the reflected member named `id`, or `size` when there is none.
 /// @tparam T The record type.
+/// @return The index, or `glz::reflect<T>::keys.size()` when no member is named `id`.
 template <typename T>
 constexpr std::size_t idIndex() {
     constexpr auto keys = glz::reflect<T>::keys;
@@ -155,7 +161,11 @@ void applyKey(RecordInfo& info) {
                 using Raw = typename MemberType<std::remove_cv_t<decltype(KeyOption<O>::member)>>::type;
                 static_assert(model::ModelKey<std::remove_cvref_t<Raw>>,
                               "BRIDGE_REGISTER_RECORD: a key member must be a ModelKey");
-                target.keyField = memberKeyName<T>(KeyOption<O>::member);
+                auto name = memberKeyName<T>(KeyOption<O>::member);
+                assert(!name.empty() && "BRIDGE_REGISTER_RECORD: key<> names a member glaze does not reflect");
+                if (!name.empty()) {
+                    target.keyField = std::move(name);
+                }
                 target.keyIsString = keyTypeIsString<Raw>();
             }
         };
