@@ -16,6 +16,7 @@ behind its own CMake option, default `OFF`, so an ordinary `cmake --build`
 - [Load / latency benchmark](#load--latency-benchmark-testsbench)
 - [Adversarial cross-socket run](#adversarial-cross-socket-run-testsqttest_qt_websocket_adversarialcpp)
 - [Install / export consumability](#install--export-consumability-scriptscheck_install_exportsh)
+- [Rung bundles load without warnings](#rung-bundles-load-without-warnings)
 - [Declined techniques, and why](#declined-techniques-and-why)
 - [Cross-references](#cross-references)
 
@@ -595,6 +596,17 @@ Self-tested by `scripts/test_check_install_export.sh`, which reintroduces each
 defect into a scratch copy of the tree one at a time and requires the checker
 to catch each one *for the stated reason* — the same "test the checker first"
 pattern as the deprecation-marker and test-type-name lints.
+
+## Rung bundles load without warnings
+
+Each rung's screen tests hold one case, `<rung>_bundle_loads_without_warnings` (`bookmarks`, `bank`, `lims`), in
+`examples/<rung>/screens/tests/`. It builds the bundle the rung's server serves and loads every screen and app
+document in it against the catalog facts the bundle carries, which include each action's effects and records
+(`examples/common/testkit/bundle_warnings.hpp`). The case fails on any refusal and on any load-time warning
+(`Document::warnings`): a mutation whose action declares no effects and after which nothing refreshes, a refresh
+declaration the effects already cover, or a watch of a query that runs a mutation with effects. It is what keeps the
+rungs' actions declaring their effects and their screens free of refresh declarations. It runs in the ordinary
+`ctest -L ladder` sweep.
 
 ## Declined techniques, and why
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <morph/core/records.hpp>
 #include <string>
 #include <vector>
 
@@ -66,3 +67,6 @@ struct ListTagsResult {
 };
 
 }  // namespace bookmarks
+
+// Tags are per user, like the bookmarks that carry them.
+BRIDGE_REGISTER_RECORD(bookmarks::TagSummary, "Bookmarks_Tag", ::morph::record::privateKeys)

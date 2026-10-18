@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <morph/ui/view.hpp>
 #include <string>
+#include <testkit/bundle_warnings.hpp>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
 #include <vector>
@@ -64,6 +65,19 @@ TEST_CASE("bookmarks screens: the screen validates, and the bundle builds", "[bo
     auto const bundle = bookmarks::screens::bundle();
     INFO((bundle ? std::string{} : bundle.error().message()));
     REQUIRE(bundle.has_value());
+}
+
+// Every document loads against the catalog the server serves with no warning: each mutation's action declares its
+// effects (or `none`), and no refresh declaration repeats what the effects already cover.
+TEST_CASE("bookmarks_bundle_loads_without_warnings", "[bookmarks-screens]") {
+    auto const bundle = bookmarks::screens::bundle();
+    INFO((bundle ? std::string{} : bundle.error().message()));
+    REQUIRE(bundle.has_value());
+    std::vector<std::string> const findings = morph::examples::testing::bundleLoadFindings(**bundle);
+    for (std::string const& finding : findings) {
+        UNSCOPED_INFO(finding);
+    }
+    CHECK(findings.empty());
 }
 
 // Mutation: start the queries before signing in (they fail without a principal).
