@@ -131,7 +131,8 @@ void visit(Walk& walk, std::string const& path);
 /// @param path The aggregate's own path.
 template <typename T, std::size_t... I>
 void visitMembers(Walk& walk, std::string const& path, std::index_sequence<I...> /*indices*/) {
-    auto const member = [&]<std::size_t Index>() {
+    // Unused for an aggregate with no members: the fold below is then empty.
+    [[maybe_unused]] auto const member = [&]<std::size_t Index>() {
         using Member = std::remove_cvref_t<decltype(morph::detail::reflectedMember<Index>(std::declval<T&>()))>;
         if constexpr (mayHoldSlots<Member>()) {
             constexpr std::string_view key = glz::reflect<T>::keys[Index];
