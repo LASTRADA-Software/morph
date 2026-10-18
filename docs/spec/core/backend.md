@@ -1457,19 +1457,31 @@ and [Writing to a connection](#writing-to-a-connection)):
   replies and events alike — and not yet written. The size is added on the
   handing thread before the frame is queued, so a `backlog()` read on the
   strand already covers a frame still on its way to the socket. Once
-  `sendTextMessage` has taken the frame, the connection records where in the
-  socket's running count of written bytes the frame ends (its framed size:
-  `QWebSocket` splits a message into `outgoingFrameSize()` frames, each with
-  an unmasked 2-, 4- or 10-byte header) in a FIFO, next to the envelope size
-  it counted. `QWebSocket::bytesWritten` advances the running count and
-  releases, by its envelope size, every frame it completes. The running count
-  starts below zero by what the socket still held at accept — the handshake
-  response — so those bytes are not taken for a frame's. When the socket
-  reports nothing left to write, every frame still in the FIFO is released, so
-  a misjudged framed size cannot strand a count. Over TLS, `bytesWritten`
-  reports encrypted bytes, which run ahead of the framed ones, so a frame can
-  be released a little before its last byte is out; never after. A connection
-  that goes away releases whatever it still held.
+  `sendTextMessage` has taken the frame, `detail::OutboundLedger` records,
+  next to the envelope size it counted, where in the socket's running count of
+  written bytes the frame's last byte falls: the bytes written so far plus
+  every byte the socket stack still holds, the frame's own included. The
+  position is measured, not computed from a frame layout, so bytes the socket
+  queued for itself (the handshake response, a Pong) are covered, and each
+  position is taken afresh, so no error accumulates. `QWebSocket::bytesWritten`
+  advances the count and releases, by its envelope size, every frame it
+  completes; when the stack holds nothing, every frame is released.
+  - **Over TLS** `QWebSocket::bytesWritten` reports encrypted bytes sent, and
+    `QWebSocket::bytesToWrite()` only the plaintext not yet encrypted. Qt
+    encrypts eagerly into the TLS socket's own buffer, so that plaintext count
+    reaches zero while megabytes of ciphertext are still unsent; the bytes held
+    therefore also count that buffer, `QSslSocket::encryptedBytesToWrite()`.
+    `QWebSocket` does not expose its `QSslSocket`: a `SecureMode`
+    `QWebSocketServer` accepts through a `QSslServer` it owns, which parents
+    each accepted socket, so the server finds it among its descendants by the
+    connection's two endpoints. A connection whose TLS socket is not found is
+    logged at `warn`, and its backlog then counts only plaintext not yet
+    encrypted, so a slow reader on it is not held back.
+  - Plaintext waiting to be encrypted is counted one-for-one, not with its
+    record overhead, so over TLS a frame can be released before its last byte
+    is sent by at most the overhead on the plaintext still unencrypted when it
+    was handed over. On a plain socket the position is exact.
+  - A connection that goes away releases whatever it still held.
 - **The drain call.** A release that takes the backlog from at least
   `kEventBacklogLow` to below it calls `RemoteServer::connectionDrained(cid)`
   on the Qt thread, judged from the value its own subtraction replaced; a
@@ -1485,9 +1497,12 @@ to a connection reaches the client's handler; an event carrying a pending
 call's own `callId` reaches the handler and leaves the call to its real reply;
 the connect handler fires on the first connect and on a reconnect, ahead of
 the reconnect handler; a 2 MiB event holds the next one back, and the drain
-after it is written sends one `resync`, after which events flow again; and a
-peer that completes the upgrade and never reads is aborted no sooner than a
-200 ms `sendTimeout`.
+after it is written sends one `resync`, after which events flow again; a peer
+that completes the upgrade and then stops reading, on `ws://` and on
+`wss://`, has the event after a 7 MiB one held back and receives a `resync` in
+its place once it reads again; such a peer is aborted no sooner than a 200 ms
+`sendTimeout`, on both; and the ledger releases a frame once the count reaches
+its position while later frames are still held.
 
 **Multi-client / concurrency.** One server serves many clients; each client
 registers its own model instances on the shared `RemoteServer`, so per-client

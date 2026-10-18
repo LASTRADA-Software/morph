@@ -18,6 +18,7 @@
 #include <atomic>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
@@ -33,6 +34,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/qt/detail/outbound_ledger.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
@@ -3015,6 +3017,11 @@ morph::backend::ConnectionId nextQtConnectionId(morph::backend::RemoteServer& se
     return probe + 1;
 }
 
+/// An event payload size a stalled peer cannot take in: more than the kernel's
+/// socket buffers absorb (macOS grows a send buffer to 4 MiB), so most of it
+/// stays on the server's socket, yet under the 8 MiB envelope cap.
+constexpr std::size_t kStallBytes = std::size_t{7} << 20;
+
 /// A JSON string payload of @p bytes characters.
 std::string bigPayload(std::size_t bytes) { return "\"" + std::string(bytes, 'x') + "\""; }
 
@@ -3045,11 +3052,18 @@ TEST_CASE("qt_posted_event_reaches_handler", "[push][channel]") {
     CHECK(got[1].topic == "resync");
     CHECK(exec.posted.load() == 2);
 
-    // Cleared: a later event is dropped, and the connection keeps working.
+    // Cleared: a later event is dropped. A handler installed after it sees
+    // only the marker posted after it, which also proves the dropped event
+    // had arrived: one connection's events arrive in order.
     backend.setEventHandler(nullptr, nullptr);
-    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", "{}")));
-    morph::exec::MainThreadExecutor cbExec;
-    CHECK(registerPrivate(backend, cbExec, "WsEchoModel").v != 0U);
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"dropped":true})")));
+    pumpUntil([] { return false; }, 10);
+    PushEventLog after;
+    backend.setEventHandler(after.handler(), &exec);
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"marker":true})")));
+    pumpUntil([&] { return after.size() == 1; }, 300);
+    REQUIRE(after.size() == 1);
+    CHECK(after.snapshot()[0].payload.str == R"({"marker":true})");
     CHECK(log.size() == 2);
 }
 
@@ -3207,7 +3221,7 @@ TEST_CASE("qt_stalled_peer_closed_after_send_timeout", "[push][channel]") {
     peer.setReadBufferSize(1);
 
     auto const posted = std::chrono::steady_clock::now();
-    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(std::size_t{4} << 20))));
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(kStallBytes))));
     pumpUntil([&] { return findLogged("send timeout").has_value() && findLogged("disconnected").has_value(); }, 300);
 
     auto const closedAt = findLogged("send timeout");
@@ -3246,4 +3260,225 @@ TEST_CASE("qt_backlog_drains_and_sends_resync", "[push][channel]") {
     CHECK(got[0].topic == "changes");
     CHECK(got[1].topic == "resync");
     CHECK(got[2].payload.str == R"({"after":true})");
+}
+
+namespace {
+
+/// A WebSocket peer driven by hand over a raw `QTcpSocket` or `QSslSocket`:
+/// it completes the upgrade, and then reads only when told to, so a test can
+/// stall it with the server's frames piling up behind it.
+class RawWsPeer {
+public:
+    enum class Transport : std::uint8_t { Plain, Tls };
+
+    RawWsPeer(quint16 port, Transport transport) {
+        if (transport == Transport::Tls) {
+            auto ssl = std::make_unique<QSslSocket>();
+            ssl->setPeerVerifyMode(QSslSocket::VerifyNone);
+            ssl->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 4096);
+            ssl->connectToHostEncrypted(QStringLiteral("127.0.0.1"), port);
+            auto* raw = ssl.get();
+            pumpUntil([raw] { return raw->isEncrypted(); }, 300);
+            _socket = std::move(ssl);
+        } else {
+            _socket = std::make_unique<QTcpSocket>();
+            _socket->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 4096);
+            _socket->connectToHost(QHostAddress::LocalHost, port);
+            auto* raw = _socket.get();
+            pumpUntil([raw] { return raw->state() == QAbstractSocket::ConnectedState; }, 100);
+        }
+        REQUIRE(_socket->state() == QAbstractSocket::ConnectedState);
+        _socket->write(QString("GET / HTTP/1.1\r\nHost: 127.0.0.1:%1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")
+                           .arg(port)
+                           .toUtf8());
+        pumpUntil(
+            [this] {
+                _buffer += _socket->readAll();
+                return _buffer.contains("\r\n\r\n");
+            },
+            300);
+        REQUIRE(_buffer.startsWith("HTTP/1.1 101"));
+        _buffer.remove(0, _buffer.indexOf("\r\n\r\n") + 4);
+    }
+
+    /// Stops reading: what the server sends piles up in the kernel and then
+    /// in the server's own socket buffer.
+    void stall() { _socket->setReadBufferSize(1); }
+
+    /// Reads again, without limit.
+    void resume() { _socket->setReadBufferSize(0); }
+
+    /// Pumps and reads until @p count whole text messages have arrived.
+    std::vector<std::string> readMessages(std::size_t count, int maxIterations = 500) {
+        pumpUntil(
+            [&] {
+                _buffer += _socket->readAll();
+                parse();
+                return _messages.size() >= count;
+            },
+            maxIterations);
+        return _messages;
+    }
+
+private:
+    /// Moves every whole frame out of `_buffer`, assembling text messages.
+    void parse() {
+        for (;;) {
+            if (_buffer.size() < 2) {
+                return;
+            }
+            auto const* data = reinterpret_cast<unsigned char const*>(_buffer.constData());
+            bool const fin = (data[0] & 0x80U) != 0;
+            unsigned const opcode = data[0] & 0x0FU;
+            std::uint64_t length = data[1] & 0x7FU;
+            qsizetype header = 2;
+            if (length == 126) {
+                if (_buffer.size() < 4) {
+                    return;
+                }
+                length = (std::uint64_t{data[2]} << 8U) | data[3];
+                header = 4;
+            } else if (length == 127) {
+                if (_buffer.size() < 10) {
+                    return;
+                }
+                length = 0;
+                for (int i = 0; i < 8; ++i) {
+                    length = (length << 8U) | data[2 + i];
+                }
+                header = 10;
+            }
+            auto const total = header + static_cast<qsizetype>(length);
+            if (_buffer.size() < total) {
+                return;
+            }
+            if (opcode == 0x1 || opcode == 0x0) {
+                _partial.append(_buffer.constData() + header, static_cast<std::size_t>(length));
+                if (fin) {
+                    _messages.push_back(std::move(_partial));
+                    _partial.clear();
+                }
+            }
+            _buffer.remove(0, total);
+        }
+    }
+
+    std::unique_ptr<QTcpSocket> _socket;
+    QByteArray _buffer;
+    std::string _partial;
+    std::vector<std::string> _messages;
+};
+
+/// A Qt server, plain or TLS, with the given send timeout.
+std::unique_ptr<morph::qt::QtWebSocketServer> makePushServer(morph::backend::RemoteServer& server,
+                                                             RawWsPeer::Transport transport,
+                                                             std::chrono::milliseconds sendTimeout) {
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.sendTimeout = sendTimeout;
+    std::optional<QSslConfiguration> tls;
+    if (transport == RawWsPeer::Transport::Tls) {
+        tls = makeServerTlsConfig();
+    }
+    auto ws = std::make_unique<morph::qt::QtWebSocketServer>(server, quint16{0}, tls, cfg);
+    REQUIRE(ws->listen());
+    return ws;
+}
+
+}  // namespace
+
+TEST_CASE("qt_stalled_reader_is_held_back_then_resynced", "[push][channel]") {
+    ensureApp();
+    auto const transport = GENERATE(RawWsPeer::Transport::Plain, RawWsPeer::Transport::Tls);
+    CAPTURE(transport == RawWsPeer::Transport::Tls ? "wss" : "ws");
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto const wsServer = makePushServer(*server, transport, std::chrono::milliseconds{0});
+    auto const cid = nextQtConnectionId(*server);
+    RawWsPeer peer{wsServer->port(), transport};
+    peer.stall();
+
+    // An event the peer does not read: the backlog stays above
+    // kEventBacklogHigh, so the next event is held back and owed as a resync.
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(kStallBytes))));
+    pumpUntil([] { return false; }, 30);
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"held":true})")));
+    pumpUntil([] { return false; }, 10);
+
+    peer.resume();
+    auto const got = peer.readMessages(2);
+    REQUIRE(got.size() >= 2);
+    CHECK(morph::wire::decode(got[0]).kind == "event");
+    auto const second = morph::wire::decode(got[1]);
+    UNSCOPED_INFO("second message: " << got[1].substr(0, 120));
+    CHECK(second.body.find(R"("topic":"resync")") != std::string::npos);
+    CHECK(second.body.find("held") == std::string::npos);
+}
+
+TEST_CASE("qt_stalled_peer_closed_after_send_timeout_wss", "[push][channel]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto const wsServer = makePushServer(*server, RawWsPeer::Transport::Tls, std::chrono::milliseconds{200});
+    auto const cid = nextQtConnectionId(*server);
+
+    std::mutex logMtx;
+    std::vector<std::pair<std::chrono::steady_clock::time_point, std::string>> logged;
+    morph::log::ScopedLoggerOverride guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
+                                               std::scoped_lock const lock{logMtx};
+                                               logged.emplace_back(std::chrono::steady_clock::now(),
+                                                                   std::string{msg});
+                                           },
+                                           morph::log::LogLevel::debug};
+    auto findLogged = [&](std::string_view needle) -> std::optional<std::chrono::steady_clock::time_point> {
+        std::scoped_lock const lock{logMtx};
+        for (auto const& [when, msg] : logged) {
+            if (msg.find(needle) != std::string::npos) {
+                return when;
+            }
+        }
+        return std::nullopt;
+    };
+
+    RawWsPeer peer{wsServer->port(), RawWsPeer::Transport::Tls};
+    peer.stall();
+    auto const posted = std::chrono::steady_clock::now();
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(kStallBytes))));
+    pumpUntil([&] { return findLogged("send timeout").has_value() && findLogged("disconnected").has_value(); }, 300);
+
+    auto const closedAt = findLogged("send timeout");
+    REQUIRE(closedAt.has_value());
+    CHECK(*closedAt - posted >= std::chrono::milliseconds{200});
+    CHECK(findLogged("disconnected").has_value());
+}
+
+TEST_CASE("qt_ledger_releases_a_frame_once_its_last_byte_is_written", "[push][channel]") {
+    morph::qt::detail::OutboundLedger ledger;
+    auto const t0 = std::chrono::steady_clock::now();
+    auto const t1 = t0 + std::chrono::milliseconds{5};
+    // 30 bytes the socket queued for itself, then two frames behind them.
+    ledger.push(/*pending=*/130, /*counted=*/90, t0);
+    ledger.push(/*pending=*/330, /*counted=*/190, t1);
+    CHECK(ledger.oldest() == t0);
+
+    // Short of the first frame's end, with bytes still held: nothing released.
+    CHECK(ledger.written(129, 201) == 0);
+    // Its last byte out while the second frame is still held: the first
+    // alone is released, by what it counted, not by the bytes written.
+    CHECK(ledger.written(1, 200) == 90);
+    CHECK(ledger.oldest() == t1);
+    CHECK(ledger.written(150, 50) == 0);
+
+    // Nothing left on the socket: everything is out, whatever the positions.
+    CHECK(ledger.written(10, 0) == 190);
+    CHECK_FALSE(ledger.oldest().has_value());
+
+    // A position taken later counts from the bytes written so far.
+    ledger.push(/*pending=*/40, /*counted=*/30, t1);
+    CHECK(ledger.written(39, 1) == 0);
+    CHECK(ledger.written(1, 7) == 30);
+
+    ledger.push(/*pending=*/100, /*counted=*/70, t1);
+    CHECK(ledger.clear() == 70);
+    CHECK_FALSE(ledger.oldest().has_value());
 }

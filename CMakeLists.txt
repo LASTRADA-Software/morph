@@ -1047,6 +1047,7 @@ if(MORPH_BUILD_QT)
             include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
+            include/morph/qt/detail/outbound_ledger.hpp
     )
 
     # Compiled implementation (QObject subclass needs MOC via a .cpp file)

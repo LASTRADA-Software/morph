@@ -5,6 +5,9 @@
 #include <QObject>
 #include <QPointer>
 #ifndef QT_NO_SSL
+#include <QSslSocket>
+#endif
+#ifndef QT_NO_SSL
 #include <QSslConfiguration>
 #endif
 #include <QTimer>
@@ -13,10 +16,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <deque>
 #include <memory>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/qt/detail/outbound_ledger.hpp>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -107,8 +110,10 @@ struct QtWebSocketServerConfig {
 ///
 /// @par Resource limits
 /// Pass a `QtWebSocketServerConfig` to bound connection count, per-frame size,
-/// per-connection message rate, and handshake/idle time. All fields default to
-/// unbounded, except `maxMessageBytes`, which defaults to the wire-layer cap.
+/// per-connection message rate, handshake/idle time, and how long a frame may
+/// stay unwritten. All fields default to unbounded, except `maxMessageBytes`,
+/// which defaults to the wire-layer cap, and `sendTimeout`, which defaults to
+/// 30 s.
 ///
 /// @par Bind address & plaintext-exposure guard
 /// `listen()` refuses — returns `false` and logs at `morph::log::LogLevel::error`
@@ -228,17 +233,6 @@ public:
     Q_SLOT void onBytesWritten(qint64 bytes);
 
 private:
-    /// @brief One frame handed to a socket and not yet written.
-    struct UnwrittenFrame {
-        /// @brief Position, in the socket's running count of written bytes,
-        ///        at which this frame's last byte is written.
-        qint64 end = 0;
-        /// @brief What the frame added to the backlog: its envelope's size.
-        std::size_t counted = 0;
-        /// @brief When the frame was handed to the socket; drives `sendTimeout`.
-        std::chrono::steady_clock::time_point queuedAt;
-    };
-
     /// @brief Per-connection state tracked between accept and disconnect.
     struct ClientState {
         /// @brief The connection this state belongs to (for symmetry with the map key; unused for lookup).
@@ -271,12 +265,18 @@ private:
         /// server strand, can read it without reaching this state.
         std::shared_ptr<std::atomic<std::size_t>> backlog = std::make_shared<std::atomic<std::size_t>>(0);
 
-        /// @brief Frames on the socket and not yet written, oldest first.
-        std::deque<UnwrittenFrame> unwritten;
+        /// @brief Frames on the socket and not yet written, released as
+        ///        `QWebSocket::bytesWritten` reports them out.
+        detail::OutboundLedger unwritten;
 
-        /// @brief Running count of bytes the socket has written, as reported by
-        ///        `QWebSocket::bytesWritten`, less what it held at accept.
-        qint64 written = 0;
+#ifndef QT_NO_SSL
+        /// @brief The TLS socket under `socket`, on a `SecureMode` server.
+        ///
+        /// `QWebSocket` reports encrypted bytes written but holds back only
+        /// the plaintext it has not yet encrypted; what is encrypted and still
+        /// unsent is on this socket, so a frame's position must count it.
+        QPointer<QSslSocket> tls;
+#endif
 
         /// @brief One-shot timer enforcing `sendTimeout` on the oldest
         ///        unwritten frame; `nullptr` if `sendTimeout == 0`.
@@ -327,6 +327,20 @@ private:
     ///        `sendTimeout`; otherwise re-arms the timer.
     /// @param socket The connection's socket.
     void onSendTimer(QWebSocket* socket);
+
+    /// @brief Bytes @p state's socket stack still holds unsent: the
+    ///        `QWebSocket`'s own, plus, over TLS, the ciphertext not yet sent.
+    /// @param state The connection.
+    /// @return The bytes held.
+    static qint64 pendingBytes(ClientState const& state);
+
+#ifndef QT_NO_SSL
+    /// @brief Finds the `QSslSocket` a `SecureMode` server accepted
+    ///        @p socket over.
+    /// @param socket The upgraded connection.
+    /// @return The TLS socket, or null when there is none or it cannot be found.
+    [[nodiscard]] QSslSocket* findTlsSocket(QWebSocket const* socket) const;
+#endif
 
     /// @brief Releases every frame @p state still holds and drops its timers.
     ///        Called when the connection goes away.
