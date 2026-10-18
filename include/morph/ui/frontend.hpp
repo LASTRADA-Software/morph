@@ -158,6 +158,15 @@ public:
     ///        delivered. Called by `runApp` once the screens are gone and before the frontend's runtime is; the
     ///        source may be opened again afterwards.
     virtual void close() = 0;
+
+    /// @brief Adds a listener called on the owner after each successful connect to the server, the first included
+    ///        (spec 8 §7, "Reconnect"). A shell registers `Session::reconnected` here, so the session re-sends its
+    ///        watch set and re-reads what it shows after an outage. The source owns the backend's single connect
+    ///        hook, so anything else that wants connects subscribes here too.
+    ///
+    /// The default does nothing: a local source has no connection to lose.
+    /// @param listener Called on the owner after each connect; it must stay callable while the source is open.
+    virtual void onConnected(std::function<void()> listener) { static_cast<void>(listener); }
 };
 
 /// @brief A frontend: owns an event loop and a renderer, and runs one source's screens.

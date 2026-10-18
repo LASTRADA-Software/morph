@@ -58,8 +58,18 @@ Where the screens and the models are. `main` builds one from its arguments; the 
 | `open(ctx, ready)` | Connects (or sets up the local models), signs the user in natively when the application needs it — on the owner, before the catalog is requested — and calls `ready` once, on the owner, now or later, with a `Bundle` or a `ConnectError` |
 | `switchBackend(backend, done)` | Replaces the dispatch target under the mounted screens: `Bridge::switchBackend` posted to the owner. `done` is called once, on the owner, when the switch committed, or with why not; a failed switch leaves the old backend |
 | `close()` | Releases what `open` made — connections, bridges, handlers — and drops a `ready` not yet delivered. `runApp` calls it once the screens are gone and before the runtime is; the source may be opened again |
+| `onConnected(listener)` | Adds a listener called on the owner after each successful connect, the first included. The default does nothing: a local source has no connection to lose. A remote source owns the backend's single connect hook, so anything that wants connects (a shell's `Session::reconnected`, a connection indicator) subscribes here |
 
 Every call is made on the context's owner, and every callback is called there.
+
+**Reconnect** (server push, spec 8 §7). The generic client's remote source installs the backend's connect hook and
+its event handler, and posts both to the owner. On a connect after the first bundle loaded, a new connection, it
+sends `ui-hello` again (the handshake only, not a reload: the documents did not change because the connection
+dropped), so the connection negotiates `events`, then calls its `onConnected` listeners. The first connect's
+`ui-hello` is the one `open` filed. The shell builds its `Session` with `SessionOptions::watcher = source.watcher()`
+(`watcherOver` the source's exchange; empty in process), registers `Session::reconnected` with `onConnected`, and
+hands each event to `Session::deliverEvent`. The watch set and the refetches it causes are filed after the
+`ui-hello`, on the same ordered connection.
 
 - `ui::Bundle` carries the application's id, the manifest's SHA-256 digest, and every document — the screens, the
   app shell, and the app document (`app`) when there is one — by id, as verified JSON text, and in `themes` the theme

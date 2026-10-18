@@ -12,6 +12,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
@@ -208,7 +209,22 @@ public:
         sessionOptions.scheduler = &_context->scheduler();
         sessionOptions.catalog = source.catalog();
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
+        sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        // Registered once: they reach whichever session is current, and nothing once the shell is gone.
+        if (!_listening) {
+            _listening = true;
+            source.onConnected([this, alive = std::weak_ptr<bool>{_alive}] {
+                if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                    _session->reconnected();
+                }
+            });
+            source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
+                if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                    _session->deliverEvent(event);
+                }
+            });
+        }
         showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
@@ -632,6 +648,8 @@ private:
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
     ui::ScreenHostRegistry _hosts;
     std::unique_ptr<ui::Session> _session;
+    // Whether the source's connect and event listeners are registered.
+    bool _listening = false;
     std::unique_ptr<Application> _application;
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ShellFrame> _frame;

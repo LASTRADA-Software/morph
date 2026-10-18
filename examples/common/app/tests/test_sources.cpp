@@ -471,3 +471,105 @@ TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[examp
     }
     source.close();
 }
+
+namespace {
+
+// A local backend whose connect hook the test fires, as a transport does after each connect.
+class ConnectingBackend final : public morph::backend::LocalBackend {
+public:
+    using LocalBackend::LocalBackend;
+    void setConnectHandler(std::function<void()> const& handler) override { *_handler = handler; }
+    [[nodiscard]] std::shared_ptr<std::function<void()>> handler() const { return _handler; }
+
+private:
+    std::shared_ptr<std::function<void()>> _handler = std::make_shared<std::function<void()>>();
+};
+
+// The probe application behind a server-like transport: the UI service answers the `ui-*` kinds in process, the
+// exchange answers `watch` itself, as `RemoteServer` does, and every request's kind is logged in order.
+class ReconnectingSource final : public morph::examples::ClientSource {
+public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test fires and inspects these.
+    std::vector<std::string> kinds;
+    std::vector<std::string> watchBodies;
+    std::shared_ptr<std::function<void()>> connectHook;
+    ConnectingBackend* backend = nullptr;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    ReconnectingSource() = default;
+    ~ReconnectingSource() override { close(); }
+    ReconnectingSource(ReconnectingSource const&) = delete;
+    ReconnectingSource& operator=(ReconnectingSource const&) = delete;
+    ReconnectingSource(ReconnectingSource&&) = delete;
+    ReconnectingSource& operator=(ReconnectingSource&&) = delete;
+
+protected:
+    [[nodiscard]] std::expected<Transport, morph::ui::ConnectError> connect(
+        morph::ui::AppContext& /*context*/) override {
+        auto served = probe::bundle();
+        REQUIRE(served.has_value());
+        _service =
+            std::make_shared<morph::ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        auto made = std::make_unique<ConnectingBackend>(*_workers);
+        backend = made.get();
+        connectHook = made->handler();
+        return Transport{
+            .backend = std::move(made),
+            .exchange =
+                [this](morph::wire::Envelope const& request,
+                       std::function<void(morph::ui::ExchangeReply)> const& done) {
+                    kinds.push_back(request.kind);
+                    if (request.kind == "watch" || request.kind == "unwatch") {
+                        watchBodies.push_back(request.body);
+                        morph::wire::Envelope ok;
+                        ok.kind = "ok";
+                        ok.body = "{}";
+                        done(ok);
+                        return;
+                    }
+                    done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+                },
+            .serverEvents = true};
+    }
+    void disconnect() override {
+        _workers.reset();
+        _service.reset();
+    }
+
+private:
+    std::shared_ptr<morph::ui::UiService> _service;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+}  // namespace
+
+// Mutation: call the listeners before the ui-hello, or forward no events — the order or the last watch changes.
+TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[examples-common][source][push]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend screens;
+    ReconnectingSource source;
+    ShellLog log;
+    {
+        auto shell =
+            morph::examples::mountClientShell(context, screens, openAndWait(context, source), source, log.options());
+        REQUIRE(log.mounted == std::vector<std::string>{"probe.home"});
+        REQUIRE(source.connectHook != nullptr);
+
+        // A connect once the bundle loaded is a new connection: it negotiates events again, then the session
+        // re-sends its whole watch set.
+        source.kinds.clear();
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&] { return source.kinds.size() >= 2; }));
+        CHECK(source.kinds == std::vector<std::string>{"ui-hello", "watch"});
+        CHECK(source.watchBodies.back() == R"({"records":[],"instances":[],"replace":true})");
+
+        // A server event reaches the session: a resync answers with the whole watch set.
+        source.kinds.clear();
+        source.backend->deliverEvent({.topic = "resync", .payload = {"null"}});
+        REQUIRE(pumpUntil(context.owner(), [&] { return !source.kinds.empty(); }));
+        CHECK(source.kinds == std::vector<std::string>{"watch"});
+        CHECK(log.problems.empty());
+    }
+    source.close();
+}

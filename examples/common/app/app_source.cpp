@@ -291,6 +291,25 @@ void ClientSource::open(ui::AppContext& context,
         return;
     }
     exec::IExecutor& owner = context.executor();
+    _serverEvents = transport->serverEvents;
+    // The source owns the backend's connect hook and its event handler; both reach the owner before anything else
+    // sees them, and nothing after `close`.
+    transport->backend->setEventHandler(
+        [this, alive](wire::EventBody const& event) {
+            if (*alive) {
+                for (auto const& listener : _eventListeners) {
+                    listener(event);
+                }
+            }
+        },
+        &owner);
+    transport->backend->setConnectHandler([this, alive, &owner] {
+        owner.post([this, alive] {
+            if (*alive) {
+                connected();
+            }
+        });
+    });
     _bridge = std::make_unique<bridge::Bridge>(std::move(transport->backend), owner);
     _bridge->setDefaultSession(_session);
     // A reply already queued when the source closes still reaches the exchange's continuation; from then on it sends
@@ -413,6 +432,37 @@ void ClientSource::signIn(std::string principal, std::string token, std::functio
 
 void ClientSource::signOut(std::function<void(bool)> done) { signIn(signedOutPrincipal(), {}, std::move(done)); }
 
+void ClientSource::connected() {
+    // The first connect's `ui-hello` is the one `open` filed, and its answer loads the first bundle; every later
+    // connect is a new connection, which negotiates events again. Only the handshake: the documents did not change
+    // because the connection dropped.
+    if (_loaded && _exchange) {
+        wire::Envelope hello;
+        hello.kind = std::string{ui::kHelloKind};
+        hello.session = _session;
+        hello.body = ui::detail::writeMessage(clientHello());
+        _exchange(std::move(hello), [](ui::ExchangeReply const&) {});
+    }
+    std::vector<std::function<void()>> const listeners = _connectListeners;
+    for (auto const& listener : listeners) {
+        listener();
+    }
+}
+
+void ClientSource::onConnected(std::function<void()> listener) { _connectListeners.push_back(std::move(listener)); }
+
+void ClientSource::onEvent(std::function<void(wire::EventBody const&)> listener) {
+    _eventListeners.push_back(std::move(listener));
+}
+
+ui::Watcher ClientSource::watcher() {
+    if (!_serverEvents || !_exchange || _bridge == nullptr) {
+        return {};
+    }
+    // The session is read at each send, so a watch after a sign-in carries the new principal.
+    return ui::watcherOver(_exchange, [this] { return _session; }, &_bridge->owner());
+}
+
 void ClientSource::switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) {
     done(std::unexpected("this client does not switch backends; the switch to `" + backend.name +
                          "` is the hosting layer's"));
@@ -451,7 +501,7 @@ std::expected<ClientSource::Transport, ui::ConnectError> RemoteAppSource::connec
                                                 .message = "cannot connect to " + _url + ": " + made.error()});
     }
     ui::Exchange exchange = ui::exchangeOver(*made->requests, context.executor());
-    return Transport{.backend = std::move(made->backend), .exchange = std::move(exchange)};
+    return Transport{.backend = std::move(made->backend), .exchange = std::move(exchange), .serverEvents = true};
 }
 
 // ── LocalAppSource ──────────────────────────────────────────────────────────

@@ -167,6 +167,22 @@ public:
     ///                changed; not called for an unchanged digest, a failed poll, or after `close`.
     void poll(std::function<void(std::vector<std::string> changed)> changed);
 
+    /// @brief Adds a listener called on the owner after each successful connect, the first included. On a reconnect
+    ///        the source first sends `ui-hello` again, so the new connection negotiates events, then calls the
+    ///        listeners.
+    /// @param listener Called on the owner; it must stay callable while the source is open.
+    void onConnected(std::function<void()> listener) final;
+
+    /// @brief Adds a listener for the events the server sends: what a shell hands to `Session::deliverEvent`.
+    /// @param listener Called on the owner, once per event, in the order they arrived.
+    void onEvent(std::function<void(wire::EventBody const&)> listener);
+
+    /// @brief What the session's `SessionOptions::watcher` sends the cache's watch changes through: `watcherOver` the
+    ///        source's exchange, stamping the session current at each send. Empty for a source whose transport
+    ///        carries no server events, such as an in-process one.
+    /// @return The watcher, or empty.
+    [[nodiscard]] ui::Watcher watcher();
+
     /// @brief The principal before any sign-in, which `signOut` returns to.
     /// @return It; empty for none.
     [[nodiscard]] virtual std::string signedOutPrincipal() const { return {}; }
@@ -178,6 +194,9 @@ protected:
         std::unique_ptr<backend::detail::IBackend> backend;
         /// @brief The exchange; it may borrow the backend, which the source guards.
         ui::Exchange exchange;
+        /// @brief Whether the server behind the transport sends events and handles `watch`: true for a server, false
+        ///        in process.
+        bool serverEvents = false;
     };
 
     /// @brief Makes the transport on @p context.
@@ -213,6 +232,13 @@ private:
     // Retries the queue while it holds anything: the transports reconnect on their own and tell no one.
     std::optional<reactive::TimerHandle> _replay;
     ui::Exchange _exchange;
+    // Whether the open transport's server sends events and handles `watch`.
+    bool _serverEvents = false;
+    // Called after each connect, and with each event.
+    std::vector<std::function<void()>> _connectListeners;
+    std::vector<std::function<void(wire::EventBody const&)>> _eventListeners;
+    // A connect, on the owner: `ui-hello` again once the first bundle loaded, then the listeners.
+    void connected();
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
     // The model types the loaded catalog names: its models, and the model of each action it has facts for.
