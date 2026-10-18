@@ -904,9 +904,9 @@ All four helpers `assert` in a debug build that the
 is what turns the thread-safety precondition below from advice into a
 diagnosable failure.
 
-#### Why all three are `noexcept` while allocating
+#### Why all four are `noexcept` while allocating
 
-Each of the three builds `std::string` keys and grows a map, so each can throw
+Each of the four builds `std::string` keys and grows a map, so each can throw
 `std::bad_alloc` through a `noexcept` boundary and call `std::terminate`. That
 is recorded in [Failure modes](#failure-modes) and is **deliberate, not an
 oversight**.
@@ -1200,7 +1200,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 ## `MORPH_CLIENT_ONLY` — suppressing model-owning registrars
 
 A pure client — one that dispatches every action to a remote peer and never
-constructs a model locally — has no use for two of the three registrars
+constructs a model locally — has no use for two of the registrars
 `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` normally emit:
 
 - `registerModelOnce<M>` stores a factory (`[] { return ModelFactory::create<M>(); }`)
@@ -1419,12 +1419,12 @@ correctly under `MORPH_CLIENT_ONLY`.
 | Macro | Arguments | Generates |
 |---|---|---|
 | `BRIDGE_REGISTER_MODEL` | `(M, NAME)` | `ModelTraits<M>` specialisation + static-init factory registration. |
-| `BRIDGE_REGISTER_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + static-init dispatcher and executor registration. Optional 4th arg: `Loggable`. `Result` deduced from `decltype(M::execute(A))`, requiring `M` complete. |
+| `BRIDGE_REGISTER_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + static-init dispatcher, result-slot and executor registration. Optional 4th arg: `Loggable`. `Result` deduced from `decltype(M::execute(A))`, requiring `M` complete. |
 | `BRIDGE_REGISTER_ACTION_FOR_CLIENT` | `(M, A, RESULT, NAME, ...)` | Same as `BRIDGE_REGISTER_ACTION`, except `Result` is the explicitly-named `RESULT` argument — `M` may be forward-declared only. See ["a header seam for `MORPH_CLIENT_ONLY`"](#bridge_register_action_for_client--a-header-seam-for-morph_client_only). |
 | `BRIDGE_DECLARE_MODEL` | `(M, NAME)` | `ModelTraits<M>` specialisation + a link-time canary requiring `BRIDGE_REGISTER_MODEL_SOURCE(M)` somewhere in the link. No registration. See ["Moving a registrar out of the header"](#moving-a-registrar-out-of-the-header). |
 | `BRIDGE_REGISTER_MODEL_SOURCE` | `(M)` | Static-init factory registration for a `M` already declared via `BRIDGE_DECLARE_MODEL`. Reads `NAME` back off `ModelTraits<M>::typeId()`. |
 | `BRIDGE_DECLARE_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + a link-time canary requiring `BRIDGE_REGISTER_ACTION_SOURCE(M, A)` somewhere in the link. Optional 4th arg: `Loggable`. No registration. |
-| `BRIDGE_REGISTER_ACTION_SOURCE` | `(M, A)` | Static-init dispatcher and executor registration for an `A` already declared via `BRIDGE_DECLARE_ACTION`. Reads `NAME` back off `ActionTraits<A>::typeId()`. |
+| `BRIDGE_REGISTER_ACTION_SOURCE` | `(M, A)` | Static-init dispatcher, result-slot and executor registration for an `A` already declared via `BRIDGE_DECLARE_ACTION`. Reads `NAME` back off `ActionTraits<A>::typeId()`. |
 | `BRIDGE_REGISTER_VALIDATOR` | `(A, FN)` | `ActionValidator<A>` specialisation + custom predicate. |
 
 ### Detail helpers
@@ -1462,7 +1462,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
 | `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each. |
 | Enforcing the "no registration after `main`" precondition | **A debug-build latch and an `assert`, not a mutex** | Documented alone the constraint is unenforceable, and a violation's only symptom is intermittent map corruption. A latch closed by the first singleton read costs nothing in a release build and turns the `dlopen` scenario into an abort with a message. Synchronising the registries instead would put a lock on a per-request read path to legalise a startup-only operation — a trade nobody has measured. |
-| `register*Once` stays `noexcept` | **Keep it, and record why** | The only caller is a namespace-scope initialiser, where an escaping exception already calls `std::terminate` ([basic.start.dynamic]). Removing `noexcept` changes nothing about an OOM at static init and adds a dead unwind path. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). |
+| `register*Once` stays `noexcept` | **Keep it, and record why** | The only caller is a namespace-scope initialiser, where an escaping exception already calls `std::terminate` ([basic.start.dynamic]). Removing `noexcept` changes nothing about an OOM at static init and adds a dead unwind path. See ["Why all four are `noexcept` while allocating"](#why-all-four-are-noexcept-while-allocating). |
 | Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocated for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
 
 ## Thread safety
@@ -1552,7 +1552,7 @@ and separately `noteRegistryRead` emptied).
 | `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
-| Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. This is the intended outcome rather than an accepted defect: the same OOM without `noexcept` terminates anyway, because the caller is the dynamic initialiser of a non-local variable. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). | `registry.hpp` |
+| Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionResultOnce`, `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. This is the intended outcome rather than an accepted defect: the same OOM without `noexcept` terminates anyway, because the caller is the dynamic initialiser of a non-local variable. See ["Why all four are `noexcept` while allocating"](#why-all-four-are-noexcept-while-allocating). | `registry.hpp` |
 | A `register*Once` call after the registration phase closes (e.g. a `dlopen`ed module registering once dispatch has begun) | **Debug build:** the `assert` fires and the process aborts with a message naming this hazard. **Release build:** unchanged — undefined behaviour, racing the map's internals against concurrent `find`s, with no diagnostic. The latch detects the violation; it does not make it safe. | `registry.hpp`, `bridge.hpp` — see ["The registration-phase latch"](#the-registration-phase-latch) |
 | `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` used with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the same link | **Fails to link** — an unresolved external symbol naming `modelSourceRegistrationRequired<M>` / `actionSourceRegistrationRequired<M, A>`, before the program ever runs. Contrast the row above: this is the one registration mistake in this table that is *not* deferred to runtime. See ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard). | `registry.hpp` |
 
@@ -1690,6 +1690,14 @@ and `BRIDGE_REGISTER_ACTION_SOURCE` runs, calls
 `detail::actionResultSlots()`. `Result` is the unwrapped type, so a `Task<R>`
 handler contributes `R`.
 
+- **Keyed by action id, with the action type kept.** An entry is
+  `{std::type_index action, std::vector<ResultSlot> resultSlots}`. The
+  registry pins an action id per model, not per process, so two action types
+  may register under one id. A registration repeated with the same type is a
+  no-op. One with a different type keeps the first type's slots and lists the
+  id once in `detail::actionResultConflicts()`. Matching refuses a listed id,
+  since which result a cached query holds would otherwise depend on link
+  order. Recording rather than throwing keeps the registrar `noexcept`.
 - **A slot** is `{std::type_index type, std::string path}`. Every visited
   aggregate is one, the result itself at path `""`, so matching against the
   record registry can later stop at the first registered record on a path. The

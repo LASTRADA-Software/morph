@@ -1499,8 +1499,10 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
 ///        action's result holds which reflected aggregates.
 ///
 /// Walks `ActionTraits<Action>::Result`, the unwrapped type, so a `Task<R>`
-/// handler contributes `R`. Idempotent per action id: a registration repeated
-/// in another translation unit does not walk again.
+/// handler contributes `R`. Idempotent per action type: a registration repeated
+/// in another translation unit does not walk again. A different action type
+/// under an id already taken keeps the first type's slots and lists the id in
+/// `actionResultConflicts()`.
 /// @tparam Action The action type; `ActionTraits<Action>` must be visible.
 /// @param actionId The action's registered type-id.
 /// @return Always true, so the result can initialise a namespace-scope variable.
@@ -1512,10 +1514,19 @@ inline bool registerActionResultOnce(std::string_view actionId) noexcept {
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
            "races their internals against concurrent lookups. Load and register plugin modules before "
            "the first dispatch.");
+    std::type_index const action{typeid(Action)};
     auto& entries = mutableActionResultSlots();
-    if (!entries.contains(actionId)) {
-        entries.emplace(std::string{actionId}, walkResult<typename ActionTraits<Action>::Result>());
+    if (auto const existing = entries.find(actionId); existing != entries.end()) {
+        if (existing->second.action != action) {
+            auto& conflicts = mutableActionResultConflicts();
+            if (std::ranges::find(conflicts, actionId) == conflicts.end()) {
+                conflicts.emplace_back(actionId);
+            }
+        }
+        return true;
     }
+    entries.emplace(std::string{actionId},
+                    ActionResult{.action = action, .resultSlots = walkResult<typename ActionTraits<Action>::Result>()});
     return true;
 }
 
@@ -1604,7 +1615,7 @@ void actionSourceRegistrationRequired() {}
 /// build still forces the linker to resolve them, pulling in implementations
 /// (a database driver, a native UI framework, an OS-specific API) the client
 /// target may have no link path for at all, and will never call regardless.
-/// The third registrar (`registerActionExecutorOnce`, `bridge.hpp`) routes
+/// The executor registrar (`registerActionExecutorOnce`, `bridge.hpp`) routes
 /// through `Bridge::executeVia` -> `IBackend::execute` (fully abstract) and
 /// needs only the action's JSON codecs plus `Model::execute`'s *declaration*
 /// (for `ActionTraits::Result`, via `decltype`) — never its definition — so
@@ -1956,7 +1967,7 @@ void actionSourceRegistrationRequired() {}
     }
 // clang-format on
 
-/// @brief Shared body for `ActionTraits<A>`'s specialisation plus its two
+/// @brief Shared body for `ActionTraits<A>`'s specialisation plus its
 ///        registrars -- everything `BRIDGE_REGISTER_ACTION_4` and
 ///        `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5` expand to alike, parameterised
 ///        only on how `Result` is spelled. Composes

@@ -37,8 +37,21 @@ struct ResultSlot {
     std::string path;
 };
 
-/// @brief Every action's result slots, by action id.
-using ActionResultSlotMap = std::map<std::string, std::vector<ResultSlot>, std::less<>>;
+/// @brief What one action id's registration recorded about its result.
+///
+/// The action type is kept beside the slots because an action id is unique per
+/// model, not per process: two action types may register under one id. The
+/// first registration's slots are kept, and a later registration with a
+/// different action type is listed in `actionResultConflicts()` instead.
+struct ActionResult {
+    /// The action type that registered under the id first.
+    std::type_index action;
+    /// The places that action's result holds a reflected aggregate.
+    std::vector<ResultSlot> resultSlots;
+};
+
+/// @brief Every action's result, by action id.
+using ActionResultSlotMap = std::map<std::string, ActionResult, std::less<>>;
 
 namespace result_walker {
 
@@ -181,5 +194,20 @@ inline ActionResultSlotMap& mutableActionResultSlots() {
 /// @brief Every registered action's result slots, by action id.
 /// @return The map, unmatched against records.
 inline ActionResultSlotMap const& actionResultSlots() { return mutableActionResultSlots(); }
+
+/// @brief The process-level list of action ids registered by more than one action type.
+/// @return The mutable list.
+inline std::vector<std::string>& mutableActionResultConflicts() {
+    static std::vector<std::string> ids;
+    return ids;
+}
+
+/// @brief The action ids that a second, different action type registered under.
+///
+/// Each id appears once. Its entry in `actionResultSlots()` holds the first
+/// type's slots; matching refuses the id, since which result a cached query
+/// holds would depend on link order.
+/// @return The ids in the order the conflicts were found.
+inline std::vector<std::string> const& actionResultConflicts() { return mutableActionResultConflicts(); }
 
 }  // namespace morph::model::detail

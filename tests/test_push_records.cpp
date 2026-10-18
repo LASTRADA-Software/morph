@@ -91,8 +91,13 @@ struct ListRows {
     int limit{};
 };
 
+struct CountRows {
+    int limit{};
+};
+
 struct WalkerModel {
     ListResult execute(ListRows const& /*action*/) { return {}; }
+    Header execute(CountRows const& /*action*/) { return {}; }
 };
 
 }  // namespace push_records_test
@@ -124,6 +129,17 @@ BRIDGE_REGISTER_RECORD(NoId, "T_NoId")
 
 BRIDGE_REGISTER_MODEL(WalkerModel, "T_WalkerModel")
 BRIDGE_REGISTER_ACTION(WalkerModel, ListRows, "T_WalkerListRows")
+BRIDGE_REGISTER_ACTION(WalkerModel, CountRows, "T_WalkerCountRows")
+
+// Another model may register a different action type under an id already taken.
+namespace {
+[[maybe_unused]] bool const walkerConflictFirst =
+    morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerConflict");
+[[maybe_unused]] bool const walkerConflictSecond =
+    morph::model::detail::registerActionResultOnce<CountRows>("T_WalkerConflict");
+[[maybe_unused]] bool const walkerSameFirst = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
+[[maybe_unused]] bool const walkerSameSecond = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
+}  // namespace
 
 namespace {
 
@@ -208,9 +224,11 @@ TEST_CASE("walker_vector_member", "[push][records]") {
 
 TEST_CASE("walker_paths_through_optional_and_map", "[push][records]") {
     auto const slots = morph::model::detail::walkResult<Nested>();
+    REQUIRE(hasSlot(slots, typeid(Nested), ""));
     REQUIRE(hasSlot(slots, typeid(Header), "header"));
     REQUIRE(hasSlot(slots, typeid(Row), "header.rows"));
     REQUIRE(hasSlot(slots, typeid(Row), "byName"));
+    REQUIRE(slots.size() == 4);
 }
 
 TEST_CASE("walker_skips_custom_codec", "[push][records]") {
@@ -250,6 +268,23 @@ TEST_CASE("action_registration_records_result_slots", "[push][records]") {
     auto const& all = morph::model::detail::actionResultSlots();
     auto const found = all.find("T_WalkerListRows");
     REQUIRE(found != all.end());
-    REQUIRE(hasSlot(found->second, typeid(ListResult), ""));
-    REQUIRE(hasSlot(found->second, typeid(Row), "rows"));
+    REQUIRE(found->second.action == std::type_index{typeid(ListRows)});
+    REQUIRE(hasSlot(found->second.resultSlots, typeid(ListResult), ""));
+    REQUIRE(hasSlot(found->second.resultSlots, typeid(Row), "rows"));
+}
+
+TEST_CASE("action_result_second_type_under_one_id_is_a_conflict", "[push][records]") {
+    auto const& all = morph::model::detail::actionResultSlots();
+    auto const& conflicts = morph::model::detail::actionResultConflicts();
+    auto const conflict = all.find("T_WalkerConflict");
+    REQUIRE(conflict != all.end());
+    REQUIRE(conflict->second.action == std::type_index{typeid(ListRows)});
+    REQUIRE(hasSlot(conflict->second.resultSlots, typeid(ListResult), ""));
+    REQUIRE_FALSE(hasSlot(conflict->second.resultSlots, typeid(Header), ""));
+    REQUIRE(std::ranges::count(conflicts, std::string{"T_WalkerConflict"}) == 1);
+
+    auto const same = all.find("T_WalkerSame");
+    REQUIRE(same != all.end());
+    REQUIRE(std::ranges::find(conflicts, std::string{"T_WalkerSame"}) == conflicts.end());
+    REQUIRE(std::ranges::find(conflicts, std::string{"T_WalkerListRows"}) == conflicts.end());
 }
