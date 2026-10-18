@@ -1046,6 +1046,7 @@ public:
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
         MORPH_ZONE("ActionDispatcher::dispatch");
+        MORPH_ZONE_TEXT(actionId);
         MORPH_ZONE_TEXT(detail::currentRequestId());
         // A dispatch means the maps are being read, which in the registration
         // model means the registration phase is over. Debug builds only; see
