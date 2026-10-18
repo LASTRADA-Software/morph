@@ -396,8 +396,11 @@ It reuses that one `authenticate` result for its stamp.
   principal, so after an authenticated baseline it counts as different. This
   covers signing in as someone else on the same connection, and a client that
   keeps its watches across a sign-out: neither goes on receiving events admitted
-  for the previous principal. The client's cache is cleared on a principal
-  change, and it watches again with its next envelope, which is admitted afresh.
+  for the previous principal. A connection that held any watch is sent one
+  `resync` event; the client answers every `resync` by marking its watched
+  entries stale and sending its whole watch set again with `replace: true`,
+  which is admitted afresh for the new principal, and a refused topic comes
+  back in the `WatchReply`.
 - **A new token for the same principal keeps the watches.** The comparison is
   on the verified principal, not on the token, so a refreshed token does not
   drop and re-admit the connection's whole watch set.
@@ -429,11 +432,14 @@ on the session stored with it:
   list results but not capture them still receives the change.
 
 A dropped watch's topic leaves the event, and an event with no topic left is
-not sent. The client watches again with its next envelope, whose fresh token is
-admitted afresh. The "may run some action" answers come from the watch table's
-cache per verified principal and token, so for an authenticated principal a
-policy change reaches its existing watches when it next watches with a new
-token; `authenticate` and `authorizeInstance` are asked each time. A private
+not sent. The connection is then sent one `resync`, however many watches the
+fan-out dropped, and the client answers it by sending its whole watch set again
+with `replace: true`, under its current token; a topic still refused comes back
+in the `WatchReply`. The "may run some action" answers come from the watch
+table's cache per verified principal and token, so for an authenticated
+principal a policy change reaches an existing watch when its stored token stops
+verifying or the topic is watched again; `authenticate` and
+`authorizeInstance` are asked each time. A private
 instance's topic has no watch: it goes only to the connections whose scope
 holds the instance.
 

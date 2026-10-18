@@ -757,7 +757,8 @@ public:
     ///
     /// Each recipient's watches are then re-authorised by the rule that
     /// admitted them (`reauthorise`): a topic whose watch fails is dropped
-    /// from the table and from the event. A record registered with
+    /// from the table and from the event, and a connection that lost any
+    /// watch is sent one `resync` after its event (`sendResync`). A record registered with
     /// `morph::record::privateKeys` reaches a principal other than
     /// @p callerPrincipal without its keys. Each connection's event holds only
     /// the topics left, is not sent when none are, and passes through
@@ -797,16 +798,18 @@ public:
         }
         Authentications authentications;
         for (auto& [cid, body] : bodies) {
-            reauthorise(cid, body, caller, callerPrincipal, authentications);
-            if (body.records.empty() && body.instances.empty()) {
-                continue;
+            bool const dropped = reauthorise(cid, body, caller, callerPrincipal, authentications);
+            if (!body.records.empty() || !body.instances.empty()) {
+                std::string payload;
+                (void)glz::write_json(body, payload);
+                auto envelope =
+                    ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
+                if (!oversized(cid, envelope)) {
+                    postHere(cid, std::move(envelope));
+                }
             }
-            std::string payload;
-            (void)glz::write_json(body, payload);
-            auto envelope =
-                ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
-            if (!oversized(cid, envelope)) {
-                postHere(cid, std::move(envelope));
+            if (dropped) {
+                sendResync(cid);
             }
         }
     }
@@ -1089,8 +1092,9 @@ private:
     /// the answers they cache per principal and token, or that one watch is
     /// dropped. A dropped watch's topic leaves @p body. Which action wrote
     /// the change is not checked: a principal that may list a record but not
-    /// write it still receives its changes. The client watches again with its
-    /// next envelope, whose fresh token is admitted afresh.
+    /// write it still receives its changes. The caller owes the connection a
+    /// `resync` when this drops anything; the client answers it by sending
+    /// its whole watch set again, which is admitted afresh.
     ///
     /// A private instance's topic has no watch: it is sent to the scope that
     /// holds the instance, and kept.
@@ -1106,8 +1110,10 @@ private:
     /// @param caller          Connection the execute arrived on; `0` for unscoped.
     /// @param callerPrincipal The execute's verified principal; empty when none was.
     /// @param asked           This fan-out's `authenticate` answers; extended in place.
-    void reauthorise(ConnectionId cid, ::morph::wire::ChangesBody& body, ConnectionId caller,
-                     std::string_view callerPrincipal, Authentications& asked) {
+    /// @return True when any of @p cid's watches was dropped.
+    [[nodiscard]] bool reauthorise(ConnectionId cid, ::morph::wire::ChangesBody& body, ConnectionId caller,
+                                   std::string_view callerPrincipal, Authentications& asked) {
+        bool dropped = false;
         // Copied out before a drop: dropping frees the `Watch` it came from.
         auto const authenticated = [&](detail::Watch const& watch) {
             if (stillAuthenticated(watch, asked)) {
@@ -1116,6 +1122,7 @@ private:
             std::string const principal = watch.principal;
             std::string const token = watch.context.token;
             _watches.dropSession(cid, principal, token);
+            dropped = true;
             return false;
         };
         std::vector<::morph::effects::RecordChange> records;
@@ -1127,6 +1134,7 @@ private:
             }
             if (!mayWatchRecord(watch->context, change.record)) {
                 _watches.remove(cid, ::morph::wire::WatchBody{.records = {change.record}, .instances = {}});
+                dropped = true;
                 continue;
             }
             bool const keepsKeys = cid == caller || (!callerPrincipal.empty() && watch->principal == callerPrincipal);
@@ -1151,12 +1159,33 @@ private:
                     _watches.remove(cid, ::morph::wire::WatchBody{
                                              .records = {},
                                              .instances = {{.modelType = topic.modelType, .primary = topic.primary}}});
+                    dropped = true;
                     continue;
                 }
             }
             instances.push_back(std::move(topic));
         }
         body.instances = std::move(instances);
+        return dropped;
+    }
+
+    /// @brief Sends @p cid one `resync` event, owed because the server dropped
+    ///        some of its watches on its own. On the server strand.
+    ///
+    /// The client answers a `resync` by marking what it watches stale and
+    /// sending its whole watch set again with `replace: true`; a topic still
+    /// refused comes back in the `WatchReply`. Without it, a client whose
+    /// watch was dropped would stop receiving that topic's changes and never
+    /// know. Sent only to a connection that negotiated events, and through
+    /// `postHere`, so a connection held back behind its backlog gets the one
+    /// `resync` its drain already owes it. An `unwatch`, a `replace`, a close
+    /// and a write failure drop watches without one: the first two are the
+    /// client's own, and the last two leave no connection to tell.
+    /// @param cid Connection whose watches were dropped.
+    void sendResync(ConnectionId cid) {
+        if (eventsNegotiated(cid)) {
+            postHere(cid, ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}")));
+        }
     }
 
     /// @brief Body of `post`. On the server strand.
@@ -1555,7 +1584,8 @@ private:
     /// `authenticate` refuses, drops every watch @p cid holds and becomes the
     /// baseline: a watch was admitted for one principal, and must not keep
     /// delivering to another who now speaks on the same connection. A new
-    /// token for the same principal keeps them. `cid == 0` and a connection
+    /// token for the same principal keeps them. A connection that held any
+    /// watch is sent one `resync` (`sendResync`). `cid == 0` and a connection
     /// not open have no baseline.
     /// @param principal The envelope's verified principal, or empty.
     /// @param cid       Connection the envelope arrived on; `0` for unscoped.
@@ -1565,8 +1595,12 @@ private:
         }
         auto const [baseline, first] = _principalBaselines.try_emplace(cid, principal);
         if (!first && baseline->second != principal) {
+            bool const watched = _watches.topicCount(cid) != 0;
             _watches.dropConnection(cid);
             baseline->second = principal;
+            if (watched) {
+                sendResync(cid);
+            }
         }
     }
 

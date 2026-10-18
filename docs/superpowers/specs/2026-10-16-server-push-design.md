@@ -340,6 +340,8 @@ A client watches the topics its cache holds, so the server sends each connection
 - **Lifetime.** A topic is watched while at least one cache entry holds it, mounted or kept (spec 5 §5: for
   5 minutes). The client counts references per topic. It sends `watch` when a count leaves zero and `unwatch` when it
   returns to zero.
+  The server may also drop a watch on its own (§12): it then sends a `resync`, and the client answers every `resync`
+  by sending its whole watch set again with `replace: true`, as it does after a reconnect.
 - **Watch before fetch.** Watch changes made in one reactive batch are sent as one message, **before** the fetches
   of that batch, on the same connection. The server handles `watch` on its strand when the message arrives, and an
   `execute` is admitted on that same strand before it is posted to the model strand. The watch is therefore in the
@@ -445,7 +447,7 @@ The interpreter's query cache applies a change the same way whether it came from
 | `updates R` with keys | Patch: each entry holding `R` merges the new records into the rows with those keys, at the paths and by the key field the catalog gives (§5). It uses the existing `patch` merge, and the catalog's `listFields` for a list inside a record. No refetch. | Each entry holding `R` whose value contains one of the keys is marked stale, and refetched if mounted. |
 | `changes R` | Each entry holding `R` is marked stale, and refetched if mounted. | The same. |
 | `changesInstance` | Each entry read through the same instance is marked stale, and refetched if mounted. | The same, for the instance named: the private one this connection owns, or a keyed shared one it watches. |
-| `resync` | none | Every watched entry is marked stale, and refetched if mounted. |
+| `resync` | none | Every watched entry is marked stale, and refetched if mounted. The whole watch set is sent again with `replace: true` (§12). |
 
 - **A change during a fetch is kept.** A stale mark on an entry whose fetch is pending sets `refetchAfter`. When the
   fetch settles, the entry stays stale and fetches once more, even if it succeeded. Otherwise the success would clear
@@ -555,8 +557,8 @@ changes visible.
     authorises passes through it; `hello`, which carries no session, does not.
   - **The baseline** is the verified principal of the first stamped envelope after the connection opens. An envelope
     whose token fails `authenticate` is stamped with no principal, so it counts as different: the watches drop, and
-    the client sends them again with its next, freshly signed, envelope. That covers signing in as someone else, and a client that keeps old watches across a sign-out.
-    The client's cache is already cleared on a principal change (spec 5 §5), and it watches again.
+    the connection is sent one `resync` (below). That covers signing in as someone else, and a client that keeps old
+    watches across a sign-out. The client's cache is already cleared on a principal change (spec 5 §5).
   - **Fan-out re-authorises each watch at send time, by the rule that admitted it.**
     - It runs `authenticate` on the stored context, which fails for an expired token.
     - For a record topic, it then requires again that the principal may run some action whose `records` hold the
@@ -564,9 +566,16 @@ changes visible.
       results but not capture them still receives the change.
     - For an instance topic, it re-runs the admission check for instance topics below.
 
-    A failure drops the watch. The client watches again with its next envelope, which carries a fresh token. The
-    "may run some action holding `R`" answer is cached per principal and record type, and refreshed when that
-    principal's token is.
+    A failure drops the watch, and the connection is sent one `resync` (below). The "may run some action holding
+    `R`" answer is cached per principal and token, so a policy change reaches an existing watch when its stored
+    token stops verifying or the topic is watched again.
+  - **A watch the server drops is answered with a `resync`.** Whenever the server drops any of a connection's
+    watches other than by that connection's own `unwatch` or `replace` (a principal change, or a re-authorisation
+    failure at fan-out), it sends that connection one `resync` event: one per envelope or fan-out, however many
+    watches went, only when `events` is negotiated, and through the backlog hold-back (§6), so a connection held
+    back gets the one `resync` its drain owes. The client answers **every** `resync` by marking its watched entries
+    stale and sending its whole watch set again with `replace: true`; a topic still refused comes back in the
+    `WatchReply`. A close and a write failure send nothing: there is no connection left to tell.
 - **What a watch may name.**
   - A record type: only when the principal may run at least one action whose `records` contain it. Otherwise the
     `ok` reply lists it as refused, and the client logs it.

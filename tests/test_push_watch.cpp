@@ -3,6 +3,7 @@
 // The server's per-connection watch table and the core `watch`/`unwatch`
 // kinds: what a watch may name, how it is stored, and what drops it.
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -804,7 +805,23 @@ struct EventWire {
         return sent;
     }
 
-    /// The `changes` payloads received, decoded.
+    /// The topic of every event received, in order.
+    std::vector<std::string> topics() {
+        std::vector<std::string> names;
+        for (auto const& frame : snapshot()) {
+            auto const env = ::morph::wire::decode(frame);
+            REQUIRE(env.kind == ::morph::wire::kEventKind);
+            ::morph::wire::EventBody event;
+            REQUIRE_FALSE(glz::read_json(event, env.body));
+            names.push_back(event.topic);
+        }
+        return names;
+    }
+
+    /// How many `resync` events were received.
+    std::size_t resyncs() { return static_cast<std::size_t>(std::ranges::count(topics(), ::morph::wire::kResyncTopic)); }
+
+    /// The `changes` payloads received, decoded; `resync` events are skipped.
     std::vector<::morph::wire::ChangesBody> changes() {
         std::vector<::morph::wire::ChangesBody> bodies;
         for (auto const& frame : snapshot()) {
@@ -812,6 +829,9 @@ struct EventWire {
             REQUIRE(env.kind == ::morph::wire::kEventKind);
             ::morph::wire::EventBody event;
             REQUIRE_FALSE(glz::read_json(event, env.body));
+            if (event.topic == ::morph::wire::kResyncTopic) {
+                continue;
+            }
             REQUIRE(event.topic == ::morph::wire::kChangesTopic);
             auto body = ::morph::wire::readChangesBody(event.payload.str);
             REQUIRE(body);
@@ -852,9 +872,10 @@ struct FanRig {
 
     EventWire& wire(ConnectionId cid) { return *wires.at(cid); }
 
-    void watch(ConnectionId cid, ::morph::wire::WatchBody const& body, std::string const& token = {}) {
+    void watch(ConnectionId cid, ::morph::wire::WatchBody const& body, std::string const& token = {},
+               std::string_view kind = ::morph::wire::kWatchKind) {
         ::morph::wire::Envelope env;
-        env.kind = std::string{::morph::wire::kWatchKind};
+        env.kind = std::string{kind};
         env.callId = 2;
         env.session.token = token;
         env.body = glz::write_json(body).value_or(std::string{});
@@ -1092,6 +1113,8 @@ TEST_CASE("execute_under_other_principal_drops_watches_before_its_fanout", "[pus
     // ...to the connection still watching, but not to the watch bob's execute dropped.
     CHECK(rig.wire(other).changes().size() == 1U);
     CHECK(rig.wire(shared).changes().empty());
+    CHECK(rig.wire(shared).resyncs() == 1U);
+    CHECK(rig.wire(other).resyncs() == 0U);
     CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{other});
 }
 
@@ -1176,6 +1199,9 @@ TEST_CASE("expired_watch_dropped_at_send", "[push][watch]") {
     CHECK(rig.wire(watcher).changes().size() == 1U);
     CHECK(rig.wire(caller).changes().size() == 2U);
     CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{caller});
+    // carol is told once, after the event she did receive, and the caller not at all.
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"changes", "resync"});
+    CHECK(rig.wire(caller).resyncs() == 0U);
 }
 
 TEST_CASE("lister_not_writer_still_receives", "[push][watch]") {
@@ -1259,6 +1285,7 @@ TEST_CASE("refused_after_policy_change_drops_watch", "[push][watch]") {
     rig.flush();
 
     CHECK(rig.wire(reader).changes().size() == 1U);
+    CHECK(rig.wire(reader).resyncs() == 1U);
     CHECK(rig.recordWatchers("T_FanRow").empty());
 }
 
@@ -1279,6 +1306,7 @@ TEST_CASE("instance_watch_reauthorised_at_send", "[push][watch]") {
     rig.flush();
 
     CHECK(rig.wire(watcher).changes().size() == 1U);
+    CHECK(rig.wire(watcher).resyncs() == 1U);
     CHECK(rig.instanceWatchers(kFanModel, "k1").empty());
 }
 
@@ -1315,4 +1343,95 @@ TEST_CASE("assign_promoted_instance_reaches_watcher", "[push][watch]") {
     CHECK(bodies.front().instances.front().primary == "k9");
     CHECK(bodies.front().instances.front().instance == mid);
     CHECK(rig.wire(caller).snapshot().empty());
+}
+
+TEST_CASE("expired_session_drop_is_one_resync", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, {.records = {"T_FanRow"}, .instances = {{.modelType = std::string{kFanModel}, .primary = "k1"}}},
+              "carol");
+    auto const mid = rig.create(caller, "k1", "alice");
+
+    guard->expire("carol");
+    // A write that reaches both of carol's topics drops both, and owes one resync.
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":1})", "alice").kind == "ok");
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":1})", "alice").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"resync"});
+}
+
+TEST_CASE("principal_change_owes_one_resync", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, std::make_shared<SecretGuard>()};
+    auto const cid = rig.connect();
+    auto const idle = rig.connect();
+    rig.watch(cid, records({"T_FanRow", "T_FanOther"}), "alice");
+    rig.watch(idle, records({}), "alice");
+
+    // A register under bob drops both of alice's watches at once.
+    (void)rig.create(cid, {}, "bob");
+    (void)rig.create(idle, {}, "bob");
+    rig.flush();
+
+    CHECK(rig.wire(cid).topics() == std::vector<std::string>{"resync"});
+    // A connection that watched nothing has nothing to re-send.
+    CHECK(rig.wire(idle).snapshot().empty());
+}
+
+TEST_CASE("client_drops_owe_no_resync", "[push][watch]") {
+    FanRig rig;
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow", "T_FanOther"}));
+    rig.watch(cid, records({"T_FanRow"}), {}, ::morph::wire::kUnwatchKind);
+    rig.watch(cid, records({"T_FanRow"}, true));
+    rig.flush();
+
+    CHECK(rig.recordWatchers("T_FanOther").empty());
+    CHECK(rig.wire(cid).snapshot().empty());
+}
+
+TEST_CASE("private_keys_stripped_between_unauthenticated_connections", "[push][watch]") {
+    // No principal is verified on either connection: they are not the same
+    // principal, so the other one is not given the keys, and the caller keeps
+    // them only because it is the calling connection.
+    FanRig rig;
+    auto const caller = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(caller, records({"T_FanPrivate"}));
+    rig.watch(other, records({"T_FanPrivate"}));
+    auto const mid = rig.create(caller);
+
+    CHECK(rig.execute(caller, mid, "T_FanEditPrivate", R"({"id":4})").kind == "ok");
+    rig.flush();
+
+    auto const mine = rig.wire(caller).changes();
+    REQUIRE(mine.size() == 1U);
+    CHECK(keysOf(mine.front().records.front()) == std::vector<std::string>{"4"});
+    auto const theirs = rig.wire(other).changes();
+    REQUIRE(theirs.size() == 1U);
+    REQUIRE(theirs.front().records.size() == 1U);
+    CHECK_FALSE(theirs.front().records.front().keys.has_value());
+}
+
+TEST_CASE("private_keys_kept_for_the_calling_connection", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const bob = rig.connect();
+    // No other alice connection: the caller keeps its keys, bob does not.
+    rig.watch(caller, records({"T_FanPrivate"}), "alice");
+    rig.watch(bob, records({"T_FanPrivate"}), "bob");
+    auto const mid = rig.create(caller, {}, "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanEditPrivate", R"({"id":7})", "alice").kind == "ok");
+    rig.flush();
+
+    auto const mine = rig.wire(caller).changes();
+    REQUIRE(mine.size() == 1U);
+    CHECK(keysOf(mine.front().records.front()) == std::vector<std::string>{"7"});
+    auto const theirs = rig.wire(bob).changes();
+    REQUIRE(theirs.size() == 1U);
+    CHECK_FALSE(theirs.front().records.front().keys.has_value());
 }

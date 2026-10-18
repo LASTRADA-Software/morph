@@ -1183,6 +1183,19 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   ([security.md](../security.md#a-connections-principal-baseline)). And so
   does fan-out, for a watch that no longer passes the rule that admitted it
   ([Fan-out](#fan-out)).
+- <a id="resync-for-dropped-watches"></a>**Resync for dropped watches.** When
+  the server drops watches on its own, the client is not otherwise told, and
+  would stop receiving those topics. So a principal change that drops any
+  watch, and a fan-out whose re-authorisation drops any, send the connection
+  one `resync` event (`RemoteServer::sendResync`): one per envelope or per
+  fan-out, however many watches went. It is sent only to a connection that
+  negotiated events, and through `post`'s hold-back, so a connection already
+  held back behind its backlog gets the one `resync` its drain owes. The
+  client answers every `resync` by marking its watched entries stale and
+  sending its whole watch set again with `replace: true`; a topic still
+  refused comes back in the `WatchReply`. An `unwatch` and a `replace` are the
+  client's own and owe nothing; a close and a write failure leave no
+  connection to tell.
 
 ### Fan-out
 
@@ -1205,9 +1218,9 @@ through `dispatchExecute`.
   connection `watchersOf(record)` names, and a keyed shared instance's topic to
   every connection `watchersOf(modelType, primary)` names, **the caller
   included**. An instance whose change carries no primary is looked up in the
-  directory on the strand: one an `assign` keyed while its execute ran is
-  matched by the key it holds now, since matching is against
-  `Instance::sharedKey` at fan-out. The caller may never see its own reply: an execute the
+  directory on the strand: the directory is consulted at fan-out when a change
+  carries no primary, so an instance an `assign` keyed while its execute ran
+  is matched by the key it holds now. The caller may never see its own reply: an execute the
   `executeTimeout` answered first but that succeeded, a reply the client
   discarded, a replay whose reply went to the offline worker. A private
   instance's topic goes to every connection whose scope holds the instance
@@ -1235,11 +1248,14 @@ through `dispatchExecute`.
      watch. The action that wrote the change is not consulted, so a principal
      that may list a record but not write it still receives its changes.
 
-  A dropped watch's topic leaves the body; the client watches again with its
-  next envelope. A private instance's topic has no watch and is kept. A
-  verified principal's cached `authorize` answer stands until that principal
-  watches with a new token, so a policy change reaches its existing watches
-  then; the `authenticate` and `authorizeInstance` checks are asked afresh.
+  A dropped watch's topic leaves the body, and the connection is sent one
+  `resync` after its event, however many watches the fan-out dropped
+  (`sendResync`; see [Resync for dropped watches](#resync-for-dropped-watches)).
+  A private instance's topic has no watch and is kept. A verified principal's
+  cached `authorize` answer stands while the session it was cached for keeps
+  watching, so a policy change reaches an existing watch when its stored token
+  stops verifying or the topic is watched again; the `authenticate` and
+  `authorizeInstance` checks are asked afresh.
 - **Private keys.** A record registered with `morph::record::privateKeys`
   reaches a recipient without its `keys` (a whole-type change) unless the
   recipient is the calling connection or its watch's principal is the
