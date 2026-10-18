@@ -1557,7 +1557,8 @@ TEST_CASE("flush_at_256_keys_without_waiting", "[push][watch]") {
 }
 
 TEST_CASE("burst_over_backlog_yields_one_resync", "[push][watch]") {
-    FanRig rig{std::chrono::milliseconds{0}, nullptr, kForever};
+    constexpr auto kWindow = std::chrono::milliseconds{20};
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, kWindow};
     auto const cid = rig.connect();
     rig.watch(cid, records({"T_FanRow"}));
     rig.wire(cid).backlog = ::morph::backend::kEventBacklogHigh + 1;
@@ -1569,6 +1570,8 @@ TEST_CASE("burst_over_backlog_yields_one_resync", "[push][watch]") {
     rig.wire(cid).backlog = 0;
     rig.server->connectionDrained(cid);
     rig.server->connectionDrained(cid);
+    // Past the window, so a queue left behind the hold-back would have been sent.
+    std::this_thread::sleep_for(kWindow * 5);
     rig.flush();
     CHECK(rig.wire(cid).topics() == std::vector<std::string>{"resync"});
 }
@@ -1686,4 +1689,27 @@ TEST_CASE("negative_coalesce_window_refused", "[push][watch]") {
     ::morph::backend::ServerConfig config;
     config.coalesceWindow = std::chrono::milliseconds{-1};
     CHECK_THROWS_AS(std::make_shared<RemoteServer>(pool, std::move(config)), std::invalid_argument);
+}
+
+TEST_CASE("principal_change_discards_queued_changes", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard, kForever};
+    auto const caller = rig.connect();
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}), "carol");
+    rig.fanOut({rowChange({"7777"})}, caller, "alice");
+
+    // An envelope under dave: carol's queue is discarded, not sent, and one resync covers it.
+    (void)rig.create(cid, {}, "dave");
+    rig.flush();
+    CHECK(rig.wire(cid).topics() == std::vector<std::string>{"resync"});
+
+    // The next event dave is sent holds none of what was queued for carol.
+    rig.watch(cid, records({"T_FanRow"}), "dave");
+    rig.fanOut(rowBurst(::morph::backend::detail::kCoalesceKeyLimit, 1000), caller, "alice");
+    auto const bodies = rig.wire(cid).changes();
+    REQUIRE(bodies.size() == 1U);
+    auto const keys = keysOf(bodies.front().records.front());
+    CHECK(keys.size() == ::morph::backend::detail::kCoalesceKeyLimit);
+    CHECK(std::ranges::find(keys, "7777") == keys.end());
 }

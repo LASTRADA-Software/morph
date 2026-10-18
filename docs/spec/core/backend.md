@@ -1289,8 +1289,12 @@ through `dispatchExecute`.
     connection. A window of zero sends each fan-out at once.
   - *What is not queued.* Nothing is queued for a connection with no writer,
     or one held back behind its backlog: its drain sends a `resync`, which
-    covers every change since. A closed connection drops its queue with its
-    writer, and its window's close then finds nothing to send.
+    covers every change since. A closed connection, and one whose writer is
+    removed, drops its queue with its writer, and its window's close then
+    finds nothing to send. A principal change (the baseline in
+    [Watches](#watches)) discards the queue without sending it, since it was
+    authorised for the previous principal, and the connection is sent one
+    `resync` if it held any watch or had anything queued.
   - *Volume.* A window opens only when the previous one has closed, so window
     closes send a connection at most 20 events a second at 50 ms. A queue
     sent at the key limit can come sooner, so the full bound is 20 events a

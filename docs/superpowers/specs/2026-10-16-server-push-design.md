@@ -592,7 +592,8 @@ changes visible.
 - **Values never travel to other connections** (§9), so `secretFields` and row-level filtering stay on the read path,
   where they are enforced today.
 - **Volume.**
-  - Coalescing bounds events to 20 a second per connection.
+  - Coalescing bounds a connection to at most 20 timer flushes a second, plus one event per 256 keys or topics it
+    is sent.
   - The backlog bound (§6) holds events back from a slow reader and replaces them with one `resync`, and the
     transport's `sendTimeout` closes a reader that stops.
   - The query-must-read rule (§10) removes the way a fetch could feed itself.

@@ -332,9 +332,9 @@ struct ServerConfig {
     ///        as one `changes` event.
     ///
     /// The window opens at the first change queued for the connection, and its
-    /// queue is sent when the window closes, or at once when
-    /// `detail::kCoalesceKeyLimit` keys are queued. Zero sends each fan-out's
-    /// event at once, unmerged. Negative is refused by the constructor.
+    /// queue is sent when the window closes, or at once when 256 keys are
+    /// queued. Zero sends each fan-out's event at once, unmerged. Negative is
+    /// refused by the constructor.
     std::chrono::milliseconds coalesceWindow{50};
 };
 
@@ -663,6 +663,7 @@ public:
                 return;
             }
             if (!writer.write) {
+                self->discardChanges(cid);
                 self->_writers.erase(cid);
                 return;
             }
@@ -1012,10 +1013,7 @@ private:
     /// @param cid Connection scope to close.
     void closeConnectionHere(ConnectionId cid) {
         noteOwner("RemoteServer::closeConnection");
-        // The connection's queued changes go with its writer.
-        if (auto found = _writers.find(cid); found != _writers.end() && found->second.windowTimer != 0) {
-            _strandTimer->cancel(found->second.windowTimer);
-        }
+        discardChanges(cid);
         _writers.erase(cid);
         _facts.erase(cid);
         _watches.dropConnection(cid);
@@ -1268,6 +1266,26 @@ private:
         found->second.window = 0;
         found->second.windowTimer = 0;
         flushChanges(cid);
+    }
+
+    /// @brief Drops what connection @p cid has queued and closes its window,
+    ///        sending nothing. On the server strand.
+    /// @param cid Connection whose queue is discarded.
+    /// @return `true` when something was queued.
+    bool discardChanges(ConnectionId cid) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return false;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.windowTimer != 0) {
+            _strandTimer->cancel(outbox.windowTimer);
+        }
+        outbox.window = 0;
+        outbox.windowTimer = 0;
+        bool const queued = !outbox.queued.empty();
+        (void)outbox.queued.take();
+        return queued;
     }
 
     /// @brief Sends what connection @p cid has queued as one `changes` event
@@ -1692,9 +1710,11 @@ private:
     /// `authenticate` refuses, drops every watch @p cid holds and becomes the
     /// baseline: a watch was admitted for one principal, and must not keep
     /// delivering to another who now speaks on the same connection. A new
-    /// token for the same principal keeps them. A connection that held any
-    /// watch is sent one `resync` (`sendResync`). `cid == 0` and a connection
-    /// not open have no baseline.
+    /// token for the same principal keeps them. The changes queued for the
+    /// connection are discarded, never sent: they were authorised for the
+    /// previous principal. A connection that held any watch, or had changes
+    /// queued, is sent one `resync` (`sendResync`), which covers them.
+    /// `cid == 0` and a connection not open have no baseline.
     /// @param principal The envelope's verified principal, or empty.
     /// @param cid       Connection the envelope arrived on; `0` for unscoped.
     void compareWithBaseline(const std::string& principal, ConnectionId cid) {
@@ -1704,9 +1724,10 @@ private:
         auto const [baseline, first] = _principalBaselines.try_emplace(cid, principal);
         if (!first && baseline->second != principal) {
             bool const watched = _watches.topicCount(cid) != 0;
+            bool const queued = discardChanges(cid);
             _watches.dropConnection(cid);
             baseline->second = principal;
-            if (watched) {
+            if (watched || queued) {
                 sendResync(cid);
             }
         }
