@@ -3,7 +3,9 @@
 // qt_quick::Frontend: run, quit and the teardown order (docs/spec/qt_quick/frontend.md). This executable owns no
 // QGuiApplication: each run makes its own, as a client's main does.
 
+#include <QCoreApplication>
 #include <QGuiApplication>
+#include <QKeyEvent>
 #include <QQuickWindow>
 #include <QWindow>
 #include <array>
@@ -176,4 +178,36 @@ TEST_CASE("qt_quick frontend: the option is named qt and is usable where a windo
 int main(int argcIn, char* argvIn[]) {
     Catch::Session session;
     return morph::testkit::runSession(session, argcIn, argvIn);
+}
+
+TEST_CASE("qt_quick frontend: Ctrl+Shift+I opens the inspector only in development mode", "[qt_quick][frontend]") {
+    for (ui::DevelopmentTools const mode : {ui::DevelopmentTools::Off, ui::DevelopmentTools::On}) {
+        INFO((mode == ui::DevelopmentTools::On ? "On" : "Off"));
+        std::vector<std::string> log;
+        RecordingSource source{log};
+        qt_quick::FrontendConfig config = configWith(log, [](ui::AppContext& context) {
+            context.executor().post([&context] {
+                QWindow* app = nullptr;
+                for (QWindow* const window : QGuiApplication::topLevelWindows()) {
+                    if (window->title() == QStringLiteral("test")) {
+                        app = window;
+                    }
+                }
+                REQUIRE(app != nullptr);
+                QKeyEvent press{QEvent::KeyPress, Qt::Key_I, Qt::ControlModifier | Qt::ShiftModifier};
+                QCoreApplication::sendEvent(app, &press);
+                context.executor().post([&context] {
+                    int shown = 0;
+                    for (QWindow const* const window : QGuiApplication::topLevelWindows()) {
+                        shown += window->isVisible() ? 1 : 0;
+                    }
+                    context.quit(shown);
+                });
+            });
+        });
+        config.devTools = mode;
+        qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+        // The application's window, and in development mode the inspector's window over it.
+        CHECK(frontend.run(source) == (mode == ui::DevelopmentTools::On ? 2 : 1));
+    }
 }

@@ -6,8 +6,8 @@
 # directory (relative to the caller's CMAKE_CURRENT_SOURCE_DIR, i.e.
 # examples/<rung>/) actually has files — a rung with no screens/ yet simply
 # gets no ladder_<rung>_screens target, silently, so this one function
-# serves every rung from pastebin (rung 1) onward unchanged as each rung
-# grows into more of the target set.
+# serves every rung unchanged as each rung grows into more of the target
+# set.
 #
 # Directory -> target convention:
 #   src/models/*.cpp, src/db/*.cpp, src/app/*.cpp  -> ladder_<rung>_lib       STATIC (morph + Lightweight)
@@ -33,8 +33,8 @@
 # `set_tests_properties(<name> PROPERTIES LABELS ...)` is one of them: CTest
 # *appends* labels, so the first-registered entry accumulated later rungs'
 # labels too and `ctest -L ladder-<rung>` over-selects -- running another
-# rung's binary alongside its own, with nothing to say so (measured once as crm
-# selecting 180 cases while owning 168). A failure line, `--output-junit` and
+# rung's binary alongside its own, with nothing to say so (measured once as
+# one rung selecting 180 cases while owning 168). A failure line, `--output-junit` and
 # CDash also identify a test by name alone, so a duplicate could not say which
 # binary failed. scripts/check_ctest_name_collisions.sh is the gate that keeps
 # this property true; ci.yml's ladder-tests job runs it on the all-rungs
@@ -92,8 +92,7 @@ function(morph_add_rung)
     # examples/CMakeLists.txt), not a descendant of it, so without this,
     # ladder_<rung>_lib's `target_link_libraries(... Qt6::Core)` below fails
     # with "target was not found" the first time this function is actually
-    # exercised (verified empirically: pastebin, the first real rung, hits
-    # exactly this). Calling both again here is cheap and, per Qt's own docs,
+    # exercised (verified empirically). Calling both again here is cheap and, per Qt's own docs,
     # idempotent/harmless if some ancestor scope already ran them — this is
     # the one place in the whole rung that needs it, since every target below
     # is created in *this* function's (i.e. the calling rung directory's) scope.
@@ -114,8 +113,8 @@ function(morph_add_rung)
         # those apart (include/<rung>/app/app.hpp vs src/app/app.cpp), so a
         # QObject declared in include/ gets no moc output at all otherwise —
         # which a static library happily builds and only fails at the first
-        # link that actually needs the vtable (pastebin::app::App, hit the
-        # moment ladder_pastebin_tests linked it). Header entries are not
+        # link that actually needs the vtable (a rung's `app::App`, the moment
+        # its test binary links it). Header entries are not
         # compiled; they only join the AUTOMOC scan.
         file(GLOB_RECURSE _lib_headers CONFIGURE_DEPENDS "${_dir}/include/*.hpp")
         if(_lib_sources)
@@ -141,11 +140,9 @@ function(morph_add_rung)
                 apply_coverage(ladder_${_rung}_lib)
             endif()
             # AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage()
-            # is above. Without this, a --preset clang-tsan build of the ladder
-            # compiles this target (a rung's models -- the code kanban-tsan's
-            # stress test actually races on) with no sanitizer instrumentation at
-            # all, silently defeating the whole point of building under that
-            # preset. See .github/workflows/ci.yml's kanban-tsan job.
+            # is above. Without this, a sanitizer build of the ladder compiles
+            # this target (a rung's models) with no instrumentation at all,
+            # silently defeating the whole point of building under that preset.
             if(DEFINED AF_SANITIZER)
                 apply_sanitizers(ladder_${_rung}_lib ${AF_SANITIZER})
             endif()
@@ -228,7 +225,7 @@ function(morph_add_rung)
             target_link_libraries(ladder_${_rung}_tests PRIVATE morph::ladder_testkit)
             # ctest runs a rung's test binary from its own build directory, so
             # repo-relative test data (e.g. tests/fuzz/findings/*, replayed as
-            # hostile paste content by pastebin's model suite) cannot be found
+            # hostile input by a model suite) cannot be found
             # by a relative path. Compile the source root in instead — the same
             # thing tests/fuzz/CMakeLists.txt does by passing absolute corpus
             # paths on the command line, expressed here as a macro because a
@@ -286,12 +283,9 @@ function(morph_add_rung)
                 apply_coverage(ladder_${_rung}_tests)
             endif()
             # AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage()
-            # is above. This is the target kanban's [tsan]-tagged stress test
-            # actually links and runs from -- without this, a --preset clang-tsan
-            # build compiles it with no sanitizer instrumentation at all, and
-            # .github/workflows/ci.yml's kanban-tsan job would build and pass
-            # while never actually exercising ThreadSanitizer over the code it
-            # claims to cover.
+            # is above. Without this, a sanitizer build compiles the rung's suite
+            # with no instrumentation at all, and a sanitizer leg over it would
+            # build and pass while never exercising the sanitizer.
             if(DEFINED AF_SANITIZER)
                 apply_sanitizers(ladder_${_rung}_tests ${AF_SANITIZER})
             endif()

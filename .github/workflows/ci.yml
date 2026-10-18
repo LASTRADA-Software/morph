@@ -84,6 +84,11 @@ env:
   # FASTCACHE_PREFETCH_GROUP), so this partitions the *statistics* and never
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
+  # A UTF-8 locale on every runner. The hosted image sets one and the
+  # self-hosted Docker runners do not; under "C", Qt warns that it switched to
+  # C.UTF-8, and the ladder's render smokes fail on any Qt warning.
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
   CLANG_VERSION: "22"
   # The Catch2 the `clang-tidy` job analyses against, through the
   # clang-tidy-diff.py run inside it. Not a version this
@@ -400,8 +405,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       # Release legs run the suite too: these are the only builds with NDEBUG
-      # defined and MORPH_UI_DEV_TOOLS off, so code on those paths runs nowhere
-      # else.
+      # defined, so code on those paths runs nowhere else.
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
@@ -543,7 +547,7 @@ jobs:
       # build.
       #
       # No `QT_QPA_PLATFORM: offscreen` here, unlike the identical step in
-      # bank-sanitizers, kanban-tsan and ladder-sanitizers, and the absence is
+      # ladder-sanitizers, and the absence is
       # deliberate rather than an omission. The sweep's first act is
       # `ctest --show-only=json-v1`, which *executes* every DISCOVERY_MODE
       # PRE_TEST binary to enumerate its cases; a Qt-linked one aborts headless
@@ -851,318 +855,6 @@ jobs:
         with:
           name: ${{ github.job }}-${{ strategy.job-index }}
 
-  # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
-  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
-  # a bare morph::bridge::Bridge/morph::backend::LocalBackend directly, on a
-  # real morph::exec::ThreadPoolExecutor{4}, with zero Qt frames anywhere in
-  # its call graph (see the test file's own header comment) -- so the "a GUI
-  # stack under TSan is mostly noise" rationale that keeps the ladder out of
-  # linux-sanitizers does not apply to this one test. This job builds only
-  # what that test needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban,
-  # no Qt GUI modules beyond the WebSockets backend the ladder testkit itself
-  # requires -- to keep it a minimal, fast, TSan-clean addition rather than
-  # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
-  #
-  # The test must not reach a QtExecutor, and the constraint is load-bearing
-  # rather than stylistic: driving the same scenario through
-  # BackendRig{Mode::Local, ...} constructs a real morph::qt::QtExecutor for
-  # client-facing callback delivery, and that produces 165 ThreadSanitizer
-  # warnings bottoming out in genuine Qt-internal frames -- undetectable as
-  # real bugs or false positives from outside a TSan-instrumented Qt build.
-  # Never constructing one sidesteps the ambiguity rather than resolving it.
-  kanban-tsan:
-    name: Kanban / ThreadSanitizer
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
-        run: |
-          sudo apt-get update -q
-          # unixodbc-dev + libsqliteodbc: the ladder (built by this job)
-          # fetches the Lightweight ORM, whose CMake runs
-          # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose DbFixture
-          # opens a real `DRIVER=SQLite3` connection at test time (identical
-          # rationale to linux-sanitizers' coverage-leg step and ladder-tests'
-          # own install step). Named explicitly rather than relied on from the
-          # runner image.
-          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt does
-          # `find_package(yaml-cpp)`/`find_package(libzip)` as system CONFIG
-          # packages, not through CPM (examples/bank/CMakeLists.txt's comment
-          # on the identical fetch) — without these, configure fails the
-          # moment MORPH_BUILD_LADDER=ON pulls Lightweight in.
-          # libgl1-mesa-dev: every other job that configures MORPH_BUILD_QT=ON
-          # together with MORPH_BUILD_LADDER=ON installs this (linux-sanitizers'
-          # coverage leg, ladder-tests, linux-all-features) for Qt's GL platform
-          # integration; carried here for the same reason even though this leg's
-          # test run itself stays off-GUI.
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
-            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
-          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
-          # bash`: see linux-compilers' identical install step for why the piped
-          # form reports success having installed nothing.
-          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          test -s /tmp/llvm.sh
-          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
-
-      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
-      # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
-      # every other job that builds the ladder on Linux already documents.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      - name: Set up sccache
-        uses: ./.github/actions/sccache-setup
-
-      # MORPH_LADDER_RUNGS=kanban (a single rung, not "all"): examples/CMakeLists.txt's
-      # rung-selection loop (`if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST
-      # MORPH_LADDER_RUNGS)`) matches a single-value list correctly, and examples/common
-      # (the testkit every rung's tests link) is always added regardless of which rungs
-      # are selected — so this configures and builds only kanban's ladder targets, not
-      # the whole ladder.
-      - name: Configure (clang-tsan, kanban only)
-        run: |
-          cmake --preset clang-tsan \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_LADDER=ON \
-            -DMORPH_LADDER_RUNGS=kanban \
-            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
-      # catch_discover_tests() runs ladder_kanban_tests once at BUILD time to
-      # enumerate its cases, which can abort on this headless runner (no X
-      # server) without it — see linux-sanitizers' and ladder-tests' own Build
-      # steps for the identical note.
-      - name: Build
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset clang-tsan
-
-      # The same assertion linux-sanitizers and ladder-sanitizers make, for the
-      # same reason: this job's whole claim is that kanban's stress
-      # test ran under ThreadSanitizer, and an uninstrumented binary makes that
-      # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
-      # ASan-only assertion on a TSan leg is itself a control that measures
-      # nothing.
-      #
-      # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
-      # step below, because this step sits between them and enumerates the same
-      # binaries they do. The sweep begins with `ctest
-      # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
-      # its binary. Nothing this job builds is both Qt-linked and PRE_TEST
-      # today -- ladder_kanban_tests is POST_BUILD (cmake/morph_add_rung.cmake),
-      # so its enumeration already happened inside the Build step's environment
-      # -- which is why this step is green without the variable and not why it
-      # is safe. Changing one word to PRE_TEST on any Qt-linked rung suite would
-      # make this step fail with `ctest listed no tests`, naming neither Qt nor
-      # the display -- a diagnostic that points nowhere near its cause.
-      - name: Every ctest binary is instrumented
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
-
-      # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
-      # labels morph_add_rung() applies (cmake/morph_add_rung.cmake) — Catch2's
-      # own tags ([kanban][stress][tsan]) are never translated into ctest
-      # labels anywhere in this repo's CMake (no catch_discover_tests call
-      # passes ADD_TAGS_AS_LABELS). A "-L tsan" filter would therefore match
-      # zero tests and silently run nothing. This test's name is the only
-      # thing distinguishing it, and "ThreadSanitizer" appears in exactly one
-      # TEST_CASE name across the whole kanban tree (confirmed by grep), so
-      # -R selects it precisely.
-      - name: Test (kanban's TSan-tagged stress test only)
-        env:
-          QT_QPA_PLATFORM: offscreen
-          # The same suppression file linux-sanitizers' Test step passes. Both
-          # entries are libstdc++ refcounts for a shared exception, decremented
-          # inside an uninstrumented libstdc++.so.6; the evidence is in
-          # cmake/tsan.supp.
-          # Without it this leg is a coin toss on a false positive that the
-          # other TSan leg already knows is one — and the failure mode of a
-          # known false positive is that the next real one is waved past.
-          #
-          # `second_deadlock_stack=1` for the reason the linux-sanitizers Test
-          # step above gives at length, and appended to the same
-          # value rather than added as a second `TSAN_OPTIONS:` key, which
-          # would silently drop the suppressions file this leg was given in the
-          # first place.
-          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
-        run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      - name: Upload the sccache entries this build used
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: ./.github/actions/sccache-upload
-        with:
-          name: ${{ github.job }}-${{ strategy.job-index }}
-
-  # ── Linux: the bank example under UndefinedBehaviorSanitizer ──────────
-  # No other sanitizer leg builds the bank example: linux-sanitizers,
-  # kanban-tsan, ladder-sanitizers and valgrind set zero MORPH_BUILD_BANK_*
-  # flags, against eight places elsewhere in this file that set
-  # MORPH_BUILD_BANK_EXAMPLE=ON. Bank is not a rung (it is absent from
-  # examples/rungs.txt and never calls morph_add_rung(), for the reasons that
-  # file gives), so MORPH_BUILD_LADDER=ON does not reach it either. This job is
-  # the only instrumented build bank gets.
-  #
-  # A sanitizer leg reaches only what the suites drive: this one's reach is
-  # bank_tests, plus the bank server's own code where those tests link it.
-  #
-  # Why a job of its own rather than a flag on linux-sanitizers' clang-ubsan
-  # leg: that leg builds no Qt, and bank's server links morph::qt. Folding Qt
-  # and the Lightweight ORM into a three-leg matrix makes that leg the slowest
-  # one, whose duration is then the matrix's. Same argument as kanban-tsan
-  # above.
-  #
-  # ubsan rather than asan: UBSan diagnoses the numeric-conversion class bank's
-  # money arithmetic is exposed to. Bank under ASan is worth having and is not
-  # covered here. Nothing is suppressed and there is no allowlist entry.
-  bank-sanitizers:
-    name: Bank example / UBSan
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
-      # .cache/cpm): restored, a configure clones nothing; missed, it clones
-      # and this step saves the result for the next run.
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: .cache/cpm
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
-          restore-keys: cpm-${{ runner.os }}-
-
-      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
-        run: |
-          sudo apt-get update -q
-          # The same set kanban-tsan and ladder-sanitizers install, and for
-          # the same reasons: unixodbc-dev + libsqliteodbc because
-          # examples/bank/CMakeLists.txt fetches the Lightweight ORM, whose
-          # CMake runs `pkg_check_modules(ODBC REQUIRED odbc)` and whose
-          # fixtures open a real `DRIVER=SQLite3` connection at test time;
-          # libyaml-cpp-dev + libzip-dev because Lightweight's own
-          # CMakeLists.txt finds them as system CONFIG packages rather than
-          # through CPM; libgl1-mesa-dev for Qt's GL platform integration,
-          # which every job configuring MORPH_BUILD_QT=ON alongside a Qt GUI
-          # target installs.
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
-            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
-          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
-          # bash`: see linux-compilers' identical install step for why the piped
-          # form reports success having installed nothing.
-          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          test -s /tmp/llvm.sh
-          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
-
-      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
-      # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
-      # every other job that builds Qt on Linux already documents.
-      - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
-          cache: true
-
-      - name: Set up sccache
-        uses: ./.github/actions/sccache-setup
-
-      # MORPH_BUILD_QT=ON builds bank's server alongside bank_lib. No
-      # MORPH_BUILD_LADDER: bank is not a rung, so it would add every rung's
-      # tree for nothing.
-      - name: Configure (clang-ubsan, bank example)
-        run: |
-          cmake --preset clang-ubsan \
-            -DMORPH_BUILD_QT=ON \
-            -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
-      # catch_discover_tests() runs each POST_BUILD-discovered Qt-linked test
-      # binary once during the build to enumerate its cases -- in this
-      # configure, morph_qt_tests.
-      - name: Build
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset clang-ubsan
-
-      # The same assertion linux-sanitizers, ladder-sanitizers and kanban-tsan
-      # make. It is not a formality here: bank's targets need an
-      # apply_sanitizers() call of their own, and this sweep is what says so
-      # rather than letting the leg report a clean bank run over uninstrumented
-      # binaries.
-      #
-      # QT_QPA_PLATFORM=offscreen because the sweep's first act is `ctest
-      # --show-only=json-v1`, which runs every PRE_TEST discovery, and a
-      # Qt-linked test binary listing its cases with no display and no
-      # platform aborts; the listing then prints no JSON at all and the sweep
-      # refuses to pass having examined nothing. The Test step below declares
-      # the same value: this sweep's subject is the binaries that step runs.
-      - name: Every ctest binary is instrumented
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: bash scripts/check_sanitizer_instrumentation.sh build/clang-ubsan ubsan
-
-      # -L bank, not the whole suite: this configure also builds morph_tests
-      # and morph_qt_tests, which linux-sanitizers' clang-ubsan leg already
-      # runs under the identical instrumentation.
-      # The label is applied by examples/bank/CMakeLists.txt's
-      # catch_discover_tests calls; a filter that matched nothing would be this
-      # repository's named failure mode, and CMakePresets.json's base-test sets
-      # `noTestsAction: error` so it exits 8 with "No tests were found!!!"
-      # instead (confirmed against a tree built without bank).
-      - name: Test (bank's suites only)
-        env:
-          QT_QPA_PLATFORM: offscreen
-          # halt_on_error, because apply_sanitizers()'s ubsan arm already
-          # passes -fno-sanitize-recover=undefined -- this makes the runtime
-          # agree with the compile line rather than leaving the two to differ,
-          # the same pair ladder-sanitizers' Test step sets.
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --preset clang-ubsan -L bank --output-on-failure
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical from
-      # the outside, and only the build-step duration hints at which one you
-      # have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      - name: Upload the sccache entries this build used
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: ./.github/actions/sccache-upload
-        with:
-          name: ${{ github.job }}-${{ strategy.job-index }}
-
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
     name: Linux / Qt6 WebSockets
@@ -1460,12 +1152,12 @@ jobs:
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
       # be selected.
-      # -DMORPH_BUILD_BANK_EXAMPLE=ON is what puts ladder_bank_server in this
-      # build tree. bank is not a rung, so -DMORPH_LADDER_RUNGS=all does not
-      # reach it: the root CMakeLists.txt guards add_subdirectory(examples/bank)
-      # on that option alone (OFF by default -- bank pulls the Lightweight ORM
-      # in), and examples/bank/CMakeLists.txt then declares the server inside
-      # its own if(MORPH_BUILD_QT), which this job already sets. Nothing new has
+      # Bank is rung 2, so -DMORPH_LADDER_RUNGS=all already adds it through the
+      # rung loop; -DMORPH_BUILD_BANK_EXAMPLE=ON asks for it explicitly as
+      # well, and the root adds examples/bank itself only when the ladder is
+      # off, so it is added once. examples/bank/CMakeLists.txt declares
+      # ladder_bank_server inside its own if(MORPH_BUILD_QT), which this job
+      # already sets. Nothing new has
       # to be installed for it: the apt step above already names Lightweight's
       # libsqlite3-dev/libyaml-cpp-dev/libzip-dev/unixodbc-dev/libsqliteodbc
       # (MORPH_BUILD_LADDER=ON fetches the same pinned ORM through
@@ -1528,7 +1220,7 @@ jobs:
       # `set_tests_properties(<name> PROPERTIES LABELS ...)` reaches both and
       # CTest *appends*, so one entry accumulates the other rung's label and
       # `ctest -L ladder-<rung>` runs another rung's binary alongside its own
-      # (measured once as crm reporting on 180 cases while owning 168); a
+      # (measured once as one rung reporting on 180 cases while owning 168); a
       # failure line then names a test that exists twice. cmake/morph_add_rung.cmake's TEST_PREFIX makes
       # those names unique by construction -- this is what keeps them that way
       # the next time a rung is template-copied or a suite is registered by
@@ -1688,10 +1380,9 @@ jobs:
   # bottoming out in Qt-internal frames which cannot be classified as real
   # races or false positives from outside a TSan-instrumented Qt build —
   # measured at 165 warnings deep. The way through is to write the one test
-  # that matters so it constructs no QtExecutor at all and run only it under
-  # TSan, which is what kanban-tsan above does. Thread-
-  # sanitising a rung means following that pattern per test, not adding a
-  # blanket -DAF_SANITIZER=tsan leg here.
+  # that matters so it constructs no QtExecutor at all and run only that test
+  # under TSan, in a leg of its own. Thread-sanitising a rung means following
+  # that pattern per test, not adding a blanket -DAF_SANITIZER=tsan leg here.
   #
   # -LE stress mirrors ladder-tests: the stress cases are long-running by
   # design and ASan's shadow-memory overhead compounds that.
@@ -1873,7 +1564,7 @@ jobs:
       # another, so both halves belong here: this is the only leg that
       # builds Qt under a sanitizer, so if these run anywhere it is here.
       # linux-sanitizers deliberately keeps Qt out of its matrix (see its
-      # Configure comment), and kanban-tsan runs exactly one named stress test.
+      # Configure comment).
       #
       # Measured before adding this step, on clang 22 with these same options:
       # all 67 cases across tests/qt, tests/net_qt_interop and
@@ -2376,8 +2067,10 @@ jobs:
           # default is the concrete way -- every examples/ source
           # would silently become "not built by this configure" and stop being
           # analysed, and this gate would go green having read 40% less code.
+          # The three rungs and their shared code are about 110 of the ~130
+          # examples/ entries; without the ladder the rest is ~25, far under 100.
           MIN_ENTRIES = 600
-          MIN_EXAMPLES_ENTRIES = 200
+          MIN_EXAMPLES_ENTRIES = 100
 
           # How many database entries a changed header is allowed to borrow flags from
           # before this script gives up on it. Candidates are tried nearest-first (by
@@ -2698,7 +2391,7 @@ jobs:
   # its objects wrong. A cancelled run publishes nothing.
   sccache-publish:
     name: Publish the master compiler cache
-    needs: [linux-compilers, linux-sanitizers, linux-coverage, kanban-tsan, bank-sanitizers, linux-qt, ladder-tests, ladder-sanitizers]
+    needs: [linux-compilers, linux-sanitizers, linux-coverage, linux-qt, ladder-tests, ladder-sanitizers]
     if: "!cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
     runs-on: ubuntu-24.04
     permissions:

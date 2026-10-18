@@ -193,6 +193,8 @@ TEST_CASE("UiClient opens a verified bundle filtered for the principal", "[ui-se
     REQUIRE(bundle.documents.at("auth.login") == uiservice::kLogin);
     REQUIRE(bundle.documents.at("app") == uiservice::kApp);
     REQUIRE(opened->files.at(hashOf("theme", "default")) == uiservice::kTheme);
+    // The shell reads the theme from the bundle, by file id, as it reads the documents.
+    CHECK(opened->bundle.themes.at("default") == uiservice::kTheme);
     REQUIRE(opened->files.at(hashOf("component", "Chart")) == uiservice::kChart);
     REQUIRE(opened->hello.application == "lims");
     REQUIRE(opened->catalog.entries.size() == 5U);

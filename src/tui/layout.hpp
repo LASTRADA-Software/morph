@@ -62,17 +62,25 @@ struct GridPlan {
     std::vector<int> columnWidths;  ///< Width of each column.
     std::vector<int> rowY;          ///< Top edge of each row.
     std::vector<int> rowHeights;    ///< Height of each row.
-    int gap = 0;                    ///< Cells between columns and between rows; never negative.
+    int columnGap = 0;              ///< Cells between columns; never negative.
+    int rowGap = 0;                 ///< Rows between rows; never negative.
 };
 
-/// Places cells row-major in `columns` equal columns (fewer than one counts as one). A cell whose span does not fit
-/// the rest of its row starts the next row; a row is as tall as its tallest cell.
-[[nodiscard]] GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width);
+/// Places cells row-major in `columns` equal columns (fewer than one counts as one), `width.gap` columns apart and
+/// `rowGap` rows apart. A cell whose span does not fit the rest of its row starts the next row; a row is as tall as
+/// its tallest cell.
+[[nodiscard]] GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap);
 
 /// The rectangle a slot of `plan` covers, gaps between its columns included.
 [[nodiscard]] ::core::tui::Rect slotArea(GridPlan const& plan, GridSlot const& slot);
 
-/// `area` shrunk by `padding` cells on every side; never negative.
-[[nodiscard]] ::core::tui::Rect pad(::core::tui::Rect area, int padding);
+/// `area` shrunk by `vertical` rows at the top and bottom and `horizontal` columns at the left and right; never
+/// negative.
+[[nodiscard]] ::core::tui::Rect pad(::core::tui::Rect area, int vertical, int horizontal);
+
+/// The cells a spacing step (`ui::spacingStep`) is along `axis`. A cell is about twice as tall as it is wide, so a
+/// step is about half as many rows as columns: vertically 0, 0, 0, 1, 1, 2 and horizontally 0, 1, 1, 2, 2, 3 for
+/// steps 0 to 5. A step outside 0 to 5 is the nearest end.
+[[nodiscard]] int stepCells(int step, ui::Axis axis) noexcept;
 
 }  // namespace morph::tui::layout

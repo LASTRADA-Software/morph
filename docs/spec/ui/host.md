@@ -70,8 +70,8 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
     to it.
   - A foreign or closed handle, a close or save in progress, and the interpreter's refusal of the new document are
     `MountError`, and the old screen stays.
-- **`inspector(handle)`**, in a build with the development tools, is the `Inspector` over a screen it mounted
-  ([`inspector.md`](inspector.md)), or nothing for a closed or foreign handle. It is the only way a host hands out its
+- **`inspector(handle)`** is the `Inspector` over a screen it mounted ([`inspector.md`](inspector.md)), or nothing
+  for a closed or foreign handle or for a screen whose session is not in development mode. It is the only way a host hands out its
   screen, and it gives a read-only view and a `refetch` command, not the `Screen`.
 - **`identityOf`** evaluates the document's `identity` over the params alone, without mounting, and answers its
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,

@@ -69,8 +69,7 @@ public:
 ///
 /// `FileActionLog` appends and rebuilds its idempotency-dedup set from
 /// whatever is already on disk, so a leftover file from an earlier test would
-/// silently suppress a re-relayed row. Deleted before use and after, matching
-/// `examples/pastebin/tests/test_paste_model.cpp`'s own App-test convention.
+/// silently suppress a re-relayed row. Deleted before use and after.
 [[nodiscard]] std::filesystem::path freshLogPath(const std::string& name) {
     auto path = std::filesystem::temp_directory_path() / ("bookmarks_" + name + ".jsonl");
     std::filesystem::remove(path);

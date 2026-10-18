@@ -122,7 +122,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
 | Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view | — |
-| Slot | `MorphSlot` | its children | — |
+| Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
 | Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |
@@ -181,11 +181,38 @@ it; a widget out of reach takes none.
 
 A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size, `fixed(n)` to a preferred size of
 `n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
-horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`). A stale field is dimmed; a
+horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`).
+
+A content-sized dimension fills the container across its axis ([`../ui/backend_contract.md`](../ui/backend_contract.md),
+the cross axis). A QML child cannot see its parent's axis, so the container says: `ContainerCore::adopt` writes the
+child's `fillsWidth` and `fillsHeight` from `crossFill()`, which is the width for every container but a row (the
+height), a splitter and a table row (neither, since they size their own children). `MorphWidget` binds
+`Layout.fillWidth` to a stretch width, or a content width with `fillsWidth`, and the same for height. Along its axis a
+`MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
+start: a `GridLayout` given more length hands the spare to the gaps between its cells.
+
+**Surfaces.** `Theme.scheme(name)` is the colour scheme of a surface (`MorphScheme`: the colour roles, each the
+theme's unless the surface sets it), and the theme itself for the empty name. Every `MorphWidget` draws with
+`scheme`: its own surface's when it has one, else `inheritedScheme`, which its container writes when it adopts it
+(`ContainerCore::scheme()`; the roots give the theme). The mount sets a node's surface before it mounts the node's
+children, so a container's scheme is known when they are adopted. A widget with a surface draws its background under
+its content. `applyTheme(engine, values, surfaces)` sets every role of each named surface's scheme in place, so a
+widget that holds one follows a later theme.
+
+The roots fill the window as one column: a root whose height stretches takes what the others leave, as on the
+terminal; without one, the roots keep their own heights at the top.
+
+A spacing step (a stack's or grid's `gap`, a panel's `padding`) is `Theme.spaceOf(step)` px, from the `space.0` …
+`space.5` tokens, not a number of units. A stale field is dimmed; a
 field's errors show under it in the error colour; a required field is marked. The `Theme` singleton holds the colour
 roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
 tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
-The style is Qt Quick Controls' `Basic`.
+The controls are Qt Quick Controls' `Basic` ones, drawn from the theme rather than with that style's look: an input
+(`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.controlHeight` tall with
+`Theme.radiusControl` corners and a border that takes the focus colour; a check box's indicator is accent-filled when
+checked; a tab bar underlines the current tab in the accent; a table's header is muted and its rows dense with a
+hairline between them; a panel is a card; a heading is `Theme.headingPixels`, bold; and the window behind every
+surface is `Theme.background`.
 
 ## Components
 
@@ -255,7 +282,7 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- Per-subtree surfaces and a runtime density from theme tokens; the units come from the default font, not the
+- A runtime density from theme tokens; the units come from the default font, not the
   scale tokens.
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

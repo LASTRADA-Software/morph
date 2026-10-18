@@ -130,6 +130,23 @@ reorders children, and only through this.
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included |
 | `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built. A hidden cell keeps its column: the cells after it stay under their own headers |
 
+**Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
+value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
+`space.<step>` in px on Qt Quick, cells by axis on the terminal.
+
+**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary` or `Danger`; the mount
+calls it only for another value than `Normal`, so a document without the `emphasis` key (`normal`, `primary`,
+`danger`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error colour;
+the terminal draws both bold, a danger one in the error colour.
+
+**The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
+units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
+in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
+fills its width. A kind whose width is its label (a button, a badge, a checkbox) fills the line but draws at its
+natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
+start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
+size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
+
 ## Interfaces
 
 | Interface | Setters | Handlers |

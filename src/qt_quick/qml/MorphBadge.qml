@@ -7,6 +7,8 @@ import QtQuick.Controls
 MorphWidget {
     id: root
 
+    fillsAcross: false
+
     property int tone: 0
     property string text: ""
     property string icon: ""
@@ -17,14 +19,14 @@ MorphWidget {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: Qt.alpha(Theme.tone(root.tone), 0.15)
-        border.color: Theme.tone(root.tone)
+        color: Qt.alpha(root.toneOf(root.tone), 0.15)
+        border.color: root.toneOf(root.tone)
     }
 
     Label {
         id: label
         anchors.centerIn: parent
         text: (root.icon !== "" ? root.icon + " " : "") + root.text
-        color: Theme.tone(root.tone)
+        color: root.toneOf(root.tone)
     }
 }

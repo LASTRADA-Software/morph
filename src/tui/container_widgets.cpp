@@ -26,7 +26,7 @@
 namespace morph::tui::detail {
 
 void StackImpl::setGap(int gap) {
-    _gap = gap;
+    _gap = layout::stepCells(gap, _axis);
     refresh();
 }
 
@@ -68,7 +68,8 @@ void GridImpl::setColumns(int columns) {
 }
 
 void GridImpl::setGap(int gap) {
-    _gap = gap;
+    _columnGap = layout::stepCells(gap, ui::Axis::Horizontal);
+    _rowGap = layout::stepCells(gap, ui::Axis::Vertical);
     refresh();
 }
 
@@ -104,23 +105,24 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
         return {.width = 0, .height = 0};
     }
     int const columns = std::max(1, _columns);
-    int const gap = std::max(0, _gap);
     int unit = 0;
     for (auto const* child : shown) {
         int const span = std::clamp(spanOf(child), 1, columns);
-        int const width = std::max(0, requestedSize(*child).width - (gap * (span - 1)));
+        int const width = std::max(0, requestedSize(*child).width - (_columnGap * (span - 1)));
         unit = std::max(unit, (width + span - 1) / span);
     }
-    int const width = (unit * columns) + (gap * (columns - 1));
-    auto const plan = layout::planGrid(columns, cellsOf(shown), layout::Track{.length = width, .gap = gap});
+    int const width = (unit * columns) + (_columnGap * (columns - 1));
+    auto const plan =
+        layout::planGrid(columns, cellsOf(shown), layout::Track{.length = width, .gap = _columnGap}, _rowGap);
     int const height = std::accumulate(plan.rowHeights.begin(), plan.rowHeights.end(), 0) +
-                       (gap * (static_cast<int>(plan.rowHeights.size()) - 1));
+                       (_rowGap * (static_cast<int>(plan.rowHeights.size()) - 1));
     return {.width = width, .height = height};
 }
 
 std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) const {
     auto const shown = shownChildren();
-    auto const plan = layout::planGrid(_columns, cellsOf(shown), layout::Track{.length = size.width, .gap = _gap});
+    auto const plan =
+        layout::planGrid(_columns, cellsOf(shown), layout::Track{.length = size.width, .gap = _columnGap}, _rowGap);
     std::vector<::core::tui::Rect> areas;
     areas.reserve(children().size());
     auto slot = plan.slots.begin();
@@ -146,7 +148,8 @@ void PanelImpl::setTitle(std::string_view title) {
 }
 
 void PanelImpl::setPadding(int padding) {
-    _padding = std::max(0, padding);
+    _paddingRows = layout::stepCells(padding, ui::Axis::Vertical);
+    _paddingColumns = layout::stepCells(padding, ui::Axis::Horizontal);
     refresh();
 }
 
@@ -192,8 +195,8 @@ void PanelImpl::syncChildren() {
         return {.width = displayWidth(heading()), .height = 1};
     }
     auto const inner = stackNaturalSize(children(), ui::Axis::Vertical, 0);
-    return {.width = std::max(inner.width + (2 * _padding) + 2, displayWidth(heading()) + 4),
-            .height = inner.height + (2 * _padding) + 2};
+    return {.width = std::max(inner.width + (2 * _paddingColumns) + 2, displayWidth(heading()) + 4),
+            .height = inner.height + (2 * _paddingRows) + 2};
 }
 
 std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) const {
@@ -202,7 +205,8 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
     }
     auto const inside = ::core::tui::Rect{
         .x = 1, .y = 1, .width = std::max(0, size.width - 2), .height = std::max(0, size.height - 2)};
-    return stackAreas(children(), layout::pad(inside, _padding), StackSpec{.axis = ui::Axis::Vertical});
+    return stackAreas(children(), layout::pad(inside, _paddingRows, _paddingColumns),
+                      StackSpec{.axis = ui::Axis::Vertical});
 }
 
 // The title is written into a canvas of its own between the corners rather than handed to drawBox, which shortens

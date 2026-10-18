@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — renaming a tag renames it everywhere it is used.
+# bookmarks (rung 1) — renaming a tag renames it everywhere it is used.
 #
 # examples/bookmarks/README.md's "What to implement" step 4: tag rename and
 # merge, cascading across bookmarks. There is no CreateTag action -- tags come

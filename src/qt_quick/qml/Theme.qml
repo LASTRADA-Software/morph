@@ -2,10 +2,12 @@
 pragma Singleton
 import QtQuick
 
-// The colours and units every MorphUi component reads. A unit is the default font's average character width
-// horizontally and its line height vertically. The colours and the stale opacity are the ui-theme/1 defaults;
-// qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
+// The colours, units and spacing every MorphUi component reads. A unit is the default font's average character width
+// horizontally and its line height vertically. The colours, the stale opacity and the spacing are the ui-theme/1
+// defaults; qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
 QtObject {
+    id: theme
+
     readonly property FontMetrics metrics: FontMetrics {}
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
@@ -24,6 +26,139 @@ QtObject {
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     property real staleOpacity: 0.55
+    // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
+    // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
+    property color background: "#f2f3f7"
+    property real radiusControl: 6
+    property real radiusCard: 10
+    property real controlHeight: 32
+    property real bodySize: 0
+    property real headingSize: 0
+    readonly property real bodyPixels: bodySize > 0 ? bodySize : metrics.font.pixelSize > 0 ? metrics.font.pixelSize
+                                                                                           : metrics.height * 0.75
+    readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
+    // The card's shadow: `elevation.card`.
+    property color cardShadowColor: "#14000000"
+    property real cardShadowOffsetX: 0
+    property real cardShadowOffsetY: 2
+    property real cardShadowBlur: 10
+    property real cardShadowSpread: 0
+
+    // The spacing scale in px, one entry per spacing step 0 to 5: the `space.<step>` defaults.
+    property list<real> space: [0, 4, 8, 12, 16, 24]
+
+    // A spacing step's distance; a step outside 0 to 5 is the nearest end, as the mount already clamps it.
+    function spaceOf(step: int): real {
+        return space[Math.max(0, Math.min(space.length - 1, step))]
+    }
+
+    // The theme's own scheme, and the built-in surfaces: the page screens sit on, a raised card, the dark navigator
+    // column and the top bar. A role a built-in surface does not set follows the theme's. A theme index's surface of
+    // the same name replaces one, and any other name gets a scheme of its own (`scheme`).
+    readonly property MorphScheme themeScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
+    readonly property MorphScheme pageScheme: MorphScheme {
+        surface: theme.background
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
+    readonly property MorphScheme cardScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
+    readonly property MorphScheme sidebarScheme: MorphScheme {
+        surface: "#1f2430"
+        text: "#c9ccd6"
+        muted: "#7d8396"
+        accent: "#4c8dff"
+        focus: theme.focus
+        selection: "#2f3646"
+        border: "#2f3646"
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
+    readonly property MorphScheme toolbarScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: "#e3e5ea"
+        neutral: theme.neutral
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+    }
+    property var extraSchemes: ({})
+    readonly property Component schemeComponent: Component {
+        MorphScheme {}
+    }
+
+    // The scheme of a surface name: a built-in one, one a theme declared, or, for the empty name, the theme's own.
+    function scheme(name: string): MorphScheme {
+        switch (name) {
+        case "":
+            return themeScheme
+        case "page":
+            return pageScheme
+        case "card":
+            return cardScheme
+        case "sidebar":
+            return sidebarScheme
+        case "toolbar":
+            return toolbarScheme
+        default:
+            if (!(name in extraSchemes))
+                extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
+            return extraSchemes[name] as MorphScheme
+        }
+    }
+
+    // The same, for applyTheme: a function C++ calls returns its value as a QVariant only when it declares no types.
+    function schemeObject(name) {
+        return scheme(name)
+    }
+
+    // Whether a surface name is one the theme draws a background for.
+    function draws(name: string): bool {
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || (name in extraSchemes)
+    }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.
     function textColor(role: int): color {

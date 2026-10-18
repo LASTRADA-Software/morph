@@ -37,7 +37,8 @@ MorphWidget {
     onWidthsChanged: place()
     Layout.fillWidth: true
     implicitWidth: cells.implicitWidth
-    implicitHeight: cells.implicitHeight
+    // A dense row: the control height less 8 px, or the cells' height when they need more.
+    implicitHeight: Math.max(cells.implicitHeight, Theme.controlHeight - 8)
     Accessible.role: Accessible.Row
     Accessible.selected: selected
 
@@ -46,7 +47,15 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: root.selected ? Theme.selection : "transparent"
+        color: root.selected ? root.scheme.selection : "transparent"
+    }
+    // The hairline between rows.
+    Rectangle {
+        anchors.bottom: parent.bottom
+        width: parent.width
+        height: 1
+        color: root.scheme.border
+        opacity: 0.6
     }
 
     Item {

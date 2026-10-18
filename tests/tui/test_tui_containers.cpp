@@ -44,7 +44,8 @@ TEST_CASE("tui containers: a grid places cells row-major, a span covers columns 
     Harness harness{21, 3};
     auto const grid = harness.make<GridImpl>(nullptr);
     grid->setColumns(2);
-    grid->setGap(1);
+    // Step 3: two columns between columns, one row between rows.
+    grid->setGap(3);
     auto const first = harness.make<TextImpl>(grid.get());
     first->setText("a");
     auto const second = harness.make<TextImpl>(grid.get());
@@ -52,7 +53,7 @@ TEST_CASE("tui containers: a grid places cells row-major, a span covers columns 
     auto const wide = harness.make<TextImpl>(grid.get());
     wide->setText("c");
     grid->setSpan(*wide, 2);
-    CHECK(harness.draw() == Rows{"a          b", "", "c"});
+    CHECK(harness.draw() == Rows{"a           b", "", "c"});
     CHECK(WidgetBase::of(*wide).view().screenBounds().width == 21);
 }
 
@@ -60,25 +61,27 @@ TEST_CASE("tui containers: a hidden grid child leaves no cell, and the cells aft
     Harness harness{21, 3};
     auto const grid = harness.make<GridImpl>(nullptr);
     grid->setColumns(2);
-    grid->setGap(1);
+    // Step 3: two columns between columns, one row between rows.
+    grid->setGap(3);
     auto const first = harness.make<TextImpl>(grid.get());
     first->setText("a");
     auto const second = harness.make<TextImpl>(grid.get());
     second->setText("b");
     auto const third = harness.make<TextImpl>(grid.get());
     third->setText("c");
-    CHECK(harness.draw() == Rows{"a          b", "", "c"});
+    CHECK(harness.draw() == Rows{"a           b", "", "c"});
     first->setVisible(false);
-    CHECK(harness.draw() == Rows{"b          c"});
+    CHECK(harness.draw() == Rows{"b           c"});
     first->setVisible(true);
-    CHECK(harness.draw() == Rows{"a          b", "", "c"});
+    CHECK(harness.draw() == Rows{"a           b", "", "c"});
 }
 
 TEST_CASE("tui containers: moveChild reorders a grid's cells, and a span follows its child", "[tui][containers]") {
     Harness harness{21, 3};
     auto const grid = harness.make<GridImpl>(nullptr);
     grid->setColumns(2);
-    grid->setGap(1);
+    // Step 3: two columns between columns, one row between rows.
+    grid->setGap(3);
     auto const first = harness.make<TextImpl>(grid.get());
     first->setText("a");
     auto const second = harness.make<TextImpl>(grid.get());
@@ -87,7 +90,7 @@ TEST_CASE("tui containers: moveChild reorders a grid's cells, and a span follows
     wide->setText("c");
     grid->setSpan(*wide, 2);
     grid->moveChild(*wide, 0);
-    CHECK(harness.draw() == Rows{"c", "", "a          b"});
+    CHECK(harness.draw() == Rows{"c", "", "a           b"});
 }
 
 TEST_CASE("tui containers: setSpan of a widget that is not the grid's child throws", "[tui][containers]") {
@@ -125,10 +128,11 @@ TEST_CASE("tui containers: a panel's padding insets its child", "[tui][container
     Harness harness{12, 5};
     auto const panel = harness.make<PanelImpl>(nullptr);
     panel->setTitle("Info");
-    panel->setPadding(1);
+    // Step 3: one row above and below, two columns either side.
+    panel->setPadding(3);
     auto const body = harness.make<TextImpl>(panel.get());
     body->setText("hi");
-    CHECK(harness.draw().at(2) == "│ hi       │");
+    CHECK(harness.draw().at(2) == "│  hi      │");
 }
 
 TEST_CASE("tui containers: a collapsible panel toggles on Enter, hides its child and reports the state",

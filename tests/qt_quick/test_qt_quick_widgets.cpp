@@ -5,6 +5,7 @@
 // probe cannot reach"): read-only fields of every kind, unreachable widgets, and controlled inputs other than a
 // text field snapping back.
 
+#include <QColor>
 #include <QQuickItem>
 #include <QStringList>
 #include <QTest>
@@ -546,4 +547,28 @@ TEST_CASE("qt_quick widgets: a widget's width class follows the host's width", "
     scene.window().resize(500, 600);
     scene.settle();
     CHECK(classes == std::vector<std::string>{"compact", "medium", "expanded", "compact"});
+}
+
+TEST_CASE("qt_quick widgets: a primary button is accent-filled, a danger one error-filled", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createButton(column.get());
+    auto primary = scene.backend().createButton(column.get());
+    auto danger = scene.backend().createButton(column.get());
+    plain->setLabel("Plain");
+    primary->setLabel("Go");
+    primary->setEmphasis(ui::ButtonEmphasis::Primary);
+    danger->setLabel("Drop");
+    danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    scene.settle();
+    auto const background = [](ui::ButtonWidget& button) {
+        QQuickItem const* const control = Scene::itemsOf(Scene::itemOf(button), "QQuickButton").value(0);
+        REQUIRE(control != nullptr);
+        auto* const fill = control->property("background").value<QQuickItem*>();
+        REQUIRE(fill != nullptr);
+        return fill->property("color").value<QColor>();
+    };
+    CHECK(background(*plain) == QColor{"#ffffff"});
+    CHECK(background(*primary) == QColor{"#1565c0"});
+    CHECK(background(*danger) == QColor{"#c62828"});
 }

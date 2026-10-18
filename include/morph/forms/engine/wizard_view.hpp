@@ -82,7 +82,7 @@ namespace detail::engine {
         .current = [wizard] { return std::optional<std::size_t>{wizard->current()}; },
     };
     steps.common.testId = "wizard_steps";
-    return ui::column(ui::Column{.children = {ui::text(std::move(title)), ui::steps(std::move(steps))}, .gap = 1});
+    return ui::column(ui::Column{.children = {ui::text(std::move(title)), ui::steps(std::move(steps))}, .gap = 4});
 }
 
 /// @brief The built-in navigation: Back, Next and the last step's note.
@@ -101,7 +101,7 @@ namespace detail::engine {
     last.common.visible = [wizard] { return wizard->onLastStep(); };
     last.common.testId = "wizard_last";
     return ui::row(ui::Row{
-        .children = {ui::button(std::move(back)), ui::button(std::move(next)), ui::text(std::move(last))}, .gap = 1});
+        .children = {ui::button(std::move(back)), ui::button(std::move(next)), ui::text(std::move(last))}, .gap = 4});
 }
 
 }  // namespace detail::engine
@@ -134,7 +134,7 @@ namespace detail::engine {
         .children = {options.chrome.header ? options.chrome.header(session) : detail::engine::wizardHeader(session),
                      std::move(body),
                      options.chrome.nav ? options.chrome.nav(session) : detail::engine::wizardNav(session, options)},
-        .gap = 1});
+        .gap = 4});
 }
 
 }  // namespace morph::forms

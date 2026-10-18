@@ -5,9 +5,8 @@
 #   morph_scenario.py --server ws://127.0.0.1:<port> \
 #       scripts/scenario/scenarios/bank/register-sign-in-and-open-an-account.scenario
 #
-# Bank signs in differently from every other rung that has a sign-in, and this
-# file is where that difference is written down. `bookmarks`, `kanban` and
-# `ledger` mint a bearer token and the server verifies its signature; bank's
+# Bank signs in differently from bookmarks, and this file is where that
+# difference is written down. `bookmarks` mints a bearer token and the server verifies its signature; bank's
 # `AuthModel` mints nothing. `LoginRequest` verifies a password and hands back
 # the *principal* for the client to install, which is exactly what
 # `bank::app::App::login()` does with it in the shipped GUI and CLI. So a bank

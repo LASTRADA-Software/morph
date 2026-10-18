@@ -9,9 +9,8 @@
 
 /// @file
 /// `ClientPool<Presenter>` -- N presenter instances over one `BackendRig`'s
-/// N clients, the multi-client convergence-test scaffold `examples/
-/// TESTING.md` names as rung 3's obligation (design spec §6 -- absorbed
-/// into rung 4's scope).
+/// N clients, the multi-client convergence-test scaffold
+/// `examples/TESTING.md`'s "Multi-client stress harness" section names.
 
 namespace morph::ladder::testkit {
 

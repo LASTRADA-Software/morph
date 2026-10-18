@@ -38,7 +38,7 @@ ui::Screen densityScreen() {
                            ui::text({.text = ui::format("Dry density: {0}", {density})})
                                .testId("density")
                                .visible(ui::engaged(density))},
-                          {.gap = 8});
+                          {.gap = 2});
     });
 }
 

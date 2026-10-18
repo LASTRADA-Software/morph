@@ -18,6 +18,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
+#include "button_emphasis.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -399,6 +400,8 @@ struct Text {
 struct Button {
     /// @brief The caption.
     Prop<std::string> label;
+    /// @brief How much it stands out; set once.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Called on activation.
     Action onClick;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -502,11 +505,20 @@ struct Menu {
     Common common{};
 };
 
+/// @brief The largest spacing step: a `gap` or `padding` names a step from 0 (none) to this, which each backend maps
+///        to its own distance (the theme's `space.<step>` on Qt Quick, cells on the terminal).
+inline constexpr int kMaxSpacingStep = 5;
+
+/// @brief A `gap` or `padding` as the spacing step a backend receives.
+/// @param value The value as written.
+/// @return @p value clamped to `[0, kMaxSpacingStep]`.
+[[nodiscard]] constexpr int spacingStep(int value) noexcept { return std::clamp(value, 0, kMaxSpacingStep); }
+
 /// @brief Children stacked top to bottom.
 struct Column {
     /// @brief The children, in order; a null child is skipped.
     std::vector<Node> children;
-    /// @brief Space between children, in backend units.
+    /// @brief Space between children: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
@@ -516,7 +528,7 @@ struct Column {
 struct Row {
     /// @brief The children, in order; a null child is skipped.
     std::vector<Node> children;
-    /// @brief Space between children, in backend units.
+    /// @brief Space between children: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
@@ -536,7 +548,7 @@ struct Grid {
     int columns = 1;
     /// @brief The cells, row-major.
     std::vector<GridCell> cells;
-    /// @brief Space between cells, in backend units.
+    /// @brief Space between cells: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
@@ -552,7 +564,7 @@ struct Spacer {
 struct Panel {
     /// @brief The title.
     Prop<std::string> title;
-    /// @brief Space between frame and child, in backend units.
+    /// @brief Space between frame and child: a spacing step, 0 to `kMaxSpacingStep`.
     int padding = 0;
     /// @brief The content; may be null.
     Node child;
@@ -779,7 +791,7 @@ struct ForEach {
     std::shared_ptr<detail::ForEachModel const> model;
     /// @brief The direction rows are stacked in; set once.
     Axis axis = Axis::Vertical;
-    /// @brief Space between rows, in backend units.
+    /// @brief Space between rows: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop of the row container.
     Common common{};

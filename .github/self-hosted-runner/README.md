@@ -434,7 +434,7 @@ set each of them should use — self-hosted if one is free, otherwise the
 plain `ubuntu-24.04` GitHub-hosted label. Nothing needs to be started or
 stopped by hand for this fallback to work; it's just naturally in effect
 whenever no `lastrada-docker` runner happens to be online or all of them
-are busy on another job. `linux-coverage`, `kanban-tsan`, `linux-qt`,
+are busy on another job. `linux-coverage`, `linux-qt`,
 `valgrind`, and `clang-tidy` are intentionally left on `ubuntu-24.04` for
 now, with no `probe-self-hosted` dependency at all.
 

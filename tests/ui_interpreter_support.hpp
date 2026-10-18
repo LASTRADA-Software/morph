@@ -358,6 +358,12 @@ inline Catalog corpusCatalog() {
 
 /// @brief One client: an owner, a runtime, a clock, a session, a dispatcher, a host and a backend.
 struct Harness {
+    /// @brief A harness whose session has @p tools; development mode by default, so the inspector has a screen's
+    ///        records to read.
+    /// @param mode Whether the session's screens record what the inspector reads.
+    explicit Harness(ui::DevelopmentTools mode = ui::DevelopmentTools::On) : tools{mode} {}
+
+    ui::DevelopmentTools tools;
     morph::testing::StepExecutor owner;
     reactive::Runtime runtime{owner};
     reactive::testing::ManualScheduler scheduler;
@@ -373,7 +379,8 @@ struct Harness {
                                                     } catch (...) {
                                                         return "error";
                                                     }
-                                                }}};
+                                                },
+                                                .developmentTools = tools}};
     ScriptedDispatcher dispatcher{owner};
     RecordingHost host;
     ui::testing::RecordingBackend backend;

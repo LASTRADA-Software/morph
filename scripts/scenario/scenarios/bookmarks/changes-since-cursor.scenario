@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — the poll a client uses to learn what changed, and the
+# bookmarks (rung 1) — the poll a client uses to learn what changed, and the
 # background job whose writes it exists to deliver.
 #
 # examples/bookmarks/README.md's definition of done: "Metadata auto-fetch

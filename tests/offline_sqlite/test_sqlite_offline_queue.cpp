@@ -781,9 +781,9 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: construction syncs the containing
 TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync warns instead of throwing", "[sqlite]") {
     // Same split as the file-backed queues: a directory fsync this platform or
     // mount cannot perform is a durability *ceiling*, not a failure, and must
-    // not stop the database opening. kanban's enableOfflineQueue() builds one
-    // of these from a user-supplied path, so throwing here would mean a data
-    // directory on NFS could not open the app at all.
+    // not stop the database opening. A client that builds one of these from a
+    // user-supplied path would otherwise be unable to start at all from a data
+    // directory on NFS.
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
 

@@ -19,8 +19,8 @@ result.
 Standard library only: no build step, no dependencies, no `pip install`.
 
     python3 scripts/scenario/run_scenarios.py                  # every rung
-    python3 scripts/scenario/run_scenarios.py --rung pastebin
-    python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
+    python3 scripts/scenario/run_scenarios.py --rung bookmarks
+    python3 scripts/scenario/run_scenarios.py --rung bank --twice --mutate
 """
 
 from __future__ import annotations
@@ -54,22 +54,18 @@ EXPECTED_TO_FAIL = frozenset({"broken-on-purpose.scenario"})
 #: it only bounds how long this tool hangs when a server fails to start.
 STARTUP_TIMEOUT_SECONDS = 30.0
 
-#: The one line of server output this tool has to understand. Four rungs print
-#: `listening on ws://127.0.0.1:<port>`; pastebin prints `listening on port
-#: <port>`. Anchored on those two forms specifically so kanban's *second*
-#: line -- its attachment side channel, `listening on http://127.0.0.1:<port>`
-#: -- cannot be mistaken for the WebSocket one and send every scenario to the
-#: wrong socket.
-PORT_LINE = re.compile(r"listening on (?:ws://[^\s:]+:|port )(\d+)\s*$")
+#: The one line of server output this tool has to understand: every rung's
+#: server prints `listening on ws://127.0.0.1:<port>`. Anchored on the `ws://`
+#: scheme so a server that announces another listener on its own line cannot
+#: send every scenario to the wrong socket.
+PORT_LINE = re.compile(r"listening on ws://[^\s:]+:(\d+)\s*$")
 
 
 def parse_port(line: str) -> int | None:
     """Reads a server's WebSocket port out of one line of its stdout.
 
     @param line One line of server output, newline optional.
-    @return The port, or `None` if this is not the WebSocket announcement --
-            including for kanban's attachment side channel, which announces an
-            `http://` port on its own line.
+    @return The port, or `None` if this is not the WebSocket announcement.
     """
     match = PORT_LINE.search(line.rstrip("\n"))
     return int(match.group(1)) if match else None
@@ -114,30 +110,9 @@ class RungSpec:
     def seed(self, db_path: pathlib.Path) -> None:
         """Inserts the fixture rows a rung's scenarios name by a fixed id.
 
-        Ledger is the only rung that gets any, and they are a convenience
-        rather than a necessity: with no action that creates a `ledgers` row,
-        `OpenAccount ledgerId=1` against a fresh database is refused with "no
-        such ledger" and every ledger journey is unreachable over the wire.
-        `CreateLedger` is what removes that dependence, and
-        `scenarios/ledger/bootstrap-a-book-over-the-wire.scenario` is the file
-        that proves it -- it names no seeded id at all and would pass against
-        a database this method never touched.
-
-        The two rows stay because fourteen sibling files were written against
-        the fixed ids `1` and `2`, and one of them (`two-books-are-isolated`)
-        needs *two* books that exist before its first step. Keeping them is a
-        deliberate scope line, not an inability: migrating those files to
-        capture their own ids is a change to fourteen files, and each would
-        still have to stay re-runnable against a database it has already run
-        on. Nothing here is any longer a claim that a ledger cannot be created
-        over the wire.
-
         Runs *after* the server has started, so the migrations that create the
-        tables have already run. `INSERT OR IGNORE` keeps this idempotent, so
-        a rerun against a database that already has the row is a no-op rather
-        than a constraint violation -- and, since these rows carry explicit
-        ids, a `CreateLedger` dispatched by a scenario allocates the next free
-        id above them rather than colliding.
+        tables have already run. `INSERT OR IGNORE` keeps it idempotent, so a
+        rerun against a database that already has the row is a no-op.
 
         @param db_path The SQLite file the server was pointed at.
         """
@@ -157,52 +132,18 @@ class RungSpec:
 #: removed with the meta-gates, so a rung added elsewhere but not here is now
 #: skipped in silence rather than failing loudly.
 RUNGS: dict[str, RungSpec] = {
-    "pastebin": RungSpec(
-        binary="ladder_pastebin_server", port_var="PASTEBIN_PORT", db_var="PASTEBIN_DB"
-    ),
     "bookmarks": RungSpec(
         binary="ladder_bookmarks_server",
         port_var="BOOKMARKS_PORT",
         db_var="BOOKMARKS_DB",
         token_secret_var="BOOKMARKS_TOKEN_SECRET",
     ),
-    "polls": RungSpec(binary="ladder_polls_server", port_var="POLLS_PORT", db_var="POLLS_DB"),
-    "kanban": RungSpec(
-        binary="ladder_kanban_server",
-        port_var="KANBAN_PORT",
-        db_var="KANBAN_DB",
-        token_secret_var="KANBAN_TOKEN_SECRET",
-        extra_zero_ports=("KANBAN_ATTACHMENT_PORT",),
-    ),
-    # bank is not in examples/rungs.txt and does not call morph_add_rung(); its
-    # server is a local target in examples/bank/CMakeLists.txt. Being a rung and
-    # having scenarios were always independent -- `lims` and `crm` are rungs
-    # with no scenarios -- and this is the same independence from the other
-    # side: a scenario corpus over a server, with no claim to a rung number --
-    # bank takes none, per examples/rungs.txt and examples/LADDER.md.
-    # Everything this table needs is a binary name and two environment
-    # variables, all three of which examples/bank/src/server/main.cpp defines.
-    #
     # No `token_secret_var`: bank's AuthModel mints no bearer token. It verifies
     # a password and returns the principal for the *client* to install, so a
     # bank scenario signs in with `session principal=...` and no token, and the
     # server vouches for that claim (see BankDemoAuthorizer in bank's server
-    # main.cpp). pastebin and polls take this same `None` for the simpler reason
-    # that they have no sign-in at all.
+    # main.cpp).
     "bank": RungSpec(binary="ladder_bank_server", port_var="BANK_PORT", db_var="BANK_DB"),
-    "ledger": RungSpec(
-        binary="ladder_ledger_server",
-        port_var="LEDGER_PORT",
-        db_var="LEDGER_DB",
-        token_secret_var="LEDGER_TOKEN_SECRET",
-        # Fixture books for the fourteen ledger files written against the
-        # fixed ids 1 and 2 -- see `seed`'s doc comment for why they stay even
-        # though `CreateLedger` exists.
-        seed_sql=(
-            "INSERT OR IGNORE INTO ledgers (id, name) VALUES (1, 'Scenario book')",
-            "INSERT OR IGNORE INTO ledgers (id, name) VALUES (2, 'Second book')",
-        ),
-    ),
 }
 
 
@@ -284,15 +225,10 @@ class ServerProcess:
         self._drainer: threading.Thread | None = None
 
     def __enter__(self) -> "ServerProcess":
-        # cwd is the run's own temp directory, not the caller's. A rung server
-        # writes files there that no environment variable relocates: kanban
-        # puts its action log at `current_path() / "kanban_actions.jsonl"` and
-        # its attachment storage beside it. Left alone, those land in whatever
-        # directory the driver was invoked from and *accumulate across runs* --
-        # which is not merely untidy. `GetActivity` reads that log back, and a
-        # fresh database restarts project ids at 1, so run two's project 1
-        # inherits run one's project 1 activity and the feed reports work that
-        # never happened on this board.
+        # cwd is the run's own temp directory, not the caller's: a file a
+        # server writes relative to its working directory then lands beside
+        # the run's database and goes with it, instead of accumulating across
+        # runs in whatever directory the driver was invoked from.
         self._process = subprocess.Popen(  # noqa: S603
             [str(self.binary)],
             env=RUNGS[self.rung].environment(self.db_path),
@@ -313,10 +249,9 @@ class ServerProcess:
         process = self._process
         if process is None:
             return
-        # The whole process group: a server that spawned helpers (kanban's
-        # attachment side channel) must not outlive this block and hold its
-        # port, which would make the next run fail for a reason that has
-        # nothing to do with the scenario it was running.
+        # The whole process group: a helper a server spawned must not outlive
+        # this block and hold its port, which would make the next run fail for
+        # a reason that has nothing to do with the scenario it was running.
         try:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         except (ProcessLookupError, PermissionError):

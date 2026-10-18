@@ -11,21 +11,19 @@
 #include <QSGRendererInterface>
 #include <algorithm>
 #include <array>
+#include <iostream>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/frontend.hpp>
+#include <morph/qt_quick/inspector.hpp>
 #include <morph/qt_quick/scheduler.hpp>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/runtime.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
 #include "qt_quick/keys.hpp"
-
-#if MORPH_UI_DEV_TOOLS
-#include <morph/qt_quick/inspector.hpp>
-#endif
 
 namespace morph::qt_quick {
 
@@ -133,9 +131,8 @@ int Frontend::run(ui::AppSource& source) {
     QObject::connect(&window, &QQuickWindow::closing, &anchor, [&context] { context.quit(0); });
     // The shell the inspector reads; cleared once the loop has ended, before runApp destroys the shell.
     ui::MountedShell* shown = nullptr;
-#if MORPH_UI_DEV_TOOLS
     std::optional<InspectorWindow> inspector;
-    if (_config.devTools) {
+    if (_config.devTools == ui::DevelopmentTools::On) {
         inspector.emplace([&shown](std::function<void(ui::Inspector&)> const& visit) {
             if (shown != nullptr) {
                 shown->inspectFocused(visit);
@@ -143,21 +140,24 @@ int Frontend::run(ui::AppSource& source) {
         });
         inspector->attachTo(window);
     }
-#endif
     return ui::runApp(
         context, source,
-        [this, &backend, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+        [this, &backend, &engine, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+            // The application's look, before the shell mounts its first screen.
+            if (result) {
+                for (std::string const& problem : applyBundleTheme(engine, result->themes)) {
+                    std::cerr << "morph::qt_quick: " << problem << '\n';
+                }
+            }
             auto shell = _config.mountShell(opened, backend, std::move(result));
             shown = shell.get();
             return shell;
         },
         [&] {
             int const code = context.loop(window);
-#if MORPH_UI_DEV_TOOLS
             if (inspector) {
                 inspector->hide();
             }
-#endif
             shown = nullptr;
             return code;
         });

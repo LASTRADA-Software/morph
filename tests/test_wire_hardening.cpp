@@ -42,8 +42,8 @@
 //   `glz::write_json` and so reproduced Bug E exactly for every string field
 //   of every action and result. Action bodies are pure caller data (a paste's
 //   content, a chat message, a filename), so this is at least as exposed as
-//   the envelope was. Found by pastebin (ladder rung 1) replaying
-//   tests/fuzz/findings/ as paste content; fixed with the same instrument,
+//   the envelope was. Found by a ladder rung replaying tests/fuzz/findings/
+//   as stored user content; fixed with the same instrument,
 //   `model::detail::EscapingWriteOpts`.
 //
 // Bug E (control bytes in the remaining string fields): the same writer gap
@@ -428,8 +428,8 @@ TEST_CASE("wire::detail::peekCallId reads a digit run that ends exactly at the s
 // its own peer's `fromJson` then rejected — and, alongside an escaped
 // character, was silently rewritten into two 0x00 bytes. Action bodies are
 // pure caller data (a paste's content, a chat message, a filename), so this is
-// at least as exposed as the envelope was. Found by pastebin (ladder rung 1)
-// replaying tests/fuzz/findings/ as paste content; fixed with the same
+// at least as exposed as the envelope was. Found by a ladder rung replaying
+// tests/fuzz/findings/ as stored user content; fixed with the same
 // instrument, `model::detail::EscapingWriteOpts`. See docs/spec/core/registry.md,
 // "Control bytes in action and result bodies".
 

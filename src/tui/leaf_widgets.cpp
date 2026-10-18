@@ -92,10 +92,23 @@ void ButtonImpl::setLabel(std::string_view label) {
 
 void ButtonImpl::setOnClick(ui::Action onClick) { _onClick = std::move(onClick); }
 
+void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
+    _emphasis = emphasis;
+    refresh();
+}
+
 ::core::tui::Size ButtonImpl::naturalSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
-    canvas.putString(0, 0, "[ " + _label + " ]", buttonStyle(canvas.theme(), actionable(), hasFocus()));
+    // Primary is bold, danger bold in the error colour; neither changes a disabled button's look.
+    ::core::tui::Style style = buttonStyle(canvas.theme(), actionable(), hasFocus());
+    if (actionable() && _emphasis != ui::ButtonEmphasis::Normal) {
+        style.bold = true;
+        if (_emphasis == ui::ButtonEmphasis::Danger) {
+            style.fg = canvas.theme().error.fg;
+        }
+    }
+    canvas.putString(0, 0, "[ " + _label + " ]", style);
 }
 
 ::core::tui::EventResult ButtonImpl::key(::core::tui::KeyEvent const& key) {

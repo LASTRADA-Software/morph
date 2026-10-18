@@ -5,10 +5,12 @@
 // default; an unknown `$type` and an unknown path are ignored.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <initializer_list>
 #include <map>
 #include <morph/ui/service.hpp>
 #include <morph/ui/theme.hpp>
+#include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -102,6 +104,58 @@ TEST_CASE("theme: a variant layers over base, later files winning", "[ui][theme]
     CHECK(values.colors.at("color.err").hex() == "#cc1a1a80");
 }
 
+TEST_CASE("theme: the spacing scale is space.0 to space.5, in px, with rem as 16 px", "[ui][theme]") {
+    morph::ui::ThemeValues const defaults = morph::ui::themeValues();
+    std::vector<double> scale;
+    for (int step = 0; step <= morph::ui::kMaxSpacingStep; ++step) {
+        scale.push_back(defaults.dimensions.at("space." + std::to_string(step)));
+    }
+    CHECK(scale == std::vector<double>{0, 4, 8, 12, 16, 24});
+
+    TokenSet const tokens = parsed(R"({"space": {"$type": "dimension",
+        "3": {"$value": {"value": 20, "unit": "px"}}, "4": {"$value": {"value": 1.5, "unit": "rem"}},
+        "5": {"$type": "number", "$value": 99}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.dimensions.at("space.3") == 20.0);
+    CHECK(values.dimensions.at("space.4") == 24.0);
+    // A path of the set with another type keeps the default.
+    CHECK(values.dimensions.at("space.5") == 24.0);
+    CHECK(values.dimensions.at("space.1") == 4.0);
+}
+
+TEST_CASE("theme: the shell's tokens have defaults, and a shadow is read and checked", "[ui][theme]") {
+    morph::ui::ThemeValues const defaults = morph::ui::themeValues();
+    CHECK(defaults.colors.at("color.background").hex() == "#f2f3f7");
+    CHECK(defaults.dimensions.at("radius.control") == 6.0);
+    CHECK(defaults.dimensions.at("radius.card") == 10.0);
+    CHECK(defaults.dimensions.at("control.height") == 32.0);
+    // Zero: derived from the platform font.
+    CHECK(defaults.dimensions.at("font.size.body") == 0.0);
+    CHECK(defaults.dimensions.at("font.size.heading") == 0.0);
+    morph::ui::ThemeShadow const card = defaults.shadows.at("elevation.card");
+    CHECK(card.color.hex() == "#00000014");
+    CHECK(card.offsetY == 2.0);
+    CHECK(card.blur == 10.0);
+
+    TokenSet const tokens = parsed(R"({"elevation": {"card": {"$type": "shadow", "$value": {"color": "#11223344",
+        "offsetX": {"value": 1, "unit": "px"}, "offsetY": {"value": 3, "unit": "px"},
+        "blur": {"value": 0.5, "unit": "rem"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeShadow const read = morph::ui::themeValues(*resolved).shadows.at("elevation.card");
+    CHECK(read.color.hex() == "#11223344");
+    CHECK(read.offsetX == 1.0);
+    CHECK(read.offsetY == 3.0);
+    CHECK(read.blur == 8.0);
+
+    auto const malformed =
+        morph::ui::parseTokens(R"({"elevation": {"card": {"$type": "shadow", "$value": {"color": 3}}}})");
+    REQUIRE_FALSE(malformed);
+    CHECK_THAT(malformed.error(), Catch::Matchers::ContainsSubstring("shadow"));
+}
+
 TEST_CASE("theme: a missing token takes its default; an unknown path is ignored", "[ui][theme]") {
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");
@@ -115,7 +169,9 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     CHECK(values.colors.at("color.muted").hex() == "#6e6e73");
     CHECK(values.colors.at("color.warn.bg").hex() == "#fff4e5");
     CHECK_FALSE(values.colors.contains("space.2"));
-    CHECK(values.colors.size() + values.numbers.size() == morph::ui::kThemeTokens.size());
+    CHECK(values.dimensions.at("space.2") == 8.0);
+    CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() + values.shadows.size() ==
+          morph::ui::kThemeTokens.size());
 
     // A path of the set with another type keeps the default.
     TokenSet const wrong = parsed(R"({"color": {"text": {"$type": "number", "$value": 3}}})");
@@ -324,7 +380,10 @@ TEST_CASE("theme: every simple type's shape is checked", "[ui][theme]") {
     CHECK_FALSE(accepted("fontWeight", "0"));
     CHECK_FALSE(accepted("fontWeight", "1001"));
     CHECK_FALSE(accepted("fontWeight", "true"));
-    CHECK(accepted("shadow", R"({"anything": true})"));
+    CHECK(accepted("typography", R"({"anything": true})"));
+    CHECK_FALSE(accepted("shadow", R"({"anything": true})"));
+    CHECK(accepted("shadow", R"({"color": "#000000", "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 1, "unit": "px"}, "blur": {"value": 2, "unit": "px"}, "spread": {"value": 0, "unit": "px"}})"));
 }
 
 TEST_CASE("theme: declarations and bounds of a token file are checked", "[ui][theme]") {

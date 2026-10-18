@@ -110,7 +110,7 @@
           },
           "ResultGrid": { "host": "ResultGrid", "version": 2, "props": { "rows": "json" }, "fallback": { "kind": "text", "text": "grid" } }
         },
-        "view": { "kind": "column", "gap": 8, "keys": { "Ctrl+Shift+R": [{ "refetch": "results" }] }, "children": [
+        "view": { "kind": "column", "gap": 2, "keys": { "Ctrl+Shift+R": [{ "refetch": "results" }] }, "children": [
           { "kind": "text", "id": "heading", "text": { "ref": "label" }, "role": "title", "a11y": { "name": "Heading", "role": "heading" },
             "testId": "heading", "surface": "card", "tooltip": "t", "sizing": { "lit": { "stretch": 1 } } },
           { "kind": "select", "id": "analysis", "label": "Analysis", "options": { "query": "limits" }, "selected": null, "onStale": "clear",

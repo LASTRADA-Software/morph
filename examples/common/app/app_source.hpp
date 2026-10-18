@@ -11,8 +11,8 @@
 #include <morph/core/executor.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/session/session.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/explorer.hpp>
 #include <morph/ui/frontend.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/queueing_dispatcher.hpp>
@@ -137,18 +137,31 @@ public:
     /// @return It; null before a bundle was delivered.
     [[nodiscard]] ui::Bundle const* bundle() const noexcept { return _loaded ? &_loaded->bundle : nullptr; }
 
+    /// @brief The catalog for the current principal: its entries, what the principal may run, and the facts.
+    /// @return It; null before a bundle was delivered.
+    [[nodiscard]] ui::CatalogReply const* catalogReply() const noexcept {
+        return _loaded ? &_loaded->catalog : nullptr;
+    }
+
+    /// @brief The `schemas` document of every model the catalog names, by model type, or why it did not arrive: what
+    ///        the explorer lists each model's actions from.
+    /// @return Them; empty before a bundle was delivered.
+    [[nodiscard]] ui::SchemasByModel const& schemasByModel() const noexcept { return _byModel; }
+
+    /// @brief The principal the source's session carries now.
+    /// @return It; empty for none.
+    [[nodiscard]] std::string const& principal() const noexcept { return _session.principal; }
+
     /// @brief The file side channel (`files/1`) over the source's exchange, carrying its session: what a screen's
     ///        `upload` and `download` move bytes through.
     /// @return It, or nothing before the source is open.
     [[nodiscard]] std::optional<ui::FileTransfer> files() const;
 
-#if MORPH_UI_DEV_TOOLS
     /// @brief One step of development reload (spec 5 §12): sends `ui-hello`, and when the manifest digest changed,
     ///        fetches the changed bundle and the catalog for it. Nothing is sent while a poll is still in flight.
     /// @param changed Called on the owner once the changed bundle is current, with the ids of the documents it
     ///                changed; not called for an unchanged digest, a failed poll, or after `close`.
     void poll(std::function<void(std::vector<std::string> changed)> changed);
-#endif
 
     /// @brief The principal before any sign-in, which `signOut` returns to.
     /// @return It; empty for none.
@@ -198,12 +211,14 @@ private:
     ui::Exchange _exchange;
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
-    // The model types the loaded catalog names.
+    // The model types the loaded catalog names: its models, and the model of each action it has facts for.
     [[nodiscard]] std::vector<std::string> modelTypes() const;
     // Records each action's schema of one `{actionType: schema}` document; a document that does not parse adds none.
     void recordSchemas(std::string const& document);
     // The schema of each action, by action id, fetched for every model type the catalog names.
     std::map<std::string, std::string, std::less<>> _schemas;
+    // Each model's schemas document as it arrived, or why it did not.
+    ui::SchemasByModel _byModel;
     std::optional<ui::LoadedBundle> _loaded;
     // The catalog the screens read through `catalog()`: replaced in place when a sign-in reloads it, so a session
     // built over the first catalog sees the facts of the current one.
@@ -217,10 +232,8 @@ private:
     // Fetches the catalog and the bundle for the current session, then the schemas; `done` once they are current.
     void reload(std::shared_ptr<bool> const& alive, std::function<void(std::expected<void, ui::ConnectError>)> done);
     reactive::TimerHandle _timeout;
-#if MORPH_UI_DEV_TOOLS
     // Whether a development poll is in flight.
     bool _polling = false;
-#endif
 };
 
 /// @brief Fetches the screens from a server (`--server`), over the transport the frontend calls for.

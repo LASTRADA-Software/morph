@@ -69,7 +69,7 @@ public:
     /// event handler, which Qt turns into an immediate `abort()` — surfacing
     /// as an intermittent "Subprocess aborted" attributed to whichever test
     /// case happened to be running, never to the one that left the event
-    /// behind. Observed in practice on rung 1's QML-adapter suite, reliably
+    /// behind. Observed in practice on a rung's QML-adapter suite: reliably
     /// under CPU load, roughly one run in fifty without it.
     /// Same `_liveness`/`weak_ptr` shape `morph::bridge::Bridge` uses for the
     /// identical hazard (`include/morph/core/bridge.hpp`).
@@ -190,9 +190,9 @@ public:
     ///                   modes, which run no server. Defaults to
     ///                   `QtWebSocketServerConfig{}` — i.e. exactly the
     ///                   unconfigured server this rig has always built. A
-    ///                   rung testing transport-enforced limits (pastebin's
-    ///                   size-limit UX case, which needs a small
-    ///                   `maxMessageBytes`) configures it here rather than
+    ///                   rung testing transport-enforced limits (a size-limit
+    ///                   case, which needs a small `maxMessageBytes`)
+    ///                   configures it here rather than
     ///                   standing up its own server alongside the rig.
     BackendRig(Mode mode, std::size_t nClients, std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr,
                ::morph::qt::QtWebSocketServerConfig serverConfig = ::morph::qt::QtWebSocketServerConfig{})
@@ -301,7 +301,7 @@ public:
     /// the first posted callback) — so "the pool has joined" only proves
     /// every `post()` call was *made*, not that every resulting event was
     /// *pumped*. A caller's own `pumpUntil` (tracking only its own top-level
-    /// completions, e.g. test_kanban_stress.cpp's `outstanding` counter) has
+    /// completions, e.g. a stress test's `outstanding` counter) has
     /// no visibility into that inner, nested completion, so it can observe
     /// "done" and let this rig tear down while a second post from that
     /// nested continuation is still sitting, undelivered, in the Qt event
@@ -380,7 +380,7 @@ public:
     /// only dispatches actions should use `client<Model>()`/`bridge()`
     /// instead. A handful of transport-level operations have no Bridge-level
     /// equivalent at all — `negotiateProtocolVersion()` (the `hello`
-    /// handshake, which pastebin's protocol-negotiation case exercises) is the
+    /// handshake) is the
     /// motivating one — and reaching them otherwise would mean a test
     /// standing up a second socket alongside the rig's own, testing a
     /// connection the rig never built.
@@ -440,8 +440,8 @@ private:
     // resolve posted through a dangling `IExecutor*`. That crashes nowhere
     // near the rig — the stale callback lands on the Qt event loop and
     // detonates inside whatever later test happens to pump it, which is
-    // exactly how it presented (intermittent SIGSEGVs scattered across
-    // pastebin's socket cases). Destroying `_workerPool` — which joins its
+    // exactly how it presented (intermittent SIGSEGVs scattered across a
+    // rung's socket cases). Destroying `_workerPool` — which joins its
     // threads, so every in-flight completion has resolved — before the
     // executors closes that window. That ordering remains load-bearing: `QtExecutor`'s
     // `_alive` token guards *delivery of an already-queued event*, not a

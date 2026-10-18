@@ -35,7 +35,7 @@ object, and groups nest. A token's `$type` is its own or the nearest enclosing g
   "space": { "$type": "dimension", "2": { "$value": { "value": 8, "unit": "px" } } } }
 ```
 
-`parseTokens` checks the shape of the simple types and accepts the composite ones unchecked:
+`parseTokens` checks the shape of the simple types and of `shadow`, and accepts the other composite ones unchecked:
 
 | `$type` | Value |
 |---|---|
@@ -45,7 +45,8 @@ object, and groups nest. A token's `$type` is its own or the nearest enclosing g
 | `number` | a number |
 | `fontFamily` | a name, or a non-empty list of names |
 | `fontWeight` | 1 to 1000, or a DTCG weight name (`semi-bold`, …) |
-| `shadow`, `typography`, `border`, `strokeStyle`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
+| `shadow` | `{"color", "offsetX", "offsetY", "blur", "spread"}` with a colour and four dimensions, or a non-empty list of them |
+| `typography`, `border`, `strokeStyle`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
 
 A token of another `$type` is dropped, as spec 6 §6 says. Refused: text that is not a JSON object or nests deeper
 than `kMaxJsonDepth`, a must-understand (`!`) name, a name with `.`, `{` or `}`, a member that is not an object, a
@@ -88,6 +89,27 @@ none), a density (or none) and a surface (or none) over `base` must resolve from
 cycle, a missing reference, or a file the index names that the bundle lacks refuses the bundle, naming the index and
 the combination (`base + dark + density compact: …`). At most 17³ combinations are resolved.
 
+## Surfaces
+
+A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Four are
+built in, so an application gets the shell's look with no theme file; a theme index's surface of the same name
+replaces one, and declares any other:
+
+| Surface | Background | Colour roles |
+|---|---|---|
+| `page` | `color.background` | the theme's |
+| `card` | `color.surface`, with `radius.card`, a border and `elevation.card` | the theme's |
+| `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection and border `#2f3646`; the rest the theme's |
+| `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
+
+**In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
+shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the index's `base`, and each of its surfaces
+resolved with its layer; a bundle without a theme index restores the defaults. No variant or density is chosen yet.
+
+A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
+is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither
+built in nor in the theme draws nothing and changes no colour.
+
 ## The closed set
 
 `kThemeTokens` is the closed `ui-theme/1` set, each path with its kind and the `MorphUi` default:
@@ -97,10 +119,20 @@ the combination (`base + dark + density compact: …`). At most 17³ combination
 | `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.neutral`, `color.selection` | colour |
 | `color.ok`, `color.warn`, `color.err`, `color.info`, each with `.bg`, `.border` and `.dot` | colour |
 | `opacity.stale` | number |
+| `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
+| `color.background` (`#f2f3f7`) | colour |
+| `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
+| `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
+| `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
-its default otherwise; a token outside the set is ignored. `space.*`, `control.*`, `font.*` and `elevation.*` are
-resolved and checked like any token, and join the set with the components that read them.
+its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
+(`kPixelsPerRem`): the renderers do not change the root font size. `ThemeValues` keeps colours, numbers and
+dimensions in three maps, and shadows in a fourth.
+
+The six `space` tokens are the spacing scale: `space.<step>` is how far apart a `gap` or `padding` of that step puts
+things (`docs/spec/ui/view_tree.md`, the spacing step). Other `space.*` paths, `control.*`, `font.*` and
+`elevation.*` are resolved and checked like any token, and join the set with the components that read them.
 
 ## On Qt Quick
 
@@ -112,6 +144,13 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus` | `color.<same name>` |
 | `error`, `success`, `info`, `warn` | `color.err`, `color.ok`, `color.info`, `color.warn` |
 | `staleOpacity` | `opacity.stale` |
+| `space` (six px lengths) | `space.0` … `space.5` |
+| `background` | `color.background` |
+| `radiusControl`, `radiusCard`, `controlHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `font.size.body`, `font.size.heading` |
+| `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
+
+`Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
+platform font, the body its size and a heading 1.3 times the body.
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
@@ -132,6 +171,7 @@ component draws them.
 
 ## Not yet
 
-- Surfaces resolved per subtree, and `{"pref": "density"}` choosing a density at runtime.
-- The scale tokens in the closed set, and units from them rather than from the default font.
+- `{"pref": "density"}` choosing a density at runtime.
+- Units from the scale tokens rather than from the default font; `control.*`, `font.*` and `elevation.*` in the closed
+  set.
 - Icons, the terminal renderer's palette mapping.

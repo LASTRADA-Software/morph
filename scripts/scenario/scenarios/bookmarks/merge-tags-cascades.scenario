@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — merging two tags moves every bookmark and destroys the
+# bookmarks (rung 1) — merging two tags moves every bookmark and destroys the
 # source.
 #
 # examples/bookmarks/README.md's "What to implement" step 4, the other half of

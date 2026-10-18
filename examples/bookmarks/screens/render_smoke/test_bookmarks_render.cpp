@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// bookmarks' render smoke (spec 4 §7): the screen of the bundle mounted by the Qt Quick renderer, offscreen, in local
-// mode over the rung's test database. A refused document, a mount error, an interpreter diagnostic or a Qt warning
-// fails it.
+// bookmarks' render smoke (spec 4 §7): every screen of the bundle mounted by the Qt Quick renderer, offscreen, in
+// local mode over the rung's test database. A refused document, a mount error, an interpreter diagnostic or a Qt
+// warning fails it.
 
 #include <app/app_source.hpp>
 #include <array>
@@ -45,8 +45,10 @@ TEST_CASE("bookmarks render smoke: local mode, every screen, offscreen", "[bookm
                                    .setUp = [](LocalSetup const&) { bookmarks::screens::prepareLocal(); }},
                           LocalSetup{.db = {}, .user = "alice"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
-    CHECK(report.mounted == std::vector<std::string>{std::string{bookmarks::screens::kLogin},
-                                                     std::string{bookmarks::screens::kBookmarks}});
+    CHECK(report.mounted == std::vector<std::string>{
+                                std::string{bookmarks::screens::kLogin}, std::string{bookmarks::screens::kBookmarks},
+                                std::string{bookmarks::screens::kShared}, std::string{bookmarks::screens::kTags},
+                                std::string{bookmarks::screens::kImport}});
     // Just before the verdict: unscoped messages attach to the next assertion.
     for (std::string const& failure : report.failures) {
         UNSCOPED_INFO(failure);

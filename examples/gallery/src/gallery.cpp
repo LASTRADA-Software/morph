@@ -85,14 +85,15 @@ ui::Screen homeScreen() {
                          .step = 1,
                          .onChange = ui::set(level, ui::event())}),
              ui::filePicker({.label = "File", .onPick = ui::set(picked, ui::event())})},
-            {.title = "Inputs", .padding = 8});
+            {.title = "Inputs", .padding = 2});
 
-        auto layout = ui::row({ui::grid({ui::text({.text = "Cell"}), ui::spacer()}, {.gap = 4, .columns = 2}),
-                               ui::scroll({ui::text({.text = "Scrolled"})}, "vertical"),
-                               ui::tabs({{.label = "One", .children = ui::text({.text = "First tab"})},
-                                         {.label = "Two", .children = ui::text({.text = "Second tab"})}}),
-                               ui::splitter({ui::text({.text = "Left"}), ui::text({.text = "Right"})}, "horizontal")},
-                              {.gap = 8});
+        auto const layout =
+            ui::row({ui::grid({ui::text({.text = "Cell"}), ui::spacer()}, {.gap = 1, .columns = 2}),
+                     ui::scroll({ui::text({.text = "Scrolled"})}, "vertical"),
+                     ui::tabs({{.label = "One", .children = ui::text({.text = "First tab"})},
+                               {.label = "Two", .children = ui::text({.text = "Second tab"})}}),
+                     ui::splitter({ui::text({.text = "Left"}), ui::text({.text = "Right"})}, "horizontal")},
+                    {.gap = 2});
 
         auto menus = ui::menu({{.label = "View",
                                 .items = {{.label = "Side panel", .onClick = ui::open(side)},
@@ -135,9 +136,9 @@ ui::Screen homeScreen() {
             ui::panel({ui::form<AddFact>(model).id(ui::element("addFact")).testId("addFact"),
                        ui::collection<FactsView>(model).id(ui::element("factsView")).testId("factsView"),
                        ui::wizard<FactWizard>(model).id(ui::element("factWizard")).testId("factWizard")},
-                      {.title = "Forms", .padding = 8});
+                      {.title = "Forms", .padding = 2});
 
-        return ui::column({menus, inputs, layout, overlays, lists, feedback, forms}, {.gap = 12});
+        return ui::column({menus, inputs, layout, overlays, lists, feedback, forms}, {.gap = 3});
     });
 }
 

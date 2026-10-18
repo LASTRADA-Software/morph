@@ -187,6 +187,35 @@ namespace {
 
 }  // namespace
 
+std::string const& WidgetBase::effectiveSurface() const noexcept {
+    WidgetBase const* widget = this;
+    while (widget->_surface.empty() && widget->_container != nullptr) {
+        widget = widget->_container;
+    }
+    return widget->_surface;
+}
+
+namespace {
+
+/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
+[[nodiscard]] bool invertsSurface(std::string_view surface) noexcept {
+    return surface == "sidebar" || surface == "toolbar";
+}
+
+/// Marks every cell of @p area inverse: what an inverted surface does to what a widget on it painted. Set rather than
+/// toggled, so a child painting over its container's cells does not invert them back.
+void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.tryAt(row, col)) {
+                cell->style.inverse = true;
+            }
+        }
+    }
+}
+
+}  // namespace
+
 // A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
 // overlay): it is drawn as it is.
 void WidgetBase::render(::core::tui::Canvas& canvas) {
@@ -195,10 +224,13 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     if (drawn == laidOut || !laidOut.contains(drawn)) {
         _drawShift = {};
         paint(canvas);
-        return;
+    } else {
+        _drawShift = {.x = drawn.x - laidOut.x, .y = drawn.y - laidOut.y};
+        paintClipped(canvas, laidOut.size());
     }
-    _drawShift = {.x = drawn.x - laidOut.x, .y = drawn.y - laidOut.y};
-    paintClipped(canvas, laidOut.size());
+    if (invertsSurface(effectiveSurface())) {
+        invert(canvas.buffer(), drawn);
+    }
 }
 
 // The scratch buffer spans the drawn rows, and the columns from the laid-out left edge to the drawn right one: a

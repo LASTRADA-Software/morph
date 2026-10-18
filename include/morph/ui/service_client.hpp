@@ -381,11 +381,12 @@ private:
         loaded.bundle.applicationId = loaded.manifest.application;
         loaded.bundle.manifestDigest = digest.substr(kHashPrefix.size());
         for (ManifestFile const& file : loaded.manifest.files) {
-            if (file.kind != kScreenFile && file.kind != kAppFile) {
+            if (file.kind != kScreenFile && file.kind != kAppFile && file.kind != kThemeFile) {
                 continue;
             }
             if (auto const found = loaded.files.find(file.hash); found != loaded.files.end()) {
-                loaded.bundle.documents.insert_or_assign(file.id, found->second);
+                auto& into = file.kind == kThemeFile ? loaded.bundle.themes : loaded.bundle.documents;
+                into.insert_or_assign(file.id, found->second);
             }
         }
     }

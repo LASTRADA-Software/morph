@@ -1,5 +1,11 @@
 # QML bridge boilerplate: B vs C, re-measured at six rungs
 
+> **A measurement of a past tree.** Every figure and path below is of the
+> revisions the paragraph below names. The hand-written
+> QML bridges it measures are no longer in the tree — clients draw
+> server-defined screens — and of the rungs it names only `bookmarks` and
+> `lims` remain on the ladder ([`examples/LADDER.md`](../../examples/LADDER.md)).
+
 Analysis for [#86](https://github.com/LASTRADA-Software/morph/issues/86)
 ("Per-model hand-written QObject bridges don't scale"). The issue's numbers
 were taken when four examples existed. This re-runs them against the tree as

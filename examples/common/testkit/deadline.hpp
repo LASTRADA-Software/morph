@@ -11,23 +11,20 @@
 /// by the same knob every other ladder wait obeys.
 ///
 /// @par Why this is not simply part of `pump.hpp`
-/// `pump.hpp` is the ladder's only sanctioned wait surface, and every wait it
-/// offers is a *Qt event-loop* wait: it includes `<QCoreApplication>` and
-/// calls `processEvents`. That include is the whole obstacle. kanban's
-/// concurrent-move stress test (`examples/kanban/tests/test_kanban_stress.cpp`)
-/// is deliberately Qt-free: a `pumpUntil`-driven version of it pulls in
-/// `QtExecutor`, and a run under ThreadSanitizer then produces 165 warnings
-/// that all bottom out in Qt-internal frames — a prebuilt Qt cannot be seen
-/// through by TSan, so those warnings are unusable evidence either way. That
-/// file therefore owns a small `waitUntil` of its own over
-/// `std::this_thread::sleep_for`, and without this header its budgets would be
-/// fixed wall-clock constants: `MORPH_LADDER_DEADLINE_MS` would move every
-/// deadline in the ladder except the ones in the slowest test.
+/// `pump.hpp` is the ladder's only sanctioned Qt wait surface, and every wait
+/// it offers is a *Qt event-loop* wait: it includes `<QCoreApplication>` and
+/// calls `processEvents`. That include is the whole obstacle for a test that
+/// must not link Qt — a stress test meant to run under ThreadSanitizer, say,
+/// where routing callbacks through a `QtExecutor` produces warnings that
+/// bottom out in Qt-internal frames a prebuilt Qt cannot be seen through, so
+/// they are unusable evidence either way. Such a test owns a small wait loop
+/// of its own, and without this header its budgets would be fixed wall-clock
+/// constants that `MORPH_LADDER_DEADLINE_MS` does not move.
 ///
-/// Splitting the scale factor out is what lets both hold: `pump.hpp` includes
-/// this header and is otherwise unchanged, so every existing caller keeps the
-/// same names in the same namespace, and the Qt-free stress test includes
-/// *only* this one and scales its own poll loop with it.
+/// Splitting the scale factor out is what lets both hold: `pump.hpp` and
+/// `wait.hpp` include this header, so every caller keeps the same names in
+/// the same namespace, and a Qt-free test includes *only* this one and scales
+/// its own loop with it.
 
 namespace morph::ladder::testkit {
 

@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — a Netscape bookmark file in, the same links out.
+# bookmarks (rung 1) — a Netscape bookmark file in, the same links out.
 #
 # examples/bookmarks/README.md's "What to implement" step 5: Netscape HTML
 # import and export, chunked, with the import carrying an idempotency key.

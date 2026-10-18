@@ -193,6 +193,21 @@ template <typename T, typename F>
     return text + "]";
 }
 
+/// @brief A button emphasis's name.
+/// @param emphasis The emphasis.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(ButtonEmphasis emphasis) {
+    switch (emphasis) {
+        case ButtonEmphasis::Primary:
+            return "Primary";
+        case ButtonEmphasis::Danger:
+            return "Danger";
+        case ButtonEmphasis::Normal:
+        default:
+            return "Normal";
+    }
+}
+
 /// @brief A text role's name.
 /// @param role The role.
 /// @return The enumerator's name.
@@ -809,12 +824,13 @@ public:
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
-/// @brief A fake `ButtonWidget`: property `label`.
+/// @brief A fake `ButtonWidget`: properties `label` and `emphasis`.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
+    void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
 };
 
 /// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, the field state, and a text cursor.

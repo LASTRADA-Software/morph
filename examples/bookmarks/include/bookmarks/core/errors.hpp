@@ -7,8 +7,10 @@
 /// @file
 /// Domain exceptions. A model's `execute(...)` throws one of these; morph
 /// captures it as a `std::exception_ptr` and delivers it to the caller's
-/// `.onError(...)` callback. See `pastebin/core/errors.hpp` for the
-/// identical shape and rationale this mirrors.
+/// `.onError(...)` callback, and over a socket the `what()` string travels
+/// back in the error envelope. One base type, so a caller can catch every
+/// bookmarks failure at once, and one subtype per failure a caller treats
+/// differently.
 
 namespace bookmarks {
 
@@ -31,9 +33,8 @@ struct ValidationError : BookmarksError {
 };
 
 /// @brief A write lost a race: the target row changed between this
-///        client's read and its write (the compare-and-swap conflict shape
-///        `pastebin::Conflict` established this session for `EditPaste`),
-///        or a `MergeTags`/rename would collide with an existing tag name.
+///        client's read and its write (a compare-and-swap conflict), or a `MergeTags`/rename would collide with an
+///        existing tag name.
 struct Conflict : BookmarksError {
     using BookmarksError::BookmarksError;
 };

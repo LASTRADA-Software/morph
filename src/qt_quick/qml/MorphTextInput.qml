@@ -20,6 +20,14 @@ MorphField {
     TextField {
         id: field
         width: root.controlWidth
+        color: root.scheme.text
+        placeholderTextColor: root.scheme.muted
+        leftPadding: Theme.spaceOf(3)
+        rightPadding: Theme.spaceOf(3)
+        background: MorphInputBackground {
+            scheme: root.scheme
+            focused: field.activeFocus
+        }
         readOnly: root.readOnly
         placeholderText: root.placeholder
         echoMode: root.password ? TextInput.Password : TextInput.Normal

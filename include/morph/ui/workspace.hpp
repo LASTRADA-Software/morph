@@ -65,6 +65,8 @@ struct WorkspaceOptions {
     reactive::Scheduler* scheduler = nullptr;
     /// @brief The quiet period before the record is written, with a scheduler.
     std::chrono::milliseconds recordDelay{500};
+    /// @brief Called after the open tabs, their captions or the active tab changed; empty calls nothing.
+    std::function<void()> onChanged;
 };
 
 /// @brief One open tab, as an application's tab menu or a test reads it.
@@ -100,6 +102,8 @@ public:
           _host{&host},
           _options{std::move(options)},
           _bar{backend.createTabs(parent)} {
+        // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
+        _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _bar->setTabs({});
         _bar->setSelected(kNone);
         _bar->setOnSelect([this](std::size_t index) {
@@ -311,6 +315,28 @@ public:
         return indexOf(*_active);
     }
 
+    /// @brief The screen handle of a tab: what a client remounts for development reload and inspects.
+    /// @param index The tab's index.
+    /// @return Its handle, valid while the tab is open; null past the end.
+    [[nodiscard]] ScreenHandle* handleOf(std::size_t index) const noexcept {
+        return index < _tabs.size() ? _tabs.at(index)->handle.get() : nullptr;
+    }
+
+    /// @brief The active tab's screen handle.
+    /// @return It, or null while no tab is open.
+    [[nodiscard]] ScreenHandle* activeHandle() const noexcept {
+        std::optional<std::size_t> const shown = active();
+        return shown ? handleOf(*shown) : nullptr;
+    }
+
+    /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
+    ///        screen of the principal who is leaving.
+    void forceCloseAll() {
+        while (!_tabs.empty()) {
+            removeTab(_tabs.back()->id, true);
+        }
+    }
+
     /// @brief The open tabs, in order.
     /// @return Each tab's screen, identity and caption.
     [[nodiscard]] std::vector<WorkspaceTab> tabs() const {
@@ -390,6 +416,7 @@ private:
         tab->id = ++_lastId;
         tab->screenId = std::string{screenId};
         tab->page = _backend->createSlot(_bar.get());
+        tab->page->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         tab->page->setVisible(false);
         std::expected<std::unique_ptr<ScreenHandle>, MountError> handle;
         if (facts.host.empty()) {
@@ -549,6 +576,9 @@ private:
         _bar->setTabs(captions);
         std::optional<std::size_t> const shown = active();
         _bar->setSelected(shown.value_or(kNone));
+        if (_options.onChanged) {
+            _options.onChanged();
+        }
     }
 
     struct Walk {

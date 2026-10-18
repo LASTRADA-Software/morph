@@ -37,7 +37,7 @@ MorphWidget {
             Layout.alignment: Qt.AlignHCenter
             visible: root.text !== ""
             text: root.text
-            color: Theme.muted
+            color: root.scheme.muted
             wrapMode: Text.Wrap
         }
 

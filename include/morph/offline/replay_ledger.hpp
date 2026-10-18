@@ -20,11 +20,11 @@ namespace morph::offline {
 ///
 /// Answers one question — "has this operation id already been applied?" —
 /// for a host that must dedup a retried write against one it already
-/// committed. One framework seam in place of the near-identical table five
-/// example rungs would each hand-write: `kanban`/`ledger` store a
-/// result and replay it verbatim on a hit ("response-replay"); `lims`/
-/// `bookmarks`/`ledger`'s import path store nothing and report only that the
-/// op was seen ("skip-only"). Both are the same mechanism with a different
+/// committed. One framework seam in place of a near-identical table each host
+/// would otherwise hand-write. A host either stores a result and replays it
+/// verbatim on a hit ("response-replay"), or stores nothing and reports only
+/// that the op was seen ("skip-only", as `examples/bookmarks`' import path
+/// does). Both are the same mechanism with a different
 /// caller-side interpretation of the stored payload — see `lookup()`'s own
 /// doc comment — so there is exactly one interface here, not two.
 ///
@@ -51,11 +51,11 @@ struct IReplayLedger {
     ///
     /// @par What a hit means is the caller's decision, not this interface's
     /// The returned string is whatever `record()` stored alongside the id. A
-    /// response-replay consumer (kanban's `MoveTaskPosition`, ledger's
-    /// `StoreTransaction`) stores its result's serialised form and, on a hit,
-    /// returns that string verbatim instead of re-running the operation. A
-    /// skip-only consumer (lims's `QueuedCapture`, bookmarks'/ledger's import
-    /// path) stores an empty payload and, on a hit, reports "already applied,
+    /// response-replay consumer (a move or a money transfer whose retry must
+    /// see the original answer) stores its result's serialised form and, on a
+    /// hit, returns that string verbatim instead of re-running the operation. A
+    /// skip-only consumer (bookmarks' import path, or an at-most-once replay
+    /// of queued captures) stores an empty payload and, on a hit, reports "already applied,
     /// nothing to return" without ever looking at the string. Both read
     /// exactly the same `lookup()` — the value type reports the fact, and the
     /// layer that calls this decides what a hit means.

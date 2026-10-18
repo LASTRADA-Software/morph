@@ -204,7 +204,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         }
         return ui::row(ui::Row{
             .children = {std::move(input), ui::text(ui::Text{.text = spec.unit, .role = ui::TextRole::Muted})},
-            .gap = 1,
+            .gap = 4,
         });
     };
     auto const dateInput = [&](bool date) {
@@ -258,7 +258,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                              .field = {},
                              .common = std::move(unitCommon),
                          })},
-            .gap = 1,
+            .gap = 4,
         });
     }
     if (spec.kind == FieldKind::Boolean) {
@@ -278,7 +278,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .children =
                 {optionSelect(field, spec.widget == "radio" ? ui::SelectStyle::Radio : ui::SelectStyle::Dropdown),
                  ui::busy(ui::Busy{.active = [field] { return field->optionsPending(); }, .label = std::string{}})},
-            .gap = 1,
+            .gap = 4,
         });
     }
     if (spec.kind == FieldKind::DateTime || spec.kind == FieldKind::EpochDateTime) {
@@ -313,7 +313,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             cells.push_back(fieldCell(session, *member, options));
         }
         ui::Panel panel{
-            .title = state.label(), .padding = 1, .child = ui::column(ui::Column{.children = std::move(cells)})};
+            .title = state.label(), .padding = 4, .child = ui::column(ui::Column{.children = std::move(cells)})};
         panel.common.testId = "field_" + state.path();
         return ui::panel(std::move(panel));
     }
@@ -343,7 +343,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                             auto const found = std::ranges::find(current, row);
                             return field->label() + " " + std::to_string(found - current.begin() + 1);
                         },
-                    .padding = 1,
+                    .padding = 4,
                     .child = ui::column(ui::Column{.children = std::move(cells)}),
                 });
             });
@@ -402,7 +402,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
         cells.push_back(ui::GridCell{.node = fieldCell(session, state, options),
                                      .span = std::clamp(state.spec().colspan, 1, width)});
     }
-    return ui::grid(ui::Grid{.columns = width, .cells = std::move(cells), .gap = 1});
+    return ui::grid(ui::Grid{.columns = width, .cells = std::move(cells), .gap = 4});
 }
 
 }  // namespace detail::engine
@@ -455,7 +455,7 @@ inline ui::Node FieldView::defaultControl() const {
         } else if (group.kind == GroupKind::Accordion) {
             reactive::Signal<bool>* const collapsed = &session.groupCollapsed(i);
             children.push_back(ui::panel(ui::Panel{.title = session.groupTitle(i),
-                                                   .padding = 1,
+                                                   .padding = 4,
                                                    .child = groupGrid(session, group, columns, shared),
                                                    .collapsible = true,
                                                    .collapsed = [collapsed] { return collapsed->get(); },
@@ -463,7 +463,7 @@ inline ui::Node FieldView::defaultControl() const {
             ++i;
         } else {
             children.push_back(ui::panel(ui::Panel{
-                .title = session.groupTitle(i), .padding = 1, .child = groupGrid(session, group, columns, shared)}));
+                .title = session.groupTitle(i), .padding = 4, .child = groupGrid(session, group, columns, shared)}));
             ++i;
         }
     }
@@ -485,7 +485,7 @@ inline ui::Node FieldView::defaultControl() const {
     result.common.visible = [form] { return form->lastError() != nullptr || form->lastReply().has_value(); };
     result.common.testId = "form_result";
     children.push_back(ui::text(std::move(result)));
-    return ui::column(ui::Column{.children = std::move(children), .gap = 1});
+    return ui::column(ui::Column{.children = std::move(children), .gap = 4});
 }
 
 }  // namespace morph::forms

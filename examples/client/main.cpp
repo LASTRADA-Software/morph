@@ -3,8 +3,8 @@
 // The generic client (spec 4 §3): renders any application's screens, fetched from a server (`--server URL`) or linked
 // in-process (`--app NAME`), on the frontend `ui::selectFrontend` picks (`--ui=qt|tui`, `MORPH_UI`, or the first
 // usable). `--screen ID` picks the first screen; `--exit-after-mount` quits once it mounted, with 0 when it mounted
-// without a problem and 1 otherwise. `--dev`, or `MORPH_UI_DEV=1`, reloads the screens when the server's documents
-// change, in a client built with the development tools (spec 6 §21).
+// without a problem and 1 otherwise. `--dev`, or `MORPH_UI_DEV=1`, turns development mode on (spec 6 §21): the screens
+// reload when the server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick.
 
 #include <app/app_source.hpp>
 #include <app/client_shell.hpp>
@@ -15,7 +15,6 @@
 #include <iostream>
 #include <memory>
 #include <morph/ui/backend.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/frontend.hpp>
 #include <span>
 #include <string>
@@ -105,12 +104,6 @@ int run(int argc, char** argv) {
     if (char const* const dev = std::getenv("MORPH_UI_DEV"); dev != nullptr && std::string_view{dev} == "1") {
         clientArgs->dev = true;
     }
-#if !MORPH_UI_DEV_TOOLS
-    if (clientArgs->dev) {
-        std::cerr << "client: development mode is not built into this client (MORPH_UI_DEV_TOOLS is off)\n";
-        clientArgs->dev = false;
-    }
-#endif
     auto source = examples::makeSource(*clientArgs, examples::client::localApps());
     if (!source) {
         std::cerr << "client: " << source.error() << '\n';
@@ -121,9 +114,7 @@ int run(int argc, char** argv) {
 #if MORPH_CLIENT_HAS_QT_QUICK
     morph::qt_quick::FrontendConfig qtConfig{
         .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}};
-#if MORPH_UI_DEV_TOOLS
-    qtConfig.devTools = clientArgs->dev;
-#endif
+    qtConfig.devTools = clientArgs->dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
     built.push_back(morph::qt_quick::frontendOption(argc, argv, std::move(qtConfig)));
 #endif
 #if MORPH_CLIENT_HAS_TUI

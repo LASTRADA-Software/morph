@@ -1,15 +1,16 @@
-# bookmarks — rung 2 of the [application ladder](../LADDER.md)
+# bookmarks — rung 1 of the [application ladder](../LADDER.md)
 
-**Status: shipped** — every rung-2 task is complete; see
+**Status: shipped** — see
 [Definition of done](#definition-of-done) for what that does and does not
 mean, and ["The client, and its known gaps"](#the-client-and-its-known-gaps--stated-rather-than-smoothed-over)
 for what the shipped client cannot reach (pagination is not reachable from the
 GUI, and a fetched title only appears on a manual refresh; the native stack is
 verified end to end, the WASM client is written and CI-gated but has never
 been compiled here). A multi-user bookmark manager: save URLs, tag them,
-search, bulk-edit, archive, share with other users. The first "small but real"
-app: several related entities, real authorization, and the first background
-jobs.
+search, bulk-edit, archive, share with other users. The ladder's small
+application: the shortest complete path through models, persistence, screens
+and a client, with several related entities, real authorization and a
+background job.
 
 ## Running it
 
@@ -126,12 +127,10 @@ Actions, in build order:
   in-process path already exists and is sufficient —
   `SimulatedRemoteBackend` is a shipped public backend routing through the
   complete server pipeline (authorizer, journal log provider, per-instance
-  strand). `examples/pastebin/src/app/app.cpp`'s `App`/`_sweepBridge`
-  already proves the pattern working end-to-end (a `shared_ptr`-captured
-  `BridgeHandler` kept alive across every dispatched call's
+  strand). The metadata-fetch worker (`src/app/app.cpp`) keeps a
+  `shared_ptr`-captured `BridgeHandler` alive across every dispatched call's
   `.then()`/`.onError()`, closing the real race a plain local handler would
-  hit against `RemoteServer`'s async dispatch); this rung's metadata-fetch
-  worker reuses that shape unchanged. One part of the original framing was
+  hit against `RemoteServer`'s async dispatch. One part of the original framing was
   overstated and is corrected here: `handleInline` does reject `"execute"`
   (a real, documented restriction — its reply would write into a stack
   buffer already gone by the time the async reply lands), but
@@ -156,9 +155,8 @@ Actions, in build order:
   (`examples/TESTING.md`'s closed-gap list, entry 5). The unscoped shape is
   kept for two reasons. It needs no reclamation to be correct: the worker's
   handlers are created per pass and released only once every dispatch that
-  pass issued has settled, and `App`'s shutdown-drain contract — the same
-  manual lifetime-ownership discipline rung 1 established, reused verbatim —
-  is what ends the last of them. And a scope has nowhere correct to be closed
+  pass issued has settled, and `App`'s shutdown-drain contract
+  (`fetchInFlight()`) is what ends the last of them. And a scope has nowhere correct to be closed
   here: `closeConnection` reclaims every instance registered under it, so
   calling it from `~App`'s *body* would run while `_fetchBridge` and any
   outstanding pass are still alive — the same "model not found" race
@@ -168,8 +166,8 @@ Actions, in build order:
   class's teardown design, not a constructor swap.
 
   The GUI sees results on a later poll: this rung's DoD includes a **minimal
-  `GetChangesSince` poll action** as the event-pattern preview (rung 3
-  formalizes the full event-queue design) — there is no existing
+  `GetChangesSince` poll action** as the ladder's event-polling answer —
+  there is no existing
   polling/event-sequencing precedent anywhere in the framework to reuse; this
   rung builds it from a `ChangesCursor` query (a millisecond timestamp paired
   with a same-instant id tie-break, not a bare `Timestamp` — the fix
@@ -205,17 +203,16 @@ Actions, in build order:
   updates one row (`src/models/tag_model.cpp`) and writes no outbox row at
   all. It sits with the plain single-row bookmark CRUD
   (create/edit/archive/delete), which keeps the framework's default
-  two-independent-write behavior — the same choice rung 1 made for
-  `PasteModel`, but only ever *implicitly*; here it is explicit: a crash
+  two-independent-write behavior, chosen explicitly: a crash
   between the store commit and the journal append can lose that one action's
   journal entry, but can never corrupt the store, and a single-row loss
   carries none of a partially-applied bulk edit's ambiguity.
   (b) **Undo: no generic undo**, consistent with the ladder-wide position
-  [`LADDER.md`](../LADDER.md)'s "Journal honesty" section already recorded at
-  rung 1 — `journal::undoLast()` returns a *detached* holder with no API to
+  [`LADDER.md`](../LADDER.md)'s "Journal honesty" section records —
+  `journal::undoLast()` returns a *detached* holder with no API to
   reinstall it into a live server registry, so in-place undo of a shared
   instance is not possible today, full stop. `DeleteBookmark` is a hard
-  delete with no compensating action (mirroring rung 1's `DeletePaste`);
+  delete with no compensating action;
   `unarchive` is an ordinary domain action that happens to reverse `archive`
   in effect, not journal-level undo, and needed no special framework
   support to write.
@@ -246,8 +243,7 @@ resolve in writing:
   `RemoteServer::dispatchMessage()` stamps
   `_instances.insertPrivate(mid, std::move(holder), std::move(env.session.principal))`
   from the verified, authenticated caller.
-  So `BookmarkModel`/`TagModel` are registered plain, exactly like
-  `pastebin::PasteModel` — each client's own `register` call gets its own
+  So `BookmarkModel`/`TagModel` are registered plain — each client's own `register` call gets its own
   fresh instance, and `authorizeInstance` genuinely denies a different
   principal from touching that specific instance. Nothing about "one
   collection per user" is lost by dropping the shared-instance framing: a
@@ -339,9 +335,7 @@ resolve in writing:
   ExecuteBatch` only fits a homogeneous single-statement batch, so it is not
   the right tool here. `BulkEdit` (and tag rename/merge) use N individual
   statements inside one `Lightweight::SqlTransaction{mapper().Connection(),
-  SqlTransactionMode::ROLLBACK}`, the same all-or-nothing pattern
-  `PasteModel::execute(GetPaste)`/`execute(EditPaste)` already proved out in
-  rung 1 — any unhandled throw mid-batch rolls back automatically, and
+  SqlTransactionMode::ROLLBACK}` — any unhandled throw mid-batch rolls back automatically, and
   `transaction.Commit()` is reached only once every item in the batch has
   applied.
 
@@ -350,8 +344,8 @@ here, not assumed from a doc comment: `SigningAuthorizer`,
 `SimulatedRemoteBackend`, `OutboxRelay`, and `OwnershipAuthorizer` were all
 read in `include/morph/` and `tests/` directly, and `HasManyThrough`'s
 read-only `Loader` shape was confirmed against Lightweight's own vendored
-source and test entities, alongside the `examples/pastebin`/
-`examples/concepts` precedents cited inline above.
+source and test entities, alongside the `examples/concepts` precedents cited
+inline above.
 
 ## Expected strain points
 
@@ -394,7 +388,7 @@ source and test entities, alongside the `examples/pastebin`/
   ownership alone was never the layer that could.
 - Metadata auto-fetch demonstrably running as a background job: bookmark
   appears immediately; title/favicon arrive later, and the minimal
-  `GetChangesSince` poll action (the rung-3 preview) is what a client asks for
+  `GetChangesSince` poll action is what a client asks for
   them with. This criterion is met at the model level, where
   `GetChangesSince` is implemented and tested. **No screen dispatches it** —
   see the client gaps below.
@@ -429,8 +423,8 @@ discover.
   test drops a connection mid-sequence.
 - **The transport's own message-size bound is not measured by this rung.**
   `kMaxImportChunkBytes` is set "well under" it, but that relationship is
-  asserted, not verified: there is no bookmarks equivalent of pastebin's
-  "An oversized `CreatePaste` is refused by the transport" test. If the
+  asserted, not verified: no test sends an oversized `ImportBookmarks`
+  chunk and asserts that the transport refuses it. If the
   transport bound ever drops below 64 KiB, this rung's own chunk limit stops
   being the one that bites and nothing here would notice.
 - **`is_unread` is write-once at creation — nothing ever clears it.** Every

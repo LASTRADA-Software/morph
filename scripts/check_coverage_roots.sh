@@ -9,11 +9,11 @@
 # and clang had embedded that worktree's absolute source paths into their
 # coverage mappings. scripts/coverage.sh filters by *relative* path
 # (SOURCES=(include/morph), examples/<rung>/<sub>), so a record reading
-# `/home/.../morph-wt/372/examples/crm/src/models/account_model.cpp` matches
+# `/home/.../morph-wt/372/examples/<rung>/src/models/<model>.cpp` matches
 # nothing named there and is dropped -- not mis-attributed, dropped. In the run
 # that found this, 246 of 688 records were rooted in another worktree, and all
-# eight of examples/crm/src/models/*.cpp appeared *only* under the foreign
-# root, so the entire src side of codecov.yml's crm component was absent from
+# eight of one rung's src/models/*.cpp appeared *only* under the foreign
+# root, so the entire src side of that rung's codecov.yml component was absent from
 # the report while its tests ran and passed.
 #
 # The mechanism, demonstrated directly: compile one translation unit in

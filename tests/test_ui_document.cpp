@@ -250,3 +250,15 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }
+
+TEST_CASE("ui document: a button's emphasis is normal, primary or danger", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "column", "children": [
+        {"kind": "button", "label": "a", "emphasis": "primary"},
+        {"kind": "button", "label": "b", "emphasis": "danger"},
+        {"kind": "button", "label": "c", "emphasis": "normal"}]}})")
+              .has_value());
+    auto const refused = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "label": "a", "emphasis": "loud"}})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().message() == "document e at /view/emphasis: `loud` is not one of the values of `emphasis`");
+}

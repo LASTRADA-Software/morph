@@ -40,11 +40,9 @@ struct FrontendConfig {
     /// @brief Called with the window's width class (`widthClassOf`) when the window first has a width and each time
     ///        the class changes; empty calls nothing. The shell sets it as `{"env": "widthClass"}`.
     std::function<void(std::string const& widthClass)> onWidthClass;
-#if MORPH_UI_DEV_TOOLS
-    /// @brief Development mode (spec 6 §21): Ctrl+Shift+I in the window opens the inspector over the screen the
-    ///        shell shows (`ui::MountedShell::inspectFocused`). Off, the key does nothing.
-    bool devTools = false;
-#endif
+    /// @brief Development mode (spec 6 §21): with `On`, Ctrl+Shift+I in the window opens the inspector over the screen
+    ///        the shell shows (`ui::MountedShell::inspectFocused`). With `Off`, the key does nothing.
+    ui::DevelopmentTools devTools = ui::DevelopmentTools::Off;
 };
 
 /// @brief Whether a Qt Quick window can be shown here: on macOS, Windows and WebAssembly always; elsewhere when

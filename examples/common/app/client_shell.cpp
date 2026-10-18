@@ -14,16 +14,19 @@
 #include <memory>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/ui/dev_reload.hpp>
-#include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/explorer.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/route_history.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/shell_frame.hpp>
 #include <morph/ui/view.hpp>
+#include <morph/ui/workspace.hpp>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -33,10 +36,11 @@ namespace morph::examples {
 
 namespace {
 
-#if MORPH_UI_DEV_TOOLS
 // How often a development shell polls the source's digest (spec 5 §12).
 constexpr std::chrono::seconds kDevPollEvery{1};
-#endif
+
+// The explorer's screen id, and the host screen it names.
+constexpr std::string_view kExplorer = "explorer";
 
 /// The library's document host, with `navigate` handed to the shell.
 class Host final : public ui::DocumentScreenHost {
@@ -182,9 +186,9 @@ public:
 
     ~Shell() override {
         *_alive = false;
-        if (_current) {
-            _current->forceClose();
-        }
+        // The tabs first, then the frame they sit in.
+        _workspace.reset();
+        _frame.reset();
     }
     Shell(Shell const&) = delete;
     Shell& operator=(Shell const&) = delete;
@@ -203,11 +207,18 @@ public:
         ui::SessionOptions sessionOptions;
         sessionOptions.scheduler = &_context->scheduler();
         sessionOptions.catalog = source.catalog();
+        sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
             auto const found = _documents.find(screenId);
-            return found == _documents.end() ? nullptr : found->second;
+            if (found != _documents.end()) {
+                return found->second;
+            }
+            // The explorer's "Try it" documents.
+            auto const generated = _generated.find(screenId);
+            return generated == _generated.end() ? nullptr : generated->second;
         };
         hostOptions.backend = _backend;
         _application = std::make_unique<Application>(
@@ -218,18 +229,7 @@ public:
                                _source->signIn(std::move(principal), std::move(token), std::move(done));
                            });
             },
-            [this] {
-                // Every screen goes first, so their private instances are released under the session that owns them;
-                // from a posted task, since the screen that signed out is still running its commands.
-                reloadThen(false, [this](auto done) {
-                    _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
-                        if (auto const live = alive.lock(); live != nullptr && *live) {
-                            unmount();
-                            _source->signOut(done);
-                        }
-                    });
-                });
-            });
+            [this] { signOut(); });
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
@@ -248,6 +248,10 @@ public:
                     }
                 });
             });
+        _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
+            static_cast<void>(params);
+            return std::expected<std::unique_ptr<ui::ScreenHandle>, ui::MountError>{openExplorer(page)};
+        });
         if (_options.history != nullptr) {
             _routes.emplace(*_options.history, [this](std::string const& route) { openRoute(route); });
             // A start screen asked for by name wins over the route the history holds.
@@ -255,10 +259,10 @@ public:
                 _wanted = _routes->initial();
             }
         }
+        buildFrame();
         if (!openWanted()) {
             mount(start, _options.startParams);
         }
-#if MORPH_UI_DEV_TOOLS
         if (_options.dev) {
             _poll = _context->scheduler().every(kDevPollEvery, [this, alive = std::weak_ptr<bool>{_alive}] {
                 _source->poll([this, alive](std::vector<std::string> const& changed) {
@@ -268,19 +272,17 @@ public:
                 });
             });
         }
-#endif
     }
 
-#if MORPH_UI_DEV_TOOLS
     void inspectFocused(std::function<void(ui::Inspector&)> const& visit) override {
-        if (!_current || !visit) {
+        ui::ScreenHandle* const shown = _workspace ? _workspace->activeHandle() : nullptr;
+        if (shown == nullptr || !visit) {
             return;
         }
-        if (std::optional<ui::Inspector> inspector = ui::DocumentScreenHost::inspector(*_current)) {
+        if (std::optional<ui::Inspector> inspector = ui::DocumentScreenHost::inspector(*shown)) {
             visit(*inspector);
         }
     }
-#endif
 
     /// Shows @p text in place of any screen, and reports it.
     void show(std::string const& text) {
@@ -291,11 +293,155 @@ public:
     }
 
 private:
+    // The explorer over what the source holds now: the catalog, every model's schemas, and the loaded documents.
+    std::unique_ptr<ui::ScreenHandle> openExplorer(ui::ContainerWidget& page) {
+        ui::ExplorerOptions explorer;
+        if (ui::CatalogReply const* const catalog = _source->catalogReply()) {
+            explorer.catalog = *catalog;
+        }
+        explorer.facts = _source->catalog();
+        explorer.schemas = _source->schemasByModel();
+        explorer.documents = _documents;
+        if (_appDocument) {
+            explorer.documents.emplace(std::string{ui::kAppFile}, _appDocument);
+        }
+        explorer.host = _host.get();
+        explorer.provide = [this](std::string const& screenId, std::shared_ptr<ui::Document const> document) {
+            _generated.insert_or_assign(screenId, std::move(document));
+        };
+        explorer.onOpen = [this](std::string const& screenId) {
+            // Posted: the button that asked is a widget of the explorer's tab.
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    mount(screenId, {});
+                }
+            });
+        };
+        return std::make_unique<ui::Explorer>(_context->runtime(), *_backend, page, std::move(explorer));
+    }
+
+    // What `{"can": …}` reads: the actions the current catalog lets the principal run.
+    void showPermitted() {
+        ui::CatalogReply const* const catalog = _source->catalogReply();
+        if (_session == nullptr || catalog == nullptr) {
+            return;
+        }
+        _session->setPermitted(
+            std::set<std::string, std::less<>>{catalog->permitted.begin(), catalog->permitted.end()});
+    }
+
+    // Signing out, from the frame's button or a document's `signOut`: every screen goes first, so their private
+    // instances are released under the session that owns them; from a posted task, since the screen that signed out
+    // may still be running its commands.
+    void signOut() {
+        reloadThen(false, [this](auto done) {
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    unmount();
+                    _source->signOut(done);
+                }
+            });
+        });
+    }
+
+    // The frame and its workspace for the catalog the source holds now: the navigator lists its entries, so a new
+    // session's catalog gets a new frame. Every tab of the old one is closed.
+    void buildFrame() {
+        _workspace.reset();
+        _frame.reset();
+        ui::CatalogReply const* const catalog = _source->catalogReply();
+        std::vector<ui::CatalogEntry> entries;
+        if (catalog != nullptr) {
+            for (ui::CatalogEntry const& entry : catalog->entries) {
+                // The navigator lists what a signed-in person opens; before sign-in the public screens are opened by
+                // the shell itself.
+                if (_documents.contains(entry.id) && !entry.isPublic) {
+                    entries.push_back(entry);
+                }
+            }
+        }
+        // The explorer, once there is a navigator to list it in.
+        if (!entries.empty()) {
+            entries.push_back(ui::CatalogEntry{.id = std::string{kExplorer},
+                                               .title = "Explorer",
+                                               .module = "Tools",
+                                               .singleton = true,
+                                               .host = std::string{kExplorer}});
+        }
+        ui::ShellFrameOptions frame;
+        frame.applicationName = _source->bundle() != nullptr ? _source->bundle()->applicationId : std::string{};
+        frame.navigator.entries = entries;
+        frame.navigator.onOpen = [this](std::string const& screenId) {
+            // Posted: the navigator's button is a widget of the frame, which a mount may rebuild.
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    mount(screenId, {});
+                }
+            });
+        };
+        frame.onSignOut = [this] { signOut(); };
+        _frame = std::make_unique<ui::ShellFrame>(*_backend, nullptr, std::move(frame));
+        // The sidebar and the top bar show once the catalog lists a screen beyond the public ones: before a sign-in
+        // that is none, and an application without one lists its screens from the start.
+        _frame->showSignedIn(!entries.empty());
+        _frame->setPrincipal(_source->principal());
+        ui::WorkspaceOptions tabs;
+        tabs.screens = [entries = catalog != nullptr ? catalog->entries
+                                                     : std::vector<ui::CatalogEntry>{}](std::string_view screenId) {
+            if (screenId == kExplorer) {
+                return ui::WorkspaceScreen{.singleton = true, .host = std::string{kExplorer}};
+            }
+            for (ui::CatalogEntry const& entry : entries) {
+                if (entry.id == screenId) {
+                    return ui::WorkspaceScreen{.singleton = entry.singleton,
+                                               .reuseEmpty = entry.reuseEmpty,
+                                               .host = entry.host.value_or(std::string{}),
+                                               .available = entry.available};
+                }
+            }
+            return ui::WorkspaceScreen{};
+        };
+        tabs.onChanged = [this] { showActiveTitle(); };
+        tabs.hosts = &_hosts;
+        _workspace =
+            std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page());
+    }
+
+    // The top bar follows the active tab: its caption is the screen's title.
+    void showActiveTitle() {
+        if (!_frame || !_workspace) {
+            return;
+        }
+        std::optional<std::size_t> const shown = _workspace->active();
+        auto const tabs = _workspace->tabs();
+        _frame->setTitle(shown && *shown < tabs.size() ? tabs.at(*shown).caption : std::string{});
+    }
+
+    // The screen id of the active tab; empty with none.
+    [[nodiscard]] std::string activeScreen() const {
+        if (!_workspace) {
+            return {};
+        }
+        std::optional<std::size_t> const shown = _workspace->active();
+        auto const tabs = _workspace->tabs();
+        return shown && *shown < tabs.size() ? tabs.at(*shown).screenId : std::string{};
+    }
+
     // The documents of every screen the catalog lists, loaded against its facts; a screen whose document does not
     // load is reported and left out.
     void loadDocuments(ui::Bundle const& bundle) {
         _documents.clear();
+        _generated.clear();
+        _appDocument.reset();
         ui::Catalog const catalog = _source->catalog();
+        if (auto const app = bundle.documents.find(ui::kAppFile); app != bundle.documents.end()) {
+            auto loaded = ui::loadDocumentText(app->second, ui::LoadOptions{.catalog = catalog});
+            if (loaded) {
+                _appDocument = std::make_shared<ui::Document const>(std::move(*loaded));
+            } else {
+                problem(loaded.error().message());
+            }
+        }
         for (std::string const& screenId : _source->screens()) {
             auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
             if (!loaded) {
@@ -345,8 +491,13 @@ private:
                     return;
                 }
                 loadDocuments(*_source->bundle());
+                showPermitted();
                 _changed = true;
                 _signedIn = signingIn;
+                // A screen that signed in in place stays when it is still listed and the new session has no screen
+                // of its own to start on; the frame is rebuilt for the new catalog either way, so it is reopened.
+                std::string const kept = activeScreen();
+                buildFrame();
                 // The route the page was opened with, which the signed-out catalog did not list, is tried once more
                 // with the new session's, before a navigation the sign-in asked for: the link is what the user came
                 // for. A move back or forward made during the reload is tried the same way.
@@ -365,25 +516,24 @@ private:
                 // A screen that signed in in place, and is still listed, stays as it is, unless it is a public login
                 // screen and the new session has a screen of its own to start on.
                 std::string const start = firstScreen(signingIn);
-                bool const keep = _current && _documents.contains(_currentId) &&
-                                  (!_source->isPublic(_currentId) || start.empty() || _source->isPublic(start));
-                if (keep) {
-                    return;
-                }
-                mount(start, {});
+                bool const keep = !kept.empty() && _documents.contains(kept) &&
+                                  (!_source->isPublic(kept) || start.empty() || _source->isPublic(start));
+                mount(keep ? kept : start, {});
             });
         });
     }
 
+    // Opens a screen as a tab, or focuses the tab that already shows it.
     void mount(std::string const& screenId, ui::ParamMap const& params) {
-        unmount();
-        auto handle = _host->mount(screenId, params);
-        if (!handle) {
-            show("Cannot open " + handle.error().screenId + ": " + handle.error().reason);
+        _message.reset();
+        if (!_workspace) {
+            buildFrame();
+        }
+        auto const opened = _workspace->open(screenId, params);
+        if (!opened) {
+            show("Cannot open " + opened.error().screenId + ": " + opened.error().reason);
             return;
         }
-        _current = std::move(*handle);
-        _currentId = screenId;
         if (_routes) {
             auto const route = _host->routeOf(screenId, params);
             _routes->shown(route ? *route : std::string{});
@@ -431,7 +581,6 @@ private:
         }
     }
 
-#if MORPH_UI_DEV_TOOLS
     // Loads the documents a development poll found changed and remounts the shown screen when its own changed; a
     // document that does not load, or that the interpreter refuses, keeps the old one and is reported.
     void reloadChanged(std::vector<std::string> const& changed) {
@@ -439,8 +588,12 @@ private:
             return;
         }
         std::vector<ui::MountedScreen> mounted;
-        if (_current) {
-            mounted.push_back(ui::MountedScreen{.screenId = _currentId, .handle = _current.get()});
+        if (_workspace) {
+            auto const tabs = _workspace->tabs();
+            for (std::size_t index = 0; index < tabs.size(); ++index) {
+                mounted.push_back(
+                    ui::MountedScreen{.screenId = tabs.at(index).screenId, .handle = _workspace->handleOf(index)});
+            }
         }
         ui::ReloadOutcome const outcome = ui::reloadDocuments(
             changed, *_source->bundle(), ui::LoadOptions{.catalog = _source->catalog()}, _documents, *_host, mounted);
@@ -451,13 +604,11 @@ private:
             _options.onReloaded(outcome.remounted);
         }
     }
-#endif
 
     void unmount() {
         _message.reset();
-        if (_current) {
-            _current->forceClose();
-            _current.reset();
+        if (_workspace) {
+            _workspace->forceCloseAll();
         }
     }
 
@@ -475,20 +626,23 @@ private:
     bool _reloading = false;
     std::optional<std::pair<std::string, ui::ParamMap>> _pending;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
+    // The app document, which the explorer reads its uses from.
+    std::shared_ptr<ui::Document const> _appDocument;
+    // The documents the explorer generates for "Try it", by their screen ids.
+    std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
+    ui::ScreenHostRegistry _hosts;
     std::unique_ptr<ui::Session> _session;
     std::unique_ptr<Application> _application;
     std::unique_ptr<Host> _host;
-    std::unique_ptr<ui::ScreenHandle> _current;
-    std::string _currentId;
+    std::unique_ptr<ui::ShellFrame> _frame;
+    std::unique_ptr<ui::Workspace> _workspace;
     std::optional<ui::Mounted> _message;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
     bool _changed = false;
     bool _signedIn = false;
     std::string _wanted;
-#if MORPH_UI_DEV_TOOLS
     // The development poll's timer.
     std::optional<reactive::TimerHandle> _poll;
-#endif
     // Last, so it stops following the history before anything it opens screens with is gone.
     std::optional<ui::RouteHistory> _routes;
 };

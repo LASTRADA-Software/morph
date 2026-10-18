@@ -19,13 +19,21 @@
 
 - `Workspace(runtime, backend, host, options, parent)` makes a `TabsWidget` appended to `parent` (a backend root
   when it is null): the shell's root, which the host places. Each tab is a page slot of that bar, and its screen is
-  mounted into it with `DocumentScreenHost::mountInto`.
+  mounted into it with `DocumentScreenHost::mountInto`. The bar and every page stretch both ways, so a screen whose
+  root stretches fills the page; a content-sized one keeps its own size.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
   `WorkspaceTab{screenId, identity, caption}`; `active()` is the shown tab's index, `std::nullopt` while none is open.
 - An application routes its host's `onNavigate` to `open`, so a document's `navigate` opens or focuses a tab.
 - The destructor unmounts every screen without asking, newest first.
+
+- `handleOf(index)` is a tab's `ScreenHandle`, and `activeHandle()` the active tab's; null past the end or with no
+  tab. A client remounts a tab's screen through it on a development reload and reaches its inspector.
+- `forceCloseAll()` closes every tab without running a close guard, newest first: what signing out does, since no
+  guard may keep a screen of the principal who is leaving.
+- `WorkspaceOptions::onChanged` is called after the open tabs, their captions or the active tab changed, so a client's
+  top bar can follow the active tab's title.
 
 ## Opening
 

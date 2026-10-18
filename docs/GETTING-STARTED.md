@@ -2,8 +2,8 @@
 
 This is the document that comes before the others. It builds one small thing
 end to end and explains why each piece exists, using
-[`examples/pastebin`](../examples/pastebin) — the smallest complete morph
-application in the tree — as the worked example.
+[`examples/bookmarks`](../examples/bookmarks) — the smallest application on
+morph's [application ladder](../examples/LADDER.md) — as the worked example.
 
 Read this first, then
 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for the narrative map, then
@@ -17,14 +17,15 @@ which spec file answers your next question.
 
 **What this is not.** It is not a spec — where this document and a file under
 [`docs/spec/`](spec/) disagree, the spec wins. It is also not a survey: the
-journal, the offline queue, sessions and authorization are named here only
-where a first app trips over them.
+journal and the offline queue are named here only where a first app trips
+over them. Sessions get a little more room, because bookmarks is multi-user
+and every one of its actions reads the caller's principal.
 
 ## Contents
 
 - [1. What morph is for](#1-what-morph-is-for)
 - [2. The whole seam in one file](#2-the-whole-seam-in-one-file)
-- [3. Building and running pastebin](#3-building-and-running-pastebin)
+- [3. Building and running bookmarks](#3-building-and-running-bookmarks)
 - [4. The model is the application](#4-the-model-is-the-application)
 - [5. Strong ids, DTOs, and what `validate()` is for](#5-strong-ids-dtos-and-what-validate-is-for)
 - [6. Persistence](#6-persistence)
@@ -169,11 +170,12 @@ Filters: [getting-started]
 All tests passed (21 assertions in 3 test cases)
 ```
 
-## 3. Building and running pastebin
+## 3. Building and running bookmarks
 
-pastebin is [rung 1 of the application ladder](../examples/LADDER.md): one
-entity, one model, SQLite behind Lightweight, a screen the server serves, and a
-real socket server. It is the same four parts from section 2 at real scale.
+bookmarks is [rung 1 of the application ladder](../examples/LADDER.md): a
+multi-user bookmark manager with a few related entities, SQLite behind
+Lightweight, signed-token sign-in, screens the server serves, and a real socket
+server. It is the same four parts from section 2 at real scale.
 
 It needs Qt 6.5+, an ODBC SQLite3 driver, and a C++23 compiler. Configure:
 
@@ -181,59 +183,63 @@ It needs Qt 6.5+, an ODBC SQLite3 driver, and a C++23 compiler. Configure:
 cmake -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON \
-    -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=pastebin \
+    -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=bookmarks \
     -DMORPH_BUILD_TESTS=ON -DMORPH_BUILD_EXAMPLES=ON
-cmake --build build --target ladder_pastebin_tests ladder_pastebin_server morph_examples_client
+cmake --build build --target ladder_bookmarks_tests ladder_bookmarks_server morph_examples_client
 ```
 
 Run the suite first — it is the fastest confirmation that your toolchain, your
 ODBC driver and your Qt install all agree:
 
-```console
-$ ctest --test-dir build -L ladder-pastebin
-...
-100% tests passed out of 55
+```sh
+ctest --test-dir build -L ladder-bookmarks
 ```
 
-Then the app. The server owns the database, the action journal and the expiry
-sweep:
+Then the app. The server owns the database, the signing secret, the action
+journal, the metadata-fetch worker and the outbox relay. The secret has no
+default — it signs every token the server mints and verifies every token it is
+shown, so a built-in fallback would be a published signing key:
 
 ```console
-$ PASTEBIN_DB="DRIVER=SQLite3;Database=pastebin.db;Timeout=5000" \
-  PASTEBIN_PORT=8765 ./build/examples/pastebin/ladder_pastebin_server --seed
-pastebin-server: seeded a plain public paste as blue-yak-734
-pastebin-server: seeded an editable C++ snippet as quiet-hen-290
-pastebin-server: seeded a SQL snippet as quiet-jay-694
-pastebin-server: seeded a private paste as wild-ant-277
-pastebin-server: seeded a burn-after-1 paste as dark-ant-399
-pastebin-server: seeded a paste expiring in two minutes as sharp-bee-657
-pastebin-server: listening on port 8765
+$ BOOKMARKS_TOKEN_SECRET="pick-something-real" \
+  BOOKMARKS_DB="DRIVER=SQLite3;Database=bookmarks.db;Timeout=5000" \
+  BOOKMARKS_PORT=8766 ./build/examples/bookmarks/ladder_bookmarks_server
+bookmarks-server: listening on ws://127.0.0.1:8766
 ```
-
-(The animal-name ids are allocated randomly, so yours will differ.)
 
 The client is the generic one every example shares: it draws whatever screens
 the application serves. It runs in either deployment mode. Against the server:
 
 ```sh
-./build/examples/client/morph_examples_client --server ws://127.0.0.1:8765
+./build/examples/client/morph_examples_client --server ws://127.0.0.1:8766
 ```
 
-or entirely in-process, hosting `PasteModel` itself:
+or entirely in-process, hosting the models itself:
 
 ```sh
-./build/examples/client/morph_examples_client --app pastebin --db local.db
+./build/examples/client/morph_examples_client --app bookmarks --db local.db
 ```
+
+Sign in with any username — the login is a development login with no password
+([`dto/auth_dto.hpp`](../examples/bookmarks/include/bookmarks/dto/auth_dto.hpp)
+says exactly what that does and does not mean). Two clients with two usernames
+against one server show two isolated collections and a shared feed.
+
+Once signed in, **Explorer** under the navigator's Tools (or `--screen
+explorer` at start) lists the application's screens and its models with every
+action: choose one to see its facts, its fields, the screens that use it, and
+a live form that runs it. `--ui=tui` shows the same client in the terminal.
 
 Section 12 comes back to what is — and is not — different between those two
 command lines.
 
 > **Note on the two modes.** Local mode is deliberately the *smaller*
-> deployment, not an equivalent one: `pastebin::app::App` — the durable action
-> log and the periodic expiry sweep — lives only in the server binary, so a
-> local-mode client journals nothing and never reclaims expired rows. Opening an
-> expired paste still fails correctly, because `GetPaste`'s own guard never
-> depends on the sweep having run.
+> deployment, not an equivalent one: `bookmarks::app::App` — the action
+> journal, the metadata-fetch worker and the outbox relay — lives only in the
+> server binary, so a local-mode client journals nothing and never fills in a
+> fetched title. And because `LocalBackend` runs no authorizer, local mode is
+> single-user by construction: the two-user isolation is only meaningful
+> against the server.
 
 ## 4. The model is the application
 
@@ -242,100 +248,134 @@ idea in the framework: **all business logic, all invariants and all persistence
 access live in plain, single-threaded model classes with typed actions.**
 Nothing domain-shaped may live in a screen, in a client, or in `main()`.
 
-pastebin's whole domain is one class,
-[`include/pastebin/models/paste_model.hpp:30`](../examples/pastebin/include/pastebin/models/paste_model.hpp):
+bookmarks' main entity is one class,
+[`include/bookmarks/models/bookmark_model.hpp:53`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp):
 
 ```cpp
-class PasteModel {
+class BookmarkModel {
 public:
-    CreatePasteResult execute(const CreatePaste& action);
-    PasteView        execute(const GetPaste& action);
-    PasteView        execute(const EditPaste& action);
-    Ack              execute(const DeletePaste& action);
-    ListPastesResult execute(const ListPastes& action);
-    Ack              execute(const ExpirePaste& action);
+    CreateBookmarkResult execute(const CreateBookmark& action);
+    BookmarkView execute(const EditBookmark& action);
+    Ack execute(const ArchiveBookmark& action);
+    Ack execute(const UnarchiveBookmark& action);
+    Ack execute(const DeleteBookmark& action);
+    BookmarkView execute(const GetBookmark& action);
+    ListBookmarksResult execute(const ListBookmarks& action);
+    GetChangesSinceResult execute(const GetChangesSince& action);
+    BulkEditResult execute(const BulkEdit& action);
+    Ack execute(const RecordMetadata& action);
+    ImportBookmarksResult execute(const ImportBookmarks& action);
+    ExportBookmarksResult execute(const ExportBookmarks& action);
 };
 ```
 
 That is the entire public surface. One overload per action, results returned by
 value, failures thrown as the app's own typed error set
-([`core/errors.hpp`](../examples/pastebin/include/pastebin/core/errors.hpp):
-`NotFound`, `Expired`, `Burned`, `ValidationError`, `Conflict`, `TooLarge`).
-Never encode a failure as a magic value in a result DTO — morph captures the
-thrown exception as a `std::exception_ptr` and delivers it to the caller's
+([`core/errors.hpp`](../examples/bookmarks/include/bookmarks/core/errors.hpp):
+`NotFound`, `ValidationError`, `Conflict`, `Forbidden`, `TooLarge`). Never
+encode a failure as a magic value in a result DTO — morph captures the thrown
+exception as a `std::exception_ptr` and delivers it to the caller's
 `.onError(...)`, and over a socket the `what()` string travels back in the
-error envelope.
+error envelope. (`TagModel`, `SharedFeedModel` and `AuthModel` sit beside it,
+in the same shape.)
 
 **A model is single-threaded per instance, and must not know the framework
 exists.** morph runs each model instance on its own strand, so two `execute()`
-calls on one instance never overlap — which is why `PasteModel` has no mutex
-and no `std::atomic` anywhere. It also means a model must not reach for an
-executor, a `Bridge` or a background thread of its own: there is no framework
-seam for that, deliberately
-([#129](https://github.com/LASTRADA-Software/morph/issues/129) was closed as
-wrong-layer, and
-[#129](https://github.com/LASTRADA-Software/morph/issues/129) is the record). Background work is orchestration; it belongs at the app layer,
+calls on one instance never overlap — which is why `BookmarkModel` has no mutex
+anywhere. It also means a model must not reach for an executor, a `Bridge` or a
+background thread of its own: there is no framework seam for that,
+deliberately. Background work is orchestration; it belongs at the app layer,
 re-entering the model as an ordinary client call — which is exactly what
-pastebin's expiry sweep does.
+bookmarks' metadata-fetch worker does, dispatching `RecordMetadata` through the
+same server a socket client reaches.
+
+**Who is calling is read, not passed.** No action carries an owner. Each
+`execute()` reads the caller's principal from `morph::session::current()`,
+which the backend installs around every dispatched call, and refuses with
+`Forbidden` when there is none
+([`src/models/bookmark_model.cpp`](../examples/bookmarks/src/models/bookmark_model.cpp)):
+
+```cpp
+[[nodiscard]] const std::string& requireOwner() {
+    const auto* ctx = ::morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw Forbidden{"no authenticated principal"};
+    }
+    return ctx->principal;
+}
+```
+
+Over a socket, `RemoteServer` overwrites that principal with the one its
+authorizer verified before the model runs. In-process nothing verifies it, so
+the model's own check is the only one — which is why rule 1 makes models
+re-check their own authorization whichever backend they run behind.
 
 Write this layer first, and test it (section 11) before there is any bridge or
 any screen. Every ladder rung does.
 
 ## 5. Strong ids, DTOs, and what `validate()` is for
 
-### Why `PasteId` rather than `std::string`
+### Why `BookmarkId` rather than `std::int64_t`
 
 `examples/IMPLEMENTATION.md` rule 3 requires entity identity in a DTO to be a
 per-entity strong id type exposing `hasValue()`.
-[`core/types.hpp:28`](../examples/pastebin/include/pastebin/core/types.hpp):
+[`core/types.hpp:30`](../examples/bookmarks/include/bookmarks/core/types.hpp)
+(comments and one body trimmed):
 
 ```cpp
-struct PasteId {
-    std::optional<std::string> value;
+struct BookmarkId {
+    std::optional<std::int64_t> value;
 
-    constexpr PasteId() noexcept = default;
-    explicit PasteId(std::string id) noexcept : value{std::move(id)} {}
+    constexpr BookmarkId() noexcept = default;
+    explicit BookmarkId(std::int64_t id) noexcept : value{id} {}
+
+    [[nodiscard]] static BookmarkId fromOptional(std::optional<std::int64_t> payload) noexcept;
 
     [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); }
-    [[nodiscard]] const std::string& operator*() const noexcept { return *value; }
-    [[nodiscard]] auto operator<=>(const PasteId&) const noexcept = default;
+    [[nodiscard]] std::int64_t operator*() const noexcept { return *value; }
+    [[nodiscard]] auto operator<=>(const BookmarkId&) const noexcept = default;
 };
 ```
 
-Two things it buys. First, ordinary type safety: a `PasteId` and a
-`PasteCursor` are both opaque strings, and the compiler will not let you pass
-one where the other belongs. Second, the empty state is *in the type* —
-`hasValue()` distinguishes "not entered yet" from "entered as the empty
-string", which is what lets a schema-driven form and a `validate()` body agree
-about what a required field means.
+Two things it buys. First, ordinary type safety: a `BookmarkId`, a `TagId` and
+a pagination `Cursor` are all an integer on the wire, and the compiler will not
+let you pass one where another belongs. Second, the empty state is *in the
+type* — `hasValue()` distinguishes "not entered yet" from "entered", which is
+what lets a schema-driven form and a `validate()` body agree about what a
+required field means.
 
-On the wire it is just a nullable string; the strong typing lives in the C++
+On the wire it is just a nullable integer; the strong typing lives in the C++
 type only, declared by a `glz::meta` specialisation at the bottom of that file.
 
 ### DTOs are wire types, kept apart from storage types
 
-[`dto/paste_dto.hpp:64`](../examples/pastebin/include/pastebin/dto/paste_dto.hpp):
+[`dto/bookmark_dto.hpp:44`](../examples/bookmarks/include/bookmarks/dto/bookmark_dto.hpp)
+(comments trimmed):
 
 ```cpp
-struct CreatePaste {
-    std::string content;
-    std::string syntax;
-    ::morph::time::Timestamp expiresAt;  // empty = never expires
-    Reads burnAfterReads;                // empty = no burn limit
-    Visibility visibility = Visibility::Public;
-    Editability editability = Editability::Immutable;
+struct CreateBookmark {
+    std::string url;
+    std::string title;  // empty = not yet known; the metadata worker fills it in
+    std::string description;
+    std::string notes;
+    std::vector<std::string> tags;  // tag names; auto-created on first use
+    Visibility visibility = Visibility::Private;
 
-    static constexpr std::array<std::string_view, 4> optionalFields{
-        "expiresAt", "burnAfterReads", "visibility", "editability"};
+    static constexpr std::array<std::string_view, 5> optionalFields{"title", "description", "notes", "tags",
+                                                                    "visibility"};
 
-    [[nodiscard]] bool validate() const noexcept { /* ... */ }
+    static constexpr bool explicitSubmit = true;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return !url.empty() && url.size() <= kMaxUrlBytes && title.size() <= kMaxTitleBytes;
+    }
 };
 ```
 
-Note what is *not* a raw scalar: instants are `morph::time::Timestamp`, counts
-are a unit-tagged `Reads` quantity, and the two flags are `enum class`. Only
-`content` and `syntax` are loose strings, because they genuinely are free-form
-text. Section 10 shows what that discipline pays for.
+Note what is *not* a raw scalar: `visibility` is an `enum class`, not a `bool`,
+and the result's `id` is a `BookmarkId`. The remaining fields are loose strings
+because they genuinely are free-form text. Section 10 shows what that discipline
+pays for, and what `optionalFields` and `explicitSubmit` do to the form.
 
 The DTO layer is deliberately separate from the storage layer (section 6); the
 model maps between them.
@@ -355,7 +395,10 @@ All tests passed (2 assertions in 1 test case)
 ```
 
 The rejection surfaces as
-`action failed validation: <ModelType>/<ActionType>` on `.onError`.
+`action failed validation: <ModelType>/<ActionType>` on `.onError`. That is
+also why `BookmarkModel::execute(const CreateBookmark&)` still opens with its
+own `if (!action.validate()) throw ValidationError{…}`: a test that calls the
+model directly goes through no dispatcher.
 
 **But `validate()` runs after decode**, and that is the important limitation.
 By the time it sees the action, the JSON has already been turned into typed
@@ -379,36 +422,47 @@ Two consequences for a model author:
 
 ## 6. Persistence
 
-pastebin stores one table. `IMPLEMENTATION.md` rule 4 routes all persistence
-through the [Lightweight](https://github.com/LASTRADA-Software/Lightweight)
-ORM, in three pieces.
+`IMPLEMENTATION.md` rule 4 routes all persistence through the
+[Lightweight](https://github.com/LASTRADA-Software/Lightweight) ORM, in three
+pieces.
 
 **The entity**, kept strictly separate from the DTOs
-([`db/paste_entity.hpp:49`](../examples/pastebin/include/pastebin/db/paste_entity.hpp)):
+([`db/bookmark_entity.hpp:39`](../examples/bookmarks/include/bookmarks/db/bookmark_entity.hpp)):
 
 ```cpp
-struct PasteRecord {
-    static constexpr std::string_view TableName = "pastes";
+struct BookmarkRecord {
+    static constexpr std::string_view TableName = "bookmarks";
 
-    Light::Field<Light::SqlAnsiString<32>, Light::PrimaryKey::AutoAssign, Light::SqlRealName{"id"}> id;
-    Light::Field<Light::SqlMaxDynamicWideString, Light::SqlRealName{"content"}> content;
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"syntax"}> syntax;
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"owner_principal"}> ownerPrincipal;
+    Light::Field<Light::SqlAnsiString<2048>, Light::SqlRealName{"url"}> url;
+    Light::Field<Light::SqlAnsiString<512>, Light::SqlRealName{"title"}> title;
+    // ...
+    Light::Field<bool, Light::SqlRealName{"is_shared"}> isShared{false};
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};
     // ...
 };
 ```
 
+The storage type is where `bool` and raw integers are fine; the DTO above maps
+`isShared` to `Visibility` and the integer id to a `BookmarkId`. The column
+widths are pinned to the DTO's `kMaxUrlBytes`/`kMaxTitleBytes` by
+`static_assert`s in the model, so a value `validate()` accepted can never be
+silently truncated on the way in.
+
 **The migration**, which is the only DDL mechanism — no `PRAGMA user_version`
 scheme, no hand-run scripts
-([`src/db/schema.cpp:30`](../examples/pastebin/src/db/schema.cpp)):
+([`src/db/schema.cpp:24`](../examples/bookmarks/src/db/schema.cpp)):
 
 ```cpp
-LIGHTWEIGHT_SQL_MIGRATION(20260806000001, "Create pastes table") {
-    plan.CreateTableIfNotExists("pastes")
-        .PrimaryKey("id", Varchar(32))
-        .RequiredColumn("content", NVarchar(0))
-        .RequiredColumn("syntax", Varchar(32))
+LIGHTWEIGHT_SQL_MIGRATION(20260807000001, "Create bookmarks tables") {
+    plan.CreateTableIfNotExists("bookmarks")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("owner_principal", Varchar(64))
+        .RequiredColumn("url", Varchar(2048))
         // ...
+    plan.CreateIndex("idx_bookmarks_owner", "bookmarks", {"owner_principal"});
+    // ... the tags, bookmark_tags and imported_ops tables
 }
 ```
 
@@ -419,46 +473,38 @@ force-link caveat (section 7).
 
 **The access pattern.** A model holds no connection of its own. Each
 `execute()` acquires one from the pool for its own duration and returns it
-before returning:
+before returning. Writes that touch more than one row run in one transaction
+([`src/models/bookmark_model.cpp:353`](../examples/bookmarks/src/models/bookmark_model.cpp)):
 
 ```cpp
 auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+mapper->Create(rec);
+applyTagSet(mapper.Get(), rec.id.Value(), owner, action.tags);
+transaction.Commit();
 ```
 
-This is safe without locks precisely because of the strand: no two `execute()`
-calls on one instance overlap, and each acquisition is self-contained within
-one call. It is also why `PasteModel` can be registered *plain* — no shared
-instance, no primary key — while still getting burn-after-read atomicity: the
-guarantee comes from SQL, not from a C++ instance. The single conditional
-statement it rests on is at
-[`src/models/paste_model.cpp:166`](../examples/pastebin/src/models/paste_model.cpp):
-
-```cpp
-constexpr std::string_view kConsumeReadSql = R"(UPDATE pastes
-       SET read_count = read_count + 1
-     WHERE id = ?
-       AND (expires_at_ms IS NULL OR expires_at_ms > ?)
-       AND (burn_after_reads IS NULL OR read_count < burn_after_reads))";
-```
-
-Every guard a read must respect lives in that one `WHERE`, so the guard and the
-increment are applied indivisibly: of N clients racing for the last allowed
-read, exactly one gets a non-zero affected-row count. Raw SQL from inside a
-model is a *sanctioned escape*, not the norm — rule 4 pre-enumerates the cases
-and requires a written finding for each.
+A bookmark and its tag associations land together or not at all: any throw
+before `Commit()` rolls the transaction back. This is safe without locks
+precisely because of the strand: no two `execute()` calls on one instance
+overlap, and each acquisition is self-contained within one call. It is also why
+`BookmarkModel` can be registered *plain* — no shared instance, no primary key —
+and still serve every device a user signs in from: all real state is the
+database, partitioned by `owner_principal`, so every instance a user registers
+reads and writes the same rows.
 
 ## 7. Registration, and what it buys
 
 ```cpp
-BRIDGE_REGISTER_MODEL(pastebin::PasteModel, "PasteModel")
-BRIDGE_REGISTER_ACTION(pastebin::PasteModel, pastebin::CreatePaste, "CreatePaste")
-BRIDGE_REGISTER_ACTION(pastebin::PasteModel, pastebin::GetPaste, "GetPaste")
+BRIDGE_REGISTER_MODEL(bookmarks::BookmarkModel, "BookmarkModel")
+BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::CreateBookmark, "CreateBookmark")
+BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::EditBookmark, "EditBookmark")
 // ...
-BRIDGE_REGISTER_ACTION(pastebin::PasteModel, pastebin::ListPastes, "ListPastes",
+BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ListBookmarks, "ListBookmarks",
                        ::morph::model::Loggable::No)
 ```
 
-([`models/paste_model.hpp:81`](../examples/pastebin/include/pastebin/models/paste_model.hpp).)
+([`models/bookmark_model.hpp:71`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp).)
 
 Each macro emits two things:
 
@@ -470,7 +516,7 @@ Each macro emits two things:
    `ModelRegistryFactory` / `ActionDispatcher` before `main()` runs.
 
 **The type ids are strings because a remote peer can only name a type by
-string.** A wire envelope carries `"PasteModel"` and `"CreatePaste"`; the
+string.** A wire envelope carries `"BookmarkModel"` and `"CreateBookmark"`; the
 server looks them up in the dispatcher and reconstructs typed C++ from the
 body. That is the whole reason registration exists — and the reason an unknown
 id fails at runtime, not at compile time.
@@ -481,7 +527,9 @@ Nothing else about the model's shape matters.
 
 The optional fourth argument is the journal policy. It defaults to
 `Loggable::Yes`, so every action is recorded to an attached action log unless
-you opt out — `ListPastes` does, being a pure query.
+you opt out — `ListBookmarks` does, being a pure query, and so does `BulkEdit`,
+which writes its own journal entry in the same transaction as its rows (a
+transactional outbox, drained by `App::relayOutboxOnce()`).
 
 Three things that bite:
 
@@ -489,10 +537,8 @@ Three things that bite:
   `<morph/core/bridge.hpp>`**, directly or transitively. The macro calls
   `registerActionExecutorOnce<M, A>`, which is only *declared* in
   `registry.hpp`. Omit it and you get an unresolved external symbol at link
-  time, not a compile error. (Note the `core/` — headers live under
-  `include/morph/<subsystem>/`, and several documents still show a flat
-  `<morph/core/bridge.hpp>` that does not exist:
-  [#235](https://github.com/LASTRADA-Software/morph/issues/235).)
+  time, not a compile error. (Headers live under `include/morph/<subsystem>/`,
+  hence the `core/`.)
 - **If your models live in a static library, force-link it**
   (`--whole-archive` / `-force_load` / `WHOLE_ARCHIVE`). The initialiser object
   is never referenced by name, so a linker is entitled to drop it — and the
@@ -504,16 +550,11 @@ Three things that bite:
 > **Where to put the macros.** Either place works. Put the invocation in the
 > model header when several translation units need the `ActionTraits`
 > specialisation — which is what `examples/IMPLEMENTATION.md` rule 1 prescribes
-> and what 40 headers under `examples/` do — or in a single `.cpp` when only one
+> and what the ladder's model headers do — or in a single `.cpp` when only one
 > TU needs it. A header included by many `.cpp` files registers the model once
 > per including TU, which the registry absorbs by reassigning an equivalent
-> factory over the same key.
->
-> This used to be documented as contested, because `README.md` and
-> [`docs/spec/core/registry.md`](spec/core/registry.md) called header placement
-> an ODR violation. That legal claim was false and has been withdrawn — see
-> ["Header placement is legal"](spec/core/registry.md#header-placement-is-legal)
-> for the standard citation and the two-compiler reproduction.
+> factory over the same key; that is legal, not an ODR violation — see
+> ["Header placement is legal"](spec/core/registry.md#header-placement-is-legal).
 
 ## 8. The bridge: `Completion<T>` and the executor
 
@@ -545,7 +586,7 @@ this). So the receiver can be destroyed before the handler runs, and the
 natural spelling is silently wrong:
 
 ```cpp
-completion.then([this](PasteView v) { /* `this` may be long gone */ });
+completion.then([this](BookmarkView v) { /* `this` may be long gone */ });
 ```
 
 This is not hypothetical: a receiver destroyed while a completion was still in
@@ -557,120 +598,136 @@ gate instead. `morph::async::CallbackScope`
 ([`docs/spec/core/callback_scope.md`](spec/core/callback_scope.md)) is a data
 member that hands out weak tokens, and `then(scope, handler)` /
 `onError(scope, handler)` deliver only while the scope is alive and has not
-been stopped:
+been stopped. A sketch (not code from the tree):
 
 ```cpp
-class PasteViewer {
+class BookmarkViewer {
 public:
-    void open(pastebin::PasteId id) {
-        _pastes.execute(pastebin::GetPaste{.id = id})
-            .then(_scope, [this](pastebin::PasteView const& view) { show(view); })
+    void open(bookmarks::BookmarkId id) {
+        _bookmarks.execute(bookmarks::GetBookmark{.id = id})
+            .then(_scope, [this](bookmarks::BookmarkView const& view) { show(view); })
             .onError(_scope, [this](std::exception_ptr const& error) { report(error); });
     }
 
 private:
-    morph::bridge::BridgeHandler<pastebin::PasteModel> _pastes;
+    morph::bridge::BridgeHandler<bookmarks::BookmarkModel> _bookmarks;
     morph::async::CallbackScope _scope;  // declared last: destroyed first
 };
 ```
 
 Declare the scope **last**, so it dies before everything its callbacks touch.
 
+The same hazard has an app-layer shape: an object that owns both a worker pool
+and the executor that pool's completions post to must destroy the pool first.
+`bookmarks::app::App` declares its executor before its pool for exactly that
+reason, and its header explains the ordering.
+
 Whichever spelling you pick, the rule is the same: **never capture a bare
 `this` in a completion callback.**
 
 ## 9. Screens on top
 
-pastebin has no client code of its own. Its server serves **screens** —
+bookmarks has no client code of its own. Its server serves **screens** —
 documents that say what to show and which actions to run — and the generic
 client draws them, in Qt Quick or in a terminal. A screen is written in C++
 against the action types
-([`screens/pastebin_screens.cpp`](../examples/pastebin/screens/pastebin_screens.cpp)):
+([`screens/bookmarks_screens.cpp`](../examples/bookmarks/screens/bookmarks_screens.cpp),
+abridged):
 
 ```cpp
-auto const pastes = screen.model<PasteModel>("pastes", {.instance = ui::Instance::Private});
-auto const list = screen.query<ListPastes>("list", pastes);
-auto const open = screen.mutation<GetPaste>("open", pastes, {.concurrency = ui::Mode::Exclusive});
-auto const remove = screen.mutation<DeletePaste>("remove", pastes, {.invalidates = {list}});
+auto const marks = screen.model<BookmarkModel>("marks", {.instance = ui::Instance::Private});
+auto const list = ui::element("list");
+auto const bookmarks = screen.query<ListBookmarks>("bookmarks", marks, {});
+auto const archive = screen.mutation<BulkEdit>("archive", marks, {.invalidates = {bookmarks, tags}});
+auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
 return ui::column({
-    ui::form<CreatePaste>(pastes, {.onSuccess = {ui::refetch(list)}}),
-    ui::table(list.value().at(&ListPastesResult::pastes), /* columns, with Open and Delete buttons */),
-    /* the opened paste, and the error line */
+    ui::form<CreateBookmark>(marks, {.onSuccess = refreshed}).id(ui::element("createForm")).testId("createForm"),
+    ui::table(rows, {.key = ui::row("id"), /* title and URL columns */, .selection = ui::Selection::Multiple})
+        .id(list).testId("bookmarks"),
+    ui::button({.label = "Archive selected",
+                .onClick = ui::run(archive, {{&BulkEdit::ids, list.selection()},
+                                             {&BulkEdit::archive, ui::AnyHandle{std::string{"Archive"}}}})}),
+    /* the edit, import, rename and merge forms, the tag table, and the error line */
 });
 ```
 
 The screen decides nothing about the domain. It names the model, the query
-that lists pastes, the two mutations and when the list refetches; every rule
-about what a paste may be stays in `PasteModel`. Opening a paste is a mutation,
-not a query, because it consumes one of the paste's allowed reads — a refetch
-must never repeat it.
+that lists bookmarks, the mutation, and when the list refetches; every rule
+about what a bookmark may be stays in `BookmarkModel`. Archiving a selection is
+one `BulkEdit` built from the table's own selection, so it is one transaction
+in the model however many rows are selected.
+
+Sign-in is a screen too: `bookmarks.login` runs `Login` and installs the
+token its reply carries with `ui::signIn`, and the catalog hides
+`bookmarks.main` until a principal is signed in, because its queries need one.
 
 The screen is data on the wire, so the same document runs in either deployment
 mode, and on any frontend. Its tests run headless: they mount it on a recording
 backend and drive it by test id, with no window system at all
-(`examples/pastebin/screens/tests`).
+([`screens/tests/test_bookmarks_screens.cpp`](../examples/bookmarks/screens/tests/test_bookmarks_screens.cpp),
+its helpers inlined):
+
+```cpp
+harness.edit("username", "alice");
+harness.click("signIn");
+REQUIRE(harness.waitForText("count", "0 bookmarks"));
+harness.editField("createForm", "url", "https://example.org/a");
+REQUIRE(harness.submitForm("createForm"));
+REQUIRE(harness.waitForText("count", "1 bookmarks"));
+```
 
 ## 10. Forms from the compiled action type
 
 `morph::forms::schemaJson<A>()` derives a JSON Schema from the action type
 itself. Nothing declares it separately, so it cannot describe a field the
-action does not have — which is the entire point. `ui::form<CreatePaste>`
+action does not have — which is the entire point. `ui::form<CreateBookmark>`
 above is drawn from exactly this schema.
 
-Here is what `schemaJson<pastebin::CreatePaste>()` actually produces
-(abridged, and pretty-printed):
+Here is `schemaJson<bookmarks::CreateBookmark>()` as it is emitted, pretty-printed:
 
 ```json
 {
   "type": "object",
   "properties": {
-    "content":  { "type": "string", "x-order": 0, "title": "Content" },
-    "syntax":   { "type": "string", "x-order": 1, "title": "Syntax" },
-    "expiresAt": {
-      "type": ["string", "null"], "format": "date-time",
-      "x-order": 2, "title": "Expires At"
-    },
-    "burnAfterReads": {
-      "type": ["object", "null"],
-      "properties": {
-        "num": { "$ref": "#/$defs/int64_t" },
-        "den": { "$ref": "#/$defs/int64_t" },
-        "dp":  { "$ref": "#/$defs/uint32_t" }
-      },
-      "ExtUnits": { "unitAscii": "count", "unitUnicode": "" },
-      "x-order": 3, "title": "Burn After Reads", "x-decimalPlaces": 1
-    },
+    "description": { "type": "string", "x-order": 2, "title": "Description" },
+    "notes":       { "type": "string", "x-order": 3, "title": "Notes" },
+    "tags":        { "type": "array", "items": { "type": "string" }, "x-order": 4, "title": "Tags" },
+    "title":       { "type": "string", "x-order": 1, "title": "Title" },
+    "url":         { "type": "string", "x-order": 0, "title": "Url" },
     "visibility": {
       "type": "string",
-      "oneOf": [ { "title": "Public", "const": "Public" },
-                 { "title": "Private", "const": "Private" } ],
-      "x-order": 4, "title": "Visibility"
-    },
-    "editability": { "…": "same shape: Immutable | Editable" }
+      "oneOf": [ { "title": "Private", "const": "Private" },
+                 { "title": "Shared", "const": "Shared" } ],
+      "x-order": 5, "title": "Visibility"
+    }
   },
-  "$defs": { "int64_t": { "…": "…" }, "uint32_t": { "…": "…" } },
-  "title": "pastebin::CreatePaste",
-  "required": ["content", "syntax"]
+  "additionalProperties": false,
+  "title": "bookmarks::CreateBookmark",
+  "required": ["url"],
+  "x-submitMode": "explicit"
 }
 ```
 
 Read that against the DTO in section 5 and every line of it is earned:
 
-- `expiresAt` renders as a date-time input because it is a
-  `morph::time::Timestamp`, and is nullable because a `Timestamp` can be empty.
-- `burnAfterReads` carries its unit (`ExtUnits`) and its input step
-  (`x-decimalPlaces`) because it is a `Quantity<Unit::count, 1>`. Units never
-  travel on the wire — they live in the C++ type and in the schema.
-- `visibility` and `editability` are string enumerations, not bare ordinals,
-  because the DTO header specialises `glz::meta` for them.
-- `x-order` preserves declaration order, so a generated form does not shuffle.
-- `required` is exactly `["content", "syntax"]` — every reflected member is
-  required unless it is a `std::optional` or is named in the action's own
-  `optionalFields` opt-out. That opt-out is what lets "empty = never expires"
-  and "empty = no burn limit" mean what the DTO says they mean.
+- `visibility` is a string enumeration, not a bare ordinal or a checkbox,
+  because it is an `enum class` and the DTO header specialises `glz::meta` for
+  it. Without that specialisation `schemaJson<A>()` refuses to compile.
+- `x-order` preserves declaration order. The properties themselves come out sorted by name, so without it a
+  generated form would show `description` first.
+- `required` is exactly `["url"]` — every reflected member is required unless
+  it is a `std::optional` or is named in the action's own `optionalFields`
+  opt-out. That opt-out is what lets a bookmark be created without a title, so
+  the background metadata fetch has something to complete; a test pins that
+  the generated schema does not mark `title` required
+  ([`tests/test_bookmark_dto.cpp`](../examples/bookmarks/tests/test_bookmark_dto.cpp)).
+- `x-submitMode: "explicit"` comes from `explicitSubmit = true`. A form
+  otherwise submits as soon as it is valid, which for an action that stores a
+  row would store one bookmark per typed character; with it, the form renders
+  its own Submit button.
 
 This is the payoff for the type discipline in section 5. A form built from raw
-`std::string` and `double` members could not have produced any of it.
+`bool` and `int` members could not have produced any of it.
 
 And, per section 5: `required` here is a **client-side** gate. The server runs
 whatever payload arrives.
@@ -678,26 +735,39 @@ whatever payload arrives.
 ## 11. Testing
 
 Every rung tests the model layer with no screen at all — that is the point of
-keeping the domain in a plain class. The pattern is a fixture, a real schema,
-and a direct call:
+keeping the domain in a plain class. The pattern is a fixture, a real schema, a
+principal, and a direct call
+([`tests/test_bookmark_model.cpp:68`](../examples/bookmarks/tests/test_bookmark_model.cpp)):
 
 ```cpp
-TEST_CASE("CreatePaste stores a paste under a freshly allocated animal-name id", "[pastebin][model]") {
+TEST_CASE("CreateBookmark stores a bookmark owned by the authenticated principal", "[bookmarks][model]") {
     DbFixture fixture;
-    pastebin::PasteModel model;
+    bookmarks::BookmarkModel model;
+    const ScopedPrincipal principal{"alice"};
 
-    const auto id = model.execute(makeCreate("hello", "cpp")).id;
+    bookmarks::CreateBookmark action;
+    action.url = "https://example.com";
+    action.title = "Example";
+    action.tags = {"work", "reading"};
+    const auto id = model.execute(action).id;
     REQUIRE(id.hasValue());
 
-    const auto view = model.execute(pastebin::GetPaste{.id = id});
-    CHECK(view.content == "hello");
-    CHECK(view.syntax == "cpp");
+    const auto view = model.execute(bookmarks::GetBookmark{.id = id});
+    CHECK(view.url == "https://example.com");
+    CHECK(view.title == "Example");
+    CHECK(view.readState == bookmarks::ReadState::Unread);
+    CHECK(view.archiveState == bookmarks::ArchiveState::Active);
+    CHECK(view.tags.size() == 2);
 }
 ```
 
 No bridge, no executor, no pumping — the model is just a C++ object.
 `DbFixture` drops every table in a real on-disk SQLite database and re-applies
 the registered migrations, so each case starts from a clean, real schema.
+`ScopedPrincipal` is a small helper in the same file that installs a
+`session::Context` for the scope, standing in for what a backend installs
+around a dispatched call; without it, the same `CreateBookmark` throws
+`Forbidden`, and the next test case asserts exactly that.
 
 When a test *does* need the framework, `BackendRig` supplies it in whichever
 deployment shape is under test — `Mode::Local`, `Mode::LocalSingleThread` (the
@@ -714,64 +784,72 @@ completion that resolves on the same thread's executor deadlocks.
 Here is the headline claim, as something you can run rather than something you
 have to believe.
 
-pastebin's fuzz-corpus test body is generated over two deployments
-([`tests/test_paste_model.cpp:1441`](../examples/pastebin/tests/test_paste_model.cpp)):
+bookmarks' backend-matrix test body is generated over all three deployments
+([`tests/test_bookmark_model.cpp:641`](../examples/bookmarks/tests/test_bookmark_model.cpp),
+abridged):
 
 ```cpp
-const auto mode = GENERATE(Mode::Local, Mode::Socket);
+const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
 DbFixture fixture;
-BackendRig rig{mode, 1};
-auto handler = rig.client<pastebin::PasteModel>(0);
 
-const auto id = awaitQt(handler.execute(makeCreate(content))).id;
-const auto fetched = awaitQt(handler.execute(pastebin::GetPaste{.id = id}));
-CHECK(fetched.content == content);
+constexpr std::string_view kSecret = "matrix-test-secret";
+const auto authorizer =
+    std::make_shared<bookmarks::auth::BookmarksAuthorizer>(std::string{kSecret}, morph::session::hmacSha256);
+BackendRig rig{mode, 1, authorizer};
+
+const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+morph::session::Context ctx;
+ctx.principal = "alice";
+ctx.token =
+    issuer.issue(morph::session::SessionToken{.principal = "alice", .expiresAtMs = 4102444800000, .roles = {}});
+rig.bridge(0).setDefaultSession(ctx);
+
+auto handler = rig.client<bookmarks::BookmarkModel>(0);
+bookmarks::CreateBookmark create;
+create.url = "https://matrix.example";
+create.title = "Matrix";
+const auto createResult = awaitQt(handler.execute(create));
+const auto listResult = awaitQt(handler.execute(bookmarks::ListBookmarks{}));
+const auto view = awaitQt(handler.execute(bookmarks::GetBookmark{.id = createResult.id}));
+CHECK(view.url == "https://matrix.example");
 ```
 
-`Mode::Local` runs `PasteModel` on a worker pool in this process.
+`Mode::Local` runs `BookmarkModel` on a worker pool in this process.
 `Mode::Socket` stands up a `RemoteServer` behind a real `QtWebSocketServer` on
-an ephemeral port and gives the client its own `QtWebSocketBackend` over a
-loopback socket. **Nothing between those two lines changes.** Not the model,
-not the DTOs, not the registration, not the call site — only which backend the
-`Bridge` was constructed with.
+an ephemeral port, with the authorizer installed, and gives the client its own
+`QtWebSocketBackend` over a loopback socket. **Nothing between the handler and
+the `CHECK` changes.** Not the model, not the DTOs, not the registration, not
+the call site — only which backend the `Bridge` was constructed with. The
+session the bridge carries is the same in every mode; only `Socket` has an
+authorizer to verify its token.
 
-The application-level equivalent is the two command lines from section 3, and
-you can watch the difference from the outside. Running the client against the
-server produces this in the server's log:
-
-```
-[INFO ] [QtWebSocketServer] connection 1 accepted (1 live)
-[DEBUG] [dispatchMessage] connection 1: kind=register callId=1 typeId=PasteModel …
-[DEBUG] [dispatchMessage] connection 1: kind=register callId=2 typeId=PasteModel …
-[DEBUG] [dispatchMessage] connection 1: kind=execute callId=3 modelId=… modelType=PasteModel actionType=ListPastes bodyBytes=2
-[INFO ] [QtWebSocketServer] connection 1 disconnected (0 live), closeCode=1000 reason=
-```
-
-(Abridged: the real lines carry a few more empty fields, and `modelId` is a
-freshly minted opaque number that differs per run.)
-
-Running it without `--server` produces no such traffic at all — the same
-screen, the same `ListPastes`, executed in-process.
+The application-level equivalent is the two command lines from section 3:
+with `--server`, every action the screen runs crosses the socket as a
+`register` or `execute` envelope naming `BookmarkModel`; without it, the same
+screen runs the same actions in-process and no envelope exists at all.
 
 **What actually differs**, and is worth knowing before you rely on it:
 
 - **Registration timing.** Remote mode's registration is a round trip; a first
   fetch made before a handler's bind settles is held until it does.
 - **Authorization exists only remotely.** `RemoteServer` runs every request
-  through an `IAuthorizer`; `LocalBackend` does not authorize at all. The
-  default authorizer allows everything (section 13).
-- **Message size is bounded remotely.** A `CreatePaste` too large for the
-  server's envelope limit is refused by the transport, as a typed error the
-  client renders. In-process there is no such bound.
+  through an `IAuthorizer` — bookmarks' verifies the signed token on every
+  `execute` and the instance's owner — while `LocalBackend` does not authorize
+  at all. The model's own principal check (section 4) is what holds in both.
+- **Message size is bounded remotely.** A payload too large for the server's
+  envelope limit is refused by the transport, as a typed error the client
+  renders. In-process there is no such bound, which is why `ImportBookmarks`
+  carries its own, smaller chunk limit and throws `TooLarge` past it.
 - **Who owns the store.** In remote mode the server owns the database. A
-  client that also opens the same SQLite file behind the server's back is a
-  second writer, which is exactly the contention pastebin's `SQLITE_BUSY` work
-  exists to avoid — so the client opens pastebin's database **only** in local
+  client that also opened the same SQLite file behind the server's back would
+  be a second writer, so the client opens bookmarks' database **only** in local
   mode.
 
 `SimulatedRemoteBackend` (section 2) is the third shape: the same
 serialise/dispatch path as the socket, with no socket. A bug that only appears
-remotely is usually reproducible in a plain unit test through it.
+remotely is usually reproducible in a plain unit test through it — and it is
+also how bookmarks' metadata-fetch worker reaches the server as an ordinary
+client.
 
 ## 13. What morph does not do
 
@@ -779,18 +857,19 @@ A guide that only sells is worth less than one that tells you when to stop.
 Read [`docs/spec/`](spec/) before relying on any of these; the short version:
 
 - **It is not a general-purpose RPC framework.** Request/response only. No
-  streaming, no bidirectional channels, no server-initiated push.
+  streaming, no bidirectional channels, no server-initiated push. bookmarks'
+  `GetChangesSince` is the polling answer a client uses instead.
 - **`Completion<T>` is a leaf callback primitive, not a future.** No `T→U`
   chaining, no `co_await`, and no cancellation; lifetime binding is the opt-in
   `CallbackScope` of section 8.
 - **Security is app-supplied.** There is no built-in authentication: a
   `Context`'s identity is whatever the client claims until an `IAuthorizer`
-  verifies it, and the default authorizer allows everything. Version
-  negotiation, size and timeout bounds, opaque model ids and register/instance
-  authorization hooks all ship, but they are **opt-in**. A server that
-  configures none of them assumes a trusted, authenticated transport and is not
-  a hardened public-internet server. pastebin deliberately runs that fail-open
-  default and has a test asserting the delta, as executable documentation.
+  verifies it, and the default authorizer allows everything. Signed tokens,
+  version negotiation, size and timeout bounds, opaque model ids and
+  register/instance authorization hooks all ship, but they are **opt-in**.
+  bookmarks turns on signed tokens and a live-model cap and leaves the rest at
+  the default; a server that configures none of them assumes a trusted,
+  authenticated transport and is not a hardened public-internet server.
 - **Instance subscriptions are best-effort and in-process.** `subscribe<R>`
   fans out to handlers on the same `Bridge`; two separate clients sharing an
   instance do not see each other's results until they ask again. No replay, no
@@ -801,17 +880,12 @@ Read [`docs/spec/`](spec/) before relying on any of these; the short version:
 - **The journal is an audit trail, not event sourcing.** `replay()` /
   `undoLast()` re-execute the recorded action against a fresh model *object* —
   which does not isolate the database that object immediately reopens. For any
-  DB-backed model that is a live mutation, not a reconstruction. pastebin's
-  README works this through in detail and concludes that its UI must never
-  expose a raw undo over the journal.
+  DB-backed model that is a live mutation, not a reconstruction, which is why
+  bookmarks offers no generic undo and its README says so.
 - **Registration is global, macro-driven and runtime-resolved.** No runtime
   deregistration; an unknown type id fails at runtime, not compile time.
 - **Conflict resolution is not a framework concern.** On a backend switch morph
   fires `onBackendChanged()` on the fresh model instance and steps back.
-- **There is no install/export target.** `find_package(morph)` does not exist
-  today; consuming morph from outside this tree means `add_subdirectory` /
-  `FetchContent`, or adding `include/` to your include path and wiring Glaze
-  yourself ([#232](https://github.com/LASTRADA-Software/morph/issues/232)).
 - **No 1.0 compatibility promise yet.** morph is `0.1.0`; anything may change
   in any release. The policy that starts at 1.0 is already published in
   [`docs/spec/VERSIONING.md`](spec/VERSIONING.md).
@@ -834,7 +908,7 @@ You now have a question rather than a topic, which is what the map is for.
 | how do I generate a form? | `docs/spec/forms/forms.md`, and [`examples/forms`](../examples/forms) |
 | how do I test all this? | [`examples/TESTING.md`](../examples/TESTING.md) |
 | what are the rules for an app built on morph? | [`examples/IMPLEMENTATION.md`](../examples/IMPLEMENTATION.md) |
-| what does a bigger app look like? | [`examples/LADDER.md`](../examples/LADDER.md) — the rungs above this one, and what each is for |
+| what does a bigger app look like? | [`examples/LADDER.md`](../examples/LADDER.md) — bank (medium) and lims (large), and what each is for |
 
 For the production-hardening features this guide skipped — the action log and
 transactional outbox, offline queue durability, register authorization,

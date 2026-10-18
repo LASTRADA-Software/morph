@@ -1,4 +1,4 @@
-# bookmarks (rung 2) — a deleted bookmark is gone from the listing, the feed
+# bookmarks (rung 1) — a deleted bookmark is gone from the listing, the feed
 # and the export, not only from GetBookmark.
 #
 # examples/bookmarks/README.md's "What to implement" step 1. A delete that

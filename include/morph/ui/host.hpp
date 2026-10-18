@@ -19,7 +19,6 @@
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
-#include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
 #include "inspector.hpp"
@@ -438,21 +437,20 @@ public:
         return own->remount(_interpreter, std::move(document), *_options.backend);
     }
 
-#if MORPH_UI_DEV_TOOLS
     /// @brief The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window
     ///        reads. It hands out no access to the screen beyond the inspector's own read-only view and its
     ///        `refetch` command.
     /// @param handle A handle this host mounted.
-    /// @return The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle.
+    /// @return The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle,
+    ///         and nothing for a screen whose session has `DevelopmentTools::Off`.
     [[nodiscard]] static std::optional<Inspector> inspector(ScreenHandle& handle) {
         auto const* const own = dynamic_cast<Handle const*>(&handle);
         Screen* const screen = own == nullptr ? nullptr : own->screen();
         if (screen == nullptr) {
             return std::nullopt;
         }
-        return Inspector{*screen};
+        return Inspector::over(*screen);
     }
-#endif
 
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.

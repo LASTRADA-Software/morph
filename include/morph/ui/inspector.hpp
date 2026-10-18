@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "../reactive/runtime.hpp"
-#include "dev_tools.hpp"
 #include "document.hpp"
 #include "interpreter.hpp"
 #include "value.hpp"
@@ -19,10 +18,8 @@
 /// @file
 /// @brief `morph::ui::Inspector`: the development inspector's read-only view of a mounted screen (spec 6 §21).
 ///
-/// Built only with `MORPH_UI_DEV_TOOLS`; without it this header declares nothing. Specified in
+/// An inspector exists only for a screen whose session is in development mode (`DevelopmentTools::On`). Specified in
 /// `docs/spec/ui/inspector.md`.
-
-#if MORPH_UI_DEV_TOOLS
 
 namespace morph::ui {
 
@@ -72,9 +69,15 @@ struct InspectedQuery {
 /// screen lives; use it on the runtime's owner.
 class Inspector {
 public:
-    /// @brief An inspector over @p screen.
+    /// @brief An inspector over @p screen, when its session records what an inspector reads.
     /// @param screen The screen; it outlives the inspector.
-    explicit Inspector(Screen& screen MORPH_LIFETIMEBOUND) : _screen{&screen} {}
+    /// @return The inspector; nothing when the screen's session has `DevelopmentTools::Off`, which records nothing.
+    [[nodiscard]] static std::optional<Inspector> over(Screen& screen MORPH_LIFETIMEBOUND) {
+        if (!screen._core->recording) {
+            return std::nullopt;
+        }
+        return Inspector{screen};
+    }
 
     /// @brief The screen's document id.
     /// @return It.
@@ -244,9 +247,9 @@ private:
         }
     }
 
+    explicit Inspector(Screen& screen) : _screen{&screen} {}
+
     Screen* _screen;
 };
 
 }  // namespace morph::ui
-
-#endif

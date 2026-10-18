@@ -44,7 +44,7 @@ But a header can also mix real, hit lines (inline bodies, other classes'
 declarations) with one `tr()`'s phantom span -- there `LF`/`LH` are
 correctly nonzero, so the whole-file drop above never triggers, and the
 phantom span's stray `DA:` records survive untouched (confirmed via real
-CI data: examples/pastebin/include/pastebin/app/app.hpp showed LF:2/LH:2 --
+CI data: a rung's include/<rung>/app/app.hpp showed LF:2/LH:2 --
 its 2 real lines both hit -- while still carrying 21 stray `DA:40..60,0`
 records from `App::tr()`, dragging the file to 10% covered).
 `_ZN...2trEPKc...i` is the Itanium-mangled `tr(char const*, char const*,
@@ -163,8 +163,8 @@ def main():
                 # the DA: records whose line falls in [start, end), then
                 # shrink FNF: to match (each dropped tr() had FNDA:0, so
                 # FNH: is unaffected). LF:/LH: need no adjustment at all --
-                # confirmed against real data (examples/pastebin/include/
-                # pastebin/app/app.hpp's own LF:2/LH:2 already counted only
+                # confirmed against real data (a rung's include/<rung>/app/
+                # app.hpp, whose own LF:2/LH:2 already counted only
                 # its 2 real lines; llvm-cov's own line-count aggregation
                 # never included the 21 stray tr()-span DA: records in the
                 # first place, matching the whole-file LF:0/LH:0 case above.

@@ -58,7 +58,7 @@ ui::Screen registerScreen() {
                       .testId("clientId")
                       .visible(ui::engaged(client)),
                   ui::text({.text = registerClient.error()}).testId("clientError")},
-                 {.title = "Client", .padding = 8}),
+                 {.title = "Client", .padding = 2}),
              ui::panel(
                  {ui::textInput({.label = "Reference", .placeholder = "Sample reference"})
                       .id(reference)
@@ -70,8 +70,8 @@ ui::Screen registerScreen() {
                       .testId("registerSample")
                       .enabled(ui::engaged(client)),
                   ui::text({.text = registerSample.error()}).testId("sampleError")},
-                 {.title = "Sample", .padding = 8})},
-            {.gap = 12});
+                 {.title = "Sample", .padding = 2})},
+            {.gap = 3});
     });
 }
 
@@ -128,9 +128,9 @@ ui::Screen lifecycleScreen() {
                                   .onClick = ui::navigate(std::string{kResults},
                                                           {.params = ui::obj({{"sampleId", sampleId}})})})
                           .testId("results")},
-                     {.gap = 4}),
+                     {.gap = 1}),
              ui::text({.text = failure}).testId("error")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 
@@ -246,7 +246,7 @@ ui::Screen resultsScreen() {
              ui::text({.text = ui::format("{0} conflicts",
                                           {ui::count(conflicts.value().at(&ListConflictsResult::conflicts))})})
                  .testId("conflicts")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 
@@ -354,7 +354,7 @@ ui::Screen sampleScreen() {
                                          ui::set(shown, false)}})
                      .testId("remove-" + std::string{which})
                      .visible(shown)},
-                {.gap = 4});
+                {.gap = 1});
         };
         auto const turbidityShown = showTurbidity || measure.value().at(&MeasurementsView::hasTurbidity);
         auto const nitrateShown = showNitrate || measure.value().at(&MeasurementsView::hasNitrate);
@@ -367,7 +367,7 @@ ui::Screen sampleScreen() {
                       ui::button({.label = ui::t("lims.delete", "Delete"), .onClick = ui::run(remove)})
                           .testId("delete")
                           .enabled(ui::engaged(view.at(&HeaderView::sampleId)))},
-                     {.gap = 4}),
+                     {.gap = 1}),
              ui::text({.text = saveRefusal(saveError)})
                  .testId("saveRefusal")
                  .visible(ui::engaged(saved) && ui::ne(saveError, "none")),
@@ -387,7 +387,7 @@ ui::Screen sampleScreen() {
                                      .onSuccess = {ui::set(unsaved, true), ui::refetch(header)}})
                             .id(ui::element("headerForm"))
                             .testId("headerForm")},
-                       {.title = ui::t("lims.header", "Header"), .padding = 8}),
+                       {.title = ui::t("lims.header", "Header"), .padding = 2}),
              ui::panel(
                  {ui::form<SamplingSection>(sample, {.onSuccess = {ui::set(unsaved, true), ui::refetch(series)}})
                       .id(ui::element("samplingForm"))
@@ -402,7 +402,7 @@ ui::Screen sampleScreen() {
                       .visible(nitrateShown),
                   optionalToggle(kTurbidity, "turbidity", showTurbidity),
                   optionalToggle(kNitrate, "nitrate", showNitrate)},
-                 {.title = ui::t("lims.measurements", "Measurements"), .padding = 8}),
+                 {.title = ui::t("lims.measurements", "Measurements"), .padding = 2}),
              ui::panel(
                  {ui::custom(seriesGrid, {.props = {{"rows", rowsOf}}}).a11y("Dilution series").testId("seriesGrid"),
                   ui::custom(recoveryCurve, {.props = {{"rows", rowsOf}}})
@@ -413,7 +413,7 @@ ui::Screen sampleScreen() {
                                      {{"n", ui::coalesce({ui::count(ui::filter(rowsOf, &SeriesRow::outsideLimits)),
                                                           std::int64_t{0}})}})})
                       .testId("outside")},
-                 {.title = ui::t("lims.series", "Dilution series"), .padding = 8}),
+                 {.title = ui::t("lims.series", "Dilution series"), .padding = 2}),
              ui::dialog(
                  project,
                  {ui::table(
@@ -426,7 +426,7 @@ ui::Screen sampleScreen() {
                       .a11y("Projects")
                       .testId("projects")},
                  {.title = ui::t("lims.chooseProject", "Choose project")})},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 
@@ -444,9 +444,9 @@ ui::Screen loginScreen() {
         return ui::column(
             {ui::row({ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
                       ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")},
-                     {.gap = 8}),
+                     {.gap = 2}),
              ui::text({.text = login.error()}).testId("error")},
-            {.gap = 8});
+            {.gap = 2});
     });
 }
 

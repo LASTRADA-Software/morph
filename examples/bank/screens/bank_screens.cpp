@@ -47,34 +47,8 @@ ui::AnyHandle accountOptions(ui::AnyHandle const& accounts) {
     });
 }
 
-// The sidebar every signed-in screen shows: the other screens, and signing out.
-ui::Node sidebar(std::string_view current) {
-    struct Entry {
-        std::string_view screen;
-        std::string label;
-        std::string testId;
-    };
-    std::vector<Entry> const entries{{.screen = kAccounts, .label = "Accounts", .testId = "nav-accounts"},
-                                     {.screen = kMove, .label = "Move money", .testId = "nav-move"},
-                                     {.screen = kCards, .label = "Cards", .testId = "nav-cards"},
-                                     {.screen = kPayees, .label = "Payees", .testId = "nav-payees"},
-                                     {.screen = kLoans, .label = "Loans", .testId = "nav-loans"}};
-    std::vector<ui::Node> items;
-    items.reserve(entries.size() + 1);
-    for (Entry const& entry : entries) {
-        items.push_back(ui::button({.label = entry.label, .onClick = ui::navigate(std::string{entry.screen})})
-                            .testId(entry.testId)
-                            .enabled(entry.screen != current));
-    }
-    items.push_back(ui::button({.label = "Sign out", .onClick = {ui::signOut(), ui::navigate(std::string{kLogin})}})
-                        .testId("signOut"));
-    return ui::column(items, {.gap = 4});
-}
-
-// A signed-in screen: the sidebar, then its content.
-ui::Node page(std::string_view current, ui::Nodes const& content) {
-    return ui::row({sidebar(current), ui::column(content, {.gap = 8})}, {.gap = 16});
-}
+// A signed-in screen's content. The client's frame shows the navigator and signing out beside it.
+ui::Node page(std::string_view /*current*/, ui::Nodes const& content) { return ui::column(content, {.gap = 4}); }
 
 // Sign-in: a successful login or registration installs the principal it answered and opens the accounts.
 ui::Screen loginScreen() {
@@ -102,8 +76,11 @@ ui::Screen loginScreen() {
         screen.watch(loggedIn, signedIn(login, loggedIn));
         screen.watch(created, signedIn(registered, created));
         auto const refusal = ui::coalesce({loggedIn.at("message"), created.at("message")});
-        return ui::column(
-            {ui::text({.text = "Morph Bank"}).testId("brand"),
+        // A centred card, as the bookmarks sign-in is: a stretch spacer either side of a panel of fixed width.
+        auto const stretch = ui::obj({{"stretch", ui::AnyHandle{std::int64_t{1}}}});
+        auto const card = ui::obj({{"fixed", ui::AnyHandle{std::int64_t{44}}}});
+        auto const form = ui::column(
+            {ui::text({.text = "Morph Bank", .role = std::string{"heading"}}).testId("brand"),
              ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
              ui::textInput({.label = "Password", .placeholder = "Password", .mode = std::string{"password"}})
                  .id(password)
@@ -111,11 +88,18 @@ ui::Screen loginScreen() {
              ui::textInput({.label = "Display name", .placeholder = "Display name (for new accounts)"})
                  .id(displayName)
                  .testId("displayName"),
-             ui::row({ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn"),
-                      ui::button({.label = "Create account", .onClick = ui::run(registered)}).testId("register")},
-                     {.gap = 8}),
-             ui::text({.text = ui::coalesce({refusal, login.error(), registered.error()})}).testId("loginError")},
-            {.gap = 8});
+             ui::row(
+                 {ui::button(
+                      {.label = "Sign in", .emphasis = morph::ui::ButtonEmphasis::Primary, .onClick = ui::run(login)})
+                      .testId("signIn"),
+                  ui::button({.label = "Create account", .onClick = ui::run(registered)}).testId("register")},
+                 {.gap = 2}),
+             ui::text(
+                 {.text = ui::coalesce({refusal, login.error(), registered.error()}), .role = std::string{"error"}})
+                 .testId("loginError")},
+            {.gap = 3});
+        return ui::row({ui::spacer().sizing(stretch), ui::panel({form}, {.padding = 5}).sizing(card),
+                        ui::spacer().sizing(stretch)});
     });
 }
 
@@ -159,6 +143,7 @@ ui::Screen accountsScreen() {
                                .label = "",
                                .cell = ui::button(
                                    {.label = "Close",
+                                    .emphasis = morph::ui::ButtonEmphasis::Danger,
                                     .onClick = ui::run(close, {{&dto::CloseAccount::id, ui::row("id")}})})}}})
                  .a11y("Accounts")
                  .testId("accounts"),
@@ -307,6 +292,7 @@ ui::Screen payeesScreen() {
                                      .label = "",
                                      .cell = ui::button(
                                          {.label = "Remove",
+                                          .emphasis = morph::ui::ButtonEmphasis::Danger,
                                           .onClick = ui::run(remove, {{&dto::RemovePayee::id, ui::row("id")}})})}}})
                  .a11y("Payees")
                  .testId("payees"),

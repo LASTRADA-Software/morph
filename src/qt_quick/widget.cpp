@@ -207,7 +207,12 @@ void ItemBase::showTestId(std::string_view testId) const {
 
 void ItemBase::showTooltip(std::string_view text) const { write("tooltip", toQString(text)); }
 
-void ItemBase::showSurface(std::string_view surface) const { write("surface", toQString(surface)); }
+void ItemBase::showSurface(std::string_view surface) const {
+    write("surface", toQString(surface));
+    if (auto const* const container = dynamic_cast<ContainerCore const*>(this)) {
+        container->passSchemeDown();
+    }
+}
 
 void ItemBase::takeChords(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) const {
     write("chords", toStringList(chords));
@@ -271,8 +276,29 @@ void ContainerCore::adopt(ItemBase& child) {
     if (QQuickItem* const item = child.item(); item != nullptr && content != nullptr) {
         item->setParentItem(content);
     }
+    CrossFill const fill = crossFill();
+    child.write("fillsWidth", fill.width);
+    child.write("fillsHeight", fill.height);
+    if (QObject* const inherited = scheme()) {
+        child.write("inheritedScheme", QVariant::fromValue(inherited));
+    }
     _children.push_back(&child);
     adopted(child);
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a container's children may be containers, which pass it on in turn.
+void ContainerCore::passSchemeDown() const {
+    QObject* const inherited = scheme();
+    if (inherited == nullptr) {
+        return;
+    }
+    for (ItemBase const* const child : _children) {
+        child->write("inheritedScheme", QVariant::fromValue(inherited));
+        auto const* const nested = dynamic_cast<ContainerCore const*>(child);
+        if (nested != nullptr && child->read("surface").toString().isEmpty()) {
+            nested->passSchemeDown();
+        }
+    }
 }
 
 void ContainerCore::release(ItemBase& child) noexcept {
