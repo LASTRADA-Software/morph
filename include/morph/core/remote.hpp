@@ -184,6 +184,33 @@ private:
 /// values are minted by `RemoteServer::openConnection()`.
 using ConnectionId = std::uint64_t;
 
+/// @brief A transport's outbound side of one connection, for what the server
+///        sends unasked: events.
+///
+/// Handed to `RemoteServer::setConnectionWriter`. Both callables run on the
+/// server strand, so neither may block: `write` queues the frame on the
+/// transport's own thread, as a reply is queued.
+struct ConnectionWriter {
+    /// @brief Queues one encoded envelope for the connection. May throw when
+    ///        the connection can no longer be written; the server catches it.
+    std::function<void(std::string)> write;
+    /// @brief Bytes of encoded envelopes handed to the transport for this
+    ///        connection, replies and events alike, and not yet written.
+    ///        Empty reads as `0`.
+    std::function<std::size_t()> backlog;
+};
+
+/// @brief Backlog above which `RemoteServer::post` holds a connection's events
+///        back and owes it one `resync` instead: 1 MiB.
+inline constexpr std::size_t kEventBacklogHigh = std::size_t{1} << 20;
+
+/// @brief Backlog below which a transport reports a connection drained, by
+///        calling `RemoteServer::connectionDrained`: 256 KiB.
+///
+/// Well under `kEventBacklogHigh`, so a reader hovering at the bound does not
+/// flip between held back and drained on every frame.
+inline constexpr std::size_t kEventBacklogLow = std::size_t{256} << 10;
+
 /// @brief Snapshot of a `RemoteServer`'s current health.
 struct HealthStatus {
     /// @brief `true` if the server currently accepts and dispatches new work.
@@ -576,6 +603,89 @@ public:
         _strand.postTask([self = shared_from_this(), cid] { self->closeConnectionHere(cid); });
     }
 
+    /// @brief Hands the server the transport's writer for connection @p cid,
+    ///        through which `post` reaches it.
+    ///
+    /// Replaces any writer @p cid already has. Kept only while the connection
+    /// is open: a writer for `0`, for an unknown `cid` or for one already
+    /// closed is dropped, and `closeConnection(cid)` drops it. A writer whose
+    /// `write` is empty removes the connection's writer.
+    ///
+    /// Callable from any thread; runs on the server strand, after an
+    /// `openConnection()` and before any `post` the same thread makes next.
+    /// @param cid    Connection, as returned by `openConnection()`.
+    /// @param writer The connection's writer and its backlog read.
+    void setConnectionWriter(ConnectionId cid, ConnectionWriter writer) {
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid, writer = std::move(writer)]() mutable {
+            self->noteOwner("RemoteServer::setConnectionWriter");
+            if (!self->_connectionScopes.contains(cid)) {
+                return;
+            }
+            if (!writer.write) {
+                self->_writers.erase(cid);
+                return;
+            }
+            self->_writers.insert_or_assign(cid, ConnectionOutbox{.writer = std::move(writer)});
+        });
+    }
+
+    /// @brief Writes @p envelope to connection @p cid, unless its reader has
+    ///        fallen behind.
+    ///
+    /// On the server strand, while the connection's `backlog()` exceeds
+    /// `kEventBacklogHigh`, the envelope is dropped and the connection is owed
+    /// one `resync` event, which `connectionDrained(cid)` sends. Until then
+    /// every later envelope is dropped too, so the `resync` is the next thing
+    /// the connection is sent after the hold-back began. Replies do not pass
+    /// through here and are never held back.
+    ///
+    /// Dropped as well: an envelope larger than `wire::kMaxEnvelopeBytes`
+    /// (counted as `Metric::eventOversize`), and one for a connection with no
+    /// writer — `0`, unknown, or closed. A `write` that throws is caught on
+    /// the strand.
+    ///
+    /// Callable from any thread. Envelopes one thread posts to one connection
+    /// are written in that order.
+    /// @param cid      Connection to write to.
+    /// @param envelope The encoded envelope (via `wire::encode`).
+    void post(ConnectionId cid, std::string envelope) {
+        if (envelope.size() > ::morph::wire::kMaxEnvelopeBytes) {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::eventOversize, 1.0);
+            ::morph::log::logWarn("[post] envelope for connection {} dropped: {} bytes exceeds {}", cid,
+                                  envelope.size(), ::morph::wire::kMaxEnvelopeBytes);
+            return;
+        }
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid, envelope = std::move(envelope)]() mutable {
+            self->postHere(cid, std::move(envelope));
+        });
+    }
+
+    /// @brief Tells the server that connection @p cid's backlog has fallen
+    ///        below `kEventBacklogLow`.
+    ///
+    /// What a transport calls when it has written enough of what it holds. If
+    /// `post` held an event back since the last drain, the connection is sent
+    /// one `resync` event (`wire::makeEvent("resync", "{}")`), meaning
+    /// everything it watches may have changed, and events flow again.
+    /// Otherwise nothing is sent. The drain, not a later write, sends it, so a
+    /// connection that only listens still receives it.
+    ///
+    /// Callable from any thread, the transport's included; it only posts to
+    /// the server strand.
+    /// @param cid Connection whose backlog drained.
+    void connectionDrained(ConnectionId cid) {
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid] { self->connectionDrainedHere(cid); });
+    }
+
     /// @brief The server strand, as an executor.
     ///
     /// What `runningOn(server.strand())` asks about: true inside every task the
@@ -678,6 +788,13 @@ private:
         std::string error;
     };
 
+    /// One connection's writer, and whether `post` has held an event back
+    /// from it since the last drain.
+    struct ConnectionOutbox {
+        ConnectionWriter writer;
+        bool owesResync{false};
+    };
+
     /// @brief Rejects a configuration whose protocol range is empty.
     /// @param config The configuration to check.
     /// @return @p config, unchanged.
@@ -746,6 +863,7 @@ private:
     /// @param cid Connection scope to close.
     void closeConnectionHere(ConnectionId cid) {
         noteOwner("RemoteServer::closeConnection");
+        _writers.erase(cid);
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -759,6 +877,64 @@ private:
             }
         }
         _connectionScopes.erase(scopeIter);
+    }
+
+    /// @brief Body of `post`. On the server strand.
+    /// @param cid      Connection to write to.
+    /// @param envelope The encoded envelope, within the size cap.
+    void postHere(ConnectionId cid, std::string envelope) {
+        noteOwner("RemoteServer::post");
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.owesResync) {
+            return;
+        }
+        if (outbox.writer.backlog && outbox.writer.backlog() > kEventBacklogHigh) {
+            outbox.owesResync = true;
+            return;
+        }
+        writeTo(cid, outbox, std::move(envelope));
+    }
+
+    /// @brief Body of `connectionDrained`. On the server strand.
+    /// @param cid Connection whose backlog drained.
+    void connectionDrainedHere(ConnectionId cid) {
+        noteOwner("RemoteServer::connectionDrained");
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || !found->second.owesResync) {
+            return;
+        }
+        found->second.owesResync = false;
+        writeTo(cid, found->second, ::morph::wire::encode(::morph::wire::makeEvent("resync", "{}")));
+    }
+
+    /// @brief Hands @p envelope to @p outbox's writer, catching what it
+    ///        throws. On the server strand.
+    /// @param cid      Connection the writer belongs to.
+    /// @param outbox   The connection's writer state.
+    /// @param envelope The encoded envelope.
+    void writeTo(ConnectionId cid, ConnectionOutbox& outbox, std::string envelope) {
+        try {
+            outbox.writer.write(std::move(envelope));
+        } catch (const std::exception& exc) {
+            writeFailed(cid, exc.what());
+        } catch (...) {
+            writeFailed(cid, "unknown exception");
+        }
+    }
+
+    /// @brief What a failed write to connection @p cid does. On the server strand.
+    ///
+    /// The connection keeps its writer: the transport reports the connection
+    /// gone through `closeConnection`, which drops it.
+    /// @param cid    Connection whose write threw.
+    /// @param reason The exception's message.
+    void writeFailed(ConnectionId cid, std::string_view reason) {
+        noteOwner("RemoteServer::writeFailed");
+        ::morph::log::logWarn("[post] write to connection {} failed: {}", cid, reason);
     }
 
     /// @brief Registers a drain waiter, or answers it at once. On the server strand.
@@ -1831,6 +2007,9 @@ private:
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
+    // The writer of each open connection that has one, set by
+    // `setConnectionWriter` and dropped with the connection's scope.
+    std::unordered_map<ConnectionId, ConnectionOutbox> _writers;
     /// Names one cancellable call: the connection it arrived on and the
     /// `callId` its client chose.
     struct CancelKey {

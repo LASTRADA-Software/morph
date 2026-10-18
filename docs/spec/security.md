@@ -34,6 +34,17 @@ application. Be explicit about the boundary:
   `wire::kMaxEnvelopeBytes` (8 MiB) before parsing, bounding a single message's
   allocation and parse cost (see [wire.md](core/wire.md)). This is a coarse
   per-message backstop only — not a rate limit, timeout, or inner-`body` bound.
+- A bound on what a slow reader costs in server-sent events. `RemoteServer::post`
+  holds events back from a connection whose transport reports more than
+  `kEventBacklogHigh` (1 MiB) written to it and not yet sent, and owes it a
+  single `resync` event instead, sent when the transport reports the backlog
+  below `kEventBacklogLow` (256 KiB). However many events a peer fails to read,
+  the server queues none of them for it; what the transport already holds is
+  the transport's to bound. Replies are never held back, and a peer that stops
+  reading altogether is closed by its transport's send timeout. An event larger
+  than `wire::kMaxEnvelopeBytes` is dropped unsent. The writer and the backlog
+  read are transport code inside the trust boundary, like `closeConnection` (see
+  [backend.md](core/backend.md), "Writing to a connection").
 - A negotiated protocol-version handshake (`wire::kind == "hello"`), opt-in and
   exchanged before any `execute`, so an incompatible peer is refused with a
   clear diagnostic instead of failing per-request later (see

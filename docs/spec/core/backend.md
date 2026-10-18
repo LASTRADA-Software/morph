@@ -46,6 +46,7 @@ and react to backend changes.
 - [`PayloadCompleteness` — enforcing the action-evolution policy](#payloadcompleteness--enforcing-the-action-evolution-policy)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
+- [Writing to a connection](#writing-to-a-connection)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -982,8 +983,9 @@ nothing for a caller that never uses it.
 - `closeConnection(cid)` posts, to the server strand, the erasure of every model
   still recorded in `cid`'s scope (its directory record and the per-instance
   connection entry) exactly as the `deregister` path does, then drops the scope
-  itself. Passing `0`, an unknown `cid`, or a `cid` already closed is a no-op —
-  idempotent by construction.
+  itself, and the connection's writer with it (see
+  [Writing to a connection](#writing-to-a-connection)). Passing `0`, an unknown
+  `cid`, or a `cid` already closed is a no-op — idempotent by construction.
 - **`closeConnection` does not consult `IAuthorizer`.** It is server-side
   housekeeping triggered by the transport observing its own connection close,
   not a caller-attributed action — synthesising a `deregister` envelope
@@ -1007,6 +1009,55 @@ nothing for a caller that never uses it.
   wedges the server permanently at `err "too many models"`.
 - `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
   the process itself) — it is unaffected by connection scopes.
+
+### Writing to a connection
+
+A reply goes back through the `reply` functor its own request carried. What the
+server sends unasked — an `event` envelope (see [wire.md](wire.md)) — needs a
+way to reach a connection with no request in hand, so a transport hands the
+server one per connection.
+
+- `ConnectionWriter{write, backlog}` is that handle. `write(std::string)`
+  queues one encoded envelope on the transport's own thread, as a reply is
+  queued; `backlog()` reads how many bytes of encoded envelopes, replies and
+  events alike, the transport has accepted for the connection and not yet
+  written. Both run on the server strand and must not block.
+- `setConnectionWriter(cid, writer)` posts to the server strand and keeps the
+  writer only while `cid`'s scope is open: a writer for `0`, an unknown `cid`
+  or a closed one is dropped, so a transport racing its own disconnect cannot
+  leave a writer nothing removes. It replaces any writer `cid` already had; an
+  empty `write` removes it. `closeConnection(cid)` drops it. The writer lives
+  next to the connection scopes, in a `cid → {writer, owesResync}` map that
+  only the strand touches.
+- `post(cid, envelope)` is callable from any thread. On the calling thread, an
+  envelope larger than `wire::kMaxEnvelopeBytes` is dropped, logged at `warn`
+  and counted as `Metric::eventOversize` — the peer would refuse to decode it.
+  Otherwise it is posted to the strand, where it is written, or dropped if the
+  connection has no writer. Envelopes one thread posts to one connection are
+  written in that order.
+- **Events, not replies, give way to a slow reader.** The server cannot see a
+  transport's outbox; it sees only `backlog()`. When `backlog()` exceeds
+  `kEventBacklogHigh` (1 MiB) at a `post`, the envelope is dropped and the
+  connection is marked as owed a `resync`. Every later `post` to it is dropped
+  too, even once the backlog has fallen, until the transport calls
+  `connectionDrained(cid)`; the server then sends one
+  `makeEvent("resync", "{}")` — "everything you watch may have changed" — and
+  clears the mark. So the `resync` is the next event the connection receives
+  after the first one it missed, and no event it receives is older than one it
+  missed. A drain with nothing owed sends nothing.
+- `connectionDrained(cid)` is what a transport calls when the backlog falls
+  below `kEventBacklogLow` (256 KiB). It is callable from any thread — the
+  transport's loop or socket thread in practice — and only posts to the strand.
+  The drain, not a later write, sends the `resync`, so a connection that only
+  listens still receives it. The gap between the two bounds keeps a reader
+  hovering near one of them from flipping between held back and drained on
+  every frame.
+- The backlog is counted by the transport, because only it can see what it
+  still holds; replies count toward it, and are never held back. A peer that
+  stops reading altogether is the transport's to close, by its send timeout.
+- A `write` that throws is caught on the strand and logged at `warn`; the
+  server keeps serving and the connection keeps its writer until the transport
+  closes it.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
@@ -1970,7 +2021,10 @@ server: each call is a loop task, so the loop serialises them.
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
-| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope and its writer. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
+| `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
+| `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
 | `health(replyExec)` | `[[nodiscard]] Completion<HealthStatus> health(IExecutor& replyExec)` — readiness/liveModels/inFlight, answered on the server strand; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). See [observability.md](observability.md). |

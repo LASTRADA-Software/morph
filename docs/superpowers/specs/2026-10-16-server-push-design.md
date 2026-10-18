@@ -266,8 +266,9 @@ The wire gains its first server-initiated message.
     `-Woverloaded-virtual` build requires.
 - **The envelope.** `kind: "event"`, `callId: 0`, `body: {topic, payload}`. For this design the topic is
   `changes`. A client routes it by kind before reply matching, so an event is never taken for an orphaned reply.
-- **Writing to a connection.** `RemoteServer` gains `setConnectionWriter(cid, write)`, the transport's writer for a
-  connection already opened with `openConnection()`, and `post(cid, envelope)`.
+- **Writing to a connection.** `RemoteServer` gains `setConnectionWriter(cid, writer)`, which takes the transport's
+  `ConnectionWriter{write, backlog}` for a connection already opened with `openConnection()`, `post(cid, envelope)`,
+  and `connectionDrained(cid)`.
   - `post` is callable from any thread. It hands the encoded envelope to the writer, which queues it on the
     transport's own thread, as replies are queued today.
   - The size cap (`kMaxEnvelopeBytes`) applies.
@@ -282,16 +283,18 @@ The wire gains its first server-initiated message.
     - decremented on the loop or socket thread once the frame is written (the `net` `outbox` emptying, Qt's
       `bytesWritten`).
 
-    `setConnectionWriter(cid, write, backlog, onDrained)` hands the server the writer, a read of that counter, and a
-    drain callback that the transport calls when the counter falls below 256 KiB.
+    `setConnectionWriter(cid, writer)` hands the server the writer and a read of that counter, as
+    `ConnectionWriter{write, backlog}`. When the counter falls below 256 KiB, the transport calls
+    `RemoteServer::connectionDrained(cid)`; the server holds no callback into the transport.
     - The counter counts the bytes of the encoded envelopes handed to the writer, and is decremented by the same
       amount when that frame has been written. It never uses a transport's framed byte counts, so it cannot drift.
-    - `onDrained` runs on the transport's thread. It only posts to the server strand, where the owed `resync` is sent
-      and the flag cleared.
+    - `connectionDrained` is called on the transport's thread. It only posts to the server strand, where the owed
+      `resync` is sent and the flag cleared.
   - **Events, not replies, give way.** When `backlog()` exceeds 1 MiB, the server stops posting events to that
-    connection and records that it owes it a `resync`. When the transport calls `onDrained`, the server sends one
-    `resync` event, meaning "everything you watch may have changed", and the client marks every watched entry stale.
-    The drain callback, not a later write, triggers it, so an idle client that only watches still receives it.
+    connection and records that it owes it a `resync`. When the transport calls `connectionDrained`, the server sends
+    one `resync` event, meaning "everything you watch may have changed", and the client marks every watched entry
+    stale.
+    The drain call, not a later write, triggers it, so an idle client that only watches still receives it.
     Replies are never held back.
   - **A peer that stops reading** is closed by the transport's own rule: the `net` writer closes a peer that stalls
     past `sendTimeout`, as it does today for replies. The Qt transport gains the same timeout in part 2, so both
@@ -661,7 +664,7 @@ row, and keeps every new public symbol's Doxygen complete. The implementation pl
 | # | Part | Layer | Needs | Spec pages |
 |---|---|---|---|---|
 | 1 | **Records and effects.** `BRIDGE_REGISTER_RECORD`, raw and wrapped keys, `keyless`, `derivedFrom`, `privateKeys`; `BRIDGE_REGISTER_EFFECTS` as a registrar; the result walker in the action registration; matching when the phase closes; `records(A)` with paths; deriving changes from a result | core | none | `core/registry.md` |
-| 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, write, backlog, onDrained)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired in `onConnected()` after the held requests are flushed and before the reconnect handler is posted; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
+| 2 | **Server-to-client channel.** The `event` kind; `setConnectionWriter(cid, writer)` and `connectionDrained(cid)` with a per-connection atomic byte counter in each transport; `post`; holding events back and `resync` on drain; `sendTimeout` for the Qt transport; `SocketBackend::setConnectHandler`, fired in `onConnected()` after the held requests are flushed and before the reconnect handler is posted; `SimulatedRemoteBackend`; `setEventHandler`; the local backend's `deliverEvent` seam | core, net, qt | none | `core/wire.md`, `core/backend.md`, `security.md` |
 | 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`, and `ConnectionFacts` on `IEnvelopeService::handle`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes, `remote.hpp` `ConnectionFacts`) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
 | 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `SessionOptions::watcher`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
