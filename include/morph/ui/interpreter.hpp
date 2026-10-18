@@ -605,8 +605,11 @@ struct CacheEntry {
     std::uint64_t generation = 0;
     /// @brief When the last reply was applied.
     std::optional<std::chrono::milliseconds> fetchedAt;
-    /// @brief Marked stale by an invalidation, `refreshOn` or a backend switch.
+    /// @brief Marked stale by an invalidation, `refreshOn`, a backend switch or a change.
     bool stale = false;
+    /// @brief Marked stale while a fetch was in flight: that fetch may have read before the change, so when it
+    ///        settles the entry stays stale and fetches once more.
+    bool refetchAfter = false;
     /// @brief The mounted queries using it.
     int users = 0;
     /// @brief The eviction timer, while no query uses it.
@@ -985,6 +988,16 @@ public:
     /// @param actionId The action.
     void actionSucceeded(std::string const& typeId, std::string const& actionId);
 
+    /// @brief Marks an entry stale. While its fetch is in flight, the entry also refetches once that fetch settles,
+    ///        because the fetch may have read before the change.
+    /// @param entry The entry.
+    void markStale(detail::CacheEntry& entry) {
+        entry.stale = true;
+        if (entry.pending.peek()) {
+            entry.refetchAfter = true;
+        }
+    }
+
 private:
     void settleReply(detail::CacheEntry& entry, std::string const& reply) {
         auto json = parseJson(reply);
@@ -1000,9 +1013,17 @@ private:
             entry.errorKind.set({});
             entry.pending.set(false);
             entry.fetchedAt = now();
-            entry.stale = false;
+            entry.stale = entry.refetchAfter;
+            if (entry.refetchAfter) {
+                entry.refetchAfter = false;
+                refetchMounted(entry);
+            }
         });
     }
+
+    /// @brief Refetches an entry through the mounted queries that use it; one fetch even when several do.
+    /// @param entry The entry.
+    void refetchMounted(detail::CacheEntry const& entry);
 
     void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
         _runtime->batch([&] {
@@ -2514,13 +2535,22 @@ inline void Session::backendChanged(std::string const& backend) {
         _env.set(std::move(env));
         for (auto const& [key, entry] : _entries) {
             static_cast<void>(key);
-            entry->stale = true;
+            markStale(*entry);
         }
         std::vector<detail::QueryRuntime*> const mounted = _mounted;
         for (detail::QueryRuntime* const query : mounted) {
             query->refetchCurrent();
         }
     });
+}
+
+inline void Session::refetchMounted(detail::CacheEntry const& entry) {
+    std::vector<detail::QueryRuntime*> const mounted = _mounted;
+    for (detail::QueryRuntime* const query : mounted) {
+        if (_runtime->untracked([query] { return query->entry(); }).get() == &entry) {
+            query->refetchCurrent();
+        }
+    }
 }
 
 inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId) {

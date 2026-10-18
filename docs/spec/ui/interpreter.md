@@ -106,7 +106,7 @@ unbound or the body is `null`; otherwise `(model type, instance token, action, c
 canonical body is the body's JSON with record fields in name order.
 
 - **Cache entries** (`Session`) hold the shown value, `hasValue`, the error text and kind, `pending`, a
-  generation, `fetchedAt` and `stale`. A fetch takes a new generation; a reply of an older one is
+  generation, `fetchedAt`, `stale` and `refetchAfter`. A fetch takes a new generation; a reply of an older one is
   dropped. One entry serves every query with its key, so two screens on one key send one request.
 - **Latest wins.** A key change moves the query to another entry. The previous key's value is shown
   until the new entry has a value; a failure for the new key clears it. A failed refetch of the same key
@@ -123,6 +123,11 @@ canonical body is the body's JSON with record fields in name order.
   form's choice options are reads, not submits, and refetch nothing.
 - **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
   refetches it.
+- **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is
+  in flight, it also sets `refetchAfter`. That fetch may have read before the change, so when it settles
+  the entry keeps its new value, stays stale, and fetches once more through a mounted query that uses it.
+  A success never clears a mark that arrived during the fetch. An entry no query uses when its fetch
+  settles stays stale, and fetches when a query mounts on it.
 - **Eviction.** An entry no mounted query uses is dropped `keepUnused` after its last user left. Without
   a scheduler, entries are kept.
 - **Secrets.** An action's `secretFields` are removed from what its entry keeps.
