@@ -92,7 +92,8 @@ TEST_CASE("table: an updated row that moves is one move and one change", "[table
 
 TEST_CASE("table: a reversal moves all but one row", "[table][viewchange]") {
     Ids before(50);
-    std::ranges::iota(before, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(before.begin(), before.end(), 0U);
     Ids after(before.rbegin(), before.rend());
     auto const change = diff(before, after);
     CHECK(count(change, Kind::Moved) == 49);
@@ -105,7 +106,8 @@ TEST_CASE("table: random reorders with inserts and removes replay exactly", "[ta
     for (int round = 0; round < 300; ++round) {
         auto const universe = static_cast<std::uint32_t>(1 + (rng() % 60));
         Ids pool(universe);
-        std::ranges::iota(pool, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(pool.begin(), pool.end(), 0U);
         std::ranges::shuffle(pool, rng);
         Ids before(pool.begin(), pool.begin() + static_cast<std::ptrdiff_t>(rng() % (universe + 1)));
         std::ranges::shuffle(pool, rng);
@@ -132,14 +134,16 @@ TEST_CASE("table: random reorders with inserts and removes replay exactly", "[ta
 
 TEST_CASE("table: a change over the threshold is one reset", "[table][viewchange]") {
     Ids before(100);
-    std::ranges::iota(before, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(before.begin(), before.end(), 0U);
     Ids after(before.rbegin(), before.rend());
     auto const change = diff(before, after, {}, 10);
     CHECK(change.isReset());
     CHECK(replay(before, change, after) == after);
 
     Ids full(100);
-    std::ranges::iota(full, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(full.begin(), full.end(), 0U);
     Ids sparse;
     sparse.reserve(50);
     for (std::uint32_t i = 0; i < 100; i += 2) {

@@ -55,7 +55,8 @@ struct Filtered {
             pointers.push_back(&key);
         }
         Rows rows(snapshot->rowCount());
-        std::ranges::iota(rows, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(rows.begin(), rows.end(), 0U);
         FilterRun run{*compiled, pointers, rows};
         static_cast<void>(run.run(kNoDeadline, ::core::async::StopToken{}));
         return std::move(run).take();
@@ -273,7 +274,8 @@ TEST_CASE("table: a filter run yields at a deadline and keeps candidate order", 
     auto keys = KeyColumn::forColumn(source->columns()[0], services, cells.size());
     buildKeys(*source->snapshot(), 0, source->columns()[0], services, 0, cells.size(), keys);
     Rows reversed(cells.size());
-    std::ranges::iota(std::views::reverse(reversed), 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(reversed.rbegin(), reversed.rend(), 0U);
     FilterRun run{*compiled, {&keys}, reversed};
     std::size_t steps = 0;
     while (!run.run(std::chrono::steady_clock::now(), ::core::async::StopToken{})) {
