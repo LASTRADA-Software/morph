@@ -81,7 +81,9 @@ other client can see that working copy.
 | A key may be raw (integral or `std::string`) or a strong id wrapping one (`WrappedModelKey`). | `include/morph/core/model_key.hpp` |
 | Offline replay runs as reconnect → activate → `bindContext` → `replay`. | `docs/spec/offline/offline.md`, `include/morph/offline/reconnect_coordinator.hpp` |
 | Within a vocabulary version, changes are additive. | spec 5 §12 "Versions" |
-| The examples hold 21 `invalidates` and 13 `refreshOn` occurrences outside their tests, in seven rungs. | `grep` over `examples/`, at `a55374f5` |
+| The registration latch closes on the first read of a process-level registry only in a debug build. A release build closes it only when the application calls `closeRegistrationPhase()`, which is `noexcept`. | `include/morph/core/registry.hpp` |
+| The app explorer shows, for one action, its catalog facts (`explorer_facts`): whether it sends a credential, its calculated, secret and list fields, and its payload fingerprint. | `include/morph/ui/explorer.hpp`, `docs/spec/ui/explorer.md` |
+| The ladder has three rungs: bookmarks, bank and lims (`examples/rungs.txt`). Outside their tests they hold 9 `invalidates` (bookmarks 2, bank 5, lims 2), 5 `refreshOn` and 1 `patch` (lims), and no `refreshEvery`. Bank registers its actions in two model sets, `examples/bank/include` and `examples/bank/memory/include`. | `grep` over `examples/`, at `e70025cc` |
 
 ## 3. Concepts
 
@@ -89,7 +91,7 @@ other client can see that working copy.
   optionally a key member: `ResultView` keyed by its `ResultId`, `AccountInfo` keyed by `id`. A record type shown
   through several models is one record type: `CustomerModel::ListAccounts` and `AccountModel::GetAccount` both
   return `AccountInfo`.
-- **Derived record type.** A record computed from others: ledger's `GetBudgetReportResult` from transactions. It
+- **Derived record type.** A record computed from others: bank's `SpendingReport` from transactions (`TxnInfo`). It
   is keyless, and it declares what it is derived from (§4), so a change to its sources reaches it without every
   writer naming it.
 - **Effect.** What a successful action did. One of:
@@ -122,13 +124,22 @@ Records and effects are matched by **runtime type identity** (`std::type_index`)
 closes. The order of `BRIDGE_REGISTER_RECORD`, `BRIDGE_REGISTER_ACTION` and `BRIDGE_REGISTER_EFFECTS` across
 translation units therefore does not matter.
 
+**When matching runs.** The latch cannot run it: a release build closes the latch only when the application asks,
+and `closeRegistrationPhase()` is `noexcept`. Matching therefore runs once (`std::call_once`), on the first read of
+the record or effects registry, which also closes the latch as any registry read does. `RemoteServer`'s constructor
+and the catalog facts (`ui::CatalogFacts::action`, which local mode and the server's `ui-catalog` both build from)
+each make that read, so a server or a local client fails at startup. A
+failure throws `morph::model::EffectsRegistrationError` (a `std::logic_error`) naming every problem found, not only
+the first, and every later read throws the same error. "Refused when the phase closes" below means this.
+
 ### Records
 
 ```cpp
 BRIDGE_REGISTER_RECORD(bank::dto::AccountInfo, "Bank_Account")                // key: member `id`
 BRIDGE_REGISTER_RECORD(lims::ResultView, "Lims_Result")                        // key: `id`, a ResultId
-BRIDGE_REGISTER_RECORD(ledger::dto::GetBudgetReportResult, "Ledger_BudgetReport",
-                       morph::record::keyless, morph::record::derivedFrom<ledger::dto::TransactionEntryInfo>)
+BRIDGE_REGISTER_RECORD(bank::dto::TxnInfo, "Bank_Transaction")                 // key: member `id`
+BRIDGE_REGISTER_RECORD(bank::dto::SpendingReport, "Bank_SpendingReport",
+                       morph::record::keyless, morph::record::derivedFrom<bank::dto::TxnInfo>)
 ```
 
 - **The key** defaults to a member named `id`, the field the interpreter's `patch` already identifies rows by. It
@@ -227,6 +238,12 @@ the record types its entries hold.
 
 An `evaluate` cache entry (`ui-evaluate`, spec 5 §7) holds no records and is never watched: an evaluation depends on
 its body, not on stored data.
+
+**The app explorer shows both.** Its Facts section (`explorer_facts`) gains two rows from the same `ActionInfo`:
+"effects", listing each effect as `changes Bank_Account`, `updates Lims_Result`, `changes its instance` or `none`,
+and "reads" when nothing is declared; and "records", listing each record with its key field and paths, such as
+`Lims_Result by id at results`. A person deciding why a screen did or did not update reads the answer there, without
+the source.
 
 ## 6. The server-to-client channel
 
@@ -473,7 +490,7 @@ With effects declared, a document needs no refresh declarations.
   cover, so a document can migrate one screen at a time.
 - **warning, uncovered:** a mutation whose action declares nothing (not even `none`), with no `invalidates` or
   `patch` of its own and no query naming it in `refreshOn`. After it succeeds, nothing on any screen updates.
-  `effects::none` silences it for actions that attach or open, such as `OpenSample` and `OpenBoard`.
+  `effects::none` silences it for actions that attach or open, such as lims's `OpenSample`.
 
 **In `ui/2`, the removal.** `invalidates`, `patch` and `refreshOn` are removed from mutations and queries. Removing
 keys is not additive, so it is a new vocabulary version under spec 5 §12. A server that keeps `ui/1` documents for
@@ -502,6 +519,21 @@ changes visible.
   - It lists the actions the principal may run (the catalog's `permitted`, with their JSON shapes) as MCP tools, and
     offers `ui-evaluate` as a dry run.
   - The agent may commit directly.
+- **The adapter's shape.**
+  - `morph::ui::McpAdapter` (`include/morph/ui/agent.hpp`) speaks MCP's JSON-RPC 2.0 and knows no transport:
+    `handle(message)` takes one JSON-RPC message and completes with its reply, or with nothing for a notification.
+    It answers `initialize`, `tools/list` and `tools/call`, and refuses every other method with JSON-RPC error
+    `-32601`.
+  - `serveStdio(adapter, in, out)` drives it over newline-delimited streams, which is MCP's stdio transport. An
+    agent such as Claude Code launches the server process with an option that turns it on (bank's server:
+    `--mcp-stdio`), and the process serves its WebSocket clients as before. An HTTP transport is out of scope (§15).
+  - **Identity.** The deployer constructs the adapter with the `session::Context` its envelopes carry, for example
+    from a token in the environment. The server authenticates it on every envelope, as it does a GUI's.
+  - **Tools.** One tool per permitted action, named by the action id, whose `inputSchema` is the action's schema
+    (`schemas`). A keyed model's tool takes the instance key as the argument `instance`, and the adapter attaches
+    the shared instance by it. Any other model runs on one private instance per model type, registered on the
+    adapter's connection at first use. A tool named `evaluate`, taking `{action, body}`, is the dry run.
+  - A tool call's reply is the action's result JSON as text content, or its `err` message with `isError: true`.
 - **Fan-out treats the agent's connection like any other,** so every open GUI showing the changed records updates
   through §8 and §9.
 - **Model access and keys are not part of this design.** The adapter does not call a model provider. An external
@@ -604,6 +636,13 @@ Every test below must fail if the feature does nothing, so each names the change
   - A redundant `invalidates` warns.
   - An uncovered mutation warns, and `effects::none` silences it.
   - The watch-feedback shape warns.
+- **Explorer (ui).** An action with `changes<R>` shows `changes R` in `explorer_facts`, and one with nothing
+  declared shows `reads`. *Mutation: drop the effects row; the case fails.*
+- **Agents (ui).**
+  - `tools/list` lists exactly the permitted actions, plus `evaluate`.
+  - A `tools/call` of a writer through the adapter reaches a GUI connection watching its record as an event.
+  - A call the authoriser refuses answers `isError: true` and posts nothing.
+  - *Control: the adapter's connection is not watched by anyone; no event is posted.*
 - **End to end.**
   - A harness in `tests/` runs two generic-client sessions over the `net` transport against one server.
   - Client A's mutation updates client B's mounted screen, with no `refreshOn` and no `refreshEvery` in either
@@ -612,8 +651,11 @@ Every test below must fail if the feature does nothing, so each names the change
 
 ## 14. Delivery
 
-Each part lands as its own pull request to `master`. Parts with no dependency between them can run side by side.
-Each part updates the `docs/spec/` pages named in its row, and keeps every new public symbol's Doxygen complete.
+All nine parts land in **one pull request**, the one that carries this design, in the order below. Each part is a
+run of commits that leaves the branch building, with its unit and GUI tests green, so a bisect never lands on a
+broken commit and review can read the branch part by part. Each part updates the `docs/spec/` pages named in its
+row, and keeps every new public symbol's Doxygen complete. The implementation plan is
+`docs/superpowers/plans/2026-10-18-server-push.md`.
 
 | # | Part | Layer | Needs | Spec pages |
 |---|---|---|---|---|
@@ -623,20 +665,13 @@ Each part updates the `docs/spec/` pages named in its row, and keeps every new p
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
 | 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `SessionOptions::watcher`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
 | 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
-| 7 | **End-to-end harness and examples.** The two-session harness in `tests/`. Records and effects in the seven rungs that use refresh declarations (`none` on attach-style actions), with their declarations removed in `ui/1` documents where the warnings say so | tests, examples | 4, 5, 6 | the rungs' READMEs, `testing_strategy.md` |
+| 7 | **End-to-end harness, examples and the explorer.** The two-session harness in `tests/`. Records and effects in the three rungs: bookmarks, bank (both model sets) and lims, with `none` on attach-style actions; their 9 `invalidates`, 5 `refreshOn` and 1 `patch` removed from `ui/1` documents where the warnings say so. The explorer's effects and records rows | tests, examples, ui | 4, 5, 6 | the rungs' READMEs, `testing_strategy.md`, `ui/explorer.md` |
 | 8 | **`ui/2`.** Remove `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer and golden files emit `ui/2`; the server keeps serving `ui/1` | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
-| 9 | **MCP adapter.** A connection scope per agent session, tools from `permitted`, calls through `RemoteServer::handle` | net, ui | 4 | a new `ui/agent.md` |
+| 9 | **MCP adapter.** `McpAdapter` over a connection scope, tools from `permitted`, calls through `RemoteServer::handle`, `serveStdio`, bank's `--mcp-stdio` | ui, examples | 4 | a new `ui/agent.md` |
 
-**Ready now: parts 1 and 2.** They are independent. Part 1 is `registry.hpp` and a new records header. Part 2 is
-`wire.hpp`'s event kind, `remote.hpp`'s writer and `post`, `backend.hpp` and the transports.
-
-**Then part 3,** after part 2, because both change `wire.hpp` and `remote.hpp`. **Then parts 4 and 5 side by side, with part 6
-beside them.**
-- They share only the shapes part 3 defines.
-- Part 4 is in `remote.hpp`; part 5 is in the interpreter and the offline glue.
-- Part 5 tests its event path through the local backend's seam until part 4 lands.
-
-Part 9 can run beside anything after part 4.
+**Order in the branch:** 1, 2, 3, 4, 5, 6, 7, 8, 9. Parts 1 and 2 are independent and 6 needs only 3, but one
+branch is written in one order. Part 9 comes after 8 so that the agent test runs against the examples' final
+documents.
 
 ## 15. Out of scope
 
@@ -650,6 +685,8 @@ Part 9 can run beside anything after part 4.
   refetches cost something.
 - **Effects computed at run time,** such as a change list a model returns. Declared effects with `derivedFrom` cover
   the examples' cases. A run-time list would have to keep the rule that a model does not know the framework exists.
+- **An HTTP transport for the MCP adapter.** The adapter is transport-free and is served over stdio (§11). MCP's
+  streamable HTTP transport would let an agent reach a running server it did not launch.
 - **Push for non-UI clients.** Negotiation is in `ui-hello`. A plain `Client` that never sends it receives no events.
   The core `hello` reply already lists capabilities, but its request carries none, so a plain client has no way to
   offer events. Adding that is a separate change to `hello`.
