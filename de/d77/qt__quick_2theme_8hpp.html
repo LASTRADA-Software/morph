@@ -123,7 +123,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d77/qt__qui
 
 <p><span class="tt">applyTheme</span>: the <span class="tt">ui-theme/1</span> token values set on an engine's <span class="tt">MorphUi</span> <span class="tt">Theme</span> singleton, which every built-in component and every host component in that engine reads.  
 <a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;string&gt;</code><br />
+<div class="textblock"><code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;map&gt;</code><br />
+<code>#include &lt;string&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;<a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">../ui/theme.hpp</a>&quot;</code><br />
 </div>
@@ -131,8 +133,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d77/qt__qui
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:ac22af3274d54de1d9f1c469c9395a2d7" id="r_ac22af3274d54de1d9f1c469c9395a2d7"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac22af3274d54de1d9f1c469c9395a2d7">morph::qt_quick::applyTheme</a> (QQmlEngine &amp;engine, <a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a> const &amp;values)</td></tr>
-<tr class="memdesc:ac22af3274d54de1d9f1c469c9395a2d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a theme's values on <code class="param">engine's</code> <span class="tt">Theme</span> singleton.  <br /></td></tr>
+<tr class="memitem:a1db984d3143d21d6d6ff92dd4161b54e" id="r_a1db984d3143d21d6d6ff92dd4161b54e"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1db984d3143d21d6d6ff92dd4161b54e">morph::qt_quick::applyTheme</a> (QQmlEngine &amp;engine, <a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a> const &amp;values, std::map&lt; std::string, <a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a>, std::less&lt;&gt; &gt; const &amp;surfaces={})</td></tr>
+<tr class="memdesc:a1db984d3143d21d6d6ff92dd4161b54e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a theme's values on <code class="param">engine's</code> <span class="tt">Theme</span> singleton.  <br /></td></tr>
+<tr class="memitem:a76fd149372e96c9ad0c5f2de73563b3d" id="r_a76fd149372e96c9ad0c5f2de73563b3d"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a76fd149372e96c9ad0c5f2de73563b3d">morph::qt_quick::applyBundleTheme</a> (QQmlEngine &amp;engine, std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; const &amp;themes)</td></tr>
+<tr class="memdesc:a76fd149372e96c9ad0c5f2de73563b3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Applies a bundle's theme to <code class="param">engine's</code> <span class="tt">Theme</span>: the theme index's base, and each of its surfaces resolved with that surface's layer. A bundle with no theme index applies the defaults, so a client that opens a second application does not keep the first one's look.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">applyTheme</span>: the <span class="tt">ui-theme/1</span> token values set on an engine's <span class="tt">MorphUi</span> <span class="tt">Theme</span> singleton, which every built-in component and every host component in that engine reads. </p>
@@ -140,8 +144,8 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../de/d77/qt__quick_2theme_8hpp_source.html">theme.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="ac22af3274d54de1d9f1c469c9395a2d7" name="ac22af3274d54de1d9f1c469c9395a2d7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac22af3274d54de1d9f1c469c9395a2d7">&#9670;&#160;</a></span>applyTheme()</h2>
+<a id="a1db984d3143d21d6d6ff92dd4161b54e" name="a1db984d3143d21d6d6ff92dd4161b54e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1db984d3143d21d6d6ff92dd4161b54e">&#9670;&#160;</a></span>applyTheme()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -154,20 +158,57 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>values</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>values</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::map&lt; std::string, <a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ui::ThemeValues</a>, std::less&lt;&gt; &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>surfaces</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 <p>Sets a theme's values on <code class="param">engine's</code> <span class="tt">Theme</span> singleton. </p>
-<p>Every <span class="tt">MorphUi</span> component binds its colours to <span class="tt">Theme</span>, and a host component that imports <span class="tt">MorphUi</span> reads the same instance, so both update. A path of the set the theme lacks has its default in <code class="param">values</code> (<span class="tt">ui::themeValues</span>), which is the <span class="tt">Theme</span> property's own default, so applying <span class="tt">ui::themeValues()</span> restores the defaults. Call it on the engine's thread, before or after screens mount. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Every <span class="tt">MorphUi</span> component binds its colours to <span class="tt">Theme</span>, and a host component that imports <span class="tt">MorphUi</span> reads the same instance, so both update. A path of the set the theme lacks has its default in <code class="param">values</code> (<span class="tt">ui::themeValues</span>), which is the <span class="tt">Theme</span> property's own default, so applying <span class="tt">ui::themeValues()</span> restores the defaults. Call it on the engine's thread, before or after screens mount. A surface named in <code class="param">surfaces</code> gets every colour role from its values: the theme resolved with that surface's layer (<span class="tt">ui::resolveTheme</span>), so a role the surface does not set is the theme's. A built-in surface (<span class="tt">page</span>, <span class="tt">card</span>, <span class="tt">sidebar</span>, <span class="tt">toolbar</span>) the map does not name keeps its built-in colours. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">engine</td><td>The engine the backend compiles its components in. </td></tr>
     <tr><td class="paramname">values</td><td>The values, from <span class="tt">ui::themeValues</span>. </td></tr>
+    <tr><td class="paramname">surfaces</td><td>The theme's surfaces by name, each resolved with its layer; empty keeps the built-in ones. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The <span class="tt">Theme</span> properties that could not be set; empty when every one was. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The <span class="tt">Theme</span> properties that could not be set, a surface's as <span class="tt">&lt;name&gt;.&lt;role&gt;</span>; empty when every one was. </dd></dl>
+
+</div>
+</div>
+<a id="a76fd149372e96c9ad0c5f2de73563b3d" name="a76fd149372e96c9ad0c5f2de73563b3d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a76fd149372e96c9ad0c5f2de73563b3d">&#9670;&#160;</a></span>applyBundleTheme()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; morph::qt_quick::applyBundleTheme </td>
+          <td>(</td>
+          <td class="paramtype">QQmlEngine &amp;</td>          <td class="paramname"><span class="paramname"><em>engine</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>themes</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Applies a bundle's theme to <code class="param">engine's</code> <span class="tt">Theme</span>: the theme index's base, and each of its surfaces resolved with that surface's layer. A bundle with no theme index applies the defaults, so a client that opens a second application does not keep the first one's look. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">engine</td><td>The engine the backend compiles its components in. </td></tr>
+    <tr><td class="paramname">themes</td><td>The bundle's theme files by id (<span class="tt">ui::Bundle::themes</span>). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Why the theme could not be applied, or the <span class="tt">Theme</span> properties that could not be set; empty when it was applied whole. </dd></dl>
 
 </div>
 </div>

@@ -3,7 +3,7 @@ var searchData=
   ['jobinput_0',['JobInput',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html',1,'morph::table::detail']]],
   ['jobresult_1',['JobResult',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html',1,'morph::table::detail']]],
   ['jobs_2',['jobs',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a92549edca4bbafb2c88f6b0d91d35605',1,'morph::table::EngineStats']]],
-  ['joined_3',['joined',['../d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1',1,'morph::ui::detail']]],
+  ['joined_3',['joined',['../d9/da5/explorer_8hpp.html#a5f6fd4c26e84c166856b1a5a4a9417eb',1,'morph::ui::detail::explorer::joined()'],['../d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1',1,'morph::ui::detail::joined()']]],
   ['journal_20—_20ordered_20replayable_20action_20log_4',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
   ['journalmode_5',['journalMode',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#acf2c06305a38052b962b7fdd6d66b901',1,'morph::offline::SqliteOfflineQueue']]],
   ['json_6',['Json',['../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b',1,'morph::ui::Json'],['../d1/dc0/author_8hpp.html#a95426682ac3c0f37a78cc0d5db6ed9c8aeed8d85b888a6c015834240885ee6333',1,'Jsonmorph::ui::author']]],

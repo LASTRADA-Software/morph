@@ -127,7 +127,7 @@ var document_8hpp =
     [ "morph::ui::detail::kFormValues", "dd/d39/document_8hpp.html#a0b09a8b323110c95ae7047b6f18b5b51", null ],
     [ "morph::ui::detail::kTransferValues", "dd/d39/document_8hpp.html#aac6821b3120184c765e7c0e6e298d999", null ],
     [ "morph::ui::detail::kTextKeys", "dd/d39/document_8hpp.html#a1671229a8263a5b6744c405b482cbb6d", null ],
-    [ "morph::ui::detail::kButtonKeys", "dd/d39/document_8hpp.html#a6f2ba4eb89e63c25aab802743faedbd2", null ],
+    [ "morph::ui::detail::kButtonKeys", "dd/d39/document_8hpp.html#a0aedf5fd3491ccddd89ba96ff857758e", null ],
     [ "morph::ui::detail::kTextInputKeys", "dd/d39/document_8hpp.html#a489c3e53e3d875c978e6186d3d95fdaf", null ],
     [ "morph::ui::detail::kCheckboxKeys", "dd/d39/document_8hpp.html#aa69ae5fee55f582e5341cbe1bf804d37", null ],
     [ "morph::ui::detail::kSelectKeys", "dd/d39/document_8hpp.html#a4dbd7706934ced611e4444b370746115", null ],

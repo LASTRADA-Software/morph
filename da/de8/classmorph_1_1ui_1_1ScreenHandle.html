@@ -125,6 +125,15 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/de8/classmo
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&gt;</code></p>
+<div class="dynheader">
+Inheritance diagram for morph::ui::ScreenHandle:</div>
+<div class="dyncontent">
+ <div class="center">
+  <img src="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.png" usemap="#morph_3A_3Aui_3A_3AScreenHandle_map" alt=""/>
+  <map id="morph_3A_3Aui_3A_3AScreenHandle_map" name="morph_3A_3Aui_3A_3AScreenHandle_map">
+<area href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html" title="The app explorer, as a host screen (spec 6 §15): a splitter with the list — a search,..." alt="morph::ui::Explorer" shape="rect" coords="0,56,150,80"/>
+  </map>
+</div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -144,9 +153,8 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
 <tr class="memdesc:a8a791404c733714c898d9efb1539f38d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's identity: the document's <span class="tt"><a class="el" href="#a8a791404c733714c898d9efb1539f38d" title="The screen&#39;s identity: the document&#39;s identity, null when it declares none. A host re-keys a tab when...">identity</a></span>, <span class="tt">null</span> when it declares none. A host re-keys a tab when it changes.  <br /></td></tr>
 <tr class="memitem:a85c7c8455178a5d716c91ba683c7c5ee" id="r_a85c7c8455178a5d716c91ba683c7c5ee"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee">requestClose</a> (std::function&lt; void(bool closed)&gt; done)=0</td></tr>
 <tr class="memdesc:a85c7c8455178a5d716c91ba683c7c5ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the screen to close (spec 6 §3).  <br /></td></tr>
-<tr class="memitem:a9242625e69c44dfdd57c1129cede65f4" id="r_a9242625e69c44dfdd57c1129cede65f4"><td class="memItemLeft"><a id="a9242625e69c44dfdd57c1129cede65f4" name="a9242625e69c44dfdd57c1129cede65f4"></a>
-virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
-<tr class="memdesc:a9242625e69c44dfdd57c1129cede65f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the screen without asking: skips <span class="tt">onClose</span> and the close guard, runs <span class="tt">onUnmount</span>, and answers a pending <span class="tt"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee" title="Asks the screen to close (spec 6 §3).">requestClose</a></span> with <span class="tt">true</span>. For application quit. <br /></td></tr>
+<tr class="memitem:a9242625e69c44dfdd57c1129cede65f4" id="r_a9242625e69c44dfdd57c1129cede65f4"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9242625e69c44dfdd57c1129cede65f4">forceClose</a> ()=0</td></tr>
+<tr class="memdesc:a9242625e69c44dfdd57c1129cede65f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the screen without asking: skips <span class="tt">onClose</span> and the close guard, runs <span class="tt">onUnmount</span>, and answers a pending <span class="tt"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee" title="Asks the screen to close (spec 6 §3).">requestClose</a></span> with <span class="tt">true</span>. For application quit.  <br /></td></tr>
 <tr class="memitem:a4507a03f4764776353ef644c71024266" id="r_a4507a03f4764776353ef644c71024266"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a4507a03f4764776353ef644c71024266">canSave</a> () const</td></tr>
 <tr class="memdesc:a4507a03f4764776353ef644c71024266"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen can save its changes: a document screen that declares <span class="tt">onSave</span>, or a host screen whose handle implements <span class="tt"><a class="el" href="#a08079c795abec25606caa780c997fb76" title="Saves the screen&#39;s changes (spec 6 §15) and answers whether it is then clean.">save</a></span>. A close guard offers <em>save and close</em> only when this is <span class="tt">true</span>.  <br /></td></tr>
 <tr class="memitem:a08079c795abec25606caa780c997fb76" id="r_a08079c795abec25606caa780c997fb76"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a08079c795abec25606caa780c997fb76">save</a> (std::function&lt; void(bool clean)&gt; done)</td></tr>
@@ -156,7 +164,7 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
 <div class="textblock"><p>One mounted screen, as its host sees it. </p>
 <p>The host reads <span class="tt"><a class="el" href="#aedcbc26e44d494f356574b80d1836ad6" title="The screen&#39;s title: the document&#39;s title, as text.">title</a></span>, <span class="tt"><a class="el" href="#a44f3b643199b14dd61cebb6aabf73eba" title="Whether the screen has unsaved changes: the document&#39;s dirty.">dirty</a></span> and <span class="tt"><a class="el" href="#a8a791404c733714c898d9efb1539f38d" title="The screen&#39;s identity: the document&#39;s identity, null when it declares none. A host re-keys a tab when...">identity</a></span> to show the tab and the unsaved indicator, and closes the screen through <span class="tt"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee" title="Asks the screen to close (spec 6 §3).">requestClose</a></span>. It never destroys a handle whose close is pending, except after <span class="tt"><a class="el" href="#a9242625e69c44dfdd57c1129cede65f4" title="Closes the screen without asking: skips onClose and the close guard, runs onUnmount,...">forceClose</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aedcbc26e44d494f356574b80d1836ad6" name="aedcbc26e44d494f356574b80d1836ad6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aedcbc26e44d494f356574b80d1836ad6">&#9670;&#160;</a></span>title()</h2>
@@ -183,6 +191,8 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
 
 <p>The screen's title: the document's <span class="tt"><a class="el" href="#aedcbc26e44d494f356574b80d1836ad6" title="The screen&#39;s title: the document&#39;s title, as text.">title</a></span>, as text. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; it keeps its last value once the screen is closed. </dd></dl>
+
+<p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#adeed039a5e572adb97f06ed88613b2cc">morph::ui::Explorer</a>.</p>
 
 </div>
 </div>
@@ -212,6 +222,8 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
 <p>Whether the screen has unsaved changes: the document's <span class="tt"><a class="el" href="#a44f3b643199b14dd61cebb6aabf73eba" title="Whether the screen has unsaved changes: the document&#39;s dirty.">dirty</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; <span class="tt">false</span> once the screen is closed. </dd></dl>
 
+<p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#a3dcbe02504d61615c8c5e841ac0b9f79">morph::ui::Explorer</a>.</p>
+
 </div>
 </div>
 <a id="a8a791404c733714c898d9efb1539f38d" name="a8a791404c733714c898d9efb1539f38d"></a>
@@ -239,6 +251,8 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
 
 <p>The screen's identity: the document's <span class="tt"><a class="el" href="#a8a791404c733714c898d9efb1539f38d" title="The screen&#39;s identity: the document&#39;s identity, null when it declares none. A host re-keys a tab when...">identity</a></span>, <span class="tt">null</span> when it declares none. A host re-keys a tab when it changes. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; it keeps its last value once the screen is closed. </dd></dl>
+
+<p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#aee8e05a17d978d35de3077d7885d8be1">morph::ui::Explorer</a>.</p>
 
 </div>
 </div>
@@ -273,6 +287,37 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
   </dd>
 </dl>
 
+<p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#a6836a0ac736084a0b7b020d622457d74">morph::ui::Explorer</a>.</p>
+
+</div>
+</div>
+<a id="a9242625e69c44dfdd57c1129cede65f4" name="a9242625e69c44dfdd57c1129cede65f4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9242625e69c44dfdd57c1129cede65f4">&#9670;&#160;</a></span>forceClose()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::ScreenHandle::forceClose </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Closes the screen without asking: skips <span class="tt">onClose</span> and the close guard, runs <span class="tt">onUnmount</span>, and answers a pending <span class="tt"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee" title="Asks the screen to close (spec 6 §3).">requestClose</a></span> with <span class="tt">true</span>. For application quit. </p>
+
+<p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#ad40f4cd5e8a1b456cb22c5253683fb5b">morph::ui::Explorer</a>.</p>
+
 </div>
 </div>
 <a id="a4507a03f4764776353ef644c71024266" name="a4507a03f4764776353ef644c71024266"></a>
@@ -301,7 +346,7 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
 <p>Whether the screen can save its changes: a document screen that declares <span class="tt">onSave</span>, or a host screen whose handle implements <span class="tt"><a class="el" href="#a08079c795abec25606caa780c997fb76" title="Saves the screen&#39;s changes (spec 6 §15) and answers whether it is then clean.">save</a></span>. A close guard offers <em>save and close</em> only when this is <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; <span class="tt">false</span> unless a derived handle says otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +381,7 @@ virtual void&#160;</td><td class="memItemRight"><b>forceClose</b> ()=0</td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

@@ -4,16 +4,21 @@ var ui_2theme_8hpp =
     [ "morph::ui::Rgba", "d9/d7c/structmorph_1_1ui_1_1Rgba.html", "d9/d7c/structmorph_1_1ui_1_1Rgba" ],
     [ "morph::ui::ThemeIndex", "d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html", "d9/dcc/structmorph_1_1ui_1_1ThemeIndex" ],
     [ "morph::ui::detail::AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver" ],
+    [ "morph::ui::ThemeShadowSpec", "df/d3e/structmorph_1_1ui_1_1ThemeShadowSpec.html", "df/d3e/structmorph_1_1ui_1_1ThemeShadowSpec" ],
     [ "morph::ui::ThemeTokenSpec", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec" ],
+    [ "morph::ui::ThemeShadow", "d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html", "d0/d3b/structmorph_1_1ui_1_1ThemeShadow" ],
     [ "morph::ui::ThemeValues", "da/d96/structmorph_1_1ui_1_1ThemeValues.html", "da/d96/structmorph_1_1ui_1_1ThemeValues" ],
     [ "morph::ui::TokenSet", "d9/df6/ui_2theme_8hpp.html#a078e0deb3d43df9e845ab42446c3aa55", null ],
     [ "morph::ui::TokenFileLookup", "d9/df6/ui_2theme_8hpp.html#a9299a4c42ca59f4c30d103086a7f99e8", null ],
     [ "morph::ui::ThemeTokenKind", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9a", [
       [ "Color", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aacb5feb1b7314637725a2e73bdc9f7295", null ],
-      [ "Number", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aab2ee912b91d69b435159c7c3f6df7f5f", null ]
+      [ "Number", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aab2ee912b91d69b435159c7c3f6df7f5f", null ],
+      [ "Dimension", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa9e0e31246b7b078403969b265870b3f4", null ],
+      [ "Shadow", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa3f39588bb19e28051d9aedfbb170025c", null ]
     ] ],
     [ "morph::ui::detail::numberOf", "d9/df6/ui_2theme_8hpp.html#aec47f25e43b0bc87bfd37dfcf698dfeb", null ],
     [ "morph::ui::detail::memberOf", "d9/df6/ui_2theme_8hpp.html#a34f90eeeddc346416f3c3282e77379fb", null ],
+    [ "morph::ui::detail::pixelsOf", "d9/df6/ui_2theme_8hpp.html#a97b893ef7d67a880ededa79d501ff3e9", null ],
     [ "morph::ui::detail::hexColor", "d9/df6/ui_2theme_8hpp.html#a7b840b1aa200b73a882cbb9fed43d468", null ],
     [ "morph::ui::detail::channelOf", "d9/df6/ui_2theme_8hpp.html#a8af205857a803edce0af06eba1e1cb78", null ],
     [ "morph::ui::detail::aliasOf", "d9/df6/ui_2theme_8hpp.html#a0659229401e535e2442c94879f312896", null ],
@@ -23,6 +28,7 @@ var ui_2theme_8hpp =
     [ "morph::ui::detail::checkMeasure", "d9/df6/ui_2theme_8hpp.html#a83658358197fafb8d34c9c6c7aa03403", null ],
     [ "morph::ui::detail::checkFontFamily", "d9/df6/ui_2theme_8hpp.html#aa57255ca6f8ccd9380aebf86555c97cb", null ],
     [ "morph::ui::detail::checkFontWeight", "d9/df6/ui_2theme_8hpp.html#ae95a2b52dc7e98979ca94c4bc6fb49cc", null ],
+    [ "morph::ui::detail::checkShadow", "d9/df6/ui_2theme_8hpp.html#ae31511a172e1a962b11870c8baa8c544", null ],
     [ "morph::ui::detail::joined", "d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1", null ],
     [ "morph::ui::detail::declaredType", "d9/df6/ui_2theme_8hpp.html#a0ab2da9e954e7116716b490d9f9ac35c", null ],
     [ "morph::ui::detail::readToken", "d9/df6/ui_2theme_8hpp.html#a8b25bd3c5e88d8160805768367c26911", null ],
@@ -35,12 +41,14 @@ var ui_2theme_8hpp =
     [ "morph::ui::parseThemeIndex", "d9/df6/ui_2theme_8hpp.html#ac675e3e977612d26632df96f9a69c2d3", null ],
     [ "morph::ui::resolveTheme", "d9/df6/ui_2theme_8hpp.html#aecf98c587d900ce47c54af5ce01b802b", null ],
     [ "morph::ui::checkTheme", "d9/df6/ui_2theme_8hpp.html#a1d8c7bd7c8f889237b229fd99be0803f", null ],
+    [ "morph::ui::detail::shadowOf", "d9/df6/ui_2theme_8hpp.html#a611d0794e635d2198e6adc50077e1011", null ],
     [ "morph::ui::themeValues", "d9/df6/ui_2theme_8hpp.html#a584b26c30b180905a58dac3480f3602e", null ],
     [ "morph::ui::kThemeVocabulary", "d9/df6/ui_2theme_8hpp.html#af999583dfef89f2c26e48ce6228b3f1b", null ],
     [ "morph::ui::kMaxThemeTokens", "d9/df6/ui_2theme_8hpp.html#adfc8b5a52d66901cb00798ebc8a4af0f", null ],
     [ "morph::ui::kMaxThemeVariants", "d9/df6/ui_2theme_8hpp.html#ae187550ac7fc325bfd25003bb1c61c41", null ],
     [ "morph::ui::kMaxAliasChain", "d9/df6/ui_2theme_8hpp.html#a6e4b4f213f8422895388c9d7fa8fa591", null ],
+    [ "morph::ui::detail::kPixelsPerRem", "d9/df6/ui_2theme_8hpp.html#aa75d5224e69a0ed975ce8f1494c59cc1", null ],
     [ "morph::ui::detail::kKnownTokenTypes", "d9/df6/ui_2theme_8hpp.html#a2f2fa03b36507a9424d191f5f0a20b0a", null ],
     [ "morph::ui::detail::kFontWeights", "d9/df6/ui_2theme_8hpp.html#a27918f810beaad38837cd35c770ab194", null ],
-    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#a35fdc7d9590ebc7f01ae631bced765e2", null ]
+    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#a0be8c7219d79dd08719da67b606ea67d", null ]
 ];

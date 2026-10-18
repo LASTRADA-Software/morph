@@ -166,6 +166,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a20905db6ad9a8347936a52870a23ea6a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without unsaved changes, one at a time, stopping at the first veto.  <br /></td></tr>
 <tr class="memitem:ae818ab3fa0bd893cba6a6d5485213e7c" id="r_ae818ab3fa0bd893cba6a6d5485213e7c"><td class="memItemLeft">std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae818ab3fa0bd893cba6a6d5485213e7c">active</a> () const</td></tr>
 <tr class="memdesc:ae818ab3fa0bd893cba6a6d5485213e7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's index.  <br /></td></tr>
+<tr class="memitem:a0c05abb39feb16f73b579d7632c318d5" id="r_a0c05abb39feb16f73b579d7632c318d5"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a0c05abb39feb16f73b579d7632c318d5">handleOf</a> (std::size_t index) const noexcept</td></tr>
+<tr class="memdesc:a0c05abb39feb16f73b579d7632c318d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen handle of a tab: what a client remounts for development reload and inspects.  <br /></td></tr>
+<tr class="memitem:ab30cde461dba11a3a237f59c26c1d7ed" id="r_ab30cde461dba11a3a237f59c26c1d7ed"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ab30cde461dba11a3a237f59c26c1d7ed">activeHandle</a> () const noexcept</td></tr>
+<tr class="memdesc:ab30cde461dba11a3a237f59c26c1d7ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's screen handle.  <br /></td></tr>
+<tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2de906de11c865c7a7cc724bb7235b05">forceCloseAll</a> ()</td></tr>
+<tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving.  <br /></td></tr>
 <tr class="memitem:a8f8c64f7fbce706b574150d9c7cf216c" id="r_a8f8c64f7fbce706b574150d9c7cf216c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">WorkspaceTab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f8c64f7fbce706b574150d9c7cf216c">tabs</a> () const</td></tr>
 <tr class="memdesc:a8f8c64f7fbce706b574150d9c7cf216c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The open tabs, in order.  <br /></td></tr>
 </table>
@@ -173,7 +179,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>. </p>
 <p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> keep the order they were opened in. Opening a screen whose identity an open tab already has focuses that tab; a singleton screen has one tab. Closing runs each screen's close protocol (spec 6 §3), one tab at a time, and a walk over several tabs stops at the first veto. The shell takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. Neither copyable nor movable; owned by the owner thread of its runtime. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab261a5690054f1171b8eaf6d1e168ccb" name="ab261a5690054f1171b8eaf6d1e168ccb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab261a5690054f1171b8eaf6d1e168ccb">&#9670;&#160;</a></span>Workspace()</h2>
@@ -229,7 +235,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +264,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Unmounts every screen without asking, newest first. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +295,7 @@ Public Member Functions</h2></td></tr>
 <p>The tab bar: the shell's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +336,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tab's index, or why the screen could not be mounted; a refused mount opens nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -366,7 +372,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of tabs opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +401,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -425,7 +431,7 @@ Public Member Functions</h2></td></tr>
 <p>The record as it would be written now: the routes of the open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The routes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -460,7 +466,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -489,7 +495,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the next tab in most-recently-used order (Ctrl+Tab). Repeated calls walk the order as it was at the first of them; any other activation starts a new walk. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +524,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the previous tab in most-recently-used order (Ctrl+Shift+Tab). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -558,7 +564,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -598,7 +604,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -633,7 +639,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -668,7 +674,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -698,7 +704,102 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's index. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00307">307</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0c05abb39feb16f73b579d7632c318d5" name="a0c05abb39feb16f73b579d7632c318d5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0c05abb39feb16f73b579d7632c318d5">&#9670;&#160;</a></span>handleOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> * morph::ui::Workspace::handleOf </td>
+          <td>(</td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>index</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The screen handle of a tab: what a client remounts for development reload and inspects. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">index</td><td>The tab's index. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null past the end. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab30cde461dba11a3a237f59c26c1d7ed" name="ab30cde461dba11a3a237f59c26c1d7ed"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab30cde461dba11a3a237f59c26c1d7ed">&#9670;&#160;</a></span>activeHandle()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> * morph::ui::Workspace::activeHandle </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The active tab's screen handle. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, or null while no tab is open. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2de906de11c865c7a7cc724bb7235b05" name="a2de906de11c865c7a7cc724bb7235b05"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2de906de11c865c7a7cc724bb7235b05">&#9670;&#160;</a></span>forceCloseAll()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Workspace::forceCloseAll </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -728,7 +829,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

@@ -15,5 +15,8 @@ var classmorph_1_1ui_1_1Workspace =
     [ "closeAll", "d6/d77/classmorph_1_1ui_1_1Workspace.html#aa5e83f98b4979fe0d18c96c854a95098", null ],
     [ "closeSaved", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a20905db6ad9a8347936a52870a23ea6a", null ],
     [ "active", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ae818ab3fa0bd893cba6a6d5485213e7c", null ],
+    [ "handleOf", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a0c05abb39feb16f73b579d7632c318d5", null ],
+    [ "activeHandle", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ab30cde461dba11a3a237f59c26c1d7ed", null ],
+    [ "forceCloseAll", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a2de906de11c865c7a7cc724bb7235b05", null ],
     [ "tabs", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c", null ]
 ];

@@ -122,18 +122,28 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d6d/dev__to
 <div class="contents">
 <a href="../../d3/d6d/dev__tools_8hpp.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">// SPDX-License-Identifier: Apache-2.0</span></div>
 <div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="preprocessor">#pragma once</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"></span> </div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment">/// @file</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @brief The switch that builds the UI development tools (spec 6 §21) into a client.</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment">///</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment">/// The build sets `MORPH_UI_DEV_TOOLS` to 1 or 0 for every translation unit (the CMake option of the same name, off</span></div>
-<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment">/// by default in release build types); a build that sets nothing gets 0, so a client built outside that build</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment">/// contains none of the tools. Specified in `docs/spec/ui/service.md` and `docs/spec/ui/inspector.md`.</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span> </div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#ifndef MORPH_UI_DEV_TOOLS</span><span class="comment"></span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment">/// @brief 1 when the development tools (document reload in the generic client, the inspector) are built, 0 when not.</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#define MORPH_UI_DEV_TOOLS 0</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span> </div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="preprocessor">#include &lt;cstdint&gt;</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"></span> </div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment">/// @file</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment">/// @brief `morph::ui::DevelopmentTools`: whether a client runs in development mode (spec 6 §21). The tools are in</span></div>
+<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment">///        every build; this decides at run time whether they are on. Specified in `docs/spec/ui/inspector.md`.</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span> </div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="keyword">namespace </span>morph::ui {</div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"></span> </div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment">/// @brief Whether a session&#39;s screens record what the development inspector reads, and whether a frontend opens the</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment">///        inspector (spec 6 §21).</span></div>
+<div class="foldopen" id="foldopen00014" data-start="{" data-end="};">
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno"><a class="line" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">   14</a></span><span class="keyword">enum class</span> <a class="code hl_enumeration" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">DevelopmentTools</a> : std::uint8_t {</div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno"><a class="line" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">   15</a></span>    <a class="code hl_enumvalue" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">Off</a>,  <span class="comment">///&lt; Nothing is recorded, no inspector is handed out, and the inspector&#39;s shortcut does nothing.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno"><a class="line" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffca521c36a31c2762741cf0f8890cbe05e3">   16</a></span>    <a class="code hl_enumvalue" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffca521c36a31c2762741cf0f8890cbe05e3">On</a>,   <span class="comment">///&lt; Each screen records its lowered nodes, its live scopes and its latest command lists.</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span>};</div>
+</div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span>}  <span class="comment">// namespace morph::ui</span></div>
+<div class="ttc" id="adev__tools_8hpp_html_a76ec372e6ca8eb0e0cb057048f9e0ffc"><div class="ttname"><a href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">morph::ui::DevelopmentTools</a></div><div class="ttdeci">DevelopmentTools</div><div class="ttdoc">Whether a session&#39;s screens record what the development inspector reads, and whether a frontend opens...</div><div class="ttdef"><b>Definition</b> <a href="#l00014">dev_tools.hpp:14</a></div></div>
+<div class="ttc" id="adev__tools_8hpp_html_a76ec372e6ca8eb0e0cb057048f9e0ffca521c36a31c2762741cf0f8890cbe05e3"><div class="ttname"><a href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffca521c36a31c2762741cf0f8890cbe05e3">morph::ui::DevelopmentTools::On</a></div><div class="ttdeci">@ On</div><div class="ttdoc">Each screen records its lowered nodes, its live scopes and its latest command lists.</div><div class="ttdef"><b>Definition</b> <a href="#l00016">dev_tools.hpp:16</a></div></div>
+<div class="ttc" id="adev__tools_8hpp_html_a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36"><div class="ttname"><a href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">morph::ui::DevelopmentTools::Off</a></div><div class="ttdeci">@ Off</div><div class="ttdoc">Nothing is recorded, no inspector is handed out, and the inspector&#39;s shortcut does nothing.</div><div class="ttdef"><b>Definition</b> <a href="#l00015">dev_tools.hpp:15</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

@@ -138,6 +138,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a746a02ca111ff97a5fc34abe4614e889"><td class="mdescLeft">&#160;</td><td class="mdescRight">When given, a burst of changes writes the record once, <span class="tt"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd" title="The quiet period before the record is written, with a scheduler.">recordDelay</a></span> after the last of them. Borrowed.  <br /></td></tr>
 <tr class="memitem:ae6d59c611c7c5ab7f486c526777cdadd" id="r_ae6d59c611c7c5ab7f486c526777cdadd"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd">recordDelay</a> {500}</td></tr>
 <tr class="memdesc:ae6d59c611c7c5ab7f486c526777cdadd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The quiet period before the record is written, with a scheduler.  <br /></td></tr>
+<tr class="memitem:a30f81edaa10f4480d47c6c122ad919d3" id="r_a30f81edaa10f4480d47c6c122ad919d3"><td class="memItemLeft">std::function&lt; void()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a30f81edaa10f4480d47c6c122ad919d3">onChanged</a></td></tr>
+<tr class="memdesc:a30f81edaa10f4480d47c6c122ad919d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called after the open tabs, their captions or the active tab changed; empty calls nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How a <span class="tt"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html" title="Tabs over screens: one screen instance per tab, mounted into the tab&#39;s page through DocumentScreenHos...">Workspace</a></span> treats screens. </p>
@@ -231,6 +233,24 @@ Public Attributes</h2></td></tr>
 <p>The quiet period before the record is written, with a scheduler. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a30f81edaa10f4480d47c6c122ad919d3" name="a30f81edaa10f4480d47c6c122ad919d3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a30f81edaa10f4480d47c6c122ad919d3">&#9670;&#160;</a></span>onChanged</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void()&gt; morph::ui::WorkspaceOptions::onChanged</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called after the open tabs, their captions or the active tab changed; empty calls nothing. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

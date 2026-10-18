@@ -140,7 +140,6 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <code>#include &quot;../core/executor.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/df9/runtime_8hpp_source.html">../reactive/runtime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d5f/signal_8hpp_source.html">../reactive/signal.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d3/d6d/dev__tools_8hpp_source.html">dev_tools.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>&quot;</code><br />
@@ -211,7 +210,7 @@ Functions</h2></td></tr>
 
 <p>A screen's params, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,12 +228,12 @@ Functions</h2></td></tr>
 <b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;std::expected&lt;std::unique_ptr&lt;ScreenHandle&gt;, <a class="code hl_struct" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a>&gt;(</div>
 <div class="line">   <a class="code hl_typedef" href="#a5b073a0b5244977f291a4f30780868df">ParamMap</a> <span class="keyword">const</span>&amp; params, <a class="code hl_class" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a>&amp; page)&gt;</div>
 <div class="ttc" id="aclassmorph_1_1ui_1_1ContainerWidget_html"><div class="ttname"><a href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></div><div class="ttdoc">A widget with children. A factory given this container appends the new widget as its last child.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dc2/ui_2backend_8hpp_source.html#l00103">backend.hpp:103</a></div></div>
-<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00039">host.hpp:39</a></div></div>
-<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00042">host.hpp:42</a></div></div>
+<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00038">host.hpp:38</a></div></div>
+<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00041">host.hpp:41</a></div></div>
 </div><!-- fragment -->
 <p>Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +252,7 @@ Functions</h2></td></tr>
 <p>What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. </p>
 <p>It asks the user, typically with a dialog, and calls <span class="tt">choose</span> once. It offers <em>save and close</em> only when <span class="tt">screen.canSave()</span>; <span class="tt">Save</span> on a screen that cannot save keeps it open. The handle carries the choice out, so <span class="tt">choose</span> may be called after the handle is gone, and then does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,7 +287,7 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +324,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A string as is, <span class="tt">null</span> as empty, anything else as its canonical JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00273">273</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

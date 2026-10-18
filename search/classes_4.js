@@ -27,7 +27,9 @@ var searchData=
   ['evaluatereply_24',['EvaluateReply',['../d9/d06/structmorph_1_1ui_1_1EvaluateReply.html',1,'morph::ui']]],
   ['evaluator_25',['Evaluator',['../d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html',1,'morph::ui::detail']]],
   ['exactlyoneof_26',['ExactlyOneOf',['../d9/d06/structmorph_1_1forms_1_1ExactlyOneOf.html',1,'morph::forms']]],
-  ['expr_27',['Expr',['../d0/df6/structmorph_1_1ui_1_1Expr.html',1,'morph::ui']]],
-  ['exprchecker_28',['ExprChecker',['../d5/d9c/classmorph_1_1ui_1_1detail_1_1ExprChecker.html',1,'morph::ui::detail']]],
-  ['exprparser_29',['ExprParser',['../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html',1,'morph::ui::detail']]]
+  ['explorer_27',['Explorer',['../d9/df4/classmorph_1_1ui_1_1Explorer.html',1,'morph::ui']]],
+  ['exploreroptions_28',['ExplorerOptions',['../db/d26/structmorph_1_1ui_1_1ExplorerOptions.html',1,'morph::ui']]],
+  ['expr_29',['Expr',['../d0/df6/structmorph_1_1ui_1_1Expr.html',1,'morph::ui']]],
+  ['exprchecker_30',['ExprChecker',['../d5/d9c/classmorph_1_1ui_1_1detail_1_1ExprChecker.html',1,'morph::ui::detail']]],
+  ['exprparser_31',['ExprParser',['../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html',1,'morph::ui::detail']]]
 ];

@@ -7,5 +7,6 @@ var searchData=
   ['themetokenkind_4',['ThemeTokenKind',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9a',1,'morph::ui']]],
   ['tone_5',['Tone',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a',1,'morph::ui']]],
   ['tri_6',['Tri',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865',1,'morph::forms']]],
-  ['typekind_7',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
+  ['tryitkind_7',['TryItKind',['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d',1,'morph::ui']]],
+  ['typekind_8',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
 ];

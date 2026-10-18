@@ -142,11 +142,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d15/replay_
 <div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">///</span></div>
 <div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">/// Answers one question — &quot;has this operation id already been applied?&quot; —</span></div>
 <div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">/// for a host that must dedup a retried write against one it already</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// committed. One framework seam in place of the near-identical table five</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// example rungs would each hand-write: `kanban`/`ledger` store a</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// result and replay it verbatim on a hit (&quot;response-replay&quot;); `lims`/</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// `bookmarks`/`ledger`&#39;s import path store nothing and report only that the</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// op was seen (&quot;skip-only&quot;). Both are the same mechanism with a different</span></div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// committed. One framework seam in place of a near-identical table each host</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// would otherwise hand-write. A host either stores a result and replays it</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// verbatim on a hit (&quot;response-replay&quot;), or stores nothing and reports only</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// that the op was seen (&quot;skip-only&quot;, as `examples/bookmarks`&#39; import path</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// does). Both are the same mechanism with a different</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// caller-side interpretation of the stored payload — see `lookup()`&#39;s own</span></div>
 <div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// doc comment — so there is exactly one interface here, not two.</span></div>
 <div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">///</span></div>
@@ -174,11 +174,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d15/replay_
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">    ///</span></div>
 <div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">    /// @par What a hit means is the caller&#39;s decision, not this interface&#39;s</span></div>
 <div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">    /// The returned string is whatever `record()` stored alongside the id. A</span></div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    /// response-replay consumer (kanban&#39;s `MoveTaskPosition`, ledger&#39;s</span></div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// `StoreTransaction`) stores its result&#39;s serialised form and, on a hit,</span></div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// returns that string verbatim instead of re-running the operation. A</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// skip-only consumer (lims&#39;s `QueuedCapture`, bookmarks&#39;/ledger&#39;s import</span></div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">    /// path) stores an empty payload and, on a hit, reports &quot;already applied,</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    /// response-replay consumer (a move or a money transfer whose retry must</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// see the original answer) stores its result&#39;s serialised form and, on a</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// hit, returns that string verbatim instead of re-running the operation. A</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// skip-only consumer (bookmarks&#39; import path, or an at-most-once replay</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">    /// of queued captures) stores an empty payload and, on a hit, reports &quot;already applied,</span></div>
 <div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">    /// nothing to return&quot; without ever looking at the string. Both read</span></div>
 <div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">    /// exactly the same `lookup()` — the value type reports the fact, and the</span></div>
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">    /// layer that calls this decides what a hit means.</span></div>

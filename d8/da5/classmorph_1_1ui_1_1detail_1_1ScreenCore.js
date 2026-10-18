@@ -33,6 +33,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "prefDefaults", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a3f5c473f0727a869fe9688e9b925b241", null ],
     [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ],
     [ "pendingWork", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af58663974e48a36f839f7b35aff5f6cf", null ],
+    [ "recording", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a4f10104cc11d9ea50db349f096b052c6", null ],
     [ "rootScope", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a5637f1b8da5f4f5dfd3792f7d991c704", null ],
     [ "keptStates", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af2dbc9bafee49235fd38c86cbfee16ec", null ],
     [ "loweredNodes", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a8d4b5902967aebb4442efb52597ddf98", null ],

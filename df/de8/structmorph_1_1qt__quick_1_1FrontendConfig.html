@@ -136,8 +136,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a67e87a44ab6f96f297b1fb8ba1fc0e9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The window's title.  <br /></td></tr>
 <tr class="memitem:a7d525a4a42cdaee896a3618b39cb2ca0" id="r_a7d525a4a42cdaee896a3618b39cb2ca0"><td class="memItemLeft">std::function&lt; void(std::string const  &amp;widthClass)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7d525a4a42cdaee896a3618b39cb2ca0">onWidthClass</a></td></tr>
 <tr class="memdesc:a7d525a4a42cdaee896a3618b39cb2ca0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the window's width class (<span class="tt"><a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp.html#a69fefb171bfcfaf3bda1d9ab14ee92c4" title="The window width class {&quot;env&quot;: &quot;widthClass&quot;} reads (spec 3 §8).">widthClassOf</a></span>) when the window first has a width and each time the class changes; empty calls nothing. The shell sets it as <span class="tt">{"env": "widthClass"}</span>.  <br /></td></tr>
-<tr class="memitem:af7bcd252ae3fbc25ecfbb212f2dc71a0" id="r_af7bcd252ae3fbc25ecfbb212f2dc71a0"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#af7bcd252ae3fbc25ecfbb212f2dc71a0">devTools</a> = false</td></tr>
-<tr class="memdesc:af7bcd252ae3fbc25ecfbb212f2dc71a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Development mode (spec 6 §21): Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). Off, the key does nothing.  <br /></td></tr>
+<tr class="memitem:a7540d35a217bbc011b2c896d5862d40d" id="r_a7540d35a217bbc011b2c896d5862d40d"><td class="memItemLeft"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">ui::DevelopmentTools</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7540d35a217bbc011b2c896d5862d40d">devTools</a> = <a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">ui::DevelopmentTools::Off</a></td></tr>
+<tr class="memdesc:a7540d35a217bbc011b2c896d5862d40d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Development mode (spec 6 §21): with <span class="tt">On</span>, Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). With <span class="tt">Off</span>, the key does nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a <span class="tt"><a class="el" href="../../d0/d8a/classmorph_1_1qt__quick_1_1Frontend.html" title="Runs a morph application in a Qt Quick window, on the calling thread.">qt_quick::Frontend</a></span> runs with. </p>
@@ -216,21 +216,21 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="af7bcd252ae3fbc25ecfbb212f2dc71a0" name="af7bcd252ae3fbc25ecfbb212f2dc71a0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af7bcd252ae3fbc25ecfbb212f2dc71a0">&#9670;&#160;</a></span>devTools</h2>
+<a id="a7540d35a217bbc011b2c896d5862d40d" name="a7540d35a217bbc011b2c896d5862d40d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7540d35a217bbc011b2c896d5862d40d">&#9670;&#160;</a></span>devTools</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::qt_quick::FrontendConfig::devTools = false</td>
+          <td class="memname"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">ui::DevelopmentTools</a> morph::qt_quick::FrontendConfig::devTools = <a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">ui::DevelopmentTools::Off</a></td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Development mode (spec 6 §21): Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). Off, the key does nothing. </p>
+<p>Development mode (spec 6 §21): with <span class="tt">On</span>, Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). With <span class="tt">Off</span>, the key does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>

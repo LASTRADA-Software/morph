@@ -114,6 +114,7 @@ var view_8hpp =
       [ "Multiple", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e", null ]
     ] ],
     [ "morph::ui::slot", "d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916", null ],
+    [ "morph::ui::spacingStep", "d8/d11/view_8hpp.html#ab2af508a04a46458578e47351c7010f5", null ],
     [ "morph::ui::detail::makeNode", "d8/d11/view_8hpp.html#af3ac51f2206acd9b65bd704485a54838", null ],
     [ "morph::ui::text", "d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888", null ],
     [ "morph::ui::button", "d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183", null ],
@@ -148,5 +149,6 @@ var view_8hpp =
     [ "morph::ui::switchOn", "d8/d11/view_8hpp.html#a7949af8ff7a09a3af427801e57e55e61", null ],
     [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1", null ],
     [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a5c27cc72f0c576e4f003315f12ac4f80", null ],
-    [ "morph::ui::table", "d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b", null ]
+    [ "morph::ui::table", "d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b", null ],
+    [ "morph::ui::kMaxSpacingStep", "d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f", null ]
 ];

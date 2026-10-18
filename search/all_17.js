@@ -51,7 +51,7 @@ var searchData=
   ['withsubmitmode_48',['withSubmitMode',['../d5/dbe/classmorph_1_1forms_1_1FormModel.html#a9b2c7438cb7687ab3e6257cbd483a47d',1,'morph::forms::FormModel']]],
   ['withtext_49',['withText',['../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a05298e42c5aa059a57fc8dbc03258c4f',1,'morph::ui::author::Node']]],
   ['withunit_50',['withUnit',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#aa6636da984bed65d0aba30158e8dfa27',1,'morph::forms::FieldMeta']]],
-  ['wizard_51',['Wizard',['../d6/d94/structmorph_1_1flows_1_1Wizard.html',1,'morph::flows']]],
+  ['wizard_51',['Wizard',['../d6/d94/structmorph_1_1flows_1_1Wizard.html',1,'morph::flows::Wizard&lt; Title, Steps &gt;'],['../d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31a5af874093e5efcbaeb4377b84c5f2ec5',1,'Wizardmorph::ui'],['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7da5af874093e5efcbaeb4377b84c5f2ec5',1,'Wizardmorph::ui']]],
   ['wizard_52',['wizard',['../db/dff/structmorph_1_1ui_1_1Catalog.html#ab2ee6924a583c824126fe7b6709ac9a5',1,'morph::ui::Catalog::wizard'],['../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a61861dd646bf624c7790632dcccdd9f5',1,'morph::ui::detail::ElementState::wizard'],['../d1/dc0/author_8hpp.html#acdaa662c33689582aa26424bf39411b9',1,'morph::ui::author::wizard(ModelHandle&lt; Model &gt; const &amp;model)'],['../d0/d4d/author__forms_8hpp.html#acaee1e2b0e40ab65f97629c1d302bfc5',1,'morph::ui::author::wizard(ModelHandle&lt; Model &gt; const &amp;model)']]],
   ['wizard_2ehpp_53',['wizard.hpp',['../d9/d49/wizard_8hpp.html',1,'']]],
   ['wizard_5fview_2ehpp_54',['wizard_view.hpp',['../df/df7/wizard__view_8hpp.html',1,'']]],

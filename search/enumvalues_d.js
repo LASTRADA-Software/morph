@@ -7,7 +7,7 @@ var searchData=
   ['nolist_4',['NoList',['../db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877',1,'morph::ui::detail']]],
   ['none_5',['None',['../df/d8f/selection_8hpp.html#a0c5a863bb2ec27062f9111027ab3fee8a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::table'],['../d1/dc0/author_8hpp.html#a386c8f27968d11a8eb2cf7ad0aeff62ca6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui::author'],['../d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui'],['../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754',1,'Nonemorph::ui']]],
   ['noneusable_6',['NoneUsable',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa8980eb18c11773d5ac24a2443a993294',1,'morph::ui::FrontendError']]],
-  ['normal_7',['Normal',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0',1,'morph::ui']]],
+  ['normal_7',['Normal',['../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0',1,'Normalmorph::ui'],['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0',1,'Normalmorph::ui']]],
   ['normal_8',['normal',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555',1,'morph::offline::SqliteOfflineQueue']]],
   ['norow_9',['NoRow',['../db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219',1,'morph::ui::detail']]],
   ['not_10',['Not',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79aa74c05d080620f087c4e523977230666',1,'morph::forms::RuleExpr']]],

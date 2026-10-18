@@ -46,6 +46,7 @@ var recording__backend_8hpp =
     [ "morph::ui::testing::detail::formatLayout", "de/dd9/recording__backend_8hpp.html#a2aca44a209518b3252c9ea33bf4a939a", null ],
     [ "morph::ui::testing::detail::formatTimestamp", "de/dd9/recording__backend_8hpp.html#aed98d6924792b38a75607d1b0aeda578", null ],
     [ "morph::ui::testing::detail::formatList", "de/dd9/recording__backend_8hpp.html#aa6fbf75d22b98da76525eff2f51dc9d7", null ],
+    [ "morph::ui::testing::detail::enumName", "de/dd9/recording__backend_8hpp.html#a103342b99b9ad4abb6e0fac5fb768a80", null ],
     [ "morph::ui::testing::detail::enumName", "de/dd9/recording__backend_8hpp.html#a4faa152d8b6224dfaaa5f3f695748e78", null ],
     [ "morph::ui::testing::detail::enumName", "de/dd9/recording__backend_8hpp.html#a34e9f0ad83745442e12d1a59764f9f15", null ],
     [ "morph::ui::testing::detail::enumName", "de/dd9/recording__backend_8hpp.html#aa42328d84e6cdbff51f40ef90c64ca8a", null ],

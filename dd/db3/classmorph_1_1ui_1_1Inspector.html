@@ -128,8 +128,6 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/db3/classmo
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a52f89a7e9a208625fc1fe62f5ad344ad" id="r_a52f89a7e9a208625fc1fe62f5ad344ad"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a52f89a7e9a208625fc1fe62f5ad344ad">Inspector</a> (<a class="el" href="../../da/d97/classmorph_1_1ui_1_1Screen.html">Screen</a> &amp;screen)</td></tr>
-<tr class="memdesc:a52f89a7e9a208625fc1fe62f5ad344ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">An inspector over <code class="param">screen</code>.  <br /></td></tr>
 <tr class="memitem:ac3e631df53aec7271591db2b191a0325" id="r_ac3e631df53aec7271591db2b191a0325"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ac3e631df53aec7271591db2b191a0325">screenId</a> () const noexcept</td></tr>
 <tr class="memdesc:ac3e631df53aec7271591db2b191a0325"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's document id.  <br /></td></tr>
 <tr class="memitem:a0c6100dba75866e774762ae3c32040de" id="r_a0c6100dba75866e774762ae3c32040de"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../da/de6/structmorph_1_1ui_1_1InspectedNode.html">InspectedNode</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0c6100dba75866e774762ae3c32040de">nodes</a> () const</td></tr>
@@ -142,15 +140,20 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:af25b97cbedc44261a41c5dea5c9ef652"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reactive runtime's counters: flushes, Effects per flush, batches and misuses.  <br /></td></tr>
 <tr class="memitem:a7ae932e787d6929c2a30e199650859ac" id="r_a7ae932e787d6929c2a30e199650859ac"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7ae932e787d6929c2a30e199650859ac">refetch</a> (std::string_view query)</td></tr>
 <tr class="memdesc:a7ae932e787d6929c2a30e199650859ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refetches a query by running the document command <span class="tt">{"<a class="el" href="#a7ae932e787d6929c2a30e199650859ac" title="Refetches a query by running the document command {&quot;refetch&quot;: &quot;&lt;query&gt;&quot;} in the scope that declares i...">refetch</a>": "&lt;query&gt;"}</span> in the scope that declares it, as a user's event runs a command list: the same path, the same batch, the same log entry.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a31f94f4bfaa41e43d40eea9ee888657a" id="r_a31f94f4bfaa41e43d40eea9ee888657a"><td class="memItemLeft">static std::optional&lt; Inspector &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a31f94f4bfaa41e43d40eea9ee888657a">over</a> (<a class="el" href="../../da/d97/classmorph_1_1ui_1_1Screen.html">Screen</a> &amp;screen)</td></tr>
+<tr class="memdesc:a31f94f4bfaa41e43d40eea9ee888657a"><td class="mdescLeft">&#160;</td><td class="mdescRight">An inspector over <code class="param">screen</code>, when its session records what an inspector reads.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The development inspector over one mounted screen: its mounted nodes, its queries and mutations, the command lists it ran, and the reactive runtime's counters. </p>
 <p>Every read returns a copy, so nothing it hands out writes the screen. The one thing it does to the screen is <span class="tt"><a class="el" href="#a7ae932e787d6929c2a30e199650859ac" title="Refetches a query by running the document command {&quot;refetch&quot;: &quot;&lt;query&gt;&quot;} in the scope that declares i...">refetch</a></span>, which runs the document command <span class="tt">{"<a class="el" href="#a7ae932e787d6929c2a30e199650859ac" title="Refetches a query by running the document command {&quot;refetch&quot;: &quot;&lt;query&gt;&quot;} in the scope that declares i...">refetch</a>": "&lt;query&gt;"}</span> as a user's event would. Valid while the screen lives; use it on the runtime's owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
-</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a52f89a7e9a208625fc1fe62f5ad344ad" name="a52f89a7e9a208625fc1fe62f5ad344ad"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a52f89a7e9a208625fc1fe62f5ad344ad">&#9670;&#160;</a></span>Inspector()</h2>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a31f94f4bfaa41e43d40eea9ee888657a" name="a31f94f4bfaa41e43d40eea9ee888657a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a31f94f4bfaa41e43d40eea9ee888657a">&#9670;&#160;</a></span>over()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -159,7 +162,7 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">morph::ui::Inspector::Inspector </td>
+          <td class="memname">std::optional&lt; Inspector &gt; morph::ui::Inspector::over </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d97/classmorph_1_1ui_1_1Screen.html">Screen</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>screen</em></span></td><td>)</td>
           <td></td>
@@ -167,24 +170,24 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>An inspector over <code class="param">screen</code>. </p>
+<p>An inspector over <code class="param">screen</code>, when its session records what an inspector reads. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">screen</td><td>The screen; it outlives the inspector. </td></tr>
   </table>
   </dd>
 </dl>
+<dl class="section return"><dt>Returns</dt><dd>The inspector; nothing when the screen's session has <span class="tt"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36" title="Nothing is recorded, no inspector is handed out, and the inspector&#39;s shortcut does nothing.">DevelopmentTools::Off</a></span>, which records nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
-<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ac3e631df53aec7271591db2b191a0325" name="ac3e631df53aec7271591db2b191a0325"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac3e631df53aec7271591db2b191a0325">&#9670;&#160;</a></span>screenId()</h2>
 
@@ -211,7 +214,7 @@ Public Member Functions</h2></td></tr>
 <p>The screen's document id. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +244,7 @@ Public Member Functions</h2></td></tr>
 <p>Every node of the screen whose scope is alive, in the order it was lowered (a parent before its children), each with its expression properties evaluated now. </p>
 <p>A node is listed once per scope it was lowered in, so a row's nodes are listed once per row. A switch's <span class="tt">default</span> and a custom node's fallback are lowered in their enclosing scope, so they are listed whether or not they are shown. An evaluation the inspector makes reports no diagnostic. </p><dl class="section return"><dt>Returns</dt><dd>The nodes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +274,7 @@ Public Member Functions</h2></td></tr>
 <p>Every query and mutation of the screen's live scopes, the screen's own first, then those of the app document, with their state now. </p>
 <p>A query is <span class="tt">idle</span> with no cache entry (its <span class="tt">when</span> is not <span class="tt">true</span>, its alias is unbound or its body is <span class="tt">null</span>), and with an entry that has neither a value nor a request; <span class="tt">pending</span> while a request is in flight; <span class="tt">error</span> when the last request failed; <span class="tt">stale</span> when its entry was invalidated or its value is at least <span class="tt">staleTime</span> old; <span class="tt">fresh</span> otherwise. A mutation is <span class="tt">pending</span> while a run is in flight or queued, <span class="tt">error</span> when its last run failed, <span class="tt">fresh</span> once a run succeeded, and <span class="tt">idle</span> before any. </p><dl class="section return"><dt>Returns</dt><dd>The queries and mutations. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +304,7 @@ Public Member Functions</h2></td></tr>
 <p>The latest command lists the screen ran, oldest first, at most <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#aa145390415cb3c86f0cef9a63320ee34" title="How many command lists the inspector&#39;s log keeps.">detail::kCommandLogSize</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each list's event, its commands and its batch. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,7 +334,7 @@ Public Member Functions</h2></td></tr>
 <p>The reactive runtime's counters: flushes, Effects per flush, batches and misuses. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00151">151</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,7 +370,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether a live scope of the screen declares a query of that name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d9/df1/ui_2inspector_8hpp_source.html">inspector.hpp</a>.</p>
 
 </div>
 </div>

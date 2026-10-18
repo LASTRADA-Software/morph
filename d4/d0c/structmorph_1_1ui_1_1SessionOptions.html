@@ -138,6 +138,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ab39d41c72d3ca279d24d7e89252d14c3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog: <span class="tt">stateless</span> decides an alias's default instance; an action's <span class="tt">secretFields</span> are never cached or kept in <span class="tt">result</span>.  <br /></td></tr>
 <tr class="memitem:a0f9cecf4b22b1e65fdb0a0b33a0c67cf" id="r_a0f9cecf4b22b1e65fdb0a0b33a0c67cf"><td class="memItemLeft">std::function&lt; std::string(std::exception_ptr const  &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0f9cecf4b22b1e65fdb0a0b33a0c67cf">classify</a></td></tr>
 <tr class="memdesc:a0f9cecf4b22b1e65fdb0a0b33a0c67cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maps a failed call to its error kind (<span class="tt">denied</span>, <span class="tt">offline</span>, <span class="tt">timeout</span>, …); empty uses the default, which knows the bridge's own failures and calls everything else <span class="tt">error</span>.  <br /></td></tr>
+<tr class="memitem:af53173c1a06cb3317f827ecc3ef4ab61" id="r_af53173c1a06cb3317f827ecc3ef4ab61"><td class="memItemLeft"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">DevelopmentTools</a>&#160;</td><td class="memItemRight"><a class="el" href="#af53173c1a06cb3317f827ecc3ef4ab61">developmentTools</a> = <a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">DevelopmentTools::Off</a></td></tr>
+<tr class="memdesc:af53173c1a06cb3317f827ecc3ef4ab61"><td class="mdescLeft">&#160;</td><td class="mdescRight">Development mode: whether this session's screens record what the inspector reads. Off by default.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html" title="What screens of one client session share (spec 5 §5, §12b): the query cache, refreshOn bookkeeping,...">Session</a></span> is built with. </p>
@@ -231,6 +233,24 @@ Public Attributes</h2></td></tr>
 <p>Maps a failed call to its error kind (<span class="tt">denied</span>, <span class="tt">offline</span>, <span class="tt">timeout</span>, …); empty uses the default, which knows the bridge's own failures and calls everything else <span class="tt">error</span>. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af53173c1a06cb3317f827ecc3ef4ab61" name="af53173c1a06cb3317f827ecc3ef4ab61"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af53173c1a06cb3317f827ecc3ef4ab61">&#9670;&#160;</a></span>developmentTools</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">DevelopmentTools</a> morph::ui::SessionOptions::developmentTools = <a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">DevelopmentTools::Off</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Development mode: whether this session's screens record what the inspector reads. Off by default. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

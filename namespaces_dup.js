@@ -262,6 +262,7 @@ var namespaces_dup =
           [ "permitsAll", "d3/d31/service_8hpp.html#a61f10b6fe342beea9342254a1633dbc8", null ],
           [ "numberOf", "d9/df6/ui_2theme_8hpp.html#aec47f25e43b0bc87bfd37dfcf698dfeb", null ],
           [ "memberOf", "d9/df6/ui_2theme_8hpp.html#a34f90eeeddc346416f3c3282e77379fb", null ],
+          [ "pixelsOf", "d9/df6/ui_2theme_8hpp.html#a97b893ef7d67a880ededa79d501ff3e9", null ],
           [ "hexColor", "d9/df6/ui_2theme_8hpp.html#a7b840b1aa200b73a882cbb9fed43d468", null ],
           [ "channelOf", "d9/df6/ui_2theme_8hpp.html#a8af205857a803edce0af06eba1e1cb78", null ],
           [ "aliasOf", "d9/df6/ui_2theme_8hpp.html#a0659229401e535e2442c94879f312896", null ],
@@ -270,12 +271,14 @@ var namespaces_dup =
           [ "checkMeasure", "d9/df6/ui_2theme_8hpp.html#a83658358197fafb8d34c9c6c7aa03403", null ],
           [ "checkFontFamily", "d9/df6/ui_2theme_8hpp.html#aa57255ca6f8ccd9380aebf86555c97cb", null ],
           [ "checkFontWeight", "d9/df6/ui_2theme_8hpp.html#ae95a2b52dc7e98979ca94c4bc6fb49cc", null ],
+          [ "checkShadow", "d9/df6/ui_2theme_8hpp.html#ae31511a172e1a962b11870c8baa8c544", null ],
           [ "joined", "d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1", null ],
           [ "declaredType", "d9/df6/ui_2theme_8hpp.html#a0ab2da9e954e7116716b490d9f9ac35c", null ],
           [ "readToken", "d9/df6/ui_2theme_8hpp.html#a8b25bd3c5e88d8160805768367c26911", null ],
           [ "checkMemberName", "d9/df6/ui_2theme_8hpp.html#a7f81bd5730e6c0f4d80245d4d28c5b5a", null ],
           [ "readGroup", "d9/df6/ui_2theme_8hpp.html#a7a1012270f80b37fa2404850af04a6e8", null ],
           [ "readThemeMap", "d9/df6/ui_2theme_8hpp.html#ac11accc0e12e465ea51ee2000dbb20e3", null ],
+          [ "shadowOf", "d9/df6/ui_2theme_8hpp.html#a611d0794e635d2198e6adc50077e1011", null ],
           [ "parseTypePrefix", "d6/dda/value_8hpp.html#a36636b9cff5d87ae50b76da4ff5663bd", null ],
           [ "jsonInt", "d6/dda/value_8hpp.html#ae17a8d6aeb774cdfa58e3e892d943e4f", null ],
           [ "exactFromJson", "d6/dda/value_8hpp.html#a8a6c823d6a7452936e9826d66c5a3c8b", null ],
@@ -301,7 +304,7 @@ var namespaces_dup =
           [ "kFormValues", "dd/d39/document_8hpp.html#a0b09a8b323110c95ae7047b6f18b5b51", null ],
           [ "kTransferValues", "dd/d39/document_8hpp.html#aac6821b3120184c765e7c0e6e298d999", null ],
           [ "kTextKeys", "dd/d39/document_8hpp.html#a1671229a8263a5b6744c405b482cbb6d", null ],
-          [ "kButtonKeys", "dd/d39/document_8hpp.html#a6f2ba4eb89e63c25aab802743faedbd2", null ],
+          [ "kButtonKeys", "dd/d39/document_8hpp.html#a0aedf5fd3491ccddd89ba96ff857758e", null ],
           [ "kTextInputKeys", "dd/d39/document_8hpp.html#a489c3e53e3d875c978e6186d3d95fdaf", null ],
           [ "kCheckboxKeys", "dd/d39/document_8hpp.html#aa69ae5fee55f582e5341cbe1bf804d37", null ],
           [ "kSelectKeys", "dd/d39/document_8hpp.html#a4dbd7706934ced611e4444b370746115", null ],
@@ -351,13 +354,16 @@ var namespaces_dup =
           [ "kCommandLogSize", "db/d42/interpreter_8hpp.html#aa145390415cb3c86f0cef9a63320ee34", null ],
           [ "kPruneLoweredAt", "db/d42/interpreter_8hpp.html#aa2de76267a8222a91458a4530b03c49e", null ],
           [ "kPluralRules", "d5/d8c/message_8hpp.html#a785294b6243689cf34d47908dd95d811", null ],
+          [ "kPixelsPerRem", "d9/df6/ui_2theme_8hpp.html#aa75d5224e69a0ed975ce8f1494c59cc1", null ],
           [ "kKnownTokenTypes", "d9/df6/ui_2theme_8hpp.html#a2f2fa03b36507a9424d191f5f0a20b0a", null ],
           [ "kFontWeights", "d9/df6/ui_2theme_8hpp.html#a27918f810beaad38837cd35c770ab194", null ]
         ] ],
         [ "Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", "d9/d03/structmorph_1_1ui_1_1Accessibility" ],
         [ "ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", "da/d14/structmorph_1_1ui_1_1ActionButton" ],
+        [ "ActionField", "d2/d20/structmorph_1_1ui_1_1ActionField.html", "d2/d20/structmorph_1_1ui_1_1ActionField" ],
         [ "ActionInfo", "d0/db7/structmorph_1_1ui_1_1ActionInfo.html", "d0/db7/structmorph_1_1ui_1_1ActionInfo" ],
         [ "ActionRef", "dd/d95/structmorph_1_1ui_1_1ActionRef.html", "dd/d95/structmorph_1_1ui_1_1ActionRef" ],
+        [ "ActionUse", "df/de4/structmorph_1_1ui_1_1ActionUse.html", "df/de4/structmorph_1_1ui_1_1ActionUse" ],
         [ "AppContext", "dd/db8/classmorph_1_1ui_1_1AppContext.html", "dd/db8/classmorph_1_1ui_1_1AppContext" ],
         [ "ApplicationInfo", "d8/d2a/structmorph_1_1ui_1_1ApplicationInfo.html", "d8/d2a/structmorph_1_1ui_1_1ApplicationInfo" ],
         [ "AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html", "dd/d83/classmorph_1_1ui_1_1AppRoot" ],
@@ -416,6 +422,8 @@ var namespaces_dup =
         [ "EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget" ],
         [ "Environment", "dc/d40/classmorph_1_1ui_1_1Environment.html", "dc/d40/classmorph_1_1ui_1_1Environment" ],
         [ "EvaluateReply", "d9/d06/structmorph_1_1ui_1_1EvaluateReply.html", "d9/d06/structmorph_1_1ui_1_1EvaluateReply" ],
+        [ "Explorer", "d9/df4/classmorph_1_1ui_1_1Explorer.html", "d9/df4/classmorph_1_1ui_1_1Explorer" ],
+        [ "ExplorerOptions", "db/d26/structmorph_1_1ui_1_1ExplorerOptions.html", "db/d26/structmorph_1_1ui_1_1ExplorerOptions" ],
         [ "Expr", "d0/df6/structmorph_1_1ui_1_1Expr.html", "d0/df6/structmorph_1_1ui_1_1Expr" ],
         [ "FetchRequest", "dc/da0/structmorph_1_1ui_1_1FetchRequest.html", "dc/da0/structmorph_1_1ui_1_1FetchRequest" ],
         [ "FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", "d1/d36/structmorph_1_1ui_1_1FieldState" ],
@@ -535,6 +543,8 @@ var namespaces_dup =
         [ "ServedScreen", "db/d17/structmorph_1_1ui_1_1ServedScreen.html", "db/d17/structmorph_1_1ui_1_1ServedScreen" ],
         [ "Session", "df/d20/classmorph_1_1ui_1_1Session.html", "df/d20/classmorph_1_1ui_1_1Session" ],
         [ "SessionOptions", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html", "d4/d0c/structmorph_1_1ui_1_1SessionOptions" ],
+        [ "ShellFrame", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html", "dc/df1/classmorph_1_1ui_1_1ShellFrame" ],
+        [ "ShellFrameOptions", "da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html", "da/d44/structmorph_1_1ui_1_1ShellFrameOptions" ],
         [ "Sizing", "d1/d89/structmorph_1_1ui_1_1Sizing.html", "d1/d89/structmorph_1_1ui_1_1Sizing" ],
         [ "Slider", "dc/d36/structmorph_1_1ui_1_1Slider.html", "dc/d36/structmorph_1_1ui_1_1Slider" ],
         [ "SliderWidget", "d4/d7d/classmorph_1_1ui_1_1SliderWidget.html", "d4/d7d/classmorph_1_1ui_1_1SliderWidget" ],
@@ -564,6 +574,8 @@ var namespaces_dup =
         [ "TextInputWidget", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html", "d9/d62/classmorph_1_1ui_1_1TextInputWidget" ],
         [ "TextWidget", "de/d89/classmorph_1_1ui_1_1TextWidget.html", "de/d89/classmorph_1_1ui_1_1TextWidget" ],
         [ "ThemeIndex", "d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html", "d9/dcc/structmorph_1_1ui_1_1ThemeIndex" ],
+        [ "ThemeShadow", "d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html", "d0/d3b/structmorph_1_1ui_1_1ThemeShadow" ],
+        [ "ThemeShadowSpec", "df/d3e/structmorph_1_1ui_1_1ThemeShadowSpec.html", "df/d3e/structmorph_1_1ui_1_1ThemeShadowSpec" ],
         [ "ThemeTokenSpec", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec" ],
         [ "ThemeValues", "da/d96/structmorph_1_1ui_1_1ThemeValues.html", "da/d96/structmorph_1_1ui_1_1ThemeValues" ],
         [ "Token", "d8/dc6/structmorph_1_1ui_1_1Token.html", "d8/dc6/structmorph_1_1ui_1_1Token" ],
@@ -585,6 +597,8 @@ var namespaces_dup =
         [ "DocumentMap", "d0/dcd/dev__reload_8hpp.html#ac9901f64f51660281f9351fd06edf49d", null ],
         [ "Commands", "dd/d39/document_8hpp.html#a6fe69a3d9daee6fa69dda107c09687e7", null ],
         [ "DocNodePtr", "dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e", null ],
+        [ "ModelSchemas", "d9/da5/explorer_8hpp.html#aeea66fab5e4e1dd398f5b1ccce7be4de", null ],
+        [ "SchemasByModel", "d9/da5/explorer_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9", null ],
         [ "ExprPtr", "d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5", null ],
         [ "UnitTable", "d8/d0e/expression_8hpp.html#a1b716e9b0352b72447f08451f3ecc33c", null ],
         [ "DateFormatter", "d8/d0e/expression_8hpp.html#afa35c32fdc39deb537f63073f3b37627", null ],
@@ -607,6 +621,15 @@ var namespaces_dup =
         [ "Key", "d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2", null ],
         [ "SlotId", "d8/d11/view_8hpp.html#aed6afd4774d6752d919d24c3e08d4065", null ],
         [ "Node", "d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39", null ],
+        [ "ButtonEmphasis", "d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314", [
+          [ "Normal", "d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0", null ],
+          [ "Primary", "d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352", null ],
+          [ "Danger", "d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a990816b607ebf99b1415760965e4d564", null ]
+        ] ],
+        [ "DevelopmentTools", "d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc", [
+          [ "Off", "d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36", null ],
+          [ "On", "d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffca521c36a31c2762741cf0f8890cbe05e3", null ]
+        ] ],
         [ "InstanceMode", "dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069ea", [
           [ "Default", "dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069eaa7a1920d61156abc05a60135aefe8bc67", null ],
           [ "Private", "dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069eaa47f9082fc380ca62d531096aa1d110f1", null ],
@@ -648,6 +671,18 @@ var namespaces_dup =
         [ "WatchSource", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583", [
           [ "Any", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583aed36a1ef76a59ee3f15180e0441188ad", null ],
           [ "User", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075", null ]
+        ] ],
+        [ "ActionUseKind", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31", [
+          [ "Query", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31a66c1b4c7f3dc385b68a9fa903ccd016d", null ],
+          [ "Mutation", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31a59016373e3e4440ecf76c1d4b6bcd97d", null ],
+          [ "Form", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad359c6df99b25183d81f7d728b71de0e", null ],
+          [ "Collection", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad15b505cce09406de9f918cb1f8c641c", null ],
+          [ "Wizard", "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31a5af874093e5efcbaeb4377b84c5f2ec5", null ]
+        ] ],
+        [ "TryItKind", "d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d", [
+          [ "Form", "d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7dad359c6df99b25183d81f7d728b71de0e", null ],
+          [ "Collection", "d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7dad15b505cce09406de9f918cb1f8c641c", null ],
+          [ "Wizard", "d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7da5af874093e5efcbaeb4377b84c5f2ec5", null ]
         ] ],
         [ "ExprKind", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663", [
           [ "Literal", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad7da1b76e5799f53a399b7a96ba67437", null ],
@@ -698,7 +733,9 @@ var namespaces_dup =
         ] ],
         [ "ThemeTokenKind", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9a", [
           [ "Color", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aacb5feb1b7314637725a2e73bdc9f7295", null ],
-          [ "Number", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aab2ee912b91d69b435159c7c3f6df7f5f", null ]
+          [ "Number", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aab2ee912b91d69b435159c7c3f6df7f5f", null ],
+          [ "Dimension", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa9e0e31246b7b078403969b265870b3f4", null ],
+          [ "Shadow", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa3f39588bb19e28051d9aedfbb170025c", null ]
         ] ],
         [ "ValueKind", "d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fb", [
           [ "Null", "d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fbabbb93ef26e3c101ff11cdd21cab08a94", null ],
@@ -795,6 +832,13 @@ var namespaces_dup =
         [ "loadDocument", "dd/d39/document_8hpp.html#a79167372e38f780fc1fa45f373e5709a", null ],
         [ "loadDocumentText", "dd/d39/document_8hpp.html#a9e11168834f5c779093ce6aa6cb34109", null ],
         [ "nodeKinds", "dd/d39/document_8hpp.html#a28e47c6b98b9d7587dadb9dcf9aa520f", null ],
+        [ "actionUseKindName", "d9/da5/explorer_8hpp.html#ac603cc8423f597fc43f2f4e0f5ccf62e", null ],
+        [ "actionUses", "d9/da5/explorer_8hpp.html#a4c5bd9fa62509d2f5b1e54674a870d3d", null ],
+        [ "actionFields", "d9/da5/explorer_8hpp.html#a41b5b4d495e9c3c6978cc8b378737ee7", null ],
+        [ "tryItScreenId", "d9/da5/explorer_8hpp.html#a3d89aad821adb34d13845cbd0c23ddc2", null ],
+        [ "tryItDocument", "d9/da5/explorer_8hpp.html#aeb941be12f35506a7ea9530ba3d5f3af", null ],
+        [ "schemasOf", "d9/da5/explorer_8hpp.html#a661cbaa10fb0a520c5e996a0f968f3b5", null ],
+        [ "tryItCatalog", "d9/da5/explorer_8hpp.html#a844592a56d9f6c8af64d9cf5e7d65628", null ],
         [ "isName", "d8/d0e/expression_8hpp.html#aaed706df776396b7be2ad677471bf4f0", null ],
         [ "parseExpression", "d8/d0e/expression_8hpp.html#a2df0ed027f18432f71838ac91380ec9a", null ],
         [ "functionNames", "d8/d0e/expression_8hpp.html#a61514f777fb960c40880693da7689afb", null ],
@@ -838,6 +882,7 @@ var namespaces_dup =
         [ "valueToJson", "d6/dda/value_8hpp.html#a3508d4c1e3b7ae6e859435e1b05dc806", null ],
         [ "parseJson", "d6/dda/value_8hpp.html#a20fe54bd802ff09f9ac750f7c20ea32e", null ],
         [ "slot", "d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916", null ],
+        [ "spacingStep", "d8/d11/view_8hpp.html#ab2af508a04a46458578e47351c7010f5", null ],
         [ "text", "d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888", null ],
         [ "button", "d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183", null ],
         [ "textInput", "d8/d11/view_8hpp.html#a2c8c9dbe2077ddffbb7285e93497ccc4", null ],
@@ -905,12 +950,14 @@ var namespaces_dup =
         [ "kPreferencesModel", "df/d07/preferences_8hpp.html#a3c989af991fd9f4b2ea44b721a5e92b4", null ],
         [ "kMaxPrefNameBytes", "df/d07/preferences_8hpp.html#a4cf19b5b33ae15ccc5d0b8dfdc9fe2fc", null ],
         [ "kMaxPrefPoints", "df/d07/preferences_8hpp.html#a1e90417709d090eb91c4c9401089d301", null ],
+        [ "kShellSidebarWidth", "db/d4f/shell__frame_8hpp.html#af30fd407fc56d3ebb11309ba2e1c7cd5", null ],
         [ "kThemeVocabulary", "d9/df6/ui_2theme_8hpp.html#af999583dfef89f2c26e48ce6228b3f1b", null ],
         [ "kMaxThemeTokens", "d9/df6/ui_2theme_8hpp.html#adfc8b5a52d66901cb00798ebc8a4af0f", null ],
         [ "kMaxThemeVariants", "d9/df6/ui_2theme_8hpp.html#ae187550ac7fc325bfd25003bb1c61c41", null ],
         [ "kMaxAliasChain", "d9/df6/ui_2theme_8hpp.html#a6e4b4f213f8422895388c9d7fa8fa591", null ],
-        [ "kThemeTokens", "d9/df6/ui_2theme_8hpp.html#a35fdc7d9590ebc7f01ae631bced765e2", null ],
-        [ "kMaxJsonDepth", "d6/dda/value_8hpp.html#acc5f1eed1d2fc9a76dccdbbffbda77e9", null ]
+        [ "kThemeTokens", "d9/df6/ui_2theme_8hpp.html#a0be8c7219d79dd08719da67b606ea67d", null ],
+        [ "kMaxJsonDepth", "d6/dda/value_8hpp.html#acc5f1eed1d2fc9a76dccdbbffbda77e9", null ],
+        [ "kMaxSpacingStep", "d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f", null ]
       ] ]
     ] ]
 ];

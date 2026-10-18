@@ -1,6 +1,5 @@
 var classmorph_1_1ui_1_1Inspector =
 [
-    [ "Inspector", "dd/db3/classmorph_1_1ui_1_1Inspector.html#a52f89a7e9a208625fc1fe62f5ad344ad", null ],
     [ "screenId", "dd/db3/classmorph_1_1ui_1_1Inspector.html#ac3e631df53aec7271591db2b191a0325", null ],
     [ "nodes", "dd/db3/classmorph_1_1ui_1_1Inspector.html#a0c6100dba75866e774762ae3c32040de", null ],
     [ "queries", "dd/db3/classmorph_1_1ui_1_1Inspector.html#ad09a61b9556e43d9449c1521c549b06a", null ],
