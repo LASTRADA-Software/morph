@@ -349,7 +349,6 @@ TEST_CASE("every_problem_is_listed", "[push][records]") {
 
 namespace {
 
-using morph::effects::Changes;
 using morph::effects::InstanceChange;
 using morph::effects::RecordChange;
 

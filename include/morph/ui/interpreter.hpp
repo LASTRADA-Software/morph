@@ -749,6 +749,50 @@ struct CacheEntry {
     }
 };
 
+/// @brief The rows of a keyed record an entry's value holds, at each of the record's paths.
+/// @param value The entry's confirmed value.
+/// @param held  The record, as the entry's action returns it; it must have a key field.
+/// @return The rows.
+[[nodiscard]] inline std::vector<Value const*> keyedRowsOf(Value const& value, ActionRecordInfo const& held) {
+    std::vector<Value const*> rows;
+    for (std::string const& path : held.paths) {
+        std::vector<std::string> const members = pathMembers(path);
+        keyedRowsAt(value, members, *held.keyField, rows);
+    }
+    return rows;
+}
+
+/// @brief Merges new rows into an entry's value at each of the record's paths.
+/// @param value The entry's confirmed value.
+/// @param held  The record, as the entry's action returns it; it must have a key field.
+/// @param rows  The new rows by key.
+/// @return The new value, or nothing when no row matched.
+[[nodiscard]] inline std::optional<Value> patchHeldRows(Value const& value, ActionRecordInfo const& held,
+                                                        RowsByKey const& rows) {
+    std::optional<Value> patched;
+    for (std::string const& path : held.paths) {
+        std::vector<std::string> const members = pathMembers(path);
+        if (auto next = patchKeyedRows(patched ? *patched : value, members, *held.keyField, rows)) {
+            patched = std::move(next);
+        }
+    }
+    return patched;
+}
+
+/// @brief The entries one change marks stale, each once, in the order they were found.
+struct Marks {
+    /// @brief The entries.
+    std::vector<CacheEntry*> entries;
+
+    /// @brief Adds an entry, unless it is already there.
+    /// @param entry The entry.
+    void add(CacheEntry& entry) {
+        if (std::ranges::find(entries, &entry) == entries.end()) {
+            entries.push_back(&entry);
+        }
+    }
+};
+
 class QueryRuntime;
 class RtScope;
 class ScreenCore;
@@ -1178,7 +1222,7 @@ public:
     /// @brief Marks an entry stale. While its fetch is in flight, the entry also refetches once that fetch settles,
     ///        because the fetch may have read before the change.
     /// @param entry The entry.
-    void markStale(detail::CacheEntry& entry) {
+    static void markStale(detail::CacheEntry& entry) {
         entry.stale = true;
         if (entry.pending.peek()) {
             entry.refetchAfter = true;
@@ -1238,6 +1282,30 @@ private:
 
     /// @brief Marks every entry but an `evaluate` one stale and refetches the mounted ones, in one batch.
     void markAllStale();
+
+    /// @brief Marks each entry of @p marks stale and refetches it through a mounted query that uses it.
+    /// @param marks The entries.
+    void markAndRefetch(detail::Marks const& marks);
+
+    /// @brief Applies one `updates` or `changes` effect of a reply: patches the entries holding the record, or marks
+    ///        them.
+    /// @param effect The effect; its record is set.
+    /// @param info   The action's catalog entry, for the records its reply holds.
+    /// @param reply  The reply's value.
+    /// @param use    Whether the reply was applied or discarded.
+    /// @param marks  Where entries to mark go.
+    void applyRecordEffect(ActionEffect const& effect, ActionInfo const& info, Value const& reply, ReplyUse use,
+                           detail::Marks& marks);
+
+    /// @brief Finds the entries a `changes` event's record change names.
+    /// @param change The change.
+    /// @param marks  Where they go.
+    void markRecordChange(effects::RecordChange const& change, detail::Marks& marks);
+
+    /// @brief Finds the entries a `changes` event's instance change names.
+    /// @param instance The instance.
+    /// @param marks    Where they go.
+    void markInstanceChange(wire::InstanceTopic const& instance, detail::Marks& marks);
 
     void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
         _runtime->batch([&] {
@@ -2773,6 +2841,7 @@ inline void Session::refetchMounted(detail::CacheEntry const& entry) {
     }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a model type and an action id, as every caller names them.
 inline void Session::applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply,
                                        ReplyUse use, std::string const& instanceToken) {
     if (!_options.catalog.action) {
@@ -2782,71 +2851,60 @@ inline void Session::applyReplyEffects(std::string const& typeId, std::string co
     if (!info || !info->effects) {
         return;
     }
-    std::vector<detail::CacheEntry*> marked;
-    auto const mark = [&](detail::CacheEntry& entry) {
-        markStale(entry);
-        if (std::ranges::find(marked, &entry) == marked.end()) {
-            marked.push_back(&entry);
-        }
-    };
+    detail::Marks marks;
     for (ActionEffect const& effect : *info->effects) {
         if (effect.kind == "changesInstance") {
             for (auto const& [key, entry] : _entries) {
                 static_cast<void>(key);
                 if (!entry->evaluate && entry->typeId == typeId && entry->instanceToken == instanceToken) {
-                    mark(*entry);
+                    marks.add(*entry);
                 }
             }
-            continue;
-        }
-        if (!effect.record || (effect.kind != "updates" && effect.kind != "changes")) {
-            continue;
-        }
-        std::string const& record = *effect.record;
-        // The reply's rows of the record, by key; none when the reply does not hold it keyed, or must only mark.
-        std::vector<Value const*> found;
-        auto const own = std::ranges::find(info->records, record, &ActionRecordInfo::record);
-        bool const patch = effect.kind == "updates" && use == ReplyUse::Applied && own != info->records.end() &&
-                           own->keyField.has_value();
-        if (patch) {
-            for (std::string const& path : own->paths) {
-                std::vector<std::string> const members = detail::pathMembers(path);
-                detail::keyedRowsAt(reply, members, *own->keyField, found);
-            }
-        }
-        detail::RowsByKey rows;
-        for (Value const* const row : found) {
-            rows.insert_or_assign(detail::canonicalJson(*row->field(*own->keyField)), row);
-        }
-        for (auto const& [key, entry] : _entries) {
-            static_cast<void>(key);
-            ActionRecordInfo const* const held = entry->holding(record);
-            if (held == nullptr) {
-                continue;
-            }
-            if (!patch || !held->keyField) {
-                mark(*entry);
-                continue;
-            }
-            Value confirmed = entry->confirmed;
-            bool changed = false;
-            for (std::string const& path : held->paths) {
-                std::vector<std::string> const members = detail::pathMembers(path);
-                if (auto patched = detail::patchKeyedRows(confirmed, members, *held->keyField, rows)) {
-                    confirmed = std::move(*patched);
-                    changed = true;
-                }
-            }
-            if (changed) {
-                confirm(*entry, confirmed);
-            }
-            // A fetch in flight may have read before the write, and would settle over the patch.
-            if (entry->pending.peek()) {
-                markStale(*entry);
-            }
+        } else if (effect.record && (effect.kind == "updates" || effect.kind == "changes")) {
+            applyRecordEffect(effect, *info, reply, use, marks);
         }
     }
-    for (detail::CacheEntry* const entry : marked) {
+    markAndRefetch(marks);
+}
+
+inline void Session::applyRecordEffect(ActionEffect const& effect, ActionInfo const& info, Value const& reply,
+                                       ReplyUse use, detail::Marks& marks) {
+    std::string const& record = *effect.record;
+    // The reply's rows of the record, by key; none when the reply does not hold it keyed, or must only mark.
+    auto const own = std::ranges::find(info.records, record, &ActionRecordInfo::record);
+    bool const patch =
+        effect.kind == "updates" && use == ReplyUse::Applied && own != info.records.end() && own->keyField.has_value();
+    detail::RowsByKey rows;
+    if (patch) {
+        for (Value const* const row : detail::keyedRowsOf(reply, *own)) {
+            rows.insert_or_assign(detail::canonicalJson(*row->field(*own->keyField)), row);
+        }
+    }
+    for (auto const& [key, entry] : _entries) {
+        static_cast<void>(key);
+        ActionRecordInfo const* const held = entry->holding(record);
+        if (held == nullptr) {
+            continue;
+        }
+        if (!patch || !held->keyField) {
+            marks.add(*entry);
+            continue;
+        }
+        if (auto patched = detail::patchHeldRows(entry->confirmed, *held, rows)) {
+            confirm(*entry, *patched);
+        }
+        // A fetch in flight may have read before the write, and would settle over the patch.
+        if (entry->pending.peek()) {
+            markStale(*entry);
+        }
+    }
+}
+
+inline void Session::markAndRefetch(detail::Marks const& marks) {
+    for (detail::CacheEntry* const entry : marks.entries) {
+        markStale(*entry);
+    }
+    for (detail::CacheEntry const* const entry : marks.entries) {
         refetchMounted(*entry);
     }
 }
@@ -2928,17 +2986,14 @@ inline wire::WatchBody Session::watchSet() const {
 
 inline void Session::markAllStale() {
     _runtime->batch([this] {
-        std::vector<detail::CacheEntry*> marked;
+        detail::Marks marks;
         for (auto const& [key, entry] : _entries) {
             static_cast<void>(key);
             if (!entry->evaluate) {
-                markStale(*entry);
-                marked.push_back(entry.get());
+                marks.add(*entry);
             }
         }
-        for (detail::CacheEntry* const entry : marked) {
-            refetchMounted(*entry);
-        }
+        markAndRefetch(marks);
     });
 }
 
@@ -2970,71 +3025,59 @@ inline void Session::deliverEvent(wire::EventBody const& event) {
 }
 
 inline void Session::applyChanges(wire::ChangesBody const& changes) {
-    // A key's canonical text, so a key the server wrote is compared with the rows' own.
-    auto const keyText = [](glz::raw_json const& key) -> std::optional<std::string> {
-        auto json = parseJson(key.str);
-        auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
-        return value ? std::optional<std::string>{detail::canonicalJson(*value)} : std::nullopt;
-    };
     _runtime->batch([&] {
-        std::vector<detail::CacheEntry*> marked;
-        auto const mark = [&](detail::CacheEntry& entry) {
-            if (std::ranges::find(marked, &entry) == marked.end()) {
-                markStale(entry);
-                marked.push_back(&entry);
-            }
-        };
+        detail::Marks marks;
         for (effects::RecordChange const& change : changes.records) {
-            std::set<std::string, std::less<>> keys;
-            if (change.keys) {
-                for (glz::raw_json const& key : *change.keys) {
-                    if (auto text = keyText(key)) {
-                        keys.insert(std::move(*text));
-                    }
-                }
-            }
-            for (auto const& [name, entry] : _entries) {
-                static_cast<void>(name);
-                ActionRecordInfo const* const held = entry->holding(change.record);
-                if (held == nullptr) {
-                    continue;
-                }
-                if (!change.keys || !held->keyField) {
-                    mark(*entry);
-                    continue;
-                }
-                std::vector<Value const*> rows;
-                for (std::string const& path : held->paths) {
-                    std::vector<std::string> const members = detail::pathMembers(path);
-                    detail::keyedRowsAt(entry->confirmed, members, *held->keyField, rows);
-                }
-                bool const holdsKey = std::ranges::any_of(rows, [&](Value const* row) {
-                    return keys.contains(detail::canonicalJson(*row->field(*held->keyField)));
-                });
-                // An entry still waiting for its first value may come to hold the key.
-                if (holdsKey || !entry->hasValue.peek()) {
-                    mark(*entry);
-                }
-            }
+            markRecordChange(change, marks);
         }
         for (wire::InstanceTopic const& instance : changes.instances) {
-            std::string const shared = "shared:" + instance.primary;
-            for (auto const& [name, entry] : _entries) {
-                static_cast<void>(name);
-                if (entry->evaluate || entry->typeId != instance.modelType) {
-                    continue;
-                }
-                bool const same = instance.primary.empty() ? !entry->instanceToken.starts_with("shared")
-                                                           : entry->instanceToken == shared;
-                if (same) {
-                    mark(*entry);
-                }
-            }
+            markInstanceChange(instance, marks);
         }
-        for (detail::CacheEntry* const entry : marked) {
-            refetchMounted(*entry);
-        }
+        markAndRefetch(marks);
     });
+}
+
+inline void Session::markRecordChange(effects::RecordChange const& change, detail::Marks& marks) {
+    // The keys' canonical text, so a key the server wrote is compared with the rows' own.
+    std::set<std::string, std::less<>> keys;
+    for (glz::raw_json const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+        auto json = parseJson(key.str);
+        auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+        if (value) {
+            keys.insert(detail::canonicalJson(*value));
+        }
+    }
+    for (auto const& [name, entry] : _entries) {
+        static_cast<void>(name);
+        ActionRecordInfo const* const held = entry->holding(change.record);
+        if (held == nullptr) {
+            continue;
+        }
+        // An entry still waiting for its first value may come to hold a key; keyless rows cannot be told apart.
+        bool const marked = !change.keys || !held->keyField || !entry->hasValue.peek() ||
+                            std::ranges::any_of(detail::keyedRowsOf(entry->confirmed, *held), [&](Value const* row) {
+                                return keys.contains(detail::canonicalJson(*row->field(*held->keyField)));
+                            });
+        if (marked) {
+            marks.add(*entry);
+        }
+    }
+}
+
+inline void Session::markInstanceChange(wire::InstanceTopic const& instance, detail::Marks& marks) {
+    std::string const shared = "shared:" + instance.primary;
+    for (auto const& [name, entry] : _entries) {
+        static_cast<void>(name);
+        if (entry->evaluate || entry->typeId != instance.modelType) {
+            continue;
+        }
+        // Without a primary key, the instance is one of the connection's own private ones.
+        bool const same =
+            instance.primary.empty() ? !entry->instanceToken.starts_with("shared") : entry->instanceToken == shared;
+        if (same) {
+            marks.add(*entry);
+        }
+    }
 }
 
 inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply,

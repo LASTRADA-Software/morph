@@ -1487,6 +1487,7 @@ using ::morph::backend::detail::ChangeCoalescer;
 /// @p count changes to `T_FanRow`, one key each, numbered from @p first.
 std::vector<::morph::effects::Changes> rowBurst(std::size_t count, std::size_t first = 0) {
     std::vector<::morph::effects::Changes> burst;
+    burst.reserve(count);
     for (std::size_t idx = 0; idx < count; ++idx) {
         burst.push_back(rowChange({std::to_string(first + idx)}));
     }
@@ -1496,6 +1497,7 @@ std::vector<::morph::effects::Changes> rowBurst(std::size_t count, std::size_t f
 /// The keys "0" up to @p count - 1, as text.
 std::vector<std::string> numbered(std::size_t count) {
     std::vector<std::string> keys;
+    keys.reserve(count);
     for (std::size_t idx = 0; idx < count; ++idx) {
         keys.push_back(std::to_string(idx));
     }
@@ -1587,6 +1589,7 @@ TEST_CASE("burst_over_backlog_yields_one_resync", "[push][watch]") {
 
 TEST_CASE("merged_keys_never_exceed_client_bound", "[push][watch]") {
     std::vector<std::string> many;
+    many.reserve(::morph::effects::kMaxChangeKeys);
     for (std::size_t idx = 0; idx < ::morph::effects::kMaxChangeKeys; ++idx) {
         many.push_back(std::to_string(idx));
     }

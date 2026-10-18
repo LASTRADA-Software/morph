@@ -265,6 +265,9 @@ bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server,
     // Before the queueing, so a backlog read on the server strand already
     // covers a frame still on its way to the Qt thread.
     backlog->fetch_add(counted);
+    // Qt owns the queued callable and deletes it once it ran or was dropped; the analyzer cannot see into
+    // QMetaObject's slot-object bookkeeping and reports it as leaked.
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
     bool const queued = QMetaObject::invokeMethod(
         app,
         [server, socket, backlog, counted, envelope = std::move(envelope)]() {
