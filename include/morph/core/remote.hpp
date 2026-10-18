@@ -748,14 +748,24 @@ public:
     /// A record topic, and the instance topic of a keyed shared instance, go
     /// to every connection watching them, @p caller included: the caller
     /// may never see its own reply (it timed out, the client discarded it, or
-    /// it went to an offline replay). A private instance's topic goes to the
+    /// it went to an offline replay). An instance is matched by the directory
+    /// key it holds now, so one an `assign` keyed while its execute ran
+    /// reaches that key's watchers. A private instance's topic goes to every
     /// connection whose scope holds that instance, which needs no watch, and
     /// to no other. A connection that has not negotiated events is sent
-    /// nothing. Each connection's event holds only the topics it is sent, and
-    /// passes through `post`'s backlog hold-back and size cap.
-    /// @param changes What one execute changed, from `effects::deriveChanges`.
-    /// @param caller  Connection the execute arrived on; `0` for unscoped.
-    void fanOut(::morph::effects::Changes changes, ConnectionId caller) {
+    /// nothing.
+    ///
+    /// Each recipient's watches are then re-authorised by the rule that
+    /// admitted them (`reauthorise`): a topic whose watch fails is dropped
+    /// from the table and from the event. A record registered with
+    /// `morph::record::privateKeys` reaches a principal other than
+    /// @p callerPrincipal without its keys. Each connection's event holds only
+    /// the topics left, is not sent when none are, and passes through
+    /// `post`'s backlog hold-back and size cap.
+    /// @param changes         What one execute changed, from `effects::deriveChanges`.
+    /// @param caller          Connection the execute arrived on; `0` for unscoped.
+    /// @param callerPrincipal The execute's verified principal; empty when none was.
+    void fanOut(::morph::effects::Changes changes, ConnectionId caller, std::string_view callerPrincipal) {
         assert(_strand.runningHere() && "RemoteServer::fanOut runs on the server strand");
         noteOwner("RemoteServer::fanOut");
         std::map<ConnectionId, ::morph::wire::ChangesBody> bodies;
@@ -767,9 +777,15 @@ public:
             }
         }
         for (auto& change : changes.instances) {
-            auto const recipients = change.primary.empty()
-                                        ? scopesHolding(::morph::exec::detail::ModelId{change.instance}, caller)
-                                        : _watches.watchersOf(change.modelType, change.primary);
+            ::morph::exec::detail::ModelId const mid{change.instance};
+            if (change.primary.empty()) {
+                // Keyed after admission: the topic is the key it holds now.
+                if (auto const* inst = _instances.find(mid); inst != nullptr && inst->sharedKey) {
+                    change.primary = inst->sharedKey->second;
+                }
+            }
+            auto const recipients = change.primary.empty() ? scopesHolding(mid)
+                                                           : _watches.watchersOf(change.modelType, change.primary);
             ::morph::wire::InstanceTopic const topic{
                 .modelType = std::move(change.modelType), .primary = std::move(change.primary),
                 .instance = change.instance};
@@ -779,8 +795,9 @@ public:
                 }
             }
         }
+        Authentications authentications;
         for (auto& [cid, body] : bodies) {
-            reauthorise(cid, body);
+            reauthorise(cid, body, caller, callerPrincipal, authentications);
             if (body.records.empty() && body.instances.empty()) {
                 continue;
             }
@@ -1023,17 +1040,12 @@ private:
 
     /// @brief The connections whose scope holds @p mid. On the server strand.
     ///
-    /// A private instance is held by the one connection that registered it;
-    /// @p caller is asked first because it usually is that connection.
-    /// @param mid    Instance.
-    /// @param caller Connection to ask first; `0` for none.
-    /// @return The connections, at most one for a private instance.
-    [[nodiscard]] std::vector<ConnectionId> scopesHolding(::morph::exec::detail::ModelId mid,
-                                                          ConnectionId caller) const {
-        if (auto const own = _connectionScopes.find(caller);
-            own != _connectionScopes.end() && own->second.contains(mid)) {
-            return {caller};
-        }
+    /// A private instance is held by the connection that registered it; every
+    /// holder is named, so routing does not depend on which connection ran
+    /// the action.
+    /// @param mid Instance.
+    /// @return The connections, ascending.
+    [[nodiscard]] std::vector<ConnectionId> scopesHolding(::morph::exec::detail::ModelId mid) const {
         std::vector<ConnectionId> holders;
         for (auto const& [cid, scope] : _connectionScopes) {
             if (scope.contains(mid)) {
@@ -1043,14 +1055,109 @@ private:
         return holders;
     }
 
-    /// @brief Narrows @p body to the topics connection @p cid may still be
-    ///        sent. On the server strand.
+    /// One fan-out's `authenticate` answers, by (stored principal, token):
+    /// whether the token still verifies as the principal it was admitted for.
+    using Authentications = std::map<std::pair<std::string, std::string>, bool>;
+
+    /// @brief Whether @p watch's session still authenticates as the principal
+    ///        it was admitted for. On the server strand.
     ///
-    /// Every topic is kept: each was authorised when its watch was admitted,
-    /// and a private instance's topic goes only to the connection holding it.
-    /// @param cid  Recipient.
-    /// @param body The topics `fanOut` chose for it; narrowed in place.
-    static void reauthorise([[maybe_unused]] ConnectionId cid, [[maybe_unused]] ::morph::wire::ChangesBody& body) {}
+    /// An expired or revoked token verifies as no principal, which differs
+    /// from a non-empty stored one. A watch admitted with no verified
+    /// principal, as under an authorizer that never authenticates, was not
+    /// admitted on authentication and still passes. Asked once per session
+    /// per fan-out.
+    /// @param watch What the watch was admitted on.
+    /// @param asked This fan-out's answers so far; extended in place.
+    /// @return True when the session still verifies as `watch.principal`.
+    [[nodiscard]] bool stillAuthenticated(detail::Watch const& watch, Authentications& asked) const {
+        auto [found, fresh] = asked.try_emplace({watch.principal, watch.context.token}, false);
+        if (fresh) {
+            found->second = verifiedPrincipal(watch.context) == watch.principal;
+        }
+        return found->second;
+    }
+
+    /// @brief Narrows @p body to the topics connection @p cid may still be
+    ///        sent, re-authorising each watch by the rule that admitted it.
+    ///        On the server strand.
+    ///
+    /// For each watched topic, in order: the watch's stored session must
+    /// still authenticate (`stillAuthenticated`), or every watch @p cid holds
+    /// under that session is dropped; then the topic's admission rule is run
+    /// again on that session, `mayWatchRecord` or `mayWatchInstance`, with
+    /// the answers they cache per principal and token, or that one watch is
+    /// dropped. A dropped watch's topic leaves @p body. Which action wrote
+    /// the change is not checked: a principal that may list a record but not
+    /// write it still receives its changes. The client watches again with its
+    /// next envelope, whose fresh token is admitted afresh.
+    ///
+    /// A private instance's topic has no watch: it is sent to the scope that
+    /// holds the instance, and kept.
+    ///
+    /// A record registered with `morph::record::privateKeys` loses its keys
+    /// unless @p cid is @p caller or its watch's principal is
+    /// @p callerPrincipal, which must be a verified one: keys name rows the
+    /// writer's principal may see, and a principal that filters rows
+    /// differently must not learn them. Without keys, the recipient refetches
+    /// every entry holding the record.
+    /// @param cid             Recipient.
+    /// @param body            The topics `fanOut` chose for it; narrowed in place.
+    /// @param caller          Connection the execute arrived on; `0` for unscoped.
+    /// @param callerPrincipal The execute's verified principal; empty when none was.
+    /// @param asked           This fan-out's `authenticate` answers; extended in place.
+    void reauthorise(ConnectionId cid, ::morph::wire::ChangesBody& body, ConnectionId caller,
+                     std::string_view callerPrincipal, Authentications& asked) {
+        // Copied out before a drop: dropping frees the `Watch` it came from.
+        auto const authenticated = [&](detail::Watch const& watch) {
+            if (stillAuthenticated(watch, asked)) {
+                return true;
+            }
+            std::string const principal = watch.principal;
+            std::string const token = watch.context.token;
+            _watches.dropSession(cid, principal, token);
+            return false;
+        };
+        std::vector<::morph::effects::RecordChange> records;
+        records.reserve(body.records.size());
+        for (auto& change : body.records) {
+            auto const* watch = _watches.watchOf(cid, change.record);
+            if (watch == nullptr || !authenticated(*watch)) {
+                continue;
+            }
+            if (!mayWatchRecord(watch->context, change.record)) {
+                _watches.remove(cid, ::morph::wire::WatchBody{.records = {change.record}, .instances = {}});
+                continue;
+            }
+            bool const keepsKeys = cid == caller || (!callerPrincipal.empty() && watch->principal == callerPrincipal);
+            if (!keepsKeys) {
+                auto const* info = ::morph::effects::recordNamed(change.record);
+                if (info != nullptr && info->privateKeys) {
+                    change.keys.reset();
+                }
+            }
+            records.push_back(std::move(change));
+        }
+        body.records = std::move(records);
+        std::vector<::morph::wire::InstanceTopic> instances;
+        instances.reserve(body.instances.size());
+        for (auto& topic : body.instances) {
+            if (!topic.primary.empty()) {
+                auto const* watch = _watches.watchOf(cid, topic.modelType, topic.primary);
+                if (watch == nullptr || !authenticated(*watch)) {
+                    continue;
+                }
+                if (!mayWatchInstance(watch->context, topic.modelType)) {
+                    _watches.remove(cid, ::morph::wire::WatchBody{
+                                             .records = {},
+                                             .instances = {{.modelType = topic.modelType, .primary = topic.primary}}});
+                    continue;
+                }
+            }
+            instances.push_back(std::move(topic));
+        }
+        body.instances = std::move(instances);
+    }
 
     /// @brief Body of `post`. On the server strand.
     /// @param cid      Connection to write to.
@@ -2327,8 +2434,10 @@ private:
             if (changes.empty()) {
                 return;
             }
-            run.self->_strand.postTask([self = run.self, changes = std::move(changes), caller = run.cid]() mutable {
-                self->fanOut(std::move(changes), caller);
+            // The execute's principal is the verified one by now (`dispatchExecute`).
+            run.self->_strand.postTask([self = run.self, changes = std::move(changes), caller = run.cid,
+                                        principal = run.env.session.principal]() mutable {
+                self->fanOut(std::move(changes), caller, principal);
             });
         } catch (const std::exception& exc) {
             ::morph::log::logError("[fanOut] changes of {} not derived: {}", run.env.actionType, exc.what());

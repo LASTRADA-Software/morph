@@ -409,6 +409,47 @@ It reuses that one `authenticate` result for its stamp.
 The baseline lives on the server strand beside the connection's other state,
 and is read and written only there.
 
+### Fan-out re-authorises each watch
+
+A watch is admitted once, but delivers for as long as it lasts, and a token
+expires or a policy changes in the meantime. So `RemoteServer::fanOut`
+re-authorises every recipient watch at send time, by the rule that admitted it,
+on the session stored with it:
+
+- **Its token must still authenticate** as the principal the watch was admitted
+  for. An expired token verifies as no principal, so the check fails, and every
+  watch the connection holds under that session is dropped. A watch admitted
+  with no verified principal, under an authorizer that never authenticates, was
+  not admitted on authentication and passes.
+- **Then the admission rule runs again.** For a record type: the principal may
+  run some action whose result holds it. For an instance topic: the model type
+  is registered, the principal may run one of its actions, and
+  `authorizeInstance(ctx, modelType, {}, 0, "")` admits it. A failure drops
+  that watch. The action that wrote the change is not checked: a role that may
+  list results but not capture them still receives the change.
+
+A dropped watch's topic leaves the event, and an event with no topic left is
+not sent. The client watches again with its next envelope, whose fresh token is
+admitted afresh. The "may run some action" answers come from the watch table's
+cache per verified principal and token, so for an authenticated principal a
+policy change reaches its existing watches when it next watches with a new
+token; `authenticate` and `authorizeInstance` are asked each time. A private
+instance's topic has no watch: it goes only to the connections whose scope
+holds the instance.
+
+### What an event reveals
+
+An event carries no values, only which topics changed and, for a record, the
+keys of the rows that did. Those keys are ids of rows the recipient could list
+through some action returning that record, but not necessarily the same rows:
+a model may filter rows per principal. A record registered with
+`morph::record::privateKeys` therefore reaches every recipient other than the
+caller's own principal as a whole-type change, without keys, and every entry
+holding it refetches through the read path, where row filtering and
+`secretFields` are enforced. The keys are kept for the calling connection and
+for watches whose verified principal is the caller's; two connections with no
+verified principal do not count as the same principal.
+
 ### Role-based policy
 
 `SigningAuthorizer`'s optional `Policy` runs over the verified claims:

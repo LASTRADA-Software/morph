@@ -30,7 +30,8 @@ namespace morph::backend::detail {
 ///
 /// A connection has no principal of its own, so each watch keeps the session
 /// of the `watch` envelope that created it and the principal verified from
-/// that session. Fan-out re-authorises the watch on them at send time.
+/// that session. Fan-out re-authorises the watch on them at send time, by the
+/// rule that admitted it.
 struct Watch {
     /// @brief The `watch` envelope's session, its principal already the verified one.
     ::morph::session::Context context;
@@ -173,6 +174,53 @@ public:
         }
         auto const found = connection->second.records.find(record);
         return found == connection->second.records.end() ? nullptr : found->second.get();
+    }
+
+    /// @brief What @p cid's watch on the keyed instance `(modelType, primary)`
+    ///        was admitted on.
+    /// @param cid       Connection.
+    /// @param modelType The instance's registered model type.
+    /// @param primary   The instance's directory key text.
+    /// @return The watch, valid until the table next changes, or null when
+    ///         @p cid does not watch that instance.
+    [[nodiscard]] Watch const* watchOf(ConnectionId cid, std::string_view modelType, std::string_view primary) const {
+        auto const connection = _connections.find(cid);
+        if (connection == _connections.end()) {
+            return nullptr;
+        }
+        auto const found = connection->second.instances.find(InstanceKey{std::string{modelType}, std::string{primary}});
+        return found == connection->second.instances.end() ? nullptr : found->second.get();
+    }
+
+    /// @brief Drops every watch @p cid holds that was admitted with
+    ///        @p principal and @p token, and keeps the rest.
+    ///
+    /// What a watch whose token no longer authenticates takes with it: every
+    /// topic the connection watched under that same session.
+    /// @param cid       Connection.
+    /// @param principal The verified principal the watches were admitted for.
+    /// @param token     The token they were admitted with.
+    void dropSession(ConnectionId cid, std::string const& principal, std::string const& token) {
+        auto found = _connections.find(cid);
+        if (found == _connections.end()) {
+            return;
+        }
+        SessionKey const key{principal, token};
+        auto const dropMatching = [this, &key](auto& topics) {
+            for (auto it = topics.begin(); it != topics.end();) {
+                if (keyOf(*it->second) == key) {
+                    release(key);
+                    it = topics.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        };
+        dropMatching(found->second.records);
+        dropMatching(found->second.instances);
+        if (found->second.size() == 0) {
+            _connections.erase(found);
+        }
     }
 
     /// @brief How many topics @p cid watches, records and instances together.

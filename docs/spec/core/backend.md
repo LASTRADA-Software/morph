@@ -1122,8 +1122,10 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   created it and the principal verified from it, because a connection has no
   principal of its own. Watching a topic again keeps the newer one.
   `watchersOf(record)` and `watchersOf(modelType, primary)` answer the
-  connections watching a topic, ascending; `watchOf(cid, record)` the watch
-  itself; `topicCount(cid)` how many topics `cid` watches. `RemoteServer::watchTable()` exposes it read-only, on the strand.
+  connections watching a topic, ascending; `watchOf(cid, record)` and
+  `watchOf(cid, modelType, primary)` the watch itself; `dropSession(cid,
+  principal, token)` drops every watch `cid` holds under one session;
+  `topicCount(cid)` how many topics `cid` watches. `RemoteServer::watchTable()` exposes it read-only, on the strand.
 - **Admission.** Each topic of a `watch` is admitted or refused on its own,
   on the principal `stampVerifiedPrincipal` verified for the envelope; the
   `ok` reply's `WatchReply` lists the refused ones, and the admitted ones are
@@ -1178,7 +1180,9 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   So does an envelope under another principal: `stampVerifiedPrincipal(env,
   cid)` compares each stamped principal with the connection's baseline and
   drops the watches on a difference
-  ([security.md](../security.md#a-connections-principal-baseline)).
+  ([security.md](../security.md#a-connections-principal-baseline)). And so
+  does fan-out, for a watch that no longer passes the rule that admitted it
+  ([Fan-out](#fan-out)).
 
 ### Fan-out
 
@@ -1193,27 +1197,55 @@ through `dispatchExecute`.
   shared instance, the primary of the directory key it held when the execute
   was admitted (`RemoteRun::sharedKey`; empty for a private instance). Changes
   that are not empty are posted to the server strand as
-  `fanOut(changes, caller)`, where `caller` is the execute's connection
-  (`RemoteRun::cid`). The reply is written exactly as without fan-out. A failed
+  `fanOut(changes, caller, callerPrincipal)`, where `caller` is the execute's
+  connection (`RemoteRun::cid`) and `callerPrincipal` its verified principal. The reply is written exactly as without fan-out. A failed
   execute derives nothing. A derivation that throws is logged; the reply and
   the action gate's release still follow.
 - **The server strand finds the recipients.** A record topic goes to every
   connection `watchersOf(record)` names, and a keyed shared instance's topic to
   every connection `watchersOf(modelType, primary)` names, **the caller
-  included**. The caller may never see its own reply: an execute the
+  included**. An instance whose change carries no primary is looked up in the
+  directory on the strand: one an `assign` keyed while its execute ran is
+  matched by the key it holds now, since matching is against
+  `Instance::sharedKey` at fan-out. The caller may never see its own reply: an execute the
   `executeTimeout` answered first but that succeeded, a reply the client
   discarded, a replay whose reply went to the offline worker. A private
-  instance's topic goes only to the connection whose scope holds the instance,
-  whether or not it is the caller, and needs no watch. A connection that has
+  instance's topic goes to every connection whose scope holds the instance
+  (`scopesHolding`), whether or not it is the caller, and needs no watch. A connection that has
   not negotiated events (`eventsNegotiated(cid)`) is sent nothing.
 - **One event per recipient.** Each recipient gets one `changes` event whose
   `ChangesBody` holds only the topics it is sent: its watched records, with the
   keys derived, and its instance topics as `InstanceTopic{modelType, primary,
   instance}`. Before it is encoded, the body passes through
-  `RemoteServer::reauthorise(cid, body)`, the one place a recipient's topics
-  are narrowed; it keeps every topic, since each watch was authorised when it
-  was admitted. The event is then written as `post` writes: dropped above
+  `RemoteServer::reauthorise`, the one place a recipient's topics are
+  narrowed. An event left with no topic is not sent. The event is then
+  written as `post` writes: dropped above
   `wire::kMaxEnvelopeBytes`, held back behind a full backlog.
+- **Re-authorised at send time, by the rule that admitted it.** For each
+  watched topic in a recipient's body:
+  1. the watch's stored session must still `authenticate` as the principal it
+     was admitted for. An expired token verifies as no principal, so every
+     watch the connection holds under that session is dropped. A watch
+     admitted with no verified principal, under an authorizer that never
+     authenticates, passes. `authenticate` is asked once per session per
+     fan-out;
+  2. the topic's admission rule runs again on that session: `mayWatchRecord`
+     for a record, `mayWatchInstance` for an instance, through the same cache
+     per principal and token ([Watches](#watches)). A refusal drops that
+     watch. The action that wrote the change is not consulted, so a principal
+     that may list a record but not write it still receives its changes.
+
+  A dropped watch's topic leaves the body; the client watches again with its
+  next envelope. A private instance's topic has no watch and is kept. A
+  verified principal's cached `authorize` answer stands until that principal
+  watches with a new token, so a policy change reaches its existing watches
+  then; the `authenticate` and `authorizeInstance` checks are asked afresh.
+- **Private keys.** A record registered with `morph::record::privateKeys`
+  reaches a recipient without its `keys` (a whole-type change) unless the
+  recipient is the calling connection or its watch's principal is the
+  caller's verified principal. Two connections with no verified principal are
+  not the same principal for this purpose. See
+  [security.md](../security.md#what-an-event-reveals).
 - **The registries are read at construction.** Every `RemoteServer`
   constructor reads the record and effects registries once, so a process whose
   declarations are invalid fails with `EffectsRegistrationError` when the server
@@ -2332,7 +2364,7 @@ server: each call is a loop task, so the loop serialises them.
 | `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
 | `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
 | `watchTable() const` | Server strand only (debug-asserted). The `detail::WatchTable` of every open connection's watches, read-only. See [Watches](#watches). |
-| `fanOut(changes, caller)` | Server strand only (debug-asserted). Sends each connection that watches a topic of `changes`, or whose scope holds a private instance in it, one `changes` event with the topics it is sent; `caller` included, connections without negotiated events skipped. A successful `execute` posts it. See [Fan-out](#fan-out). |
+| `fanOut(changes, caller, callerPrincipal)` | Server strand only (debug-asserted). Sends each connection that watches a topic of `changes`, or whose scope holds a private instance in it, one `changes` event with the topics it is sent; `caller` included, connections without negotiated events skipped. Each watch is re-authorised first, and a `privateKeys` record loses its keys for principals other than `callerPrincipal`. A successful `execute` posts it. See [Fan-out](#fan-out). |
 | `eventsNegotiated(cid) const` | Server strand only (debug-asserted). Whether `cid` negotiated events: the `ConnectionFacts::events` a service set for it. `false` for `0`, an unknown `cid` or a closed one. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |

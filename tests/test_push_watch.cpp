@@ -3,6 +3,7 @@
 // The server's per-connection watch table and the core `watch`/`unwatch`
 // kinds: what a watch may name, how it is stored, and what drops it.
 
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -20,6 +21,8 @@
 #include <morph/session/session.hpp>
 #include <mutex>
 #include <optional>
+#include <semaphore>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -109,6 +112,37 @@ struct TouchFan {
     int by{};
 };
 
+/// Lists rows; holds the row record without changing it.
+struct ListFanRows {
+    int limit{};
+};
+
+/// A record whose keys must not reach other principals.
+struct FanPrivate {
+    std::int64_t id{};
+};
+
+struct FanPrivateList {
+    std::vector<FanPrivate> rows;
+};
+
+/// Edits one private-keyed row and returns it.
+struct EditFanPrivate {
+    std::int64_t id{};
+};
+
+/// Changes the instance's own state once the test releases `fanGate()`, so
+/// the test can act between its admission and its fan-out.
+struct GatedTouchFan {
+    int by{};
+};
+
+/// Released by a test to let one `GatedTouchFan` finish.
+inline std::binary_semaphore& fanGate() {
+    static std::binary_semaphore gate{0};
+    return gate;
+}
+
 struct FanModel {
     int touched = 0;
     FanRowList execute(EditFanRow const& action) { return {.rows = {{.id = action.id, .name = "edited"}}}; }
@@ -119,6 +153,12 @@ struct FanModel {
     FanRowList execute(FailFanRow const& /*action*/) { throw std::runtime_error("edit failed"); }
     FanOtherList execute(ListFanOthers const& /*action*/) { return {}; }
     int execute(TouchFan const& action) { return touched += action.by; }
+    FanRowList execute(ListFanRows const& /*action*/) { return {}; }
+    FanPrivateList execute(EditFanPrivate const& action) { return {.rows = {{.id = action.id}}}; }
+    int execute(GatedTouchFan const& action) {
+        (void)fanGate().try_acquire_for(std::chrono::seconds{5});
+        return touched += action.by;
+    }
 };
 
 }  // namespace push_watch_test
@@ -144,6 +184,12 @@ BRIDGE_REGISTER_EFFECTS(FailFanRow, morph::effects::updates<FanRow>)
 BRIDGE_REGISTER_ACTION(FanModel, ListFanOthers, "T_FanListOthers")
 BRIDGE_REGISTER_ACTION(FanModel, TouchFan, "T_FanTouch")
 BRIDGE_REGISTER_EFFECTS(TouchFan, morph::effects::changesInstance)
+BRIDGE_REGISTER_ACTION(FanModel, ListFanRows, "T_FanListRows")
+BRIDGE_REGISTER_RECORD(FanPrivate, "T_FanPrivate", morph::record::privateKeys)
+BRIDGE_REGISTER_ACTION(FanModel, EditFanPrivate, "T_FanEditPrivate")
+BRIDGE_REGISTER_EFFECTS(EditFanPrivate, morph::effects::updates<FanPrivate>)
+BRIDGE_REGISTER_ACTION(FanModel, GatedTouchFan, "T_FanGatedTouch")
+BRIDGE_REGISTER_EFFECTS(GatedTouchFan, morph::effects::changesInstance)
 
 namespace {
 
@@ -867,6 +913,18 @@ struct FanRig {
         done.wait();
         return watchers;
     }
+
+    /// The connections watching `(modelType, primary)`, read on the server strand.
+    std::vector<ConnectionId> instanceWatchers(std::string_view modelType, std::string_view primary) {
+        std::vector<ConnectionId> watchers;
+        std::latch done{1};
+        server->strand().post([&] {
+            watchers = server->watchTable().watchersOf(modelType, primary);
+            done.count_down();
+        });
+        done.wait();
+        return watchers;
+    }
 };
 
 /// The keys of @p change, as raw JSON text.
@@ -991,7 +1049,7 @@ TEST_CASE("timed_out_call_still_reaches_caller_as_event", "[push][watch]") {
     rig.watch(caller, records({"T_FanRow"}));
     auto const mid = rig.create(caller);
 
-    auto const reply = rig.execute(caller, mid, "T_FanSlowEdit", R"({"id":8,"delayMs":50})");
+    auto const reply = rig.execute(caller, mid, "T_FanSlowEdit", R"({"id":8,"delayMs":300})");
     REQUIRE(reply.kind == "err");
     CHECK(reply.message == "timeout");
     CHECK(rig.wire(caller).snapshot().empty());
@@ -1035,4 +1093,226 @@ TEST_CASE("execute_under_other_principal_drops_watches_before_its_fanout", "[pus
     CHECK(rig.wire(other).changes().size() == 1U);
     CHECK(rig.wire(shared).changes().empty());
     CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{other});
+}
+
+namespace {
+
+/// The principal a token names: the token up to a `:`.
+std::string principalOf(std::string_view token) { return std::string{token.substr(0, token.find(':'))}; }
+
+/// An authorizer whose answers a test changes between a watch and a send.
+///
+/// A token names its principal as `SecretGuard`'s does, and `authorize` reads
+/// the principal from the token, so it tells callers apart whether or not it
+/// authenticates.
+struct FlipGuard final : ::morph::session::IAuthorizer {
+    mutable std::mutex mtx;
+    /// Whether `authenticate` vouches for any token at all.
+    bool authenticates = true;
+    /// Tokens `authenticate` refuses, as an expired one is.
+    std::set<std::string, std::less<>> expired;
+    /// `principal/actionType` pairs `authorize` refuses.
+    std::set<std::string, std::less<>> deniedActions;
+    /// Principals `authorizeInstance` refuses.
+    std::set<std::string, std::less<>> deniedInstances;
+
+    void expire(std::string token) {
+        std::scoped_lock const lock{mtx};
+        expired.insert(std::move(token));
+    }
+    void deny(std::string const& principal, std::string_view actionType) {
+        std::scoped_lock const lock{mtx};
+        deniedActions.insert(principal + "/" + std::string{actionType});
+    }
+    void denyInstances(std::string principal) {
+        std::scoped_lock const lock{mtx};
+        deniedInstances.insert(std::move(principal));
+    }
+
+    [[nodiscard]] bool authorize(const ::morph::session::Context& ctx, std::string_view /*modelType*/,
+                                 std::string_view actionType) const override {
+        std::scoped_lock const lock{mtx};
+        return !deniedActions.contains(principalOf(ctx.token) + "/" + std::string{actionType});
+    }
+    [[nodiscard]] std::optional<std::string> authenticate(const ::morph::session::Context& ctx) const override {
+        std::scoped_lock const lock{mtx};
+        if (!authenticates || ctx.token.empty() || expired.contains(ctx.token)) {
+            return std::nullopt;
+        }
+        return principalOf(ctx.token);
+    }
+    [[nodiscard]] bool authorizeInstance(const ::morph::session::Context& ctx, std::string_view /*modelType*/,
+                                         std::string_view /*actionType*/, std::uint64_t /*modelId*/,
+                                         std::string_view /*ownerPrincipal*/) const override {
+        std::scoped_lock const lock{mtx};
+        return !deniedInstances.contains(principalOf(ctx.token));
+    }
+};
+
+/// The actions that hold `T_FanRow` and write it.
+constexpr std::array<std::string_view, 3> kFanRowWriters{"T_FanEdit", "T_FanSlowEdit", "T_FanFail"};
+
+}  // namespace
+
+TEST_CASE("expired_watch_dropped_at_send", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(caller, records({"T_FanRow"}), "alice");
+    rig.watch(watcher, records({"T_FanRow"}), "carol");
+    auto const mid = rig.create(caller, {}, "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":1})", "alice").kind == "ok");
+    rig.flush();
+    REQUIRE(rig.wire(watcher).changes().size() == 1U);
+
+    // carol's token expires; nothing she sends tells the server, so only the
+    // send-time check can notice.
+    guard->expire("carol");
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":2})", "alice").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(watcher).changes().size() == 1U);
+    CHECK(rig.wire(caller).changes().size() == 2U);
+    CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{caller});
+}
+
+TEST_CASE("lister_not_writer_still_receives", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    for (auto const writer : kFanRowWriters) {
+        guard->deny("rita", writer);
+    }
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const reader = rig.connect();
+    // rita may list rows but run none of the actions that write them.
+    rig.watch(reader, records({"T_FanRow"}), "rita");
+    auto const mid = rig.create(caller, {}, "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":5})", "alice").kind == "ok");
+    rig.flush();
+
+    auto const bodies = rig.wire(reader).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().records.size() == 1U);
+    CHECK(keysOf(bodies.front().records.front()) == std::vector<std::string>{"5"});
+    CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{reader});
+}
+
+TEST_CASE("private_keys_stripped_for_other_principals_kept_for_caller", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const sameAlice = rig.connect();
+    auto const bob = rig.connect();
+    rig.watch(caller, records({"T_FanPrivate", "T_FanRow"}), "alice");
+    rig.watch(sameAlice, records({"T_FanPrivate"}), "alice:other");
+    rig.watch(bob, records({"T_FanPrivate", "T_FanRow"}), "bob");
+    auto const mid = rig.create(caller, {}, "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanEditPrivate", R"({"id":4})", "alice").kind == "ok");
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":6})", "alice").kind == "ok");
+    rig.flush();
+
+    for (auto const cid : {caller, sameAlice}) {
+        auto const bodies = rig.wire(cid).changes();
+        REQUIRE_FALSE(bodies.empty());
+        REQUIRE(bodies.front().records.size() == 1U);
+        CHECK(bodies.front().records.front().record == "T_FanPrivate");
+        CHECK(keysOf(bodies.front().records.front()) == std::vector<std::string>{"4"});
+    }
+    auto const bobBodies = rig.wire(bob).changes();
+    REQUIRE(bobBodies.size() == 2U);
+    REQUIRE(bobBodies.front().records.size() == 1U);
+    // bob learns that the type changed, not which rows.
+    CHECK(bobBodies.front().records.front().record == "T_FanPrivate");
+    CHECK_FALSE(bobBodies.front().records.front().keys.has_value());
+    // A record without privateKeys keeps its keys for every principal.
+    REQUIRE(bobBodies.back().records.size() == 1U);
+    CHECK(keysOf(bobBodies.back().records.front()) == std::vector<std::string>{"6"});
+}
+
+TEST_CASE("refused_after_policy_change_drops_watch", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    // An authorizer that does not authenticate: no principal is verified, so
+    // no admission answer is cached and the send-time check asks it afresh.
+    // A verified principal's cached answer would stand until its token is
+    // refreshed.
+    guard->authenticates = false;
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const reader = rig.connect();
+    rig.watch(reader, records({"T_FanRow"}), "rita");
+    auto const mid = rig.create(caller, {}, "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":1})", "alice").kind == "ok");
+    rig.flush();
+    REQUIRE(rig.wire(reader).changes().size() == 1U);
+
+    // rita loses every action that holds the row record.
+    guard->deny("rita", "T_FanListRows");
+    for (auto const writer : kFanRowWriters) {
+        guard->deny("rita", writer);
+    }
+    CHECK(rig.execute(caller, mid, "T_FanEdit", R"({"id":2})", "alice").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(reader).changes().size() == 1U);
+    CHECK(rig.recordWatchers("T_FanRow").empty());
+}
+
+TEST_CASE("instance_watch_reauthorised_at_send", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, instance(std::string{kFanModel}, "k1"), "carol");
+    auto const mid = rig.create(caller, "k1", "alice");
+
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":1})", "alice").kind == "ok");
+    rig.flush();
+    REQUIRE(rig.wire(watcher).changes().size() == 1U);
+
+    guard->denyInstances("carol");
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":1})", "alice").kind == "ok");
+    rig.flush();
+
+    CHECK(rig.wire(watcher).changes().size() == 1U);
+    CHECK(rig.instanceWatchers(kFanModel, "k1").empty());
+}
+
+TEST_CASE("assign_promoted_instance_reaches_watcher", "[push][watch]") {
+    FanRig rig;
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, instance(std::string{kFanModel}, "k9"));
+    auto const mid = rig.create(caller);
+
+    // Admitted while the instance is private...
+    ::morph::wire::Envelope env;
+    env.kind = "execute";
+    env.callId = 9;
+    env.modelId = mid;
+    env.modelType = std::string{kFanModel};
+    env.actionType = "T_FanGatedTouch";
+    env.body = R"({"by":1})";
+    auto waiter = std::make_shared<::morph::testing::WaitReply>();
+    rig.server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, caller);
+    // ...promoted to a key before it finishes...
+    auto const assigned = ::morph::wire::decode(rig.server->handleInline(
+        ::morph::wire::encode(::morph::wire::makeAssign(std::string{kFanModel}, "k9", mid)), caller));
+    REQUIRE(assigned.kind == "ok");
+    fanGate().release();
+    REQUIRE(waiter->await());
+    REQUIRE(waiter->env.kind == "ok");
+    rig.flush();
+
+    // ...so its change is matched against the key it holds now.
+    auto const bodies = rig.wire(watcher).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().instances.size() == 1U);
+    CHECK(bodies.front().instances.front().primary == "k9");
+    CHECK(bodies.front().instances.front().instance == mid);
+    CHECK(rig.wire(caller).snapshot().empty());
 }
