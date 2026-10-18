@@ -312,6 +312,24 @@ inline Catalog corpusCatalog() {
         if (action == "Lims_ListResults") {
             info.calculatedFields = {"concentration"};
         }
+        // Server push (spec 8): `T_Row` is keyed by `code`, not `id`, so a patch must use the catalog's key field.
+        ActionRecordInfo const rowsAtTop{.record = "T_Row", .keyField = "code", .paths = {""}};
+        if (action == "Push_ListRows" || action == "Push_Rows") {
+            info.records = {rowsAtTop};
+        }
+        if (action == "Push_Header") {
+            info.records = {ActionRecordInfo{.record = "T_Row", .keyField = "code", .paths = {"header.rows"}}};
+        }
+        if (action == "Push_EditRow" || action == "Lims_CaptureConcentration") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "updates", .record = "T_Row"}};
+            info.records = {rowsAtTop};
+        }
+        if (action == "Push_RenameAll") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
+        }
+        if (action == "Push_Reset") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changesInstance", .record = std::nullopt}};
+        }
         return info;
     };
     // The actions a `form` node, a collection's editor and a wizard's steps build from.

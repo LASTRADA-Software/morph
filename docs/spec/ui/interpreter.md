@@ -121,6 +121,20 @@ canonical body is the body's JSON with record fields in name order.
   collection or a wizard that succeeds, refetches every mounted query of the same model type whose
   `refreshOn` names its action, in every screen of the session. A collection's own list query and a
   form's choice options are reads, not submits, and refetch nothing.
+- **Every reply applies its action's effects** (spec 8 §9). `Session::actionSucceeded`, which every
+  success goes through (mutations, and the submits of forms, collections and wizards), takes the reply
+  and the instance token of the alias the call went through. Each entry knows the records its action
+  returns, with each record's key field and paths, from the catalog's `ActionInfo::records`; an
+  `evaluate` entry holds none.
+    - `updates R` merges the reply's rows of `R` into every entry holding `R`. Rows are matched by
+      the record's key field, at each path the catalog gives (`header.rows` follows members; a list
+      on the way is looked through). There is no fetch. An entry whose fetch is in flight is also
+      marked, because that fetch may have read before the write and would settle over the patch.
+    - `changes R` marks every entry holding `R` stale, and `changesInstance` every entry read through
+      the same instance token. A marked entry refetches through a mounted query that uses it.
+    - A `latest` run whose reply is discarded applies its effects as marks only: its `updates` act as
+      `changes`, because its values are older than the reply already applied. It runs no `refreshOn`.
+    - One reply's effects are applied in one reactive batch.
 - **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

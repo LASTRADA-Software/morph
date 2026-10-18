@@ -558,6 +558,116 @@ enum class PatchMiss : std::uint8_t {
     return value;
 }
 
+/// @brief The members of a catalog record path: `"header.rows"` is `header`, then `rows`; `""` is none.
+/// @param path The path.
+/// @return Its members in order.
+[[nodiscard]] inline std::vector<std::string> pathMembers(std::string_view path) {
+    std::vector<std::string> members;
+    for (auto const part : std::views::split(path, '.')) {
+        if (!part.empty()) {
+            members.emplace_back(part.begin(), part.end());
+        }
+    }
+    return members;
+}
+
+/// @brief The rows of a keyed record that a value holds at a path.
+///
+/// A list on the way is looked through, as the result walker looks through a `std::vector`. At the path's end a
+/// record with the key field is a row, and a record without it is a map whose values are the rows.
+/// @param value    The value.
+/// @param path     The members still to follow.
+/// @param keyField The record's key field.
+/// @param out      Where the rows go.
+// NOLINTNEXTLINE(misc-no-recursion): one level per path member or nested list.
+inline void keyedRowsAt(Value const& value, std::span<std::string const> path, std::string_view keyField,
+                        std::vector<Value const*>& out) {
+    if (ValueList const* const items = value.asList()) {
+        for (Value const& item : *items) {
+            keyedRowsAt(item, path, keyField, out);
+        }
+        return;
+    }
+    ValueRecord const* const record = value.asRecord();
+    if (record == nullptr) {
+        return;
+    }
+    if (!path.empty()) {
+        if (auto const found = record->find(path.front()); found != record->end()) {
+            keyedRowsAt(found->second, path.subspan(1), keyField, out);
+        }
+        return;
+    }
+    if (record->contains(keyField)) {
+        out.push_back(&value);
+        return;
+    }
+    for (auto const& [name, item] : *record) {
+        static_cast<void>(name);
+        if (ValueRecord const* const row = item.asRecord(); row != nullptr && row->contains(keyField)) {
+            out.push_back(&item);
+        }
+    }
+}
+
+/// @brief New rows by the canonical text of their key.
+using RowsByKey = std::map<std::string, Value const*, std::less<>>;
+
+/// @brief Merges new rows over the rows with the same key that a value holds at a path.
+/// @param value    The value.
+/// @param path     The members still to follow.
+/// @param keyField The record's key field.
+/// @param rows     The new rows.
+/// @return The new value, or nothing when no row matched.
+// NOLINTNEXTLINE(misc-no-recursion): one level per path member or nested list.
+[[nodiscard]] inline std::optional<Value> patchKeyedRows(Value const& value, std::span<std::string const> path,
+                                                         std::string_view keyField, RowsByKey const& rows) {
+    if (ValueList const* const items = value.asList()) {
+        ValueList out = *items;
+        bool changed = false;
+        for (Value& item : out) {
+            if (auto patched = patchKeyedRows(item, path, keyField, rows)) {
+                item = std::move(*patched);
+                changed = true;
+            }
+        }
+        return changed ? std::optional<Value>{Value{std::move(out)}} : std::nullopt;
+    }
+    ValueRecord const* const record = value.asRecord();
+    if (record == nullptr) {
+        return std::nullopt;
+    }
+    if (!path.empty()) {
+        auto const found = record->find(path.front());
+        if (found == record->end()) {
+            return std::nullopt;
+        }
+        auto patched = patchKeyedRows(found->second, path.subspan(1), keyField, rows);
+        if (!patched) {
+            return std::nullopt;
+        }
+        ValueRecord out = *record;
+        out.insert_or_assign(path.front(), std::move(*patched));
+        return Value{std::move(out)};
+    }
+    if (auto const key = record->find(keyField); key != record->end()) {
+        auto const row = rows.find(canonicalJson(key->second));
+        return row == rows.end() ? std::nullopt : std::optional<Value>{mergeRow(value, *row->second)};
+    }
+    ValueRecord out = *record;
+    bool changed = false;
+    for (auto& [name, item] : out) {
+        static_cast<void>(name);
+        if (ValueRecord const* const row = item.asRecord(); row != nullptr && row->contains(keyField)) {
+            if (auto patched = patchKeyedRows(item, {}, keyField, rows)) {
+                item = std::move(*patched);
+                changed = true;
+            }
+        }
+    }
+    return changed ? std::optional<Value>{Value{std::move(out)}} : std::nullopt;
+}
+
 /// @brief One optimistic write still waiting for its reply.
 struct OptimisticLayer {
     /// @brief The run that made it.
@@ -616,6 +726,19 @@ struct CacheEntry {
     reactive::TimerHandle evict;
     /// @brief The fields never cached.
     std::vector<std::string> secretFields;
+    /// @brief The alias's instance token the entry was read through.
+    std::string instanceToken;
+    /// @brief The records the entry's action returns, with the key field and paths of each; empty for an
+    ///        `evaluate` entry, which holds none.
+    std::vector<ActionRecordInfo> records;
+
+    /// @brief The catalog entry of a record the entry holds.
+    /// @param record The record's wire name.
+    /// @return It, or `nullptr` when the entry does not hold the record.
+    [[nodiscard]] ActionRecordInfo const* holding(std::string_view record) const {
+        auto const found = std::ranges::find(records, record, &ActionRecordInfo::record);
+        return found == records.end() ? nullptr : &*found;
+    }
 };
 
 class QueryRuntime;
@@ -623,6 +746,12 @@ class RtScope;
 class ScreenCore;
 
 }  // namespace detail
+
+/// @brief How a mutation's reply was used.
+enum class ReplyUse : std::uint8_t {
+    Applied,    ///< The reply is the latest: its values may patch the cache.
+    Discarded,  ///< A newer run's reply was applied first, so its values are older and only mark.
+};
 
 /// @brief What running a host command (`host/1`) did.
 struct HostCommandResult {
@@ -877,9 +1006,13 @@ public:
             entry->action = action;
             entry->body = text;
             entry->evaluate = evaluate;
+            entry->instanceToken = token;
             if (_options.catalog.action) {
                 if (auto const info = _options.catalog.action(action)) {
                     entry->secretFields = info->secretFields;
+                    if (!evaluate) {
+                        entry->records = info->records;
+                    }
                 }
             }
             found = _entries.emplace(std::move(key), std::move(entry)).first;
@@ -982,11 +1115,21 @@ public:
     /// @param query The query.
     void forgetQuery(detail::QueryRuntime& query) { std::erase(_mounted, &query); }
 
-    /// @brief A mutation of @p typeId running @p actionId succeeded: refetch every mounted query of that model type
-    ///        whose `refreshOn` names it (spec 5 §5).
-    /// @param typeId   The model type.
-    /// @param actionId The action.
-    void actionSucceeded(std::string const& typeId, std::string const& actionId);
+    /// @brief A call of @p actionId on a model of @p typeId succeeded: applies the action's effects to the cache, and
+    ///        refetches every mounted query of that model type whose `refreshOn` names it (spec 5 §5).
+    ///
+    /// `updates R` merges the reply's rows of `R` into each entry holding `R`, matched by the record's key field at
+    /// the entry's paths, with no fetch; an entry whose fetch is in flight also fetches once more, since that fetch
+    /// may have read before the write. `changes R` marks each entry holding `R` stale. `changesInstance` marks each
+    /// entry read through the same instance. A marked entry refetches through a mounted query that uses it. A
+    /// discarded reply only marks: its `updates` act as `changes`, and `refreshOn` is not run.
+    /// @param typeId        The model type.
+    /// @param actionId      The action.
+    /// @param reply         The reply's value.
+    /// @param use           Whether the reply was applied or discarded.
+    /// @param instanceToken The instance token of the alias the call went through.
+    void actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
+                         std::string const& instanceToken);
 
     /// @brief Marks an entry stale. While its fetch is in flight, the entry also refetches once that fetch settles,
     ///        because the fetch may have read before the change.
@@ -1024,6 +1167,15 @@ private:
     /// @brief Refetches an entry through the mounted queries that use it; one fetch even when several do.
     /// @param entry The entry.
     void refetchMounted(detail::CacheEntry const& entry);
+
+    /// @brief Applies a reply's effects to the cache, for `actionSucceeded`.
+    /// @param typeId        The model type.
+    /// @param actionId      The action.
+    /// @param reply         The reply's value.
+    /// @param use           Whether the reply was applied or discarded.
+    /// @param instanceToken The instance token of the alias the call went through.
+    void applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
+                           std::string const& instanceToken);
 
     void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
         _runtime->batch([&] {
@@ -2553,7 +2705,90 @@ inline void Session::refetchMounted(detail::CacheEntry const& entry) {
     }
 }
 
-inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId) {
+inline void Session::applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply,
+                                       ReplyUse use, std::string const& instanceToken) {
+    if (!_options.catalog.action) {
+        return;
+    }
+    std::optional<ActionInfo> const info = _options.catalog.action(actionId);
+    if (!info || !info->effects) {
+        return;
+    }
+    std::vector<detail::CacheEntry*> marked;
+    auto const mark = [&](detail::CacheEntry& entry) {
+        markStale(entry);
+        if (std::ranges::find(marked, &entry) == marked.end()) {
+            marked.push_back(&entry);
+        }
+    };
+    for (ActionEffect const& effect : *info->effects) {
+        if (effect.kind == "changesInstance") {
+            for (auto const& [key, entry] : _entries) {
+                static_cast<void>(key);
+                if (!entry->evaluate && entry->typeId == typeId && entry->instanceToken == instanceToken) {
+                    mark(*entry);
+                }
+            }
+            continue;
+        }
+        if (!effect.record || (effect.kind != "updates" && effect.kind != "changes")) {
+            continue;
+        }
+        std::string const& record = *effect.record;
+        // The reply's rows of the record, by key; none when the reply does not hold it keyed, or must only mark.
+        std::vector<Value const*> found;
+        auto const own = std::ranges::find(info->records, record, &ActionRecordInfo::record);
+        bool const patch = effect.kind == "updates" && use == ReplyUse::Applied && own != info->records.end() &&
+                           own->keyField.has_value();
+        if (patch) {
+            for (std::string const& path : own->paths) {
+                std::vector<std::string> const members = detail::pathMembers(path);
+                detail::keyedRowsAt(reply, members, *own->keyField, found);
+            }
+        }
+        detail::RowsByKey rows;
+        for (Value const* const row : found) {
+            rows.insert_or_assign(detail::canonicalJson(*row->field(*own->keyField)), row);
+        }
+        for (auto const& [key, entry] : _entries) {
+            static_cast<void>(key);
+            ActionRecordInfo const* const held = entry->holding(record);
+            if (held == nullptr) {
+                continue;
+            }
+            if (!patch || !held->keyField) {
+                mark(*entry);
+                continue;
+            }
+            Value confirmed = entry->confirmed;
+            bool changed = false;
+            for (std::string const& path : held->paths) {
+                std::vector<std::string> const members = detail::pathMembers(path);
+                if (auto patched = detail::patchKeyedRows(confirmed, members, *held->keyField, rows)) {
+                    confirmed = std::move(*patched);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                confirm(*entry, confirmed);
+            }
+            // A fetch in flight may have read before the write, and would settle over the patch.
+            if (entry->pending.peek()) {
+                markStale(*entry);
+            }
+        }
+    }
+    for (detail::CacheEntry* const entry : marked) {
+        refetchMounted(*entry);
+    }
+}
+
+inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply,
+                                     ReplyUse use, std::string const& instanceToken) {
+    _runtime->batch([&] { applyReplyEffects(typeId, actionId, reply, use, instanceToken); });
+    if (use == ReplyUse::Discarded) {
+        return;
+    }
     std::vector<detail::QueryRuntime*> const mounted = _mounted;
     for (detail::QueryRuntime* const query : mounted) {
         auto const& names = query->decl().refreshOn;
@@ -3136,7 +3371,10 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                 }
             }
             delivered = withoutFields(*reply, secret);
+            std::string const token =
+                _alias == nullptr ? std::string{} : core.runtime().untracked([&] { return _alias->token->get(); });
             if (!applied) {
+                session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Discarded, token);
                 return;
             }
             _result.set(*reply);
@@ -3169,7 +3407,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                     target->query->invalidate();
                 }
             }
-            session.actionSucceeded(_typeId, _decl->action);
+            session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Applied, token);
             core.runList(_decl->onSuccess, commandCtx(*run->bindings), {});
             if (!secret.empty()) {
                 _result.set(delivered);
@@ -5401,11 +5639,15 @@ inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string 
                std::string_view actionId, std::string body) -> async::Completion<std::string> {
         async::Completion<std::string> completion = call(actionId, std::move(body));
         if (actionId != read) {
-            completion.then([this, alive = std::weak_ptr<bool>{_alive}, typeId = alias->decl->type,
-                             action = std::string{actionId}](std::string const&) {
-                if (!alive.expired()) {
-                    session.actionSucceeded(typeId, action);
+            completion.then([this, alive = std::weak_ptr<bool>{_alive}, alias, typeId = alias->decl->type,
+                             action = std::string{actionId}](std::string const& reply) {
+                if (alive.expired()) {
+                    return;
                 }
+                auto json = parseJson(reply);
+                auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+                std::string const token = runtime().untracked([&] { return alias->token->get(); });
+                session.actionSucceeded(typeId, action, value ? *value : Value{}, ReplyUse::Applied, token);
             });
         }
         return completion;
