@@ -243,6 +243,9 @@ know the result's shape, and a patch that finds no list is reported by the inter
 `effects` and `records` are what the core registries hold for the action: `effects` is the list of
 `{kind, record?}` the action declared, `kind` one of `updates`, `changes`, `changesInstance` and `none`, `record` the
 record's wire name for the first two; it is absent when the action declared nothing, which makes the action a read.
+A record derived (`derivedFrom`) from one the action `updates` or `changes`, directly or through others, is listed as
+`changes` too, once. The derivation itself is never sent: a client knows only that the derived record changes, which
+lets the caller's own reply mark entries holding it, in process as well as remotely.
 `records` lists the records the action's result holds as `{record, keyField?, paths}`, empty when it holds none. They
 are read from the registries where `CatalogFacts::action` records the action, so an invalid effects and records
 configuration (`EffectsRegistrationError`) fails at that call, at startup. They are what a client's watch is derived

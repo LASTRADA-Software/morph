@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/changes.hpp"
 #include "../core/effects.hpp"
 #include "../core/logger.hpp"
 #include "../core/model_key.hpp"
@@ -138,6 +139,22 @@ template <typename Result>
         out.push_back(
             ActionEffect{.kind = std::string{kind},
                          .record = effect.record.empty() ? std::nullopt : std::optional<std::string>{effect.record}});
+    }
+    // A record derived from a changed one changes as a whole too. The server expands derivations before an event
+    // leaves; stating them here as well lets the caller's own reply mark entries holding the derived record, which
+    // matters in process, where no event comes back.
+    ::morph::effects::Changes derived;
+    for (auto const& effect : *declared) {
+        if (!effect.record.empty() && (effect.kind == ::morph::effects::Kind::Updates ||
+                                       effect.kind == ::morph::effects::Kind::Changes)) {
+            ::morph::effects::detail::addDerivedChanges(::morph::effects::detail::resolved(), effect.record, derived);
+        }
+    }
+    for (auto const& change : derived.records) {
+        ActionEffect added{.kind = "changes", .record = change.record};
+        if (std::ranges::find(out, added) == out.end()) {
+            out.push_back(std::move(added));
+        }
     }
     return out;
 }

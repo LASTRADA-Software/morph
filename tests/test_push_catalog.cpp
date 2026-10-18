@@ -32,6 +32,10 @@ struct EntryList {
     std::vector<Entry> entries;
 };
 
+struct EntryReport {
+    int count{};
+};
+
 struct EditEntry {
     std::int64_t id{};
 };
@@ -61,6 +65,7 @@ using namespace push_catalog_test;
 namespace effects = morph::effects;
 
 BRIDGE_REGISTER_RECORD(Entry, "T_CatalogEntry")
+BRIDGE_REGISTER_RECORD(EntryReport, "T_CatalogReport", morph::record::keyless, morph::record::derivedFrom<Entry>)
 BRIDGE_REGISTER_MODEL(CatalogModel, "T_CatalogModel")
 BRIDGE_REGISTER_ACTION(CatalogModel, EditEntry, "T_CatalogEdit")
 BRIDGE_REGISTER_EFFECTS(EditEntry, effects::updates<Entry>, effects::changes<Entry>)
@@ -127,8 +132,10 @@ TEST_CASE("catalog_facts_carry_effects_and_records", "[push][catalog]") {
 
     auto const& edit = facts.actions.at("T_CatalogEdit");
     REQUIRE(edit.effects.has_value());
-    REQUIRE(*edit.effects ==
-            std::vector<morph::ui::ActionEffect>{{"updates", "T_CatalogEntry"}, {"changes", "T_CatalogEntry"}});
+    // A record derived from a changed one is stated as changed too, once.
+    REQUIRE(*edit.effects == std::vector<morph::ui::ActionEffect>{{"updates", "T_CatalogEntry"},
+                                                                  {"changes", "T_CatalogEntry"},
+                                                                  {"changes", "T_CatalogReport"}});
     REQUIRE(edit.records.size() == 1U);
     CHECK(edit.records.front().record == "T_CatalogEntry");
     CHECK(edit.records.front().keyField == std::optional<std::string>{"id"});
