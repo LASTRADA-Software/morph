@@ -519,17 +519,19 @@ TEST_CASE("net_backlog_holds_events_and_drain_sends_resync", "[push][channel]") 
     // drain sends one `resync` in its place.
     //
     // Assumes the kernel's loopback buffers (the server's send buffer and the
-    // client's receive window, shrunk to 2 KiB) absorb far less than 15 MiB,
+    // client's receive buffer, fixed at 256 KiB) absorb far less than 15 MiB,
     // so more than `kEventBacklogHigh` is still in the transport's backlog
     // when the event is posted. Were the kernel to take nearly everything,
-    // the event would be delivered and this test would fail, not pass.
+    // the event would be delivered and this test would fail, not pass. The
+    // receive buffer is not smaller because a window below the loopback MSS
+    // (64 KiB on Linux) stalls every segment, and 16 MiB then takes minutes.
     ::morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
     ::morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
     auto const cid = nextConnectionId(*server);
 
-    RawClient client{wsServer.port(), /*receiveBuffer=*/2048};
+    RawClient client{wsServer.port(), /*receiveBuffer=*/256 * 1024};
     client.boundReceives(20s);
     client.send(::morph::wire::makeRegister("PnModel"));
     auto const reg = client.receive();
