@@ -22,6 +22,7 @@ add_executable(morph_tests
     test_executor_scope.cpp
     test_io_loop.cpp
     test_example.cpp
+    test_push_records.cpp
     test_executor_extra.cpp
     test_strand.cpp
     test_completion.cpp

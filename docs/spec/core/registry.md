@@ -1644,3 +1644,22 @@ testing obligation, not a compile-time guarantee.
 - **Concurrency and lifetimes** — the static-init-then-read-only discipline in
   [Thread safety](#thread-safety) and the process-lifetime singleton ownership in
   [Limitations](#limitations).
+## Record registry
+
+`include/morph/core/records.hpp` holds a registry of *record types*, the rows a
+server can describe changes to. `BRIDGE_REGISTER_RECORD(T, NAME, options...)` is a
+static registrar like `BRIDGE_REGISTER_ACTION`'s: it asserts the registration
+latch and compiles out under `MORPH_CLIENT_ONLY`. Each call appends one
+`morph::record::RecordInfo` (wire name, `std::type_index`, key field, sources a
+record is derived from, `privateKeys`, `keyIsString`) to a process-level vector,
+read through `detail::recordRegistry()`.
+
+- The key defaults to the member glaze reflects as `id`; `key<&T::m>` names
+  another member (its glaze JSON key is recorded), `keyless` declares none. A
+  type with no `id`, no `key<>` and no `keyless` is recorded with no key field.
+- The key member is a `ModelKey`, raw or a `WrappedModelKey` strong id.
+  `keyIsString` follows the raw type.
+- The registry is raw: duplicate names or types, `derivedFrom` cycles and keyless
+  records that an effect names are not checked at registration.
+- Record types need external linkage: glaze reflects member names through an
+  external-linkage object, so a record in an anonymous namespace does not compile.
