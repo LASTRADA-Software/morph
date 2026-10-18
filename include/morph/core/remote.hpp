@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <core/async/StopToken.hpp>
 #include <cstddef>
@@ -203,6 +204,19 @@ struct HealthStatus {
 using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
                                                                                 std::string_view contextKey)>;
 
+/// @brief What a `RemoteServer` knows about one connection that a service, not
+///        core, decides: handed to `IEnvelopeService::handle` with each envelope.
+///
+/// A service sets a fact while answering an envelope it serves, and core reads
+/// it later without parsing that service's bodies. The facts live as long as
+/// the connection; a message handled without a connection (`cid` 0) is handed
+/// fresh facts that are dropped after its reply.
+struct ConnectionFacts {
+    /// @brief Whether the connection negotiated server-sent events: its
+    ///        `ui-hello` offered them and the UI service accepted.
+    bool events = false;
+};
+
 /// @brief Envelope kinds a `RemoteServer` answers through an extension, such as
 ///        the UI service's `ui-*` kinds.
 ///
@@ -239,6 +253,28 @@ public:
     ///         `request.callId`.
     [[nodiscard]] virtual std::string handle(const ::morph::wire::Envelope& request,
                                              const ::morph::session::IAuthorizer& authorizer) = 0;
+
+    /// @brief Answers one envelope of a kind `serves` accepted, with the facts
+    ///        of the connection it arrived on.
+    ///
+    /// What the server calls. A service that learns something about the
+    /// connection, as the UI service learns that `ui-hello` negotiated events,
+    /// overrides this one and records it in @p facts; the default forwards to
+    /// the two-parameter `handle` and leaves @p facts alone. A service
+    /// overriding only one of the two adds `using IEnvelopeService::handle;`,
+    /// so the other is not hidden. Same thread and error rules as the
+    /// two-parameter `handle`.
+    /// @param request    The decoded envelope.
+    /// @param authorizer The server's authoriser.
+    /// @param facts      The connection's facts, which the service may set;
+    ///                   fresh ones for a message handled without a connection.
+    /// @return The encoded reply envelope (`wire::encode`), addressed to
+    ///         `request.callId`.
+    [[nodiscard]] virtual std::string handle(const ::morph::wire::Envelope& request,
+                                             const ::morph::session::IAuthorizer& authorizer, ConnectionFacts& facts) {
+        static_cast<void>(facts);
+        return handle(request, authorizer);
+    }
 };
 
 /// @brief Everything about a `RemoteServer` that is configured rather than
@@ -663,6 +699,21 @@ public:
         _strand.postTask([self = shared_from_this(), cid] { self->connectionDrainedHere(cid); });
     }
 
+    /// @brief Whether connection @p cid negotiated server-sent events.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. The answer is what the UI service recorded when the
+    /// connection's `ui-hello` offered events, and stays until the connection
+    /// closes; a reconnect is a new connection and negotiates again.
+    /// @param cid Connection, as returned by `openConnection()`.
+    /// @return `true` once the connection negotiated events; `false` for `0`,
+    ///         an unknown connection or a closed one.
+    [[nodiscard]] bool eventsNegotiated(ConnectionId cid) const {
+        assert(_strand.runningHere() && "RemoteServer::eventsNegotiated runs on the server strand");
+        auto const found = _facts.find(cid);
+        return found != _facts.end() && found->second.events;
+    }
+
     /// @brief The server strand, as an executor.
     ///
     /// What `runningOn(server.strand())` asks about: true inside every task the
@@ -841,6 +892,7 @@ private:
     void closeConnectionHere(ConnectionId cid) {
         noteOwner("RemoteServer::closeConnection");
         _writers.erase(cid);
+        _facts.erase(cid);
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -854,6 +906,22 @@ private:
             }
         }
         _connectionScopes.erase(scopeIter);
+    }
+
+    /// @brief The facts a service records for connection @p cid. On the server
+    ///        strand.
+    ///
+    /// Fresh facts for `0`, an unknown `cid` or one already closed, so what a
+    /// service sets there outlives no reply: a fact is kept only where the
+    /// connection that negotiated it can be found again.
+    /// @param cid Connection the envelope arrived on.
+    /// @return The connection's facts, or throwaway ones.
+    [[nodiscard]] ConnectionFacts& factsOf(ConnectionId cid) {
+        if (cid == 0 || !_connectionScopes.contains(cid)) {
+            _throwawayFacts = ConnectionFacts{};
+            return _throwawayFacts;
+        }
+        return _facts[cid];
     }
 
     /// @brief Body of `post`. On the server strand.
@@ -1603,7 +1671,7 @@ private:
                 // the service decides on the verified principal, never on the
                 // client's claim.
                 stampVerifiedPrincipal(env);
-                reply(service->handle(env, *_authorizer));
+                reply(service->handle(env, *_authorizer, factsOf(cid)));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
@@ -1998,6 +2066,12 @@ private:
     // The writer of each open connection that has one, set by
     // `setConnectionWriter` and dropped with the connection's scope.
     std::unordered_map<ConnectionId, ConnectionOutbox> _writers;
+    // What services recorded about each open connection (`factsOf`), dropped
+    // with the connection's scope.
+    std::unordered_map<ConnectionId, ConnectionFacts> _facts;
+    // Handed to a service for a message with no open connection behind it;
+    // reset before each such message.
+    ConnectionFacts _throwawayFacts;
     /// Names one cancellable call: the connection it arrived on and the
     /// `callId` its client chose.
     struct CancelKey {

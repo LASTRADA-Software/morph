@@ -1,14 +1,22 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <latch>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/records.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/service.hpp>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "ui_service_support.hpp"
 
 // Glaze reflects member names through an external-linkage object, so these types cannot sit in an
 // anonymous namespace.
@@ -72,6 +80,45 @@ morph::ui::author::CatalogFacts registeredFacts() {
     return facts;
 }
 
+/// A server answering the UI service's kinds over the fixture bundle, every principal allowed to say hello.
+struct HelloRig {
+    morph::exec::ThreadPoolExecutor pool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server;
+
+    HelloRig() {
+        morph::backend::ServerConfig config;
+        config.services.push_back(std::make_shared<morph::ui::UiService>(uiservice::bundle()));
+        server = std::make_shared<morph::backend::RemoteServer>(pool, uiservice::authorizer(), config);
+    }
+
+    /// Sends `ui-hello` with @p body on @p cid and reads the reply.
+    morph::ui::HelloReply hello(morph::backend::ConnectionId cid, std::string const& body) {
+        morph::wire::Envelope env;
+        env.kind = std::string{morph::ui::kHelloKind};
+        env.callId = 1;
+        env.body = body;
+        morph::wire::Envelope const reply = morph::wire::decode(server->handleInline(morph::wire::encode(env), cid));
+        REQUIRE(reply.kind == "ok");
+        auto parsed = morph::ui::parseHelloReply(reply.body);
+        REQUIRE(parsed);
+        return *parsed;
+    }
+
+    /// Whether @p cid negotiated events, read on the server strand.
+    bool negotiated(morph::backend::ConnectionId cid) {
+        bool answer = false;
+        std::latch done{1};
+        server->strand().post([&] {
+            answer = server->eventsNegotiated(cid);
+            done.count_down();
+        });
+        done.wait();
+        return answer;
+    }
+};
+
+constexpr char const* kSpeaksAll = R"("vocabularies":["ui/1","expr/1","ui-theme/1"])";
+
 }  // namespace
 
 TEST_CASE("catalog_facts_carry_effects_and_records", "[push][catalog]") {
@@ -127,4 +174,59 @@ TEST_CASE("old_reply_without_fields_reads_as_reads", "[push][catalog]") {
     auto const& info = parsed->actions->at("Old_Get");
     CHECK_FALSE(info.effects.has_value());
     CHECK(info.records.empty());
+}
+
+TEST_CASE("hello_with_events_sets_connection_fact", "[push][catalog]") {
+    HelloRig rig;
+    auto const cid = rig.server->openConnection();
+    auto const other = rig.server->openConnection();
+    REQUIRE_FALSE(rig.negotiated(cid));
+
+    auto const reply = rig.hello(cid, std::string{"{"} + kSpeaksAll + R"(,"events":true})");
+    CHECK(reply.events);
+    CHECK(rig.negotiated(cid));
+    CHECK_FALSE(rig.negotiated(other));
+
+    SECTION("a later hello without the offer does not withdraw it") {
+        CHECK_FALSE(rig.hello(cid, std::string{"{"} + kSpeaksAll + "}").events);
+        CHECK(rig.negotiated(cid));
+    }
+    SECTION("a reconnect negotiates again") {
+        rig.server->closeConnection(cid);
+        CHECK_FALSE(rig.negotiated(cid));
+    }
+    SECTION("the service sets the fact it is handed") {
+        morph::ui::UiService service{uiservice::bundle()};
+        morph::backend::ConnectionFacts facts;
+        morph::wire::Envelope env;
+        env.kind = std::string{morph::ui::kHelloKind};
+        env.body = std::string{"{"} + kSpeaksAll + R"(,"events":true})";
+        static_cast<void>(service.handle(env, *uiservice::authorizer(), facts));
+        CHECK(facts.events);
+    }
+}
+
+TEST_CASE("hello_without_events_leaves_it_false", "[push][catalog]") {
+    HelloRig rig;
+    auto const cid = rig.server->openConnection();
+
+    SECTION("no offer") { CHECK_FALSE(rig.hello(cid, std::string{"{"} + kSpeaksAll + "}").events); }
+    SECTION("an explicit refusal of the offer") {
+        CHECK_FALSE(rig.hello(cid, std::string{"{"} + kSpeaksAll + R"(,"events":false})").events);
+    }
+    CHECK_FALSE(rig.negotiated(cid));
+}
+
+TEST_CASE("hello_events_round_trip_on_the_wire", "[push][catalog]") {
+    auto const request = morph::ui::parseHelloRequest(R"({"vocabularies":["ui/1"],"events":true})");
+    REQUIRE(request);
+    CHECK(request->events);
+    auto const old = morph::ui::parseHelloRequest(R"({"vocabularies":["ui/1"]})");
+    REQUIRE(old);
+    CHECK_FALSE(old->events);
+
+    std::string const digest = "sha256:" + std::string(64, '0');
+    auto const oldReply = morph::ui::parseHelloReply(R"({"application":"a","digest":")" + digest + R"("})");
+    REQUIRE(oldReply);
+    CHECK_FALSE(oldReply->events);
 }

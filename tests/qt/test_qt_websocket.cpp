@@ -2890,6 +2890,8 @@ namespace {
 /// Answers `probe-ok` with the token the request carried and `probe-err` with an `err`.
 class ProbeService final : public morph::backend::IEnvelopeService {
 public:
+    using IEnvelopeService::handle;
+
     [[nodiscard]] bool serves(std::string_view kind) const override { return kind.starts_with("probe-"); }
 
     [[nodiscard]] std::string handle(morph::wire::Envelope const& request,

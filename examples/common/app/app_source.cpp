@@ -126,6 +126,13 @@ std::vector<std::string> clientVocabularies() {
     return {std::string{ui::kVocabulary}, std::string{ui::kExprVocabulary}};
 }
 
+ui::HelloRequest clientHello() {
+    ui::HelloRequest hello;
+    hello.vocabularies = clientVocabularies();
+    hello.events = true;
+    return hello;
+}
+
 // ── ClientSource ────────────────────────────────────────────────────────────
 
 ui::Dispatcher& ClientSource::dispatcher() {
@@ -341,9 +348,7 @@ void ClientSource::open(ui::AppContext& context,
 
 void ClientSource::reload(std::shared_ptr<bool> const& alive,
                           std::function<void(std::expected<void, ui::ConnectError>)> done) {
-    ui::HelloRequest hello;
-    hello.vocabularies = clientVocabularies();
-    ui::UiClient const client{_exchange, std::move(hello), _store};
+    ui::UiClient const client{_exchange, clientHello(), _store};
     client.open(_session, [this, alive,
                            done = std::move(done)](std::expected<ui::LoadedBundle, ui::ConnectError> opened) mutable {
         if (!*alive) {
@@ -368,9 +373,7 @@ void ClientSource::poll(std::function<void(std::vector<std::string> changed)> ch
         return;
     }
     _polling = true;
-    ui::HelloRequest hello;
-    hello.vocabularies = clientVocabularies();
-    ui::UiClient const client{_exchange, std::move(hello), _store};
+    ui::UiClient const client{_exchange, clientHello(), _store};
     client.poll(_session, _loaded->hello.digest,
                 [this, alive = _alive, changed = std::move(changed)](
                     std::expected<std::optional<ui::LoadedBundle>, ui::ConnectError> polled) mutable {

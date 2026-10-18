@@ -888,6 +888,33 @@ ships; it answers `ui-hello`, `ui-catalog` and `ui-fetch`.
   empty one, never the client's claim.
 - **Authorising is the service's.** `handle(request, authorizer)` is given the
   server's `IAuthorizer`; core makes no decision about a kind it does not know.
+- **Connection facts.** What the server calls is the three-parameter
+  `handle(request, authorizer, facts)`, where `facts` is the `ConnectionFacts`
+  of the connection the envelope arrived on. It is how core learns what a
+  service negotiated without parsing that service's bodies: today the one fact
+  is `events`, which the UI service sets when a `ui-hello` offers events and it
+  accepts ([ui/service.md](../ui/service.md#the-kinds)), and which core reads
+  at fan-out through `eventsNegotiated(cid)`.
+  - The three-parameter `handle` is a non-pure virtual whose default forwards to
+    the two-parameter one, which stays pure. A service that learns nothing
+    about connections overrides only the two-parameter one, and so adds
+    `using IEnvelopeService::handle;`: GCC's `-Woverloaded-virtual`, which the
+    strict build enables at level 2, flags a derived class that overrides some
+    overloads of a virtual and hides the rest. Clang does not, so only the GCC
+    build catches its omission. A service that overrides both needs no `using`.
+  - The facts sit beside the connection scopes in a `cid → ConnectionFacts` map
+    only the server strand touches, are created on the first envelope a
+    service handles for an open connection, and are dropped by
+    `closeConnection(cid)`. A reconnect is a new connection and starts from
+    `events = false`.
+  - A message with no open connection behind it — `handle(msg, reply)`,
+    `handleInline(msg)`, or a `cid` never opened or already closed — is handed
+    throwaway facts, reset to `events = false` before each such message and
+    kept by nothing, so a fact can only be recorded where the connection that
+    negotiated it can be found again.
+  - `eventsNegotiated(cid) const` is server-strand only (a debug build
+    asserts it): it is read where fan-out runs, on the strand, and the map
+    has no lock. It is `false` for `0`, an unknown `cid` or a closed one.
 - **Synchronous, on the server strand.** `handle` returns the encoded reply and
   must not block. A throw becomes an `err` reply carrying its message, through
   the same catch every other kind uses.
@@ -2170,10 +2197,11 @@ server: each call is a loop task, so the loop serialises them.
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
-| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope and its writer. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope, its writer and its `ConnectionFacts`. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
 | `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one, keeping an owed `resync`; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
 | `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
 | `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
+| `eventsNegotiated(cid) const` | Server strand only (debug-asserted). Whether `cid` negotiated events: the `ConnectionFacts::events` a service set for it. `false` for `0`, an unknown `cid` or a closed one. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
 | `health(replyExec)` | `[[nodiscard]] Completion<HealthStatus> health(IExecutor& replyExec)` — readiness/liveModels/inFlight, answered on the server strand; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). See [observability.md](observability.md). |

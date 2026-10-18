@@ -82,6 +82,10 @@ struct LocalApp {
 /// @brief The vocabularies the generic client speaks.
 [[nodiscard]] std::vector<std::string> clientVocabularies();
 
+/// @brief The `ui-hello` the generic client opens with, and sends again on each poll: its vocabularies, and the
+///        offer of server-sent events on the connection.
+[[nodiscard]] ui::HelloRequest clientHello();
+
 /// @brief An `AppSource` that also hands the shell what it mounts screens with, once it delivered a bundle.
 ///
 /// Opened, it holds a bridge over its backend, owned by the context's executor, and the verified bundle with its

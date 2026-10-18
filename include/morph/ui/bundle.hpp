@@ -170,6 +170,8 @@ struct HelloRequest {
     std::map<std::string, std::int64_t, std::less<>> hostCommands;
     /// @brief The host values the client has, by name, with their versions.
     std::map<std::string, std::int64_t, std::less<>> hostValues;
+    /// @brief Whether the client offers to take server-sent `event` envelopes on this connection.
+    bool events = false;
 };
 
 /// @brief The body of a `ui-hello` reply.
@@ -182,6 +184,9 @@ struct HelloReply {
     std::vector<std::string> vocabularies;
     /// @brief The manifest's content hash.
     std::string digest;
+    /// @brief Whether the server accepted the client's offer of events: it may send `event` envelopes on this
+    ///        connection.
+    bool events = false;
 };
 
 /// @brief The body of a `ui-evaluate` reply: what `ActionDispatcher::evaluate` answered.
