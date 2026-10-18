@@ -1270,6 +1270,24 @@ public:
         return models;
     }
 
+    /// @brief The action type-ids registered under @p modelId.
+    ///
+    /// What a server authorizes an instance watch against: a principal may
+    /// watch an instance of a model only when it may run one of its actions.
+    ///
+    /// @param modelId Model type-id.
+    /// @return The action type-ids, sorted; empty for a model with none.
+    [[nodiscard]] std::vector<std::string> actionsOf(std::string_view modelId) const {
+        std::vector<std::string> actions;
+        for (const auto& [key, entry] : _actions) {
+            if (key.first == modelId) {
+                actions.push_back(key.second);
+            }
+        }
+        std::ranges::sort(actions);
+        return actions;
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 
@@ -1421,6 +1439,14 @@ public:
         auto holder = iter->second();
         holder->attachIdentity(std::string{primary});
         return holder;
+    }
+
+    /// @brief Whether a model type is registered under @p modelId.
+    /// @param modelId Model type-id.
+    /// @return True when `create(modelId)` would find a factory.
+    [[nodiscard]] bool contains(std::string_view modelId) const {
+        detail::noteRegistryRead(this == &defaultRegistry());
+        return _factories.contains(std::string{modelId});
     }
 
     /// @brief Returns the process-level singleton registry.

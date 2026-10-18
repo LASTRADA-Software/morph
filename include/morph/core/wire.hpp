@@ -655,7 +655,8 @@ inline constexpr std::string_view kWatchKind = "watch";
 /// @brief The envelope kind that removes topics from a connection's watch set.
 inline constexpr std::string_view kUnwatchKind = "unwatch";
 
-/// @brief The most topics (records or instances) one `watch`, `unwatch` or `changes` body may list.
+/// @brief The most topics (records or instances) one `watch`, `unwatch` or `changes` body may list, and
+///        the most topics, records and instances together, one connection may watch.
 ///
 /// A watch set is one entry per record type and open instance of a screen, so a list past this is a
 /// malformed or hostile peer rather than a large application, and the bound keeps its allocation finite.

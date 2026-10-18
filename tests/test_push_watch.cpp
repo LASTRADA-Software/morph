@@ -15,6 +15,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -77,25 +78,49 @@ using ::morph::backend::RemoteServer;
 
 constexpr std::string_view kSecretModel = "T_WatchSecretModel";
 
-/// Verifies a session by its token, which is the principal itself, and refuses
-/// every action and instance of the secret model.
+/// What one `authorizeInstance` call was asked.
+struct InstanceQuestion {
+    std::string modelType;
+    std::string actionType;
+    std::uint64_t modelId{};
+    std::string owner;
+};
+
+/// Verifies a session by its token: the principal is the token up to a `:`,
+/// so `alice` and `alice:scoped` are two tokens of one principal. Refuses every
+/// action and instance of the secret model, and every action to a `:scoped`
+/// token.
 struct SecretGuard final : ::morph::session::IAuthorizer {
     mutable std::atomic<int> authorizeCalls{0};
+    mutable std::mutex mtx;
+    mutable std::vector<InstanceQuestion> instanceQuestions;
 
-    [[nodiscard]] bool authorize(const ::morph::session::Context& /*ctx*/, std::string_view modelType,
+    [[nodiscard]] bool authorize(const ::morph::session::Context& ctx, std::string_view modelType,
                                  std::string_view /*actionType*/) const override {
         authorizeCalls.fetch_add(1);
-        return modelType != kSecretModel;
+        return modelType != kSecretModel && !ctx.token.ends_with(":scoped");
     }
     [[nodiscard]] std::optional<std::string> authenticate(const ::morph::session::Context& ctx) const override {
         if (ctx.token.empty()) {
             return std::nullopt;
         }
-        return ctx.token;
+        return ctx.token.substr(0, ctx.token.find(':'));
     }
     [[nodiscard]] bool authorizeInstance(const ::morph::session::Context& /*ctx*/, std::string_view modelType,
-                                         std::string_view /*actionType*/, std::uint64_t /*modelId*/,
-                                         std::string_view /*ownerPrincipal*/) const override {
+                                         std::string_view actionType, std::uint64_t modelId,
+                                         std::string_view ownerPrincipal) const override {
+        std::scoped_lock const lock{mtx};
+        instanceQuestions.push_back(
+            {std::string{modelType}, std::string{actionType}, modelId, std::string{ownerPrincipal}});
+        return modelType != kSecretModel;
+    }
+};
+
+/// Overrides only `authorize`, refusing the secret model's actions: its
+/// `authorizeInstance` is the allow-all default.
+struct AuthorizeOnly final : ::morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const ::morph::session::Context& /*ctx*/, std::string_view modelType,
+                                 std::string_view /*actionType*/) const override {
         return modelType != kSecretModel;
     }
 };
@@ -103,7 +128,10 @@ struct SecretGuard final : ::morph::session::IAuthorizer {
 struct Rig {
     ::morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<SecretGuard> guard = std::make_shared<SecretGuard>();
-    std::shared_ptr<RemoteServer> server = std::make_shared<RemoteServer>(pool, guard);
+    std::shared_ptr<RemoteServer> server;
+
+    explicit Rig(std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr)
+        : server{std::make_shared<RemoteServer>(pool, authorizer ? std::move(authorizer) : guard)} {}
 
     /// Sends @p kind with @p body on @p cid, signed as @p principal, and returns the reply.
     ::morph::wire::Envelope send(ConnectionId cid, std::string_view kind, ::morph::wire::WatchBody const& body,
@@ -321,4 +349,132 @@ TEST_CASE("record_admission_cached_per_principal", "[push][watch]") {
     auto const again = rig.server->openConnection();
     (void)rig.watch(again, records({"T_WatchRow"}));
     CHECK(rig.guard->authorizeCalls.load() > afterAnonymous + 1);
+}
+
+TEST_CASE("admission_cache_keys_on_the_token", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    auto const scoped = rig.server->openConnection();
+
+    // alice's full token is admitted, and the answer cached while she watches.
+    CHECK(rig.watch(cid, records({"T_WatchRow"}), "alice").refusedRecords.empty());
+    ::morph::wire::WatchBody body = records({"T_WatchRow"});
+    body.instances = {{.modelType = "T_WatchRowModel", .primary = "a"}};
+    CHECK(rig.watch(cid, body, "alice").refusedInstances.empty());
+
+    // Her scoped token verifies to the same principal but carries other claims: judged on its own.
+    auto const reply = rig.watch(scoped, body, "alice:scoped");
+    CHECK(reply.refusedRecords == std::vector<std::string>{"T_WatchRow"});
+    REQUIRE(reply.refusedInstances.size() == 1U);
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+}
+
+TEST_CASE("instance_topic_needs_a_runnable_action", "[push][watch]") {
+    Rig rig{std::make_shared<AuthorizeOnly>()};
+    auto const cid = rig.server->openConnection();
+
+    ::morph::wire::WatchBody body = instance(std::string{kSecretModel}, "k");
+    body.instances.push_back({.modelType = "T_WatchRowModel", .primary = "k"});
+    auto const reply = rig.watch(cid, body);
+
+    REQUIRE(reply.refusedInstances.size() == 1U);
+    CHECK(reply.refusedInstances.front().modelType == kSecretModel);
+    CHECK(rig.instanceWatchers(kSecretModel, "k").empty());
+    CHECK(rig.instanceWatchers("T_WatchRowModel", "k") == std::vector<ConnectionId>{cid});
+}
+
+TEST_CASE("instance_topic_of_unregistered_type_refused", "[push][watch]") {
+    Rig rig{std::make_shared<AuthorizeOnly>()};
+    auto const cid = rig.server->openConnection();
+
+    auto const reply = rig.watch(cid, instance("T_WatchNoSuchModel", "k"));
+
+    REQUIRE(reply.refusedInstances.size() == 1U);
+    CHECK(reply.refusedInstances.front().modelType == "T_WatchNoSuchModel");
+    CHECK(rig.instanceWatchers("T_WatchNoSuchModel", "k").empty());
+}
+
+TEST_CASE("instance_admission_asks_without_instance_or_owner", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+
+    (void)rig.watch(cid, instance("T_WatchRowModel", "k"));
+
+    std::scoped_lock const lock{rig.guard->mtx};
+    REQUIRE(rig.guard->instanceQuestions.size() == 1U);
+    auto const& asked = rig.guard->instanceQuestions.front();
+    CHECK(asked.modelType == "T_WatchRowModel");
+    CHECK(asked.actionType.empty());
+    CHECK(asked.modelId == 0U);
+    CHECK(asked.owner.empty());
+}
+
+TEST_CASE("connection_watch_cap", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+
+    ::morph::wire::WatchBody full;
+    for (std::size_t index = 0; index < ::morph::wire::kMaxWatchTopics; ++index) {
+        full.instances.push_back({.modelType = "T_WatchRowModel", .primary = std::to_string(index)});
+    }
+    CHECK(rig.watch(cid, full).refusedInstances.empty());
+    CHECK(rig.onStrand([cid](auto const& table) { return table.topicCount(cid); }) == ::morph::wire::kMaxWatchTopics);
+
+    // At the cap, a new topic is refused; one already watched is not.
+    ::morph::wire::WatchBody more = records({"T_WatchRow"});
+    more.instances = {{.modelType = "T_WatchRowModel", .primary = "0"}};
+    auto const refused = rig.watch(cid, more);
+    CHECK(refused.refusedRecords == std::vector<std::string>{"T_WatchRow"});
+    CHECK(refused.refusedInstances.empty());
+    CHECK(rig.recordWatchers("T_WatchRow").empty());
+
+    // A topic freed by unwatch makes room again.
+    CHECK(rig.send(cid, ::morph::wire::kUnwatchKind, instance("T_WatchRowModel", "0")).kind == "ok");
+    CHECK(rig.watch(cid, records({"T_WatchRow"})).refusedRecords.empty());
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+    CHECK(rig.onStrand([cid](auto const& table) { return table.topicCount(cid); }) == ::morph::wire::kMaxWatchTopics);
+}
+
+TEST_CASE("duplicates_in_one_body_judged_once", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+
+    ::morph::wire::WatchBody body = records({"T_WatchRow", "T_WatchSecret", "T_WatchRow", "T_WatchSecret"});
+    body.instances = {{.modelType = std::string{kSecretModel}, .primary = "k"},
+                      {.modelType = "T_WatchRowModel", .primary = "k"},
+                      {.modelType = std::string{kSecretModel}, .primary = "k"},
+                      {.modelType = "T_WatchRowModel", .primary = "k"}};
+    auto const reply = rig.watch(cid, body);
+
+    CHECK(reply.refusedRecords == std::vector<std::string>{"T_WatchSecret"});
+    REQUIRE(reply.refusedInstances.size() == 1U);
+    CHECK(reply.refusedInstances.front().modelType == kSecretModel);
+    CHECK(rig.onStrand([cid](auto const& table) { return table.topicCount(cid); }) == 2U);
+}
+
+TEST_CASE("replace_with_refused_topics", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    (void)rig.watch(cid, records({"T_WatchRow"}));
+
+    ::morph::wire::WatchBody full = records({"T_WatchSecret"}, true);
+    full.instances = {{.modelType = "T_WatchRowModel", .primary = "a"}};
+    auto const reply = rig.watch(cid, full);
+
+    CHECK(reply.refusedRecords == std::vector<std::string>{"T_WatchSecret"});
+    CHECK(rig.recordWatchers("T_WatchRow").empty());
+    CHECK(rig.recordWatchers("T_WatchSecret").empty());
+    CHECK(rig.instanceWatchers("T_WatchRowModel", "a") == std::vector<ConnectionId>{cid});
+    CHECK(rig.onStrand([cid](auto const& table) { return table.topicCount(cid); }) == 1U);
+}
+
+TEST_CASE("unwatch_of_unwatched_topic_is_ok", "[push][watch]") {
+    Rig rig;
+    auto const bare = rig.server->openConnection();
+    auto const cid = rig.server->openConnection();
+    (void)rig.watch(cid, records({"T_WatchRow"}));
+
+    CHECK(rig.send(bare, ::morph::wire::kUnwatchKind, records({"T_WatchRow"})).kind == "ok");
+    CHECK(rig.send(cid, ::morph::wire::kUnwatchKind, instance("T_WatchRowModel", "never")).kind == "ok");
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
 }

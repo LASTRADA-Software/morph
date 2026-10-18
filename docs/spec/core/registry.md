@@ -620,6 +620,7 @@ class ActionDispatcher {
     const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
                                                       std::string_view actionId) const;
     std::vector<std::string> modelsOf(std::string_view actionId) const;
+    std::vector<std::string> actionsOf(std::string_view modelId) const;
     static ActionDispatcher& instance();
 };
 ```
@@ -695,6 +696,10 @@ class ActionDispatcher {
   `RemoteServer` reads it when admitting a record watch, which knows an action
   only by the id `morph::effects::actionsHolding` returns and must authorize it
   against its model type ([backend.md, "Watches"](backend.md#watches)).
+- `actionsOf` returns the action type-ids registered under a model type-id,
+  sorted; empty for a model with none. `RemoteServer` reads it when admitting
+  an instance watch, which a principal may hold only when it may run one of the
+  model's actions.
 
 #### `ActionDescription` — what `registerAction` files for the wire
 
@@ -752,9 +757,14 @@ class ModelRegistryFactory {
     void registerModel(std::string_view modelId, Factory factory);
 
     std::unique_ptr<IModelHolder> create(std::string_view modelId, std::string_view primary = {});
+    bool contains(std::string_view modelId) const;
     static ModelRegistryFactory& instance();
 };
 ```
+
+- `contains` answers whether a model type is registered, without creating
+  one. `RemoteServer` refuses an instance watch on a model type it does not
+  have.
 
 - `create` throws `std::runtime_error` for unknown model types. The optional
   @p primary parameter is the instance's stable primary key (empty for an

@@ -10,11 +10,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <latch>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1009,7 +1011,9 @@ private:
     /// Refused with an `err`: `cid == 0`, since an unscoped message has no
     /// connection whose watch set it could change; a connection already
     /// closed; and a body `readWatchBody` refuses. Otherwise `ok` with a
-    /// `WatchReply` listing the topics not admitted, which `unwatch` never has.
+    /// `WatchReply` listing the topics not admitted, which `unwatch` never
+    /// has. A topic listed twice in one body is judged, and reported, once.
+    /// Topics past `wire::kMaxWatchTopics` on the connection are refused.
     /// @param env   The envelope, its principal the verified one.
     /// @param reply Reply sink, invoked once.
     /// @param cid   Connection the envelope arrived on.
@@ -1034,62 +1038,111 @@ private:
             _watches.remove(cid, *body);
         } else {
             ::morph::wire::WatchBody admitted{.records = {}, .instances = {}, .replace = body->replace};
-            for (auto& record : body->records) {
-                (mayWatchRecord(env.session, record) ? admitted.records : refused.refusedRecords)
-                    .push_back(std::move(record));
+            std::set<std::string_view> seenRecords;
+            for (auto const& record : body->records) {
+                if (seenRecords.insert(record).second) {
+                    (mayWatchRecord(env.session, record) ? admitted.records : refused.refusedRecords)
+                        .push_back(record);
+                }
             }
-            for (auto& topic : body->instances) {
-                // No instance id and no owner: the instance may not exist yet,
-                // and a shared one has no owner, so what admits the topic is
-                // the authorizer's rule for the model type.
-                bool const allowed = _authorizer->authorizeInstance(env.session, topic.modelType, {}, 0, {});
-                (allowed ? admitted.instances : refused.refusedInstances).push_back(std::move(topic));
+            std::set<std::pair<std::string_view, std::string_view>> seenInstances;
+            for (auto const& topic : body->instances) {
+                if (seenInstances.emplace(topic.modelType, topic.primary).second) {
+                    (mayWatchInstance(env.session, topic.modelType) ? admitted.instances : refused.refusedInstances)
+                        .push_back(topic);
+                }
             }
-            _watches.add(cid, admitted, detail::Watch{.context = env.session, .principal = env.session.principal});
+            auto overCap =
+                _watches.add(cid, admitted, detail::Watch{.context = env.session, .principal = env.session.principal});
+            std::ranges::move(overCap.refusedRecords, std::back_inserter(refused.refusedRecords));
+            std::ranges::move(overCap.refusedInstances, std::back_inserter(refused.refusedInstances));
         }
         std::string json;
         (void)glz::write_json(refused, json);
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(json))));
     }
 
+    /// @brief Answers an admission question through the watch table's cache.
+    ///        On the server strand.
+    ///
+    /// Cached per verified principal and token, since two tokens of one
+    /// principal may carry different claims. A caller with no verified
+    /// principal is judged afresh each time: an authorizer that does not
+    /// authenticate may still tell such callers apart by their token.
+    /// @tparam Judge Callable `() -> bool`, the uncached answer.
+    /// @param session The `watch` envelope's session, its principal the verified one.
+    /// @param kind    What @p name names.
+    /// @param name    A registered record's wire name or model type name.
+    /// @param judge   Decides when no answer is cached.
+    /// @return The answer.
+    template <class Judge>
+    [[nodiscard]] bool cachedAdmission(const ::morph::session::Context& session, detail::AdmissionTopic kind,
+                                       std::string_view name, Judge judge) {
+        bool const cacheable = !session.principal.empty();
+        if (cacheable) {
+            if (auto const cached = _watches.admission(session, kind, name)) {
+                return *cached;
+            }
+        }
+        bool const admitted = judge();
+        if (cacheable) {
+            _watches.noteAdmission(session, kind, name, admitted);
+        }
+        return admitted;
+    }
+
     /// @brief Whether @p session's principal may watch record type @p record:
     ///        whether it may run at least one action whose result holds it.
     ///        On the server strand.
     ///
-    /// The answer for a registered record is cached in the watch table per
-    /// verified principal. A caller with no verified principal is judged
-    /// afresh each time, since the authorizer may tell such callers apart by
-    /// something other than a principal. A name no record has is refused
-    /// without caching, so a peer cannot grow the cache with names it makes up.
+    /// Each holding action is authorized as `authorize(session, modelType,
+    /// actionId)` against every model type it is registered under in this
+    /// server's dispatcher; which actions hold the record comes from the
+    /// process effects registry. A name no record has is refused without
+    /// caching, so a peer cannot grow the cache with names it makes up.
     /// @param session The `watch` envelope's session, its principal the verified one.
     /// @param record  The record's wire name.
     /// @return True when the record may be watched.
     /// @throws morph::model::EffectsRegistrationError when the registered
     ///         records and effects are invalid.
     [[nodiscard]] bool mayWatchRecord(const ::morph::session::Context& session, std::string_view record) {
-        bool const cacheable = !session.principal.empty();
-        if (auto const cached = cacheable ? _watches.admission(session.principal, record) : std::nullopt) {
-            return *cached;
-        }
         if (::morph::effects::recordNamed(record) == nullptr) {
             return false;
         }
-        bool admitted = false;
-        for (auto const& actionId : ::morph::effects::actionsHolding(record)) {
-            for (auto const& modelType : _dispatcher.modelsOf(actionId)) {
-                if (_authorizer->authorize(session, modelType, actionId)) {
-                    admitted = true;
-                    break;
+        return cachedAdmission(session, detail::AdmissionTopic::record, record, [&] {
+            for (auto const& actionId : ::morph::effects::actionsHolding(record)) {
+                for (auto const& modelType : _dispatcher.modelsOf(actionId)) {
+                    if (_authorizer->authorize(session, modelType, actionId)) {
+                        return true;
+                    }
                 }
             }
-            if (admitted) {
-                break;
-            }
+            return false;
+        });
+    }
+
+    /// @brief Whether @p session's principal may watch keyed instances of
+    ///        @p modelType. On the server strand.
+    ///
+    /// Three conditions: the model type is registered here (refused without
+    /// caching otherwise); the principal may run at least one of its actions,
+    /// `authorize(session, modelType, actionId)`, cached as for a record; and
+    /// `authorizeInstance(session, modelType, {}, 0, "")` admits it. The last
+    /// carries no instance id, because the instance may not exist yet, and no
+    /// owner, because a shared instance has none.
+    /// @param session   The `watch` envelope's session, its principal the verified one.
+    /// @param modelType The topic's model type.
+    /// @return True when the instance topic may be watched.
+    [[nodiscard]] bool mayWatchInstance(const ::morph::session::Context& session, std::string_view modelType) {
+        if (!_registry.contains(modelType)) {
+            return false;
         }
-        if (cacheable) {
-            _watches.noteAdmission(session.principal, record, admitted);
-        }
-        return admitted;
+        bool const mayRun = cachedAdmission(session, detail::AdmissionTopic::modelType, modelType, [&] {
+            return std::ranges::any_of(_dispatcher.actionsOf(modelType), [&](std::string const& actionId) {
+                return _authorizer->authorize(session, modelType, actionId);
+            });
+        });
+        return mayRun && _authorizer->authorizeInstance(session, modelType, {}, 0, {});
     }
 
     /// @brief Registers a drain waiter, or answers it at once. On the server strand.

@@ -729,7 +729,8 @@ body, more than `kMaxWatchTopics` (4096) records or instances in one list, more 
 (4096, `core/change_types.hpp`) keys in one record entry, and any record name, model type or primary longer
 than `kMaxTopicNameBytes` (1024); the message says which one. Unknown keys are ignored, so a newer peer may
 add fields. The bounds keep a peer-supplied list from forcing an unbounded allocation and sit above any
-real watch set. The producer honours the key bound too: `deriveChanges` reports a record whose keys would
+real watch set. `RemoteServer` applies `kMaxWatchTopics` to a connection's whole watch set too
+([backend.md, "Watches"](backend.md#watches)). The producer honours the key bound too: `deriveChanges` reports a record whose keys would
 exceed it as a whole-type change (keys absent), so a change is never refused for its size.
 
 ## Action-evolution policy

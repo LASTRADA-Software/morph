@@ -449,11 +449,13 @@ matches whichever instance holds that directory key, from the moment the
 instance is keyed, by construction or by `assign`. A key no instance comes to
 hold never matches.
 
-Admission is `authorizeInstance(session, modelType, {}, 0, "")`: no instance
+Admission requires the model type to be registered, the principal to be
+allowed at least one of the model's actions by `authorize`, and
+`authorizeInstance(session, modelType, {}, 0, "")` to admit it: no instance
 id, because there may be none, and an empty owner, because a shared instance is
 ownerless. Ownership therefore protects nothing here; what protects the topic
-is the authorizer's rule for the model type, as it is for an execute on a
-shared instance. A private instance needs no watch, since the server knows its
+is the authorizer's rule for the model type's actions, as it is for an execute
+on a shared instance. A private instance needs no watch, since the server knows its
 owner. See [backend.md, "Watches"](backend.md#watches).
 
 ## Lifetime and the A7 connection-scope change

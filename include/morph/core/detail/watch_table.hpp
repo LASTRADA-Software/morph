@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,41 +38,63 @@ struct Watch {
     std::string principal;
 };
 
+/// @brief What an admission answer in a `WatchTable` is about.
+enum class AdmissionTopic : std::uint8_t {
+    /// @brief A record type, by wire name.
+    record,
+    /// @brief The instances of a model type, by type name.
+    modelType,
+};
+
 /// @brief Each connection's watched record types and keyed instances. On the
 ///        server strand: not synchronised.
 ///
 /// A record topic is stored by record name. An instance topic is stored by
 /// `(modelType, primary)` and never resolved to an instance id, because the
 /// watch is sent before the fetch that may create the instance. Watching a
-/// topic the connection already watches keeps the newer `Watch`.
+/// topic the connection already watches keeps the newer `Watch`. One
+/// connection watches at most `wire::kMaxWatchTopics` topics, records and
+/// instances together, which bounds what a peer can make the server hold.
 ///
-/// The table also caches, per principal and record, whether the principal may
-/// watch the record, so a connection's repeated watches do not re-run the
-/// admission rule. A principal's answers are forgotten once none of its
-/// watches is left, so a principal that watches again is judged afresh.
+/// The table also caches admission answers per verified principal and token:
+/// two tokens of one principal may carry different claims, so they are judged
+/// apart. Each `(principal, token)` counts the topics watched with it, and its
+/// answers are forgotten when that count returns to zero, so a session that
+/// watches again is judged afresh.
 class WatchTable {
 public:
     /// @brief Adds @p body's topics to @p cid's watch set, or, when
     ///        `body.replace` is set, makes the set exactly @p body's topics.
+    ///
+    /// A topic not watched yet is refused while the connection already
+    /// watches `wire::kMaxWatchTopics` topics.
     /// @param cid   Connection the topics are watched on.
-    /// @param body  The admitted topics; `instance` ids are ignored.
-    /// @param watch What the topics were admitted on.
-    void add(ConnectionId cid, ::morph::wire::WatchBody const& body, Watch watch) {
+    /// @param body  The admitted topics, without duplicates; `instance` ids are ignored.
+    /// @param watch What the topics were admitted on, shared by all of them.
+    /// @return The topics refused because the connection was at its cap.
+    ::morph::wire::WatchReply add(ConnectionId cid, ::morph::wire::WatchBody const& body, Watch watch) {
         if (body.replace) {
-            _connections.erase(cid);
+            dropConnection(cid);
         }
-        if (body.records.empty() && body.instances.empty()) {
-            forgetIdleAdmissions();
-            return;
-        }
+        auto const shared = std::make_shared<Watch const>(std::move(watch));
+        SessionKey const key = keyOf(*shared);
+        ::morph::wire::WatchReply overCap;
         Connection& connection = _connections[cid];
         for (auto const& record : body.records) {
-            connection.records.insert_or_assign(record, watch);
+            if (!place(connection, connection.records, record, shared, key)) {
+                overCap.refusedRecords.push_back(record);
+            }
         }
         for (auto const& topic : body.instances) {
-            connection.instances.insert_or_assign(InstanceKey{topic.modelType, topic.primary}, watch);
+            if (!place(connection, connection.instances, InstanceKey{topic.modelType, topic.primary}, shared, key)) {
+                overCap.refusedInstances.push_back(topic);
+            }
         }
-        forgetIdleAdmissions();
+        if (connection.size() == 0) {
+            _connections.erase(cid);
+        }
+        forgetIfIdle(key);
+        return overCap;
     }
 
     /// @brief Removes @p body's topics from @p cid's watch set. A topic not
@@ -82,23 +107,30 @@ public:
             return;
         }
         for (auto const& record : body.records) {
-            found->second.records.erase(record);
+            erase(found->second.records, record);
         }
         for (auto const& topic : body.instances) {
-            found->second.instances.erase(InstanceKey{topic.modelType, topic.primary});
+            erase(found->second.instances, InstanceKey{topic.modelType, topic.primary});
         }
-        if (found->second.records.empty() && found->second.instances.empty()) {
+        if (found->second.size() == 0) {
             _connections.erase(found);
         }
-        forgetIdleAdmissions();
     }
 
     /// @brief Drops every watch @p cid holds.
     /// @param cid Connection that closed, failed a write, or changed principal.
     void dropConnection(ConnectionId cid) {
-        if (_connections.erase(cid) != 0) {
-            forgetIdleAdmissions();
+        auto found = _connections.find(cid);
+        if (found == _connections.end()) {
+            return;
         }
+        for (auto const& [record, watch] : found->second.records) {
+            release(keyOf(*watch));
+        }
+        for (auto const& [topic, watch] : found->second.instances) {
+            release(keyOf(*watch));
+        }
+        _connections.erase(found);
     }
 
     /// @brief The connections watching record type @p record.
@@ -140,64 +172,124 @@ public:
             return nullptr;
         }
         auto const found = connection->second.records.find(record);
-        return found == connection->second.records.end() ? nullptr : &found->second;
+        return found == connection->second.records.end() ? nullptr : found->second.get();
     }
 
-    /// @brief The cached answer to whether @p principal may watch @p record.
-    /// @param principal A verified principal; empty for none.
-    /// @param record    A record's wire name.
+    /// @brief How many topics @p cid watches, records and instances together.
+    /// @param cid Connection.
+    /// @return The count; 0 for a connection with no watches.
+    [[nodiscard]] std::size_t topicCount(ConnectionId cid) const {
+        auto const found = _connections.find(cid);
+        return found == _connections.end() ? 0 : found->second.size();
+    }
+
+    /// @brief The cached answer to whether @p session may watch @p name.
+    /// @param session A session whose principal is the verified one.
+    /// @param kind    What @p name names.
+    /// @param name    A record's wire name or a model type name.
     /// @return The answer, or `nullopt` when none is cached.
-    [[nodiscard]] std::optional<bool> admission(std::string_view principal, std::string_view record) const {
-        auto const byPrincipal = _admissions.find(principal);
-        if (byPrincipal == _admissions.end()) {
+    [[nodiscard]] std::optional<bool> admission(::morph::session::Context const& session, AdmissionTopic kind,
+                                                std::string_view name) const {
+        auto const bySession = _sessions.find(SessionKey{session.principal, session.token});
+        if (bySession == _sessions.end()) {
             return std::nullopt;
         }
-        auto const found = byPrincipal->second.find(record);
-        if (found == byPrincipal->second.end()) {
+        auto const& answers = bySession->second.answers.at(static_cast<std::size_t>(kind));
+        auto const found = answers.find(name);
+        if (found == answers.end()) {
             return std::nullopt;
         }
         return found->second;
     }
 
-    /// @brief Caches whether @p principal may watch @p record.
-    /// @param principal A verified principal; empty for none.
-    /// @param record    A registered record's wire name.
-    /// @param admitted  The answer.
-    void noteAdmission(std::string_view principal, std::string_view record, bool admitted) {
-        auto byPrincipal = _admissions.find(principal);
-        if (byPrincipal == _admissions.end()) {
-            byPrincipal = _admissions.emplace(std::string{principal}, Answers{}).first;
-        }
-        byPrincipal->second.insert_or_assign(std::string{record}, admitted);
+    /// @brief Caches whether @p session may watch @p name.
+    ///
+    /// Kept while a topic watched with the same principal and token remains;
+    /// forgotten at the end of the next `add` otherwise.
+    /// @param session  A session whose principal is the verified one.
+    /// @param kind     What @p name names.
+    /// @param name     A registered record's wire name or model type name.
+    /// @param admitted The answer.
+    void noteAdmission(::morph::session::Context const& session, AdmissionTopic kind, std::string_view name,
+                       bool admitted) {
+        auto& answers = _sessions[SessionKey{session.principal, session.token}].answers;
+        answers.at(static_cast<std::size_t>(kind)).insert_or_assign(std::string{name}, admitted);
     }
 
 private:
     using InstanceKey = std::pair<std::string, std::string>;
+    // (verified principal, token): what an admission answer was decided on.
+    using SessionKey = std::pair<std::string, std::string>;
+    using WatchPtr = std::shared_ptr<Watch const>;
     using Answers = std::map<std::string, bool, std::less<>>;
 
     /// One connection's watches, by topic.
     struct Connection {
-        std::map<std::string, Watch, std::less<>> records;
-        std::map<InstanceKey, Watch> instances;
+        std::map<std::string, WatchPtr, std::less<>> records;
+        std::map<InstanceKey, WatchPtr> instances;
+
+        [[nodiscard]] std::size_t size() const { return records.size() + instances.size(); }
     };
 
-    /// Forgets the cached answers of every principal no watch carries.
-    void forgetIdleAdmissions() {
-        std::erase_if(_admissions, [this](auto const& entry) {
-            for (auto const& [cid, connection] : _connections) {
-                auto const carries = [&](auto const& topic) { return topic.second.principal == entry.first; };
-                if (std::ranges::any_of(connection.records, carries) ||
-                    std::ranges::any_of(connection.instances, carries)) {
-                    return false;
-                }
-            }
+    /// How many watched topics carry one session, and its cached answers by `AdmissionTopic`.
+    struct Session {
+        std::size_t topics = 0;
+        std::array<Answers, 2> answers;
+    };
+
+    [[nodiscard]] static SessionKey keyOf(Watch const& watch) { return {watch.principal, watch.context.token}; }
+
+    /// Stores @p watch for @p topic, unless that would take @p connection past the cap.
+    template <class Topics, class Topic>
+    bool place(Connection const& connection, Topics& topics, Topic const& topic, WatchPtr const& watch,
+               SessionKey const& key) {
+        auto const found = topics.find(topic);
+        if (found != topics.end()) {
+            // Counted before the old session is released, so a re-watch by the
+            // same session never drops that session's answers.
+            ++_sessions[key].topics;
+            release(keyOf(*found->second));
+            found->second = watch;
             return true;
-        });
+        }
+        if (connection.size() >= ::morph::wire::kMaxWatchTopics) {
+            return false;
+        }
+        topics.emplace(topic, watch);
+        ++_sessions[key].topics;
+        return true;
+    }
+
+    /// Removes @p topic, if watched, and releases its session.
+    template <class Topics, class Topic>
+    void erase(Topics& topics, Topic const& topic) {
+        auto const found = topics.find(topic);
+        if (found == topics.end()) {
+            return;
+        }
+        release(keyOf(*found->second));
+        topics.erase(found);
+    }
+
+    /// One topic watched with @p key is gone; the session goes with its last.
+    void release(SessionKey const& key) {
+        auto const found = _sessions.find(key);
+        if (found != _sessions.end() && --found->second.topics == 0) {
+            _sessions.erase(found);
+        }
+    }
+
+    /// Forgets @p key's answers when no watched topic carries it.
+    void forgetIfIdle(SessionKey const& key) {
+        auto const found = _sessions.find(key);
+        if (found != _sessions.end() && found->second.topics == 0) {
+            _sessions.erase(found);
+        }
     }
 
     // Ordered by connection id, so `watchersOf` answers in ascending order.
     std::map<ConnectionId, Connection> _connections;
-    std::map<std::string, Answers, std::less<>> _admissions;
+    std::map<SessionKey, Session> _sessions;
 };
 
 }  // namespace morph::backend::detail

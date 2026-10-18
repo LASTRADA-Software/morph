@@ -1114,25 +1114,45 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   principal of its own. Watching a topic again keeps the newer one.
   `watchersOf(record)` and `watchersOf(modelType, primary)` answer the
   connections watching a topic, ascending; `watchOf(cid, record)` the watch
-  itself. `RemoteServer::watchTable()` exposes it read-only, on the strand.
-- **Admission.** Each topic of a `watch` is admitted or refused on its own; the
+  itself; `topicCount(cid)` how many topics `cid` watches. `RemoteServer::watchTable()` exposes it read-only, on the strand.
+- **Admission.** Each topic of a `watch` is admitted or refused on its own,
+  on the principal `stampVerifiedPrincipal` verified for the envelope; the
   `ok` reply's `WatchReply` lists the refused ones, and the admitted ones are
-  stored.
+  stored. A topic listed twice in one body is judged, and listed, once.
   - A record type is admitted when the verified principal may run at least one
     action whose result holds it: for each action id
     `effects::actionsHolding(record)` returns, and each model type
     `ActionDispatcher::modelsOf(actionId)` registers it under,
-    `authorize(session, modelType, actionId)` — the call an `execute` of that
-    action is admitted on. The answer for a registered record is cached per
-    verified principal and record in the table, and a principal's answers are
-    forgotten once none of its watches is left. A caller with no verified
-    principal is judged afresh each time: an authorizer that does not
-    authenticate may still tell such callers apart by their token. A name no record has is refused without
-    caching, so a peer cannot grow the cache with names it makes up.
-  - An instance topic is admitted when
-    `authorizeInstance(session, modelType, {}, 0, "")` admits it: no instance
-    id, because the instance may not exist, and no owner, because a shared
-    instance has none ([shared_instances.md](shared_instances.md#watching-a-keyed-instance)).
+    `authorize(session, modelType, actionId)`. Which actions hold a record
+    comes from the process effects registry; which model types an action
+    belongs to comes from this server's dispatcher. A name no record has is
+    refused.
+  - An instance topic is admitted when three things hold: its model type is
+    registered with this server (`ModelRegistryFactory::contains`); the
+    principal may run at least one of that model's actions
+    (`authorize(session, modelType, actionId)` over
+    `ActionDispatcher::actionsOf(modelType)`); and
+    `authorizeInstance(session, modelType, {}, 0, "")` admits it. The last
+    carries no instance id, because the instance may not exist, and no owner,
+    because a shared instance has none
+    ([shared_instances.md](shared_instances.md#watching-a-keyed-instance)).
+    The first two matter because `authorizeInstance` allows everything by
+    default.
+  - **The cache.** The `authorize` answer for a record type, and for a model
+    type's actions, is cached in the table per verified principal **and
+    token**: two tokens of one principal, such as a scoped agent token and a
+    full one, may carry different claims. Each `(principal, token)` counts the
+    topics watched with it, and its answers are forgotten when the count
+    returns to zero. A caller with no verified principal is judged afresh each
+    time, since an authorizer that does not authenticate may still tell such
+    callers apart by their token. A name no record has, and a model type not
+    registered, are refused without caching, so a peer cannot grow the cache
+    with names it makes up.
+- **The cap.** One connection watches at most `wire::kMaxWatchTopics` (4096)
+  topics, records and instances together. A topic the connection does not
+  already watch is refused, and listed in the reply, while it is at the cap; an
+  `unwatch` makes room again. Every topic one `watch` admits shares one copy of
+  its session.
 - **`replace`.** A `watch` with `replace: true` makes the connection's watch
   set exactly its admitted topics. A client sends its whole set this way after a
   reconnect, which supersedes any watch changes replayed ahead of it.
