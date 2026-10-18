@@ -24,6 +24,7 @@
 
 #include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
+#include "detail/result_walker.hpp"
 #include "model.hpp"
 #include "payload_schema.hpp"
 #include "profiler.hpp"
@@ -1494,6 +1495,30 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     return true;
 }
 
+/// @brief Static-init helper for every action registration: records where the
+///        action's result holds which reflected aggregates.
+///
+/// Walks `ActionTraits<Action>::Result`, the unwrapped type, so a `Task<R>`
+/// handler contributes `R`. Idempotent per action id: a registration repeated
+/// in another translation unit does not walk again.
+/// @tparam Action The action type; `ActionTraits<Action>` must be visible.
+/// @param actionId The action's registered type-id.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Action>
+inline bool registerActionResultOnce(std::string_view actionId) noexcept {
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerActionResultOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    auto& entries = mutableActionResultSlots();
+    if (!entries.contains(actionId)) {
+        entries.emplace(std::string{actionId}, walkResult<typename ActionTraits<Action>::Result>());
+    }
+    return true;
+}
+
 /// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`'s generic-execute registration.
 ///
 /// Forward declaration only; the definition is in `bridge.hpp` (after `ActionExecuteRegistry`
@@ -1585,6 +1610,10 @@ void actionSourceRegistrationRequired() {}
 /// (for `ActionTraits::Result`, via `decltype`) — never its definition — so
 /// it is unaffected and always emitted.
 ///
+/// The result-slot registrar (`registerActionResultOnce`) references no model
+/// code, but it is suppressed too: it records facts only a process that hosts
+/// models serves, and a pure client takes them from the server's catalog.
+///
 /// Defined on the `morph` target's INTERFACE via the `MORPH_CLIENT_ONLY`
 /// CMake option, never per translation unit: two TUs disagreeing on whether a
 /// model registers itself would violate ODR. See docs/spec/core/registry.md,
@@ -1611,6 +1640,7 @@ void actionSourceRegistrationRequired() {}
 #ifdef MORPH_CLIENT_ONLY
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 #define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
+#define MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)
 #define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)
 #define MORPH_DETAIL_DEFINE_SOURCE_LOCAL(...)
 #else
@@ -1628,6 +1658,11 @@ void actionSourceRegistrationRequired() {}
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
+    }
+#define MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)                                                            \
+    namespace {                                                                                          \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_result_reg_, __COUNTER__) =              \
+        morph::model::detail::registerActionResultOnce<A>(morph::model::ActionTraits<A>::typeId());      \
     }
 #define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)      \
     extern template void __VA_ARGS__;                       \
@@ -1890,12 +1925,17 @@ void actionSourceRegistrationRequired() {}
     };
 // clang-format on
 
-/// @brief The two registrar blocks `BRIDGE_DETAIL_ACTION_TRAITS_BODY` appends
+/// @brief The registrar blocks `BRIDGE_DETAIL_ACTION_TRAITS_BODY` appends
 ///        after `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY`'s trait
 ///        specialisation, factored out so `BRIDGE_REGISTER_ACTION_SOURCE` can
-///        emit exactly the same two registrars from a `.cpp`, without
+///        emit exactly the same registrars from a `.cpp`, without
 ///        repeating the trait specialisation `BRIDGE_DECLARE_ACTION` already
 ///        placed in the header.
+///
+/// There are three: the dispatcher's runner (`registerActionOnce`), the
+/// result's slots (`registerActionResultOnce`), both suppressed under
+/// `MORPH_CLIENT_ONLY`, and the generic executor
+/// (`registerActionExecutorOnce`), always emitted.
 ///
 /// Reads `morph::model::ActionTraits<A>::typeId()` rather than taking a
 /// `NAME` parameter, so a `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
@@ -1908,6 +1948,7 @@ void actionSourceRegistrationRequired() {}
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)                                                            \
     MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, morph::model::ActionTraits<A>::typeId())                    \
+    MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)                                                                \
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(),   \
@@ -1920,7 +1961,7 @@ void actionSourceRegistrationRequired() {}
 ///        `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5` expand to alike, parameterised
 ///        only on how `Result` is spelled. Composes
 ///        `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY` (the type) with
-///        `BRIDGE_DETAIL_ACTION_REGISTRARS` (the two registrars) -- the same
+///        `BRIDGE_DETAIL_ACTION_REGISTRARS` (the registrars) -- the same
 ///        two pieces `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
 ///        emit separately, in a header and a `.cpp` respectively.
 ///

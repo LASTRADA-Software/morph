@@ -1,8 +1,14 @@
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <map>
+#include <morph/core/bridge.hpp>
+#include <morph/core/detail/result_walker.hpp>
 #include <morph/core/records.hpp>
+#include <optional>
 #include <string>
 #include <typeindex>
+#include <vector>
 
 // Glaze reflects member names through an external-linkage object, so these types cannot sit in an
 // anonymous namespace.
@@ -43,7 +49,69 @@ struct NoId {
     int value{};
 };
 
+struct ListResult {
+    std::vector<Row> rows;
+};
+
+struct Header {
+    std::vector<Row> rows;
+};
+
+struct Nested {
+    std::optional<Header> header;
+    std::map<std::string, Row> byName;
+};
+
+// Its codec is replaced, so the walker cannot know what its JSON holds.
+struct Opaque {
+    std::vector<Row> rows;
+};
+
+// A `value` mapping replaces the object codec as well.
+struct Mapped {
+    std::vector<Row> rows;
+};
+
+struct HoldsOpaque {
+    Opaque opaque;
+    Mapped mapped;
+    int count{};
+};
+
+struct Node {
+    std::vector<Node> children;
+    std::vector<Row> rows;
+};
+
+struct Renamed {
+    std::vector<Row> items;
+};
+
+struct ListRows {
+    int limit{};
+};
+
+struct WalkerModel {
+    ListResult execute(ListRows const& /*action*/) { return {}; }
+};
+
 }  // namespace push_records_test
+
+template <>
+struct glz::meta<push_records_test::Opaque> {
+    static constexpr bool custom_read = true;
+    static constexpr bool custom_write = true;
+};
+
+template <>
+struct glz::meta<push_records_test::Mapped> {
+    static constexpr auto value = &push_records_test::Mapped::rows;
+};
+
+template <>
+struct glz::meta<push_records_test::Renamed> {
+    static constexpr auto value = glz::object("entries", &push_records_test::Renamed::items);
+};
 
 using namespace push_records_test;
 
@@ -54,6 +122,9 @@ BRIDGE_REGISTER_RECORD(Report, "T_Report", morph::record::keyless, morph::record
 BRIDGE_REGISTER_RECORD(Secret, "T_Secret", morph::record::privateKeys)
 BRIDGE_REGISTER_RECORD(NoId, "T_NoId")
 
+BRIDGE_REGISTER_MODEL(WalkerModel, "T_WalkerModel")
+BRIDGE_REGISTER_ACTION(WalkerModel, ListRows, "T_WalkerListRows")
+
 namespace {
 
 morph::record::RecordInfo const* find(std::string_view name) {
@@ -63,6 +134,17 @@ morph::record::RecordInfo const* find(std::string_view name) {
         }
     }
     return nullptr;
+}
+
+// Glaze cannot read this type's member names, so the walker must skip it rather than fail to compile.
+struct Hidden {
+    std::vector<Row> rows;
+};
+
+using morph::model::detail::ResultSlot;
+
+bool hasSlot(std::vector<ResultSlot> const& slots, std::type_index type, std::string_view path) {
+    return std::ranges::any_of(slots, [&](ResultSlot const& slot) { return slot.type == type && slot.path == path; });
 }
 
 }  // namespace
@@ -109,4 +191,65 @@ TEST_CASE("record_without_id_has_no_key", "[push][records]") {
     auto const* info = find("T_NoId");
     REQUIRE(info != nullptr);
     REQUIRE_FALSE(info->keyField.has_value());
+}
+
+TEST_CASE("walker_result_itself", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<Row>();
+    REQUIRE(hasSlot(slots, typeid(Row), ""));
+    REQUIRE(slots.size() == 1);
+}
+
+TEST_CASE("walker_vector_member", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<ListResult>();
+    REQUIRE(hasSlot(slots, typeid(ListResult), ""));
+    REQUIRE(hasSlot(slots, typeid(Row), "rows"));
+    REQUIRE(slots.size() == 2);
+}
+
+TEST_CASE("walker_paths_through_optional_and_map", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<Nested>();
+    REQUIRE(hasSlot(slots, typeid(Header), "header"));
+    REQUIRE(hasSlot(slots, typeid(Row), "header.rows"));
+    REQUIRE(hasSlot(slots, typeid(Row), "byName"));
+}
+
+TEST_CASE("walker_skips_custom_codec", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<HoldsOpaque>();
+    REQUIRE(hasSlot(slots, typeid(HoldsOpaque), ""));
+    REQUIRE(slots.size() == 1);
+    REQUIRE(morph::model::detail::walkResult<Opaque>().empty());
+    REQUIRE(morph::model::detail::walkResult<Mapped>().empty());
+}
+
+TEST_CASE("walker_skips_anonymous_namespace_type", "[push][records]") {
+    REQUIRE(morph::model::detail::walkResult<Hidden>().empty());
+    REQUIRE(morph::model::detail::walkResult<std::vector<Hidden>>().empty());
+}
+
+TEST_CASE("walker_skips_scalars_strings_and_void", "[push][records]") {
+    REQUIRE(morph::model::detail::walkResult<void>().empty());
+    REQUIRE(morph::model::detail::walkResult<int>().empty());
+    REQUIRE(morph::model::detail::walkResult<std::string>().empty());
+    REQUIRE(morph::model::detail::walkResult<std::vector<std::string>>().empty());
+}
+
+TEST_CASE("walker_ends_on_recursive_type", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<Node>();
+    REQUIRE(hasSlot(slots, typeid(Node), ""));
+    REQUIRE(hasSlot(slots, typeid(Row), "rows"));
+    REQUIRE(slots.size() == 2);
+}
+
+TEST_CASE("walker_renamed_member_uses_wire_name", "[push][records]") {
+    auto const slots = morph::model::detail::walkResult<Renamed>();
+    REQUIRE(hasSlot(slots, typeid(Row), "entries"));
+    REQUIRE_FALSE(hasSlot(slots, typeid(Row), "items"));
+}
+
+TEST_CASE("action_registration_records_result_slots", "[push][records]") {
+    auto const& all = morph::model::detail::actionResultSlots();
+    auto const found = all.find("T_WalkerListRows");
+    REQUIRE(found != all.end());
+    REQUIRE(hasSlot(found->second, typeid(ListResult), ""));
+    REQUIRE(hasSlot(found->second, typeid(Row), "rows"));
 }

@@ -41,6 +41,8 @@ without knowing their concrete types.
 - [Failure modes](#failure-modes)
 - [Limitations](#limitations)
 - [Cross-references](#cross-references)
+- [Record registry](#record-registry)
+- [Action result slots](#action-result-slots)
 
 ## Overview
 
@@ -91,7 +93,8 @@ namespace scope:
    — which has external visibility to the type system; and
 2. one or more **file-scope initialiser objects** (`[[maybe_unused]] const bool`
    in an anonymous namespace) whose initialisation runs
-   `registerModelOnce` / `registerActionOnce` / `registerActionExecutorOnce`.
+   `registerModelOnce` / `registerActionOnce` / `registerActionResultOnce` /
+   `registerActionExecutorOnce`.
 
 `BRIDGE_REGISTER_VALIDATOR` emits **only** item 1 — an `ActionValidator<A>`
 specialisation. It performs no static-init registration (there is no singleton
@@ -883,19 +886,20 @@ construction; nothing in the type system says so (see
 
 ### Static-init helpers
 
-Three `detail` functions serve as static-init helpers that the macros call:
+Four `detail` functions serve as static-init helpers that the macros call:
 
 | Function | Purpose |
 |---|---|
 | `registerModelOnce<Model>(modelId)` | Registers a model factory with `ModelRegistryFactory::instance()`. Returns `true` so it can be assigned to a `const bool` in an anonymous namespace. |
 | `registerActionOnce<Model, Action>(modelId, actionId)` | Registers a runner with `ActionDispatcher::instance()`. Returns `true`. |
+| `registerActionResultOnce<Action>(actionId)` | Walks `ActionTraits<Action>::Result` and stores its slots under the action id (see [Action result slots](#action-result-slots)). Idempotent per id. |
 | `registerActionExecutorOnce<Model, Action>(modelId, actionId)` | Registers with `ActionExecuteRegistry::instance()`. Only declared in `registry.hpp`; defined in `bridge.hpp` to avoid a `registry.hpp` → `bridge.hpp` include cycle. |
 
 The process-level singletons are returned by `defaultDispatcher()` and
 `defaultRegistry()` (both are `inline` functions with function-local `static`
 variables).
 
-All three helpers `assert` in a debug build that the
+All four helpers `assert` in a debug build that the
 [registration-phase latch](#the-registration-phase-latch) is still open, which
 is what turns the thread-safety precondition below from advice into a
 diagnosable failure.
@@ -980,6 +984,11 @@ Expands to:
   `detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
   (the model-id argument is the model's registered `typeId()`, not a raw string).
   See [`MORPH_CLIENT_ONLY`](#morph_client_only--suppressing-model-owning-registrars).
+- Unless `MORPH_CLIENT_ONLY` is defined: a `[[maybe_unused]] const bool` in an
+  anonymous namespace calling
+  `detail::registerActionResultOnce<A>(morph::model::ActionTraits<A>::typeId())`,
+  which records where the result holds which reflected aggregates (see
+  [Action result slots](#action-result-slots)).
 - A `[[maybe_unused]] const bool` in an anonymous namespace calling
   `detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
   — always emitted, `MORPH_CLIENT_ONLY` or not.
@@ -1245,6 +1254,11 @@ and the `try_compile()` probes in `tests/CMakeLists.txt`): a model whose
 constructor and `execute()` are declared but never defined anywhere in the
 link succeeds when built with `MORPH_CLIENT_ONLY` defined, and fails to link
 (both symbols genuinely referenced) when built without it.
+
+**The result-slot registrar is suppressed as well.** `registerActionResultOnce`
+references no model code, so linking is not the reason: the slots are facts a
+process that hosts models serves, and a pure client takes them from the
+server's catalog.
 
 **Must be carried on the `morph` target's `INTERFACE`, never per-consumer.**
 The macro changes which registrars a model header emits; two translation
@@ -1664,3 +1678,35 @@ read through `detail::recordRegistry()`.
 - **Concurrency and lifetimes** — the static-init-then-read-only discipline in
   [Thread safety](#thread-safety) and the process-lifetime singleton ownership in
   [Limitations](#limitations).
+
+## Action result slots
+
+`include/morph/core/detail/result_walker.hpp` walks an action's result type
+and lists every reflected aggregate it can hold, with the JSON path to each.
+`BRIDGE_DETAIL_ACTION_REGISTRARS`, which every form of `BRIDGE_REGISTER_ACTION`
+and `BRIDGE_REGISTER_ACTION_SOURCE` runs, calls
+`detail::registerActionResultOnce<A>(typeId)`, which stores
+`detail::walkResult<ActionTraits<A>::Result>()` under the action id in
+`detail::actionResultSlots()`. `Result` is the unwrapped type, so a `Task<R>`
+handler contributes `R`.
+
+- **A slot** is `{std::type_index type, std::string path}`. Every visited
+  aggregate is one, the result itself at path `""`, so matching against the
+  record registry can later stop at the first registered record on a path. The
+  walker does not read the record registry.
+- **Visited:** the result; the value of a `std::vector`, `std::optional` or
+  `std::map` (adds no path segment); the members of a type glaze writes as an
+  object, either by pure reflection or through a `glz::meta` object mapping.
+  Path segments are `glz::reflect<T>::keys`, the names the codec writes, so a
+  renamed member contributes its wire name. Segments join with `.`.
+- **Skipped,** with nothing recorded beneath them: `void`, scalars, strings,
+  any other container, a type whose `glz::meta` sets `custom_read` or
+  `custom_write` or maps `value` to something other than an object, and a
+  pure-reflection type in an anonymous namespace (glaze cannot read its member
+  names, since that needs an external-linkage object of the type).
+- **Recursion ends** at a type already on the current path; that occurrence is
+  not a slot.
+- **Cost.** The walk is compile-time recursion over member types, pruned to
+  members that can hold an aggregate, so scalar members instantiate nothing. At
+  static initialisation it runs once per action id: a registration repeated in
+  another translation unit finds the id and does not walk again.
