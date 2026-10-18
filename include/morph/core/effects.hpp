@@ -342,13 +342,13 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 
 /// @brief Matches action results against records and validates the configuration.
 /// @param records The records, as registered.
-/// @param slots Every action's result slots, by action id.
+/// @param resultSlots Every action's result slots, by action id.
 /// @param declared Every action's effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolve(std::vector<record::RecordInfo> records,
-                                      model::detail::ActionResultSlotMap const& slots, EffectsMap const& declared,
+                                      model::detail::ActionResultSlotMap const& resultSlots, EffectsMap const& declared,
                                       std::vector<std::string> const& slotConflicts) {
     std::vector<std::string> problems;
 
@@ -392,7 +392,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     }
 
     Resolved resolved;
-    for (auto const& [actionId, result] : slots) {
+    for (auto const& [actionId, result] : resultSlots) {
         std::vector<model::detail::ResultSlot const*> sorted;
         sorted.reserve(result.resultSlots.size());
         for (auto const& slot : result.resultSlots) {
@@ -479,16 +479,16 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 
 /// @brief Resolves a registry built by a test, leaving the process registry untouched.
 /// @param records The records.
-/// @param slots The action result slots, by action id.
+/// @param resultSlots The action result slots, by action id.
 /// @param declared The effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolveForTesting(std::vector<record::RecordInfo> records,
-                                                model::detail::ActionResultSlotMap const& slots,
+                                                model::detail::ActionResultSlotMap const& resultSlots,
                                                 EffectsMap const& declared,
                                                 std::vector<std::string> const& slotConflicts = {}) {
-    return resolve(std::move(records), slots, declared, slotConflicts);
+    return resolve(std::move(records), resultSlots, declared, slotConflicts);
 }
 
 /// @brief The process registries, matched and validated on the first call.
