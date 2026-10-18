@@ -17,6 +17,14 @@
 ///     ladder_bookmarks_server
 /// @endcode
 ///
+/// `BOOKMARKS_TRANSPORT` picks what serves clients: `qt` (default,
+/// `QtWebSocketServer`) or `net` (`morph::net::SocketServer`, where built).
+/// `BOOKMARKS_STORE` picks where bookmarks live: `sql` (default, the
+/// database) or `memory` (each model instance's own memory, gone with it).
+/// `BOOKMARKS_WORKERS` sizes the model worker pool (default 4) and
+/// `BOOKMARKS_MAX_LIVE_MODELS` caps live model instances (default
+/// `bookmarks::app::kDefaultMaxLiveModels`; `0` is unbounded).
+///
 /// @par No `--seed`, and why
 /// This server ships none, deliberately. Every action in this rung is
 /// scoped to `session::current()->principal`, so seeding by calling a model
@@ -41,6 +49,7 @@
 #include <charconv>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -49,6 +58,10 @@
 #include <iostream>
 #include <memory>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <optional>
+#if defined(BOOKMARKS_HAVE_NET)
+#include <morph/net/socket_server.hpp>
+#endif
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
@@ -56,6 +69,7 @@
 
 #include "bookmarks/app/app.hpp"
 #include "bookmarks/db/database.hpp"
+#include "bookmarks/models/bookmark_model.hpp"
 
 // `unsetenv` is POSIX, not <cstdlib>. This server target is only built for
 // desktop platforms (morph_add_rung() does not emit it for WASM), all of
@@ -136,6 +150,25 @@ std::expected<std::shared_ptr<::morph::backend::IEnvelopeService>, std::string> 
 
 namespace {
 
+/// @brief Reads a non-negative integer from environment variable @p name.
+/// @param name     The variable.
+/// @param fallback The value when the variable is unset.
+/// @return The value, or `std::nullopt` (after saying why) when it is set but is not a whole number.
+[[nodiscard]] std::optional<std::size_t> sizeFromEnv(const char* name, std::size_t fallback) {
+    const char* raw = std::getenv(name);
+    if (raw == nullptr) {
+        return fallback;
+    }
+    const std::string_view text{raw};
+    std::size_t parsed = 0;
+    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+    if (text.empty() || ec != std::errc{} || end != text.data() + text.size()) {
+        std::cerr << "bookmarks-server: " << name << "='" << raw << "' is not a non-negative whole number\n";
+        return std::nullopt;
+    }
+    return parsed;
+}
+
 /// @brief The server: everything `main` does, with what it throws left to `main`.
 /// @param argc The argument count.
 /// @param argv The arguments.
@@ -195,6 +228,36 @@ int run(int argc, char** argv) {
         }
         port = parsed;
     }
+    const auto workers = sizeFromEnv("BOOKMARKS_WORKERS", 4);
+    const auto maxLiveModels = sizeFromEnv("BOOKMARKS_MAX_LIVE_MODELS", bookmarks::app::kDefaultMaxLiveModels);
+    if (!workers || !maxLiveModels) {
+        return 2;
+    }
+    const std::string transport =
+        std::getenv("BOOKMARKS_TRANSPORT") != nullptr ? std::getenv("BOOKMARKS_TRANSPORT") : "qt";
+#if defined(BOOKMARKS_HAVE_NET)
+    if (transport != "qt" && transport != "net") {
+        std::cerr << "bookmarks-server: BOOKMARKS_TRANSPORT='" << transport << "' is neither 'qt' nor 'net'\n";
+        return 2;
+    }
+#else
+    if (transport != "qt") {
+        std::cerr
+            << "bookmarks-server: BOOKMARKS_TRANSPORT='" << transport
+            << "' is not available: this build has only the 'qt' transport (configure with MORPH_BUILD_NET=ON)\n";
+        return 2;
+    }
+#endif
+    const std::string store = std::getenv("BOOKMARKS_STORE") != nullptr ? std::getenv("BOOKMARKS_STORE") : "sql";
+    if (store != "sql" && store != "memory") {
+        std::cerr << "bookmarks-server: BOOKMARKS_STORE='" << store << "' is neither 'sql' nor 'memory'\n";
+        return 2;
+    }
+    bookmarks::setStorage(store == "memory" ? bookmarks::Storage::Memory : bookmarks::Storage::Sql);
+    if (*workers == 0) {
+        std::cerr << "bookmarks-server: BOOKMARKS_WORKERS must be at least 1\n";
+        return 2;
+    }
 
     int exitCode = 0;
     {
@@ -208,16 +271,42 @@ int run(int argc, char** argv) {
                                 std::make_shared<bookmarks::app::NullMetadataFetcher>(),
                                 std::chrono::seconds{5},
                                 std::chrono::seconds{2},
-                                4,
+                                *workers,
                                 nullptr,
-                                {std::move(*screens)}};
+                                {std::move(*screens)},
+                                *maxLiveModels};
 
-        ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};
-        if (!wsServer.listen()) {
+        // One transport serves the clients: Qt WebSockets on this thread's event
+        // loop, or, where morph::net is built, morph's own socket server on an
+        // I/O loop of its own. The models, the journal and the timers are the
+        // same either way.
+        std::optional<::morph::qt::QtWebSocketServer> qtServer;
+#if defined(BOOKMARKS_HAVE_NET)
+        std::optional<::morph::net::SocketServer> netServer;
+        if (transport == "net") {
+            netServer.emplace(*app.server(), port);
+        } else
+#endif
+        {
+            qtServer.emplace(*app.server(), port);
+        }
+        bool listening = false;
+        std::uint16_t boundPort = 0;
+        if (qtServer) {
+            listening = qtServer->listen();
+            boundPort = qtServer->port();
+        }
+#if defined(BOOKMARKS_HAVE_NET)
+        if (netServer) {
+            listening = netServer->listen();
+            boundPort = netServer->port();
+        }
+#endif
+        if (!listening) {
             std::cerr << "bookmarks-server: failed to listen on port " << port << "\n";
             return 1;
         }
-        std::cout << "bookmarks-server: listening on ws://127.0.0.1:" << wsServer.port() << std::endl;
+        std::cout << "bookmarks-server: listening on ws://127.0.0.1:" << boundPort << std::endl;
 
         std::signal(SIGINT, onStopSignal);
         std::signal(SIGTERM, onStopSignal);
@@ -245,7 +334,14 @@ int run(int argc, char** argv) {
         // close cleanly first, *then* drain the metadata worker's own
         // dispatches (see drainMetadataFetches) before `app` leaves this
         // scope.
-        static_cast<void>(wsServer.closeGracefully(std::chrono::seconds{2}));
+        if (qtServer) {
+            static_cast<void>(qtServer->closeGracefully(std::chrono::seconds{2}));
+        }
+#if defined(BOOKMARKS_HAVE_NET)
+        if (netServer) {
+            netServer->close();
+        }
+#endif
         if (!drainMetadataFetches(app, std::chrono::seconds{5})) {
             std::cerr << "bookmarks-server: metadata-fetch dispatches did not settle within 5s; "
                          "shutting down anyway\n";

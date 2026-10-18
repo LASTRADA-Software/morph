@@ -9,6 +9,7 @@
 #include <Lightweight/SqlTransaction.hpp>
 #include <atomic>
 #include <cstdint>
+#include <morph/core/profiler.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
 #include <string>
@@ -17,6 +18,7 @@
 
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
+#include "bookmarks/db/database.hpp"
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
 #include "clock.hpp"
@@ -88,11 +90,12 @@ namespace {
 }  // namespace
 
 Ack TagModel::execute(const RenameTag& action) {
+    MORPH_ZONE("TagModel::RenameTag");
     if (!action.validate()) {
         throw ValidationError{"RenameTag: id and a non-empty, bounded name are required"};
     }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rec = loadOwnedTag(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
     rec.name = action.name;
     try {
@@ -107,13 +110,14 @@ Ack TagModel::execute(const RenameTag& action) {
 }
 
 Ack TagModel::execute(const MergeTags& action) {
+    MORPH_ZONE("TagModel::MergeTags");
     if (!action.validate()) {
         throw ValidationError{"MergeTags: sourceId and a distinct targetId are required"};
     }
     const auto& owner = requireOwner();
     const auto sourceId = static_cast<std::uint64_t>(*action.sourceId);
     const auto targetId = static_cast<std::uint64_t>(*action.targetId);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     (void)loadOwnedTag(mapper.Get(), sourceId, owner);
     (void)loadOwnedTag(mapper.Get(), targetId, owner);
 
@@ -182,13 +186,18 @@ Ack TagModel::execute(const MergeTags& action) {
     entry.idempotencyKey = owner + "-mergetags-" + std::to_string(nowMs()) + "-" + std::to_string(nextOutboxSeq());
     mapper->Create(entry);
 
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+
+        transaction.Commit();
+    }
     return result;
 }
 
 ListTagsResult TagModel::execute(const ListTags&) {
+    MORPH_ZONE("TagModel::ListTags");
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rows = mapper->Query<db::TagRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
                     .All();

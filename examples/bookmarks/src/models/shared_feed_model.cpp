@@ -4,15 +4,16 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <cstdint>
+#include <morph/core/profiler.hpp>
 #include <morph/session/session.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "bookmarks/db/bookmark_entity.hpp"
-#include "bookmarks/db/bookmark_tag_entity.hpp"
-#include "bookmarks/db/tag_entity.hpp"
+#include "bookmarks/db/database.hpp"
 #include "clock.hpp"
+#include "tag_names.hpp"
 
 namespace bookmarks {
 
@@ -36,8 +37,9 @@ void requireAnyPrincipal() {
 }  // namespace
 
 ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
+    MORPH_ZONE("SharedFeedModel::ListSharedFeed");
     requireAnyPrincipal();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto query = mapper->Query<db::BookmarkRecord>();
     (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isShared>, "=", true);
     (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
@@ -55,41 +57,12 @@ ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
         rows.resize(kPageSize);
     }
 
-    // Batched, not per-row: one query for every page bookmark's junction
-    // rows, one for every referenced tag's name, grouped in-memory below --
-    // instead of a junction query plus one tag query *per junction row*
-    // (N+1+M), this page's tag names cost exactly 2 queries regardless of
-    // how many bookmarks or tags-per-bookmark it holds.
     std::vector<std::uint64_t> pageIds;
     pageIds.reserve(rows.size());
     for (const auto& rec : rows) {
         pageIds.push_back(rec.id.Value());
     }
-    auto junctionRows = mapper->Query<db::BookmarkTagRecord>()
-                            .WhereIn(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, pageIds)
-                            .All();
-
-    std::vector<std::uint64_t> tagIds;
-    tagIds.reserve(junctionRows.size());
-    for (const auto& jrow : junctionRows) {
-        tagIds.push_back(jrow.tag.Value());
-    }
-    auto tagRows =
-        mapper->Query<db::TagRecord>().WhereIn(::Lightweight::FieldNameOf<&db::TagRecord::id>, tagIds).All();
-
-    std::unordered_map<std::uint64_t, std::string> tagNameById;
-    tagNameById.reserve(tagRows.size());
-    for (const auto& tagRow : tagRows) {
-        tagNameById.emplace(tagRow.id.Value(), std::string{tagRow.name.Value()});
-    }
-
-    std::unordered_map<std::uint64_t, std::vector<std::string>> tagsByBookmarkId;
-    tagsByBookmarkId.reserve(pageIds.size());
-    for (const auto& jrow : junctionRows) {
-        if (const auto it = tagNameById.find(jrow.tag.Value()); it != tagNameById.end()) {
-            tagsByBookmarkId[jrow.bookmark.Value()].push_back(it->second);
-        }
-    }
+    auto tagsByBookmarkId = detail::readTagNamesByBookmark(mapper.Get(), pageIds);
 
     ListSharedFeedResult result;
     for (const auto& rec : rows) {
