@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
@@ -40,6 +41,7 @@ using bank::dto::GetAccount;
 BRIDGE_REGISTER_MODEL(AccountModel, "AccountModel")
 BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount")
 BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
+BRIDGE_REGISTER_EFFECTS(bank::dto::CloseAccount, ::morph::effects::changes<bank::dto::AccountInfo>)
 
 BRIDGE_MODEL_KEY(AccountModel, GetAccount, &GetAccount::id);
 BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);

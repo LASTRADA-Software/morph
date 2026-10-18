@@ -4,6 +4,7 @@
 // WASM shadow of include/bank/models/payee_model.hpp (in-memory backend).
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/dto/common.hpp"
@@ -28,5 +29,7 @@ using bank::dto::RemovePayee;
 
 BRIDGE_REGISTER_MODEL(PayeeModel, "PayeeModel")
 BRIDGE_REGISTER_ACTION(PayeeModel, AddPayee, "AddPayee")
+BRIDGE_REGISTER_EFFECTS(bank::dto::AddPayee, ::morph::effects::changes<bank::dto::PayeeInfo>)
 BRIDGE_REGISTER_ACTION(PayeeModel, RemovePayee, "RemovePayee")
+BRIDGE_REGISTER_EFFECTS(bank::dto::RemovePayee, ::morph::effects::changes<bank::dto::PayeeInfo>)
 BRIDGE_REGISTER_ACTION(PayeeModel, ListPayees, "ListPayees")

@@ -4,10 +4,13 @@
 // WASM shadow of include/bank/models/payment_model.hpp (in-memory backend).
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
+#include "bank/dto/account_dto.hpp"
 #include "bank/dto/common.hpp"
 #include "bank/dto/payment_dto.hpp"
+#include "bank/dto/transaction_dto.hpp"
 
 namespace bank {
 
@@ -31,8 +34,15 @@ using bank::dto::PayBill;
 using bank::dto::SchedulePayment;
 
 BRIDGE_REGISTER_MODEL(PaymentModel, "PaymentModel")
+// A bill is paid now, from an account.
 BRIDGE_REGISTER_ACTION(PaymentModel, PayBill, "PayBill")
+BRIDGE_REGISTER_EFFECTS(bank::dto::PayBill, ::morph::effects::changes<bank::dto::PaymentInfo>,
+                        ::morph::effects::changes<bank::dto::TxnInfo>,
+                        ::morph::effects::changes<bank::dto::AccountInfo>)
 BRIDGE_REGISTER_ACTION(PaymentModel, SchedulePayment, "SchedulePayment")
+BRIDGE_REGISTER_EFFECTS(bank::dto::SchedulePayment, ::morph::effects::changes<bank::dto::PaymentInfo>)
 BRIDGE_REGISTER_ACTION(PaymentModel, CreateStandingOrder, "CreateStandingOrder")
+BRIDGE_REGISTER_EFFECTS(bank::dto::CreateStandingOrder, ::morph::effects::changes<bank::dto::PaymentInfo>)
 BRIDGE_REGISTER_ACTION(PaymentModel, CancelPayment, "CancelPayment")
+BRIDGE_REGISTER_EFFECTS(bank::dto::CancelPayment, ::morph::effects::changes<bank::dto::PaymentInfo>)
 BRIDGE_REGISTER_ACTION(PaymentModel, ListPayments, "ListPayments")

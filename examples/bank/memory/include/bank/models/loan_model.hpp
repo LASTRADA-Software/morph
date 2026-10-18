@@ -4,9 +4,12 @@
 // WASM shadow of include/bank/models/loan_model.hpp (in-memory backend).
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
+#include "bank/dto/account_dto.hpp"
 #include "bank/dto/loan_dto.hpp"
+#include "bank/dto/transaction_dto.hpp"
 
 namespace bank {
 
@@ -30,8 +33,16 @@ using bank::dto::LoanScheduleRequest;
 using bank::dto::RepayLoan;
 
 BRIDGE_REGISTER_MODEL(LoanModel, "LoanModel")
+// A loan is paid out into its account, as a ledger entry.
 BRIDGE_REGISTER_ACTION(LoanModel, ApplyLoan, "ApplyLoan")
+BRIDGE_REGISTER_EFFECTS(bank::dto::ApplyLoan, ::morph::effects::changes<bank::dto::LoanInfo>,
+                        ::morph::effects::changes<bank::dto::TxnInfo>,
+                        ::morph::effects::changes<bank::dto::AccountInfo>)
+// The reply is the repaid loan; the repayment is debited from an account.
 BRIDGE_REGISTER_ACTION(LoanModel, RepayLoan, "RepayLoan")
+BRIDGE_REGISTER_EFFECTS(bank::dto::RepayLoan, ::morph::effects::updates<bank::dto::LoanInfo>,
+                        ::morph::effects::changes<bank::dto::TxnInfo>,
+                        ::morph::effects::changes<bank::dto::AccountInfo>)
 BRIDGE_REGISTER_ACTION(LoanModel, GetLoan, "GetLoan")
 BRIDGE_REGISTER_ACTION(LoanModel, ListLoans, "ListLoans")
 BRIDGE_REGISTER_ACTION(LoanModel, LoanScheduleRequest, "LoanScheduleRequest")

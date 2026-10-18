@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
@@ -41,7 +42,11 @@ using bank::dto::RegisterUser;
 using bank::dto::WhoAmI;
 
 BRIDGE_REGISTER_MODEL(AuthModel, "Bank_AuthModel")
+// Registering and signing in change no row a screen shows: the screen signs the session in, which reloads the catalog.
 BRIDGE_REGISTER_ACTION(AuthModel, RegisterUser, "RegisterUser")
+BRIDGE_REGISTER_EFFECTS(bank::dto::RegisterUser, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(AuthModel, LoginRequest, "LoginRequest")
+BRIDGE_REGISTER_EFFECTS(bank::dto::LoginRequest, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(AuthModel, ChangePassword, "ChangePassword")
+BRIDGE_REGISTER_EFFECTS(bank::dto::ChangePassword, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(AuthModel, WhoAmI, "WhoAmI", ::morph::model::Loggable::No)

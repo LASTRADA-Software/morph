@@ -3,6 +3,7 @@
 
 #include <core/async/Task.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
@@ -37,6 +38,8 @@ using bank::dto::SpendingByKind;
 
 BRIDGE_REGISTER_MODEL(BudgetModel, "Bank_BudgetModel")
 BRIDGE_REGISTER_ACTION(BudgetModel, SetBudget, "SetBudget")
+BRIDGE_REGISTER_EFFECTS(bank::dto::SetBudget, ::morph::effects::changes<bank::dto::BudgetInfo>)
 BRIDGE_REGISTER_ACTION(BudgetModel, DeleteBudget, "DeleteBudget")
+BRIDGE_REGISTER_EFFECTS(bank::dto::DeleteBudget, ::morph::effects::changes<bank::dto::BudgetInfo>)
 BRIDGE_REGISTER_ACTION(BudgetModel, ListBudgets, "ListBudgets", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(BudgetModel, SpendingByKind, "SpendingByKind", ::morph::model::Loggable::No)

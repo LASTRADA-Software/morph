@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
@@ -39,9 +40,16 @@ using bank::dto::UnfreezeCard;
 
 BRIDGE_REGISTER_MODEL(CardModel, "CardModel")
 BRIDGE_REGISTER_ACTION(CardModel, IssueCard, "IssueCard")
+BRIDGE_REGISTER_EFFECTS(bank::dto::IssueCard, ::morph::effects::changes<bank::dto::CardInfo>)
 BRIDGE_REGISTER_ACTION(CardModel, FreezeCard, "FreezeCard")
+BRIDGE_REGISTER_EFFECTS(bank::dto::FreezeCard, ::morph::effects::changes<bank::dto::CardInfo>)
 BRIDGE_REGISTER_ACTION(CardModel, UnfreezeCard, "UnfreezeCard")
+BRIDGE_REGISTER_EFFECTS(bank::dto::UnfreezeCard, ::morph::effects::changes<bank::dto::CardInfo>)
 BRIDGE_REGISTER_ACTION(CardModel, CancelCard, "CancelCard")
+BRIDGE_REGISTER_EFFECTS(bank::dto::CancelCard, ::morph::effects::changes<bank::dto::CardInfo>)
 BRIDGE_REGISTER_ACTION(CardModel, SetCardLimit, "SetCardLimit")
+BRIDGE_REGISTER_EFFECTS(bank::dto::SetCardLimit, ::morph::effects::changes<bank::dto::CardInfo>)
+// A card's PIN is never shown, so changing it changes nothing a screen shows.
 BRIDGE_REGISTER_ACTION(CardModel, ChangePin, "ChangePin")
+BRIDGE_REGISTER_EFFECTS(bank::dto::ChangePin, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(CardModel, ListCards, "ListCards", ::morph::model::Loggable::No)

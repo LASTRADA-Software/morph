@@ -325,6 +325,12 @@ C++ builders:
 - **`bank.cards`**, **`bank.payees`** and **`bank.loans`**: lists with their actions and forms. A loan's schedule is
   the model's `LoanScheduleRequest`, shown through the `LoanSchedule` component.
 
+Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS`), identically in both model
+sets (`include/bank/models/` and `memory/include/bank/models/`); the records are registered beside their DTOs
+(`Bank_Account`, `Bank_Transaction`, `Bank_SpendingReport` derived from transactions, and one per other list). A
+reply refreshes every query holding a changed record, so the screens declare no refreshes.
+`bank_bundle_loads_without_warnings` keeps it so.
+
 Each signed-in screen has the sidebar, which also signs out. `AccountCards`, `TransferFlow` and `LoanSchedule` are
 host components; their built-in fallbacks are what a client without them shows. Amounts are entered in cents: bank's
 actions take minor units.

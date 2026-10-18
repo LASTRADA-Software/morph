@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
@@ -32,6 +33,9 @@ using bank::dto::Notify;
 
 BRIDGE_REGISTER_MODEL(NotificationModel, "NotificationModel")
 BRIDGE_REGISTER_ACTION(NotificationModel, Notify, "Notify")
+BRIDGE_REGISTER_EFFECTS(bank::dto::Notify, ::morph::effects::changes<bank::dto::NotificationInfo>)
 BRIDGE_REGISTER_ACTION(NotificationModel, ListNotifications, "ListNotifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(NotificationModel, MarkRead, "MarkRead")
+BRIDGE_REGISTER_EFFECTS(bank::dto::MarkRead, ::morph::effects::changes<bank::dto::NotificationInfo>)
 BRIDGE_REGISTER_ACTION(NotificationModel, MarkAllRead, "MarkAllRead")
+BRIDGE_REGISTER_EFFECTS(bank::dto::MarkAllRead, ::morph::effects::changes<bank::dto::NotificationInfo>)

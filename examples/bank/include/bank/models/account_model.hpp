@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
@@ -62,6 +63,7 @@ using bank::dto::GetAccount;
 BRIDGE_REGISTER_MODEL(AccountModel, "AccountModel")
 BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
+BRIDGE_REGISTER_EFFECTS(bank::dto::CloseAccount, ::morph::effects::changes<bank::dto::AccountInfo>)
 
 // Both actions name the account they act on, so a shared handler attaches (or
 // re-points) to that account's instance on the way through.
