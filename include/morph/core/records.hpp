@@ -206,7 +206,8 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
     RecordInfo info{.name = std::string{name}, .type = std::type_index{typeid(T)}, .keyField = {}, .derivedFrom = {}};
     applyKey<T, Opts...>(info);
     info.privateKeys = (std::is_same_v<Opts, privateKeys> || ... || false);
-    auto const addSources = []<typename O>(RecordInfo& target) {
+    // Unused when the record takes no options: the fold below is then empty.
+    [[maybe_unused]] auto const addSources = []<typename O>(RecordInfo& target) {
         if constexpr (IsDerivedFrom<O>::value) {
             []<typename... S>(RecordInfo& out, derivedFrom<S...>) { (out.derivedFrom.emplace_back(typeid(S)), ...); }(
                 target, O{});
