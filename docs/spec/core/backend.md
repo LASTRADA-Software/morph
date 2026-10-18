@@ -1167,6 +1167,10 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   as does a failed `write` or `backlog()` read on its writer: a connection that
   cannot be written to is sent no events, and its client sends the whole set
   again when it reconnects.
+  So does an envelope under another principal: `stampVerifiedPrincipal(env,
+  cid)` compares each stamped principal with the connection's baseline and
+  drops the watches on a difference
+  ([security.md](../security.md#a-connections-principal-baseline)).
 
 ### Fan-out
 

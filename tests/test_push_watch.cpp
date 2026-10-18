@@ -553,6 +553,113 @@ TEST_CASE("unwatch_of_unwatched_topic_is_ok", "[push][watch]") {
     CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
 }
 
+// ── The principal baseline: a connection's watches belong to one principal ───
+
+namespace {
+
+/// Sends a `schemas` for the row model on @p cid, signed with @p token: a kind
+/// that authorises and is not a watch, so it changes no watch of its own.
+::morph::wire::Envelope describe(Rig& rig, ConnectionId cid, std::string const& token) {
+    ::morph::wire::Envelope env;
+    env.kind = "schemas";
+    env.callId = 9;
+    env.typeId = "T_WatchRowModel";
+    env.session.token = token;
+    return ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(env), cid));
+}
+
+/// Sends a core `hello` on @p cid, signed with @p token, and returns its reply's kind.
+std::string hello(Rig& rig, ConnectionId cid, std::string const& token) {
+    ::morph::wire::Envelope env = ::morph::wire::makeHello();
+    env.session.token = token;
+    return ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(env), cid)).kind;
+}
+
+}  // namespace
+
+TEST_CASE("envelope_under_other_principal_drops_watches", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    auto const other = rig.server->openConnection();
+    ::morph::wire::WatchBody body = records({"T_WatchRow"});
+    body.instances = {{.modelType = "T_WatchRowModel", .primary = "a"}};
+    (void)rig.watch(cid, body, "alice");
+    (void)rig.watch(other, records({"T_WatchRow"}), "alice");
+
+    // Any kind that authorises compares, not only `watch`.
+    CHECK(describe(rig, cid, "bob").kind == "ok");
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{other});
+    CHECK(rig.instanceWatchers("T_WatchRowModel", "a").empty());
+
+    // bob is the baseline now: his watch stays while he sends, and goes when alice sends again.
+    (void)rig.watch(cid, instance("T_WatchRowModel", "b"), "bob");
+    CHECK(describe(rig, cid, "bob").kind == "ok");
+    CHECK(rig.instanceWatchers("T_WatchRowModel", "b") == std::vector<ConnectionId>{cid});
+    (void)rig.watch(cid, records({"T_WatchRow"}), "alice");
+    CHECK(rig.instanceWatchers("T_WatchRowModel", "b").empty());
+    // A `watch` under the new principal drops the old set before it adds its own.
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid, other});
+}
+
+TEST_CASE("unauthenticated_envelope_drops_watches", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    (void)rig.watch(cid, records({"T_WatchRow"}), "alice");
+    REQUIRE(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+
+    // A token `authenticate` refuses is stamped with no principal, which is not alice.
+    (void)describe(rig, cid, "");
+
+    CHECK(rig.recordWatchers("T_WatchRow").empty());
+}
+
+TEST_CASE("hello_does_not_reset_baseline", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+
+    // A `hello` first, under another principal, sets no baseline...
+    REQUIRE(hello(rig, cid, "bob") == "ok");
+    (void)rig.watch(cid, records({"T_WatchRow"}), "alice");
+    CHECK(describe(rig, cid, "alice").kind == "ok");
+    REQUIRE(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+
+    // ...and one after the watches, under another principal or none, drops none.
+    REQUIRE(hello(rig, cid, "bob") == "ok");
+    REQUIRE(hello(rig, cid, "") == "ok");
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+    CHECK(describe(rig, cid, "alice").kind == "ok");
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+}
+
+TEST_CASE("same_principal_new_token_keeps_watches", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    (void)rig.watch(cid, records({"T_WatchRow"}), "alice");
+
+    // A refreshed token verifies to the same principal: the baseline holds.
+    CHECK(describe(rig, cid, "alice:refreshed").kind == "ok");
+
+    CHECK(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+    auto const token = rig.onStrand([cid](auto const& table) -> std::optional<std::string> {
+        auto const* watch = table.watchOf(cid, "T_WatchRow");
+        return watch == nullptr ? std::nullopt : std::optional{watch->context.token};
+    });
+    CHECK(token == std::optional<std::string>{"alice"});
+}
+
+TEST_CASE("first_stamp_sets_baseline_even_when_unauthenticated", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+
+    // The first stamped envelope carries no valid token: its empty principal is the baseline.
+    (void)rig.watch(cid, records({"T_WatchRow"}), "");
+    REQUIRE(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+
+    CHECK(describe(rig, cid, "alice").kind == "ok");
+
+    CHECK(rig.recordWatchers("T_WatchRow").empty());
+}
+
 // ── Fan-out: what a successful execute tells the watching connections ───────
 
 namespace {

@@ -974,6 +974,7 @@ private:
         _writers.erase(cid);
         _facts.erase(cid);
         _watches.dropConnection(cid);
+        _principalBaselines.erase(cid);
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -1414,15 +1415,34 @@ private:
     /// `authenticate()` returns `nullopt` the authorizer cannot vouch for the
     /// caller, so the client-asserted principal is cleared rather than passed
     /// through unverified — every envelope kind this is called for (register,
-    /// attach, assign, instances, schemas, deregister, execute) makes an authorization or
-    /// ownership decision that must key on the verified identity, never the
-    /// client's raw claim. See docs/spec/security.md.
+    /// attach, assign, instances, schemas, deregister, execute, cancel, watch,
+    /// unwatch, a service's kind) makes an authorization or ownership decision
+    /// that must key on the verified identity, never the client's raw claim.
+    /// `hello`, which a client sends with no session, is not stamped. See
+    /// docs/spec/security.md.
+    ///
+    /// It then compares the stamped principal with @p cid's baseline, the
+    /// principal of the first envelope stamped on that connection. A different
+    /// one, including the empty principal of a token `authenticate` refuses,
+    /// drops every watch @p cid holds and becomes the baseline: a watch was
+    /// admitted for one principal, and must not keep delivering to another who
+    /// now speaks on the same connection. A new token for the same principal
+    /// keeps them. `cid == 0` and a connection not open have no baseline.
     /// @param env Envelope whose `session.principal` is stamped or cleared in place.
-    void stampVerifiedPrincipal(::morph::wire::Envelope& env) {
+    /// @param cid Connection @p env arrived on; `0` for unscoped.
+    void stampVerifiedPrincipal(::morph::wire::Envelope& env, ConnectionId cid) {
         if (auto verified = _authorizer->authenticate(env.session)) {
             env.session.principal = std::move(*verified);
         } else {
             env.session.principal.clear();
+        }
+        if (cid == 0 || !_connectionScopes.contains(cid)) {
+            return;
+        }
+        auto const [baseline, first] = _principalBaselines.try_emplace(cid, env.session.principal);
+        if (!first && baseline->second != env.session.principal) {
+            _watches.dropConnection(cid);
+            baseline->second = env.session.principal;
         }
     }
 
@@ -1768,7 +1788,7 @@ private:
                 // (including allow-all) clears it, so the register decision
                 // below — and the owner recorded from it — never key on the
                 // client's unverified claim.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Bound *who may create* an instance. The default hook allows
                 // all, so an unconfigured server registers any known type; a
                 // deployer opts into gating registration by overriding
@@ -1821,7 +1841,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("attach requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1838,7 +1858,7 @@ private:
                 // constructs a model, but it still changes what a future
                 // attacher of `primary` reaches, so it must not be reachable
                 // by an unauthenticated or unauthorized caller either.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1849,7 +1869,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("instances requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Enumeration is a read channel over the directory: gate it with
                 // `authorize` for the model type (empty action id) so a deployer
                 // can refuse listing without refusing use. It discloses the live
@@ -1863,7 +1883,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("schemas requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Gated exactly like `instances`, and for the same reason: a
                 // description is a read channel over the model type, so
                 // `authorize` with an empty action id lets a deployer refuse
@@ -1883,7 +1903,7 @@ private:
                 // env.session.principal, so that principal must be the verified
                 // one: without the stamp a caller holding any token, or none,
                 // could claim the owner's name and release the owner's instance.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Type-level gate, as for `instances`/`schemas`. A deregister
                 // names no type, so both ids are empty; it lets a verifying
                 // authorizer refuse a caller with no valid token outright.
@@ -1918,7 +1938,7 @@ private:
                 // Stamped before the ownership comparison in cancelCall, for
                 // the reason deregister is: the comparison keys on the
                 // verified principal, never on the client's claim.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 cancelCall(env, cid);
                 // One answer whatever became of the call -- stopped, unknown,
                 // finished, or another caller's -- so a cancel cannot be used
@@ -1940,13 +1960,13 @@ private:
             } else if (env.kind == ::morph::wire::kWatchKind || env.kind == ::morph::wire::kUnwatchKind) {
                 // Stamped first: the watch keeps the verified principal, and
                 // admission decides on it.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 handleWatch(env, reply, cid);
             } else if (IEnvelopeService* const service = serviceFor(env.kind); service != nullptr) {
                 // Stamped first, as for every built-in kind that authorises:
                 // the service decides on the verified principal, never on the
                 // client's claim.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 reply(service->handle(env, *_authorizer, factsOf(cid)));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
@@ -1998,7 +2018,7 @@ private:
         // principal, never the attacker's claim), and (2) an authorize-only or
         // allow-all authorizer that never authenticates (the model never sees an
         // untrusted principal as authoritative). See docs/spec/security.md.
-        stampVerifiedPrincipal(env);
+        stampVerifiedPrincipal(env, cid);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         // One lookup for the holder, its recorded owner and its hydration state
         // together: they are fields of one record.
@@ -2386,6 +2406,11 @@ private:
     // What each open connection watches, filled by `watch`/`unwatch` and
     // dropped with the connection's scope or on a failed write.
     detail::WatchTable _watches;
+    // The verified principal of the first stamped envelope on each open
+    // connection, which a later one under another principal replaces after
+    // dropping the connection's watches (`stampVerifiedPrincipal`). Dropped
+    // with the connection's scope.
+    std::unordered_map<ConnectionId, std::string> _principalBaselines;
     /// Names one cancellable call: the connection it arrived on and the
     /// `callId` its client chose.
     struct CancelKey {
@@ -2820,7 +2845,8 @@ private:
         /// @param target Executor it is posted to.
         void set(std::function<void(::morph::wire::EventBody)> next, ::morph::exec::IExecutor* target) {
             std::lock_guard lock{mutex};
-            handler = next ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(next)) : nullptr;
+            handler =
+                next ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(next)) : nullptr;
             exec = target;
         }
 

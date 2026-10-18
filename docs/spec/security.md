@@ -370,6 +370,40 @@ Both signature and payload segments are decoded through this path, so a mutated
 trailing character in either segment fails verification (`Malformed`, or
 `BadSignature` if it survives decoding but changes the MAC).
 
+### A connection's principal baseline
+
+A connection has no principal of its own: the server verifies one on every
+envelope. A watch, though, outlives the envelope that created it, and keeps
+delivering events on the connection. So the server holds, per open connection,
+a **baseline**: the verified principal of the first envelope stamped on it
+after `openConnection`.
+
+`stampVerifiedPrincipal(env, cid)` is where every kind that authorises stamps
+its principal — `register`, `attach`, `assign`, `instances`, `schemas`,
+`deregister`, `execute`, `cancel`, `watch`, `unwatch`, and every service kind.
+After stamping, it compares the stamped principal with `cid`'s baseline:
+
+- **The first stamp sets the baseline**, whatever it is — an empty principal
+  included, from a token `authenticate` refuses or an authorizer that never
+  authenticates.
+- **A different principal drops every watch the connection holds**, and becomes
+  the baseline. An envelope whose token fails `authenticate` is stamped with no
+  principal, so after an authenticated baseline it counts as different. This
+  covers signing in as someone else on the same connection, and a client that
+  keeps its watches across a sign-out: neither goes on receiving events admitted
+  for the previous principal. The client's cache is cleared on a principal
+  change, and it watches again with its next envelope, which is admitted afresh.
+- **A new token for the same principal keeps the watches.** The comparison is
+  on the verified principal, not on the token, so a refreshed token does not
+  drop and re-admit the connection's whole watch set.
+- **`hello` is not stamped**, so it neither sets nor changes the baseline.
+- **`cid == 0` has no baseline**, and neither does a connection not open;
+  `closeConnection` forgets the baseline with the rest of the connection's
+  state.
+
+The baseline lives on the server strand beside the connection's other state,
+and is read and written only there.
+
 ### Role-based policy
 
 `SigningAuthorizer`'s optional `Policy` runs over the verified claims:
