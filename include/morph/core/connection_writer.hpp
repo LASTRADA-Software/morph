@@ -2,6 +2,7 @@
 
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -14,6 +15,14 @@
 /// the server.
 
 namespace morph::backend {
+
+/// @brief Opaque id a transport uses to scope model registrations to one
+///        connection so `RemoteServer::closeConnection` can reclaim them.
+///
+/// `0` is reserved and means *unscoped* — the meaning today's two-argument
+/// `RemoteServer::handle()`/`handleInline()` calls always have. Non-zero
+/// values are minted by `RemoteServer::openConnection()`.
+using ConnectionId = std::uint64_t;
 
 /// @brief A transport's outbound side of one connection, for what the server
 ///        sends unasked: events.

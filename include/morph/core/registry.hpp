@@ -1250,6 +1250,26 @@ public:
         }
     }
 
+    /// @brief The model type-ids @p actionId is registered under.
+    ///
+    /// An action id names one action, but the pair registered is
+    /// `(model, action)`, so a server that knows only the action id, as a
+    /// record watch's admission does, asks here which model types to
+    /// authorize it against.
+    ///
+    /// @param actionId Action type-id.
+    /// @return The model type-ids, sorted; empty for an unregistered action.
+    [[nodiscard]] std::vector<std::string> modelsOf(std::string_view actionId) const {
+        std::vector<std::string> models;
+        for (const auto& [key, entry] : _actions) {
+            if (key.second == actionId) {
+                models.push_back(key.first);
+            }
+        }
+        std::ranges::sort(models);
+        return models;
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 

@@ -31,6 +31,8 @@
 #include "connection_writer.hpp"
 #include "detail/owner_probe.hpp"
 #include "detail/reply_router.hpp"
+#include "detail/watch_table.hpp"
+#include "effects.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
 #include "owner_strand.hpp"
@@ -177,14 +179,6 @@ private:
 };
 
 }  // namespace detail
-
-/// @brief Opaque id a transport uses to scope model registrations to one
-///        connection so `RemoteServer::closeConnection` can reclaim them.
-///
-/// `0` is reserved and means *unscoped* — the meaning today's two-argument
-/// `RemoteServer::handle()`/`handleInline()` calls always have. Non-zero
-/// values are minted by `RemoteServer::openConnection()`.
-using ConnectionId = std::uint64_t;
 
 /// @brief Snapshot of a `RemoteServer`'s current health.
 struct HealthStatus {
@@ -714,6 +708,17 @@ public:
         return found != _facts.end() && found->second.events;
     }
 
+    /// @brief The topics each open connection watches.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. Filled by the `watch` and `unwatch` kinds, and emptied for
+    /// a connection when it closes or a write to it fails.
+    /// @return The watch table, valid for the server's life.
+    [[nodiscard]] detail::WatchTable const& watchTable() const {
+        assert(_strand.runningHere() && "RemoteServer::watchTable runs on the server strand");
+        return _watches;
+    }
+
     /// @brief The server strand, as an executor.
     ///
     /// What `runningOn(server.strand())` asks about: true inside every task the
@@ -893,6 +898,7 @@ private:
         noteOwner("RemoteServer::closeConnection");
         _writers.erase(cid);
         _facts.erase(cid);
+        _watches.dropConnection(cid);
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -986,12 +992,104 @@ private:
     ///        its backlog, does. On the server strand.
     ///
     /// The connection keeps its writer: the transport reports the connection
-    /// gone through `closeConnection`, which drops it.
+    /// gone through `closeConnection`, which drops it. Its watches go now: a
+    /// connection that cannot be written to is sent no events, and the client
+    /// sends its whole watch set again when it reconnects.
     /// @param cid    Connection whose `write` or `backlog` threw.
     /// @param reason The exception's message.
     void writeFailed(ConnectionId cid, std::string_view reason) {
         noteOwner("RemoteServer::writeFailed");
         ::morph::log::logWarn("[post] write to connection {} failed: {}", cid, reason);
+        _watches.dropConnection(cid);
+    }
+
+    /// @brief Answers a `watch` or `unwatch` envelope. On the server strand,
+    ///        after @p env's principal is stamped.
+    ///
+    /// Refused with an `err`: `cid == 0`, since an unscoped message has no
+    /// connection whose watch set it could change; a connection already
+    /// closed; and a body `readWatchBody` refuses. Otherwise `ok` with a
+    /// `WatchReply` listing the topics not admitted, which `unwatch` never has.
+    /// @param env   The envelope, its principal the verified one.
+    /// @param reply Reply sink, invoked once.
+    /// @param cid   Connection the envelope arrived on.
+    void handleWatch(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
+                     ConnectionId cid) {
+        noteOwner("RemoteServer::watch");
+        if (cid == 0) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(env.kind + " needs a connection", env.callId)));
+            return;
+        }
+        if (!_connectionScopes.contains(cid)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+            return;
+        }
+        auto body = ::morph::wire::readWatchBody(env.body);
+        if (!body) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(body.error(), env.callId)));
+            return;
+        }
+        ::morph::wire::WatchReply refused;
+        if (env.kind == ::morph::wire::kUnwatchKind) {
+            _watches.remove(cid, *body);
+        } else {
+            ::morph::wire::WatchBody admitted{.records = {}, .instances = {}, .replace = body->replace};
+            for (auto& record : body->records) {
+                (mayWatchRecord(env.session, record) ? admitted.records : refused.refusedRecords)
+                    .push_back(std::move(record));
+            }
+            for (auto& topic : body->instances) {
+                // No instance id and no owner: the instance may not exist yet,
+                // and a shared one has no owner, so what admits the topic is
+                // the authorizer's rule for the model type.
+                bool const allowed = _authorizer->authorizeInstance(env.session, topic.modelType, {}, 0, {});
+                (allowed ? admitted.instances : refused.refusedInstances).push_back(std::move(topic));
+            }
+            _watches.add(cid, admitted, detail::Watch{.context = env.session, .principal = env.session.principal});
+        }
+        std::string json;
+        (void)glz::write_json(refused, json);
+        reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(json))));
+    }
+
+    /// @brief Whether @p session's principal may watch record type @p record:
+    ///        whether it may run at least one action whose result holds it.
+    ///        On the server strand.
+    ///
+    /// The answer for a registered record is cached in the watch table per
+    /// verified principal. A caller with no verified principal is judged
+    /// afresh each time, since the authorizer may tell such callers apart by
+    /// something other than a principal. A name no record has is refused
+    /// without caching, so a peer cannot grow the cache with names it makes up.
+    /// @param session The `watch` envelope's session, its principal the verified one.
+    /// @param record  The record's wire name.
+    /// @return True when the record may be watched.
+    /// @throws morph::model::EffectsRegistrationError when the registered
+    ///         records and effects are invalid.
+    [[nodiscard]] bool mayWatchRecord(const ::morph::session::Context& session, std::string_view record) {
+        bool const cacheable = !session.principal.empty();
+        if (auto const cached = cacheable ? _watches.admission(session.principal, record) : std::nullopt) {
+            return *cached;
+        }
+        if (::morph::effects::recordNamed(record) == nullptr) {
+            return false;
+        }
+        bool admitted = false;
+        for (auto const& actionId : ::morph::effects::actionsHolding(record)) {
+            for (auto const& modelType : _dispatcher.modelsOf(actionId)) {
+                if (_authorizer->authorize(session, modelType, actionId)) {
+                    admitted = true;
+                    break;
+                }
+            }
+            if (admitted) {
+                break;
+            }
+        }
+        if (cacheable) {
+            _watches.noteAdmission(session.principal, record, admitted);
+        }
+        return admitted;
     }
 
     /// @brief Registers a drain waiter, or answers it at once. On the server strand.
@@ -1667,6 +1765,11 @@ private:
                         body);
                     reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
                 }
+            } else if (env.kind == ::morph::wire::kWatchKind || env.kind == ::morph::wire::kUnwatchKind) {
+                // Stamped first: the watch keeps the verified principal, and
+                // admission decides on it.
+                stampVerifiedPrincipal(env);
+                handleWatch(env, reply, cid);
             } else if (IEnvelopeService* const service = serviceFor(env.kind); service != nullptr) {
                 // Stamped first, as for every built-in kind that authorises:
                 // the service decides on the verified principal, never on the
@@ -2073,6 +2176,9 @@ private:
     // Handed to a service for a message with no open connection behind it;
     // reset before each such message.
     ConnectionFacts _throwawayFacts;
+    // What each open connection watches, filled by `watch`/`unwatch` and
+    // dropped with the connection's scope or on a failed write.
+    detail::WatchTable _watches;
     /// Names one cancellable call: the connection it arrived on and the
     /// `callId` its client chose.
     struct CancelKey {

@@ -619,6 +619,7 @@ class ActionDispatcher {
     std::string schemasJson(std::string_view modelId) const;
     const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
                                                       std::string_view actionId) const;
+    std::vector<std::string> modelsOf(std::string_view actionId) const;
     static ActionDispatcher& instance();
 };
 ```
@@ -689,6 +690,11 @@ class ActionDispatcher {
   required*. Read by `RemoteServer`'s opt-in
   `PayloadCompleteness::RequireDeclaredFields` gate, so the rule the server
   enforces is by construction the rule the schema published.
+- `modelsOf` returns the model type-ids an action id is registered under,
+  sorted; empty for an unregistered action. It scans every registered pair.
+  `RemoteServer` reads it when admitting a record watch, which knows an action
+  only by the id `morph::effects::actionsHolding` returns and must authorize it
+  against its model type ([backend.md, "Watches"](backend.md#watches)).
 
 #### `ActionDescription` — what `registerAction` files for the wire
 

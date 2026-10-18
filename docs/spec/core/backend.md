@@ -47,6 +47,7 @@ and react to backend changes.
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
 - [Writing to a connection](#writing-to-a-connection)
+- [Watches](#watches)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -626,6 +627,8 @@ external reference is dropped.
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 | `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. The range's `capabilities` lists `"cancel"`. See [wire.md](wire.md#protocol-version-negotiation). |
 | `cancel` | `cancelCallId`, `session` | `ok` (the cancel's own `callId`), always | Stamps the verified principal, then requests stop on the run of the `execute` filed under `cancelCallId` **on the same connection**, if the cancel's verified principal is the execute's and the cancel passes the execute's own `authorize` and `authorizeInstance`. Anything else — unknown, finished, another connection's, another principal's, refused, unscoped — is the same `ok` and changes nothing. See [wire.md](wire.md#cancelling-a-call). |
+| `watch` | `body` = `WatchBody`, `session` | `ok` with `body` = `WatchReply`, or `err` | Stamps the verified principal, then adds the admitted topics to the connection's watch set, or makes the set exactly them with `replace: true`. Topics not admitted are listed in the reply, not refused with an `err`. `err` for `cid == 0`, a closed connection, or a body `wire::readWatchBody` refuses. See [Watches](#watches). |
+| `unwatch` | `body` = `WatchBody`, `session` | `ok` with an empty `WatchReply`, or `err` | Stamps the verified principal, then removes the listed topics from the connection's watch set. `err` as for `watch`. |
 | `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
 **Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
@@ -1087,7 +1090,62 @@ server one per connection.
   stops reading altogether is the transport's to close, by its send timeout.
 - A `write` or a `backlog()` read that throws is caught on the strand and
   logged at `warn`, and the envelope is not written; the server keeps serving
-  and the connection keeps its writer until the transport closes it.
+  and the connection keeps its writer until the transport closes it. Its
+  watches are dropped at once ([Watches](#watches)).
+
+### Watches
+
+A connection tells the server which topics its client shows, so that what a
+write changes is sent only where it can be shown. The `watch` and `unwatch`
+kinds are core kinds: `RemoteServer` handles them on its strand, with the
+connection's `cid`, because the watch table belongs to the connection and the
+execute path reads it. The UI layer sends them; nothing on the server outside
+`RemoteServer` handles them.
+
+- **Topics.** A record type, by its wire name; and a keyed shared instance, by
+  `(modelType, primary)`. An instance topic is stored by key and never resolved
+  to an instance id: the watch is sent before the fetch that may create the
+  instance, so the instance may not exist yet. One that never comes to exist
+  simply never matches.
+- **The table.** `detail::WatchTable` (`core/detail/watch_table.hpp`) holds
+  each connection's record and instance topics. Each watch keeps a
+  `detail::Watch{context, principal}`: the session of the `watch` envelope that
+  created it and the principal verified from it, because a connection has no
+  principal of its own. Watching a topic again keeps the newer one.
+  `watchersOf(record)` and `watchersOf(modelType, primary)` answer the
+  connections watching a topic, ascending; `watchOf(cid, record)` the watch
+  itself. `RemoteServer::watchTable()` exposes it read-only, on the strand.
+- **Admission.** Each topic of a `watch` is admitted or refused on its own; the
+  `ok` reply's `WatchReply` lists the refused ones, and the admitted ones are
+  stored.
+  - A record type is admitted when the verified principal may run at least one
+    action whose result holds it: for each action id
+    `effects::actionsHolding(record)` returns, and each model type
+    `ActionDispatcher::modelsOf(actionId)` registers it under,
+    `authorize(session, modelType, actionId)` — the call an `execute` of that
+    action is admitted on. The answer for a registered record is cached per
+    verified principal and record in the table, and a principal's answers are
+    forgotten once none of its watches is left. A caller with no verified
+    principal is judged afresh each time: an authorizer that does not
+    authenticate may still tell such callers apart by their token. A name no record has is refused without
+    caching, so a peer cannot grow the cache with names it makes up.
+  - An instance topic is admitted when
+    `authorizeInstance(session, modelType, {}, 0, "")` admits it: no instance
+    id, because the instance may not exist, and no owner, because a shared
+    instance has none ([shared_instances.md](shared_instances.md#watching-a-keyed-instance)).
+- **`replace`.** A `watch` with `replace: true` makes the connection's watch
+  set exactly its admitted topics. A client sends its whole set this way after a
+  reconnect, which supersedes any watch changes replayed ahead of it.
+- **Before `ui-hello`.** A `watch` on a connection that has not negotiated
+  events is stored all the same; events are posted to it only once it has.
+- **Unscoped is refused.** `cid == 0` has no connection whose watch set a
+  message could change, so both kinds answer `err` there. A connection already
+  closed answers `err "connection closed"`, so nothing is stored that no close
+  would remove.
+- **What drops watches.** `closeConnection(cid)` drops all of `cid`'s watches,
+  as does a failed `write` or `backlog()` read on its writer: a connection that
+  cannot be written to is sent no events, and its client sends the whole set
+  again when it reconnects.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
@@ -2197,10 +2255,11 @@ server: each call is a loop task, so the loop serialises them.
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
-| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope, its writer and its `ConnectionFacts`. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope, its writer, its `ConnectionFacts` and its watches. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
 | `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one, keeping an owed `resync`; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
 | `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
 | `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
+| `watchTable() const` | Server strand only (debug-asserted). The `detail::WatchTable` of every open connection's watches, read-only. See [Watches](#watches). |
 | `eventsNegotiated(cid) const` | Server strand only (debug-asserted). Whether `cid` negotiated events: the `ConnectionFacts::events` a service set for it. `false` for `0`, an unknown `cid` or a closed one. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
