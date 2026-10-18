@@ -196,7 +196,8 @@ struct ConnectionWriter {
     std::function<void(std::string)> write;
     /// @brief Bytes of encoded envelopes handed to the transport for this
     ///        connection, replies and events alike, and not yet written.
-    ///        Empty reads as `0`.
+    ///        Empty reads as `0`. May throw; the server catches it and writes
+    ///        nothing.
     std::function<std::size_t()> backlog;
 };
 
@@ -606,7 +607,8 @@ public:
     /// @brief Hands the server the transport's writer for connection @p cid,
     ///        through which `post` reaches it.
     ///
-    /// Replaces any writer @p cid already has. Kept only while the connection
+    /// Replaces any writer @p cid already has, keeping a `resync` the
+    /// connection is owed. Kept only while the connection
     /// is open: a writer for `0`, for an unknown `cid` or for one already
     /// closed is dropped, and `closeConnection(cid)` drops it. A writer whose
     /// `write` is empty removes the connection's writer.
@@ -628,7 +630,9 @@ public:
                 self->_writers.erase(cid);
                 return;
             }
-            self->_writers.insert_or_assign(cid, ConnectionOutbox{.writer = std::move(writer)});
+            // A resync already owed stays owed: the events it stands for were
+            // held back from the connection, not from the writer it had then.
+            self->_writers[cid].writer = std::move(writer);
         });
     }
 
@@ -644,8 +648,8 @@ public:
     ///
     /// Dropped as well: an envelope larger than `wire::kMaxEnvelopeBytes`
     /// (counted as `Metric::eventOversize`), and one for a connection with no
-    /// writer — `0`, unknown, or closed. A `write` that throws is caught on
-    /// the strand.
+    /// writer — `0`, unknown, or closed. A `write` or `backlog` that throws
+    /// is caught on the strand, and the envelope is not written.
     ///
     /// Callable from any thread. Envelopes one thread posts to one connection
     /// are written in that order.
@@ -892,7 +896,17 @@ private:
         if (outbox.owesResync) {
             return;
         }
-        if (outbox.writer.backlog && outbox.writer.backlog() > kEventBacklogHigh) {
+        std::size_t backlog = 0;
+        try {
+            backlog = outbox.writer.backlog ? outbox.writer.backlog() : 0;
+        } catch (const std::exception& exc) {
+            writeFailed(cid, exc.what());
+            return;
+        } catch (...) {
+            writeFailed(cid, "unknown exception");
+            return;
+        }
+        if (backlog > kEventBacklogHigh) {
             outbox.owesResync = true;
             return;
         }
@@ -926,11 +940,12 @@ private:
         }
     }
 
-    /// @brief What a failed write to connection @p cid does. On the server strand.
+    /// @brief What a failed write to connection @p cid, or a failed read of
+    ///        its backlog, does. On the server strand.
     ///
     /// The connection keeps its writer: the transport reports the connection
     /// gone through `closeConnection`, which drops it.
-    /// @param cid    Connection whose write threw.
+    /// @param cid    Connection whose `write` or `backlog` threw.
     /// @param reason The exception's message.
     void writeFailed(ConnectionId cid, std::string_view reason) {
         noteOwner("RemoteServer::writeFailed");

@@ -182,11 +182,12 @@ clears either. The reconnect handler differs on purpose: it re-binds the
 bridge's handlers, which is owner work, so the backend posts it to the executor
 it was installed with.
 
-`QtWebSocketBackend` is currently the only backend that overrides either:
-its `connected`/`disconnected` `QWebSocket` signal slots invoke
-`_connectHandler`/`_disconnectHandler` (if installed) at the same points
-they already invoke `_reconnectHandler`/schedule a reconnect — see that
-section below.
+`QtWebSocketBackend` overrides both: its `connected`/`disconnected`
+`QWebSocket` signal slots invoke `_connectHandler`/`_disconnectHandler` (if
+installed) at the same points they already invoke `_reconnectHandler`/schedule
+a reconnect — see that section below. `morph::net::SocketBackend` overrides
+`setConnectHandler`, run on its I/O loop after each connect (see
+[Server-initiated events](#server-initiated-events-over-the-socket-transport)).
 
 ## Session propagation to control envelopes
 
@@ -1025,7 +1026,9 @@ server one per connection.
 - `setConnectionWriter(cid, writer)` posts to the server strand and keeps the
   writer only while `cid`'s scope is open: a writer for `0`, an unknown `cid`
   or a closed one is dropped, so a transport racing its own disconnect cannot
-  leave a writer nothing removes. It replaces any writer `cid` already had; an
+  leave a writer nothing removes. It replaces any writer `cid` already had,
+  keeping a `resync` the connection is owed — the held-back events were the
+  connection's, not the old writer's; an
   empty `write` removes it. `closeConnection(cid)` drops it. The writer lives
   next to the connection scopes, in a `cid → {writer, owesResync}` map that
   only the strand touches.
@@ -1055,9 +1058,9 @@ server one per connection.
 - The backlog is counted by the transport, because only it can see what it
   still holds; replies count toward it, and are never held back. A peer that
   stops reading altogether is the transport's to close, by its send timeout.
-- A `write` that throws is caught on the strand and logged at `warn`; the
-  server keeps serving and the connection keeps its writer until the transport
-  closes it.
+- A `write` or a `backlog()` read that throws is caught on the strand and
+  logged at `warn`, and the envelope is not written; the server keeps serving
+  and the connection keeps its writer until the transport closes it.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
@@ -1570,8 +1573,8 @@ itself.
 
 | Component | Cross-thread surface | Everything else |
 |---|---|---|
-| `SocketBackend` | `execute`, `bindModel`, `promoteModel`, `deregisterModel`, `cancelPending` post; `waitForConnected` posts a waiter and blocks the caller; the synchronous control verbs post their frame and wait on a future for the reply; `setSession`, `setReconnectHandler` post | socket, both pending tables, call-id counter, session, reconnect handler, reconnect delay and backoff timer, connect waiters: loop only |
-| `SocketServer` | `listen()`, `close()` run on the loop and wait; `port()` is atomic; a `RemoteServer` reply is posted from the replying thread | listener, connections, writers: loop only |
+| `SocketBackend` | `execute`, `bindModel`, `promoteModel`, `deregisterModel`, `cancelPending` post; `waitForConnected` posts a waiter and blocks the caller; the synchronous control verbs post their frame and wait on a future for the reply; `setSession`, `setReconnectHandler`, `setConnectHandler`, `setEventHandler` post | socket, both pending tables, call-id counter, session, reconnect, connect and event handlers, reconnect delay and backoff timer, connect waiters: loop only |
+| `SocketServer` | `listen()`, `close()` run on the loop and wait; `port()` is atomic; a `RemoteServer` reply is posted from the replying thread, an event from the server strand, each counted on the connection's atomic backlog first | listener, connections, writers: loop only |
 
 The flows are `core::async::Task`s spawned on the loop. `SocketBackend` runs
 one attempt flow per connection attempt — dial through `core::net::connect`
@@ -1582,6 +1585,61 @@ backoff before the next attempt. Each connection has one writer flow that
 drains its queued frames one 64 KiB chunk at a time; a loop timer armed around
 each chunk's write (`sendTimeout`) closes the socket if the write makes no
 progress, which ends the connection like any other disconnect.
+
+### Server-initiated events over the socket transport
+
+The server side counts each connection's backlog; the client side routes
+`event` envelopes and reports each connect. See
+[Writing to a connection](#writing-to-a-connection) for what `RemoteServer`
+does with both.
+
+- **One writer per connection.** `SocketServer` opens the connection's scope
+  when it accepts it and at once hands `RemoteServer` a `ConnectionWriter` for
+  it. `write` encodes the envelope as a frame on the server strand and posts it
+  to the loop, as a reply's frame is posted from the replying thread; it
+  throws only when the loop is gone. Neither callable keeps the connection
+  alive: they hold a weak reference to it, and the server drops them when the
+  connection's scope closes.
+- **The backlog counts encoded envelopes.** `LoopConnection::pending` is an
+  atomic count of the bytes of encoded envelopes handed to the connection —
+  replies and events alike — and not yet written. The size is added on the
+  handing thread, before the frame is posted, so a `backlog()` read on the
+  strand already covers a frame still on its way to the loop. The same size is
+  subtracted on the loop when the writer has written the frame's last chunk,
+  or when the frame is dropped: a connection closed with frames queued, or one
+  that is closed by the time the frame arrives. Framed byte counts are never
+  used, so the add and the subtract are always the same number and the count
+  cannot drift. The counter is held by `shared_ptr`, so a thread off the loop
+  keeps the counter without keeping the connection, whose socket must be
+  released on the loop. Frames the transport sends for itself (the handshake
+  response, Pong, the Close echo) are not counted.
+- **The drain call.** When a written frame takes the backlog from at least
+  `kEventBacklogLow` to below it, the loop calls
+  `RemoteServer::connectionDrained(cid)`, judging the crossing from the value
+  its own subtraction replaced. A connection that is closed or closing is not
+  reported. Frames handed over meanwhile on other threads can lift the count
+  again and produce a second report; the server's drain handling sends nothing
+  when no `resync` is owed, so that is harmless.
+- **A peer that stops reading** is closed by `sendTimeout`, as before: the
+  backlog bounds only what the server sends unasked.
+- **Events are routed before reply matching.** `SocketBackend` hands every
+  decoded envelope to `routeEvent` before it looks in either pending table, so
+  an `event` is never taken for a reply, whatever its `callId`. The handler
+  installed by `setEventHandler` is stored on the loop and posted to its
+  executor once per event, in arrival order; with none installed, events are
+  dropped.
+- **The connect handler** is stored on the loop and run there after every
+  connect, the first included: after the requests held while the socket was
+  down have been sent, and before the reconnect handler is posted. One that
+  throws is logged, and the connection carries on.
+
+`tests/net/test_push_net.cpp` pins it: an event posted to a connection reaches
+the client's handler; an event carrying a pending call's own `callId` reaches
+the handler and leaves the call to its real reply; the connect handler fires on
+the first connect and on a reconnect, ahead of the reconnect handler; 100
+replies written return the backlog to zero with one drain report; and a reader
+that stalls behind 8 MiB of replies gets no event posted meanwhile, then one
+`resync` once it has read them.
 
 `morph::net` keeps its own WebSocket framing (`detail/ws_frame.hpp`) and
 handshake text (`detail/ws_handshake.hpp`); only the socket underneath is
@@ -2022,7 +2080,7 @@ server: each call is a loop task, so the loop serialises them.
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
 | `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope and its writer. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
-| `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
+| `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one, keeping an owed `resync`; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
 | `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
 | `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |

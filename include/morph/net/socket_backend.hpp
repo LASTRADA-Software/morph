@@ -76,14 +76,15 @@ struct SocketBackendConfig {
 /// Mirrors `morph::qt::QtWebSocketBackend`'s observable behavior
 /// (`deregisterModel` fire-and-forget, `execute` and `bindModel` asynchronous
 /// and callId-multiplexed, `DisconnectedError`/reconnect semantics). Its
-/// socket, its pending calls, its session, its reconnect handler and its
-/// reconnect state machine live on an `exec::IoLoop`, which it shares with
-/// every other socket, timer and probe the application builds on that loop.
+/// socket, its pending calls, its session, its handlers and its reconnect
+/// state machine live on an `exec::IoLoop`, which it shares with every other
+/// socket, timer and probe the application builds on that loop.
 ///
 /// Cross-thread surface: `execute`, `bindModel`, `promoteModel`, `request`,
-/// `deregisterModel`, `cancelPending`, `setSession` and `setReconnectHandler`
-/// post to the loop and return, so calls from one thread take effect in the
-/// order they were made; `waitForConnected` posts a waiter and blocks the
+/// `deregisterModel`, `cancelPending`, `setSession`, `setReconnectHandler`,
+/// `setConnectHandler` and `setEventHandler` post to the loop and return, so
+/// calls from one thread take effect in the order they were made;
+/// `waitForConnected` posts a waiter and blocks the
 /// caller, never the loop; the synchronous control verbs (`registerModel`,
 /// `registerModelWithContext`, `assignPrimary`, `listInstances`) issue the same
 /// posted request and wait for its reply, never on the loop's own thread.
@@ -478,6 +479,43 @@ public:
             core->note("SocketBackend::setReconnectHandler");
             core->reconnectHandler = std::move(handler);
             core->reconnectExec = exec;
+        });
+    }
+
+    /// @brief Installs the handler run after every successful connect, the
+    ///        first included.
+    ///
+    /// Stored on the loop, and run there: after the requests held while the
+    /// socket was down have been sent, and before the reconnect handler is
+    /// posted. A handler that throws is logged; the connection carries on.
+    /// @param handler Callable run on the backend's I/O loop. Pass `nullptr`
+    ///                to clear.
+    void setConnectHandler(const std::function<void()>& handler) override {
+        _loop->post([core = _core, handler] {
+            core->note("SocketBackend::setConnectHandler");
+            core->connectHandler = handler;
+        });
+    }
+
+    /// @brief Installs the handler each server-initiated event is posted to.
+    ///        See `IBackend::setEventHandler`.
+    ///
+    /// Stored on the loop. An `event` envelope is recognised by its kind
+    /// before any reply matching, so whatever its `callId`, it never settles a
+    /// call. Events are posted to @p exec in the order they arrived.
+    /// @param handler Callable posted to @p exec once per event. Pass
+    ///                `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override {
+        _loop->post([core = _core, handler = std::move(handler), exec]() mutable {
+            core->note("SocketBackend::setEventHandler");
+            core->eventHandler =
+                handler ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(handler))
+                        : nullptr;
+            core->eventExec = exec;
         });
     }
 
@@ -930,6 +968,15 @@ private:
             for (auto& [env, pending] : std::exchange(queuedControls, {})) {
                 fileControl(std::move(env), std::move(pending));
             }
+            if (connectHandler) {
+                try {
+                    connectHandler();
+                } catch (const std::exception& exc) {
+                    ::morph::log::logWarn("[SocketBackend] connect handler threw: {}", exc.what());
+                } catch (...) {
+                    ::morph::log::logWarn("[SocketBackend] connect handler threw a non-standard exception");
+                }
+            }
             if (isReconnect && reconnectHandler && reconnectExec != nullptr) {
                 // Posted, never run here: the handler re-registers through
                 // `bindModel`, whose replies this loop delivers.
@@ -986,6 +1033,8 @@ private:
             }
             connectWaiters.clear();
             reconnectHandler = nullptr;
+            connectHandler = nullptr;
+            eventHandler = nullptr;
             cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         }
 
@@ -1007,6 +1056,17 @@ private:
                 return;
             }
             note("SocketBackend::reply");
+            // By kind first: an event's `callId` is not a reply's, so it must
+            // never reach the tables below.
+            if (::morph::backend::detail::routeEvent(env, [this](::morph::wire::EventBody event) {
+                    if (eventHandler && eventExec != nullptr) {
+                        eventExec->post([handler = eventHandler, event = std::move(event)]() mutable {
+                            (*handler)(std::move(event));
+                        });
+                    }
+                })) {
+                return;
+            }
             auto pending = executes.take(env.callId);
             if (!pending) {
                 // Not an execute: it may be a control reply for a `bindModel`/
@@ -1168,6 +1228,12 @@ private:
         /// Posted to `reconnectExec` after every reconnect; cleared by `close()`.
         std::function<void()> reconnectHandler;
         ::morph::exec::IExecutor* reconnectExec{nullptr};
+        /// Run on the loop after every connect; cleared by `close()`.
+        std::function<void()> connectHandler;
+        /// Posted to `eventExec` for each `event` envelope; cleared by `close()`.
+        /// Shared, so each posted delivery holds it without copying it.
+        std::shared_ptr<std::function<void(::morph::wire::EventBody)>> eventHandler;
+        ::morph::exec::IExecutor* eventExec{nullptr};
         bool everConnected{false};
         bool closed{false};
         /// No further connect will be attempted: a bind made now is rejected,

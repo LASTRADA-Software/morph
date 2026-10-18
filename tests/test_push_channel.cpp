@@ -4,6 +4,7 @@
 // matching, the local backend's delivery seam, and `RemoteServer` writing
 // events to a connection and holding them back from a slow reader.
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -14,6 +15,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -303,6 +305,60 @@ TEST_CASE("throwing_connection_writer_does_not_escape_the_server", "[push][chann
     server->post(cid, encodedEvent("changes", "{}"));
     flush(*server);
     CHECK(attempts.load() == 2);
+
+    // The strand is still serving.
+    ::morph::testing::WaitReply hello;
+    server->handle(::morph::wire::encode(::morph::wire::makeHello()), std::ref(hello), cid);
+    REQUIRE(hello.await());
+    CHECK(hello.env.kind == "ok");
+}
+
+TEST_CASE("replacing_a_connection_writer_keeps_an_owed_resync", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    FakeWire slow;
+    slow.backlog = std::size_t{2} << 20;
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, slow.writer());
+    server->post(cid, encodedEvent("changes", "{}"));
+    flush(*server);
+    REQUIRE(slow.snapshot().empty());
+
+    // The transport hands over a new writer while the resync is owed: what
+    // was held back is still owed, and the drain sends it on the new writer.
+    FakeWire fresh;
+    server->setConnectionWriter(cid, fresh.writer());
+    server->post(cid, encodedEvent("changes", "{}"));
+    server->connectionDrained(cid);
+    flush(*server);
+    CHECK(slow.snapshot().empty());
+    CHECK(fresh.snapshot() == std::vector<std::string>{encodedEvent("resync", "{}")});
+}
+
+TEST_CASE("throwing_backlog_read_is_caught_like_a_throwing_write", "[push][channel]") {
+    std::mutex logMtx;
+    std::vector<std::string> lines;
+    ::morph::log::ScopedLoggerOverride const guard{[&](::morph::log::LogLevel, std::string_view msg) {
+        std::scoped_lock const lock{logMtx};
+        lines.emplace_back(msg);
+    }};
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    std::atomic<int> writes{0};
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, {.write = [&writes](const std::string&) { writes.fetch_add(1); },
+                                      .backlog = []() -> std::size_t { throw std::runtime_error("counter gone"); }});
+    server->post(cid, encodedEvent("changes", "{}"));
+    flush(*server);
+    CHECK(writes.load() == 0);
+    {
+        std::scoped_lock const lock{logMtx};
+        auto const reported = std::ranges::count_if(lines, [cid](const std::string& line) {
+            return line.find("write to connection " + std::to_string(cid) + " failed: counter gone") !=
+                   std::string::npos;
+        });
+        CHECK(reported == 1);
+    }
 
     // The strand is still serving.
     ::morph::testing::WaitReply hello;

@@ -7,6 +7,7 @@ add_executable(morph_net_tests
     test_handshake_over_socket.cpp
     test_socket_server.cpp
     test_socket_backend.cpp
+    test_push_net.cpp
 )
 
 target_link_libraries(morph_net_tests

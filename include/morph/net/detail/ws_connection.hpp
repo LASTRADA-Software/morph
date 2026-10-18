@@ -3,12 +3,14 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <core/async/Task.hpp>
 #include <core/net/EventLoop.hpp>
 #include <core/net/ISocket.hpp>
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -17,6 +19,7 @@
 #include <utility>
 
 #include "../../core/profiler.hpp"
+#include "../../core/remote.hpp"
 #include "ws_handshake.hpp"
 
 /// @file
@@ -27,9 +30,19 @@
 /// Everything here runs on the loop's thread and is touched nowhere else; the
 /// `LoopConnection` itself is held by `shared_ptr` from each flow that uses it,
 /// so a flow that resumes after its owner has let go of the connection still
-/// finds the socket object alive.
+/// finds the socket object alive. The one exception is the backlog counter,
+/// `pending`, which other threads add to and read.
 
 namespace morph::net::detail {
+
+/// @brief One whole frame waiting for the writer.
+struct OutboundFrame {
+    /// @brief The encoded WebSocket frame.
+    std::string bytes;
+    /// @brief What the frame added to `LoopConnection::pending`: the size of
+    ///        the envelope it carries, or `0` for a frame that is not counted.
+    std::size_t counted{0};
+};
 
 /// @brief A connected socket on the loop, plus its outgoing frame queue.
 struct LoopConnection {
@@ -53,7 +66,23 @@ struct LoopConnection {
     /// @brief Bound on one chunk's write; see `writerFlow`.
     std::chrono::milliseconds sendTimeout;
     /// @brief Whole frames waiting for the writer, oldest first.
-    std::deque<std::string> outbox;
+    std::deque<OutboundFrame> outbox;
+    /// @brief Bytes of encoded envelopes handed to this connection and not yet
+    ///        written: its backlog, as `RemoteServer` reads it.
+    ///
+    /// Added to by whoever hands over a frame, on any thread, before the frame
+    /// reaches the loop, so the count covers frames still on their way to the
+    /// outbox. Subtracted on the loop by the same amount once the frame's last
+    /// chunk is written, or once the frame is dropped. Counting envelopes, not
+    /// framed bytes, makes the add and the subtract the same number, so the
+    /// count cannot drift. Held by `shared_ptr` so a thread off the loop can
+    /// keep the counter without keeping the connection, whose socket must be
+    /// released on the loop.
+    std::shared_ptr<std::atomic<std::size_t>> const pending{std::make_shared<std::atomic<std::size_t>>(0)};
+    /// @brief Called on the loop when a written frame takes `pending` from at
+    ///        least `backend::kEventBacklogLow` to below it. Not called once
+    ///        the connection is closed or closing. Empty means nobody is told.
+    std::function<void()> onDrained;
     /// @brief Whether a writer flow is running.
     bool writing{false};
     /// @brief Whether the socket has been closed.
@@ -62,17 +91,45 @@ struct LoopConnection {
     bool closeWhenFlushed{false};
 };
 
+/// @brief Takes @p bytes off @p conn's backlog, and calls `onDrained` if
+///        that takes it below `backend::kEventBacklogLow`.
+///
+/// The crossing is judged from the value this subtraction replaced, so of
+/// several releases that pass the bound together exactly one reports it.
+/// Frames handed over meanwhile on other threads may lift the count again;
+/// the server's drain handling is idempotent, so a second report is harmless.
+/// @param conn  The connection.
+/// @param bytes What the frame added when it was handed over.
+inline void releaseBacklog(LoopConnection& conn, std::size_t bytes) {
+    if (bytes == 0) {
+        return;
+    }
+    std::size_t const before = conn.pending->fetch_sub(bytes);
+    bool const crossed =
+        before >= ::morph::backend::kEventBacklogLow && before - bytes < ::morph::backend::kEventBacklogLow;
+    if (crossed && !conn.closed && !conn.closeWhenFlushed && conn.onDrained) {
+        conn.onDrained();
+    }
+}
+
 /// @brief Closes @p conn's socket now, dropping any unwritten frames.
 ///
 /// A read or write parked on it resumes with `NetErrorCode::Cancelled` in a
-/// later drain step of the loop, which is how the flows learn of it.
+/// later drain step of the loop, which is how the flows learn of it. The
+/// dropped frames leave the backlog; a frame the writer holds leaves it when
+/// the writer lets go of it.
 /// @param conn The connection; idempotent.
 inline void closeConnection(LoopConnection& conn) noexcept {
     if (conn.closed) {
         return;
     }
     conn.closed = true;
+    std::size_t dropped = 0;
+    for (auto const& frame : conn.outbox) {
+        dropped += frame.counted;
+    }
     conn.outbox.clear();
+    conn.pending->fetch_sub(dropped);
     conn.socket->close();
 }
 
@@ -89,13 +146,16 @@ inline void closeOnDeadline(void* connPtr) { closeConnection(*static_cast<LoopCo
 ///
 /// Each chunk's write is bounded by `sendTimeout`: a loop timer that closes
 /// the socket if the write has not finished, so a peer that stops reading
-/// retires the connection instead of growing its queue forever.
+/// retires the connection instead of growing its queue forever. A frame
+/// leaves the backlog once its last chunk is written, or once the connection
+/// closes under it.
 /// @param conn The connection; the flow's own share keeps its socket alive.
 /// @return The flow.
 inline ::core::async::Task<void> writerFlow(std::shared_ptr<LoopConnection> conn) {
     while (!conn->closed && !conn->outbox.empty()) {
-        std::string const frame = std::move(conn->outbox.front());
+        OutboundFrame const next = std::move(conn->outbox.front());
         conn->outbox.pop_front();
+        std::string const& frame = next.bytes;
         std::size_t offset = 0;
         while (offset < frame.size() && !conn->closed) {
             std::size_t const length = std::min(kWriteChunk, frame.size() - offset);
@@ -113,6 +173,7 @@ inline ::core::async::Task<void> writerFlow(std::shared_ptr<LoopConnection> conn
             }
             offset += *written;
         }
+        releaseBacklog(*conn, next.counted);
     }
     conn->writing = false;
     if (conn->closeWhenFlushed) {
@@ -121,18 +182,22 @@ inline ::core::async::Task<void> writerFlow(std::shared_ptr<LoopConnection> conn
 }
 
 /// @brief Queues @p frame on @p conn and starts the writer if it is idle.
-/// @param conn  The connection.
-/// @param frame One complete, encoded WebSocket frame.
-/// @return `false` if the connection is closed and the frame was dropped.
-inline bool enqueueFrame(std::shared_ptr<LoopConnection> const& conn, std::string frame) {
+/// @param conn    The connection.
+/// @param frame   One complete, encoded WebSocket frame.
+/// @param counted What the caller added to `conn->pending` for this frame;
+///                `0` for a frame that is not counted.
+/// @return `false` if the connection is closed and the frame was dropped, its
+///         count released with it.
+inline bool enqueueFrame(std::shared_ptr<LoopConnection> const& conn, std::string frame, std::size_t counted = 0) {
     // The send side's zone is here and not in `writerFlow`: a zone must not
     // stay open across a `co_await`, where the loop runs other work on the
     // same thread before the writer resumes.
     MORPH_ZONE("ws::enqueueFrame");
     if (conn->closed || conn->closeWhenFlushed) {
+        releaseBacklog(*conn, counted);
         return false;
     }
-    conn->outbox.push_back(std::move(frame));
+    conn->outbox.push_back(OutboundFrame{.bytes = std::move(frame), .counted = counted});
     if (!conn->writing) {
         conn->writing = true;
         conn->loop.spawn(writerFlow(conn));
