@@ -23,6 +23,8 @@ add_executable(morph_tests
     test_io_loop.cpp
     test_example.cpp
     test_push_records.cpp
+    test_push_effects.cpp
+    push_records_late.cpp
     test_executor_extra.cpp
     test_strand.cpp
     test_completion.cpp
@@ -587,6 +589,14 @@ add_test(NAME morph_duplicate_model_id
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/expect_message.cmake)
 set_tests_properties(morph_duplicate_model_id PROPERTIES TIMEOUT 60)
 
+# An action's effects registered in one translation unit and not seen by another that registers the same action:
+# BRIDGE_REGISTER_EFFECTS defines no specialisation, so the program links, and both halves read the same effects.
+add_executable(morph_effects_unseen_links compile_checks/effects_unseen_a.cpp compile_checks/effects_unseen_b.cpp)
+target_link_libraries(morph_effects_unseen_links PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_effects_unseen_links)
+add_test(NAME morph_effects_unseen_links COMMAND morph_effects_unseen_links)
+set_tests_properties(morph_effects_unseen_links PROPERTIES TIMEOUT 60)
+
 # The negative probe stays a configure-time try_compile(): the link failure is
 # the assertion. Its scratch project cannot link core-cpp either, so a failure
 # alone would prove nothing; the check is that the linker named
@@ -706,7 +716,8 @@ set_tests_properties(morph_client_only_facade PROPERTIES TIMEOUT 60)
 # program linking them fails with the sanitizer runtime undefined.
 if(DEFINED AF_SANITIZER)
     foreach(_morph_guard_probe IN ITEMS morph_client_only_guard_links morph_client_only_runtime_throw
-                                        morph_client_only_facade morph_declare_source_canary)
+                                        morph_client_only_facade morph_declare_source_canary
+                                        morph_effects_unseen_links)
         apply_sanitizers(${_morph_guard_probe} ${AF_SANITIZER})
     endforeach()
     unset(_morph_guard_probe)

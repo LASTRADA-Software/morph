@@ -43,6 +43,7 @@ without knowing their concrete types.
 - [Cross-references](#cross-references)
 - [Record registry](#record-registry)
 - [Action result slots](#action-result-slots)
+- [Effects](#effects)
 
 ## Overview
 
@@ -1638,7 +1639,8 @@ read through `detail::recordRegistry()`.
 - The key member is a `ModelKey`, raw or a `WrappedModelKey` strong id.
   `keyIsString` follows the raw type.
 - The registry is raw: duplicate names or types, `derivedFrom` cycles and keyless
-  records that an effect names are not checked at registration.
+  records that an effect names are not checked at registration. They are
+  checked on the first read through `morph::effects` (see [Effects](#effects)).
 - Record types need external linkage: glaze reflects member names through an
   external-linkage object, so a record in an anonymous namespace does not compile.
 
@@ -1718,3 +1720,60 @@ handler contributes `R`.
   members that can hold an aggregate, so scalar members instantiate nothing. At
   static initialisation it runs once per action id: a registration repeated in
   another translation unit finds the id and does not walk again.
+
+## Effects
+
+`include/morph/core/effects.hpp` records what each action changes and answers,
+for every action, which records its result holds.
+
+- **Declaring.** `BRIDGE_REGISTER_EFFECTS(A, effects...)` is a static registrar
+  storing `{Kind, std::type_index?}` per effect under `ActionTraits<A>::typeId()`
+  in `detail::mutableEffectsRegistry()`. The effects are
+  `morph::effects::updates<R>`, `changes<R>`, `changesInstance` and `none`. It
+  asserts the registration latch, compiles out under `MORPH_CLIENT_ONLY`, and
+  defines no specialisation, so a translation unit that does not see it is
+  consistent with one that does (the `morph_effects_unseen_links` probe links
+  two such halves). It belongs beside the action's registration, not in a
+  header, where it would run once per translation unit.
+- **Idempotent per action.** Each action id keeps its distinct declarations;
+  one equal to a stored one, in any order, is not added again. Two distinct
+  declarations are a conflict, recorded rather than thrown so the registrar
+  stays `noexcept`.
+- **Lazy resolution.** Nothing is matched at registration, so the order of
+  `BRIDGE_REGISTER_RECORD`, `BRIDGE_REGISTER_ACTION` and
+  `BRIDGE_REGISTER_EFFECTS` across translation units does not matter. The
+  first call to `effectsOf`, `recordsOf`, `recordNamed` or `actionsHolding`
+  resolves the three process registries once, under `std::call_once`. Every
+  call is a process-registry read (`noteRegistryRead(true)`), so it closes the
+  latch in a debug build. Resolution cannot run at the latch:
+  `closeRegistrationPhase()` is `noexcept`, and a release build closes it only
+  when the application asks.
+- **Matching.** For each action, its result slots are taken in path order, and a
+  slot is kept when its type is a registered record and no kept slot's path
+  contains it (a path contains itself and every path below it; `""` contains
+  all). So each path stops at its first registered record, and a record's own
+  members are never searched for further records. Kept slots are grouped by
+  record into `ActionRecord{record, keyField, paths}`, giving `recordsOf`.
+  `actionsHolding(record)` is the inverse: the action ids, in id order, whose
+  `recordsOf` names the record.
+- **Validation.** Resolution refuses, all problems at once:
+  - an action id registered by two action types (`actionResultConflicts()`);
+  - an action with two different effects declarations;
+  - `updates<R>` or `changes<R>` where `R` is not a registered record;
+  - `updates<R>` where `R` has no key, or where the action's `recordsOf` does
+    not name `R`;
+  - a type registered as a record twice, or one name registered for two types;
+  - a `derivedFrom` cycle among registered records, a record derived from
+    itself included. A source that is not a registered record is ignored.
+- **Failure.** A refusal throws `morph::model::EffectsRegistrationError`, a
+  `std::logic_error` whose `what()` lists every problem, one per line, each
+  naming the action or record. The error is kept and the same error is thrown
+  by every later read, so no read ever sees a partly valid registry.
+- **Reads.** `effectsOf(id)` is `nullopt` for an action that declared nothing:
+  it reads. `effectsOf` gives each record as its wire name, empty for
+  `changesInstance` and `none`. `recordNamed(name)` points into the resolved
+  copy of the record registry, valid for the life of the process.
+- **Testing.** `detail::resolveForTesting(records, slots, effects,
+  slotConflicts)` runs the same resolution over registries a test builds, so an
+  invalid configuration can be exercised without making the process registry
+  invalid for the rest of the suite.

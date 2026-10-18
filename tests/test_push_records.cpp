@@ -131,12 +131,7 @@ BRIDGE_REGISTER_MODEL(WalkerModel, "T_WalkerModel")
 BRIDGE_REGISTER_ACTION(WalkerModel, ListRows, "T_WalkerListRows")
 BRIDGE_REGISTER_ACTION(WalkerModel, CountRows, "T_WalkerCountRows")
 
-// Another model may register a different action type under an id already taken.
 namespace {
-[[maybe_unused]] bool const walkerConflictFirst =
-    morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerConflict");
-[[maybe_unused]] bool const walkerConflictSecond =
-    morph::model::detail::registerActionResultOnce<CountRows>("T_WalkerConflict");
 [[maybe_unused]] bool const walkerSameFirst = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
 [[maybe_unused]] bool const walkerSameSecond = morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerSame");
 }  // namespace
@@ -274,6 +269,23 @@ TEST_CASE("action_registration_records_result_slots", "[push][records]") {
 }
 
 TEST_CASE("action_result_second_type_under_one_id_is_a_conflict", "[push][records]") {
+    // Another model may register a different action type under an id already taken. Matching refuses such
+    // an id, so the conflict is registered here and removed again: the process registry must stay valid for
+    // every other case that reads it.
+    bool const wasClosed = morph::model::registrationPhaseClosed();
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+    static_cast<void>(morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerConflict"));
+    static_cast<void>(morph::model::detail::registerActionResultOnce<CountRows>("T_WalkerConflict"));
+    if (wasClosed) {
+        morph::model::closeRegistrationPhase();
+    }
+    struct Restore {
+        ~Restore() {
+            morph::model::detail::mutableActionResultSlots().erase("T_WalkerConflict");
+            std::erase(morph::model::detail::mutableActionResultConflicts(), std::string{"T_WalkerConflict"});
+        }
+    } const restore;
+
     auto const& all = morph::model::detail::actionResultSlots();
     auto const& conflicts = morph::model::detail::actionResultConflicts();
     auto const conflict = all.find("T_WalkerConflict");
