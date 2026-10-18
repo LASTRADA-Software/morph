@@ -14,6 +14,7 @@ behind its own CMake option, default `OFF`, so an ordinary `cmake --build`
 - [Fuzz harness](#fuzz-harness-testsfuzz)
 - [Soak tests](#soak-tests-testssoak)
 - [Load / latency benchmark](#load--latency-benchmark-testsbench)
+- [Concurrent-user benchmark](#concurrent-user-benchmark-scriptsscenariobench_bookmarkspy)
 - [Adversarial cross-socket run](#adversarial-cross-socket-run-testsqttest_qt_websocket_adversarialcpp)
 - [Install / export consumability](#install--export-consumability-scriptscheck_install_exportsh)
 - [Declined techniques, and why](#declined-techniques-and-why)
@@ -440,6 +441,35 @@ build costs **14.06** and 0.00 per lookup — exactly 3.00 removed, in every one
 of 40 processes, idle and loaded, on clang Release, clang Debug and gcc Debug
 alike. A figure from an ungated benchmark, or from before the strand's map-node
 handling was changed, is not comparable with either.
+
+## Concurrent-user benchmark (`scripts/scenario/bench_bookmarks.py`)
+
+`morph_bench` measures one dispatch inside one process. This benchmark measures
+a whole server from outside it: a `ladder_bookmarks_server` process, its
+transport, its authorizer and its model lifecycle, under thousands of
+simulated users who each connect, sign in, do 5-10 actions with think time,
+and disconnect. Its question is how many concurrent users one server carries,
+and which thread runs out first. `scripts/scenario/README.md` has its flags.
+
+It measures the framework rather than the rung when the server runs with the
+in-memory store (`--store memory`): each model instance then keeps its own
+bookmarks in a container, journals nothing and touches no database, so an
+action costs the framework plus a container operation. `--workload framework`
+goes further and replaces every action with a `Login` round trip.
+
+What it reports per run, and why each figure is there:
+
+- **Server CPU per thread**, from `/proc/<pid>/task`. A server whose total CPU
+  is low can still be saturated, on one thread; the per-thread split is what
+  shows which one.
+- **Client CPU**, so a run limited by its own load generator says so.
+- **Other processes' CPU** on the host, from `/proc/stat` less the server and
+  the clients. The machine this runs on is shared, and a run that competed for
+  it warns rather than reporting a figure that is not comparable with a quiet
+  one.
+
+It is a manual tool, not a CI gate: its figures depend on the host, and its
+value is in comparing two runs on the same quiet machine.
 
 ## Adversarial cross-socket run (`tests/qt/test_qt_websocket_adversarial.cpp`)
 

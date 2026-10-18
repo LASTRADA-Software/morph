@@ -266,6 +266,12 @@ class ServerProcess:
             process.wait(timeout=10)
 
     @property
+    def pid(self) -> int:
+        """The server's process id, for sampling it."""
+        assert self._process is not None
+        return self._process.pid
+
+    @property
     def url(self) -> str:
         """The `ws://` url scenarios should be pointed at."""
         return f"ws://127.0.0.1:{self.port}"
