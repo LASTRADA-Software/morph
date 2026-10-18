@@ -77,7 +77,7 @@ Choosing an action (or `select(actionId)`) replaces the right side with, in orde
 | Section | Test id | What it shows |
 |---|---|---|
 | The heading | `explorer_title` | `<model> / <action>` |
-| Facts | `explorer_facts` | the model; with catalog facts, whether it sends a credential, the server-calculated, secret and list fields; the schema's `x-payloadFingerprint` and `x-payloadShape`; and whether the principal may run it |
+| Facts | `explorer_facts` | the model; with catalog facts, whether it sends a credential, the server-calculated, secret and list fields, its effects (`changes Bank_Account`, `updates Lims_Result`, `changes its instance`, `none`, or `reads` when it declares nothing) and the records its result holds, each with its key field and paths (`Lims_Result by id at results`; `keyless`, and `the result` for the result itself); the schema's `x-payloadFingerprint` and `x-payloadShape`; and whether the principal may run it |
 | Fields | `explorer_fields` | a grid of name, type, required and rules; an unreadable schema as "unreadable schema: <why>" with its first 200 bytes |
 | Used by | `explorer_uses` | per use, the screen id, the pointer and the kind, with an "Open" button (`explorer_open_<n>`) unless it is the app document |
 | Try it | `explorer_tryit` | the generated document, mounted into a slot; or why it is not offered (`explorer_tryit_status`) |

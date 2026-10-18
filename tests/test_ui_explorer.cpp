@@ -97,6 +97,11 @@ CatalogReply twoModels() {
     ActionInfo capture;
     capture.modelType = "Lims_SampleModel";
     capture.calculatedFields = {"concentration"};
+    capture.effects = std::vector<morph::ui::ActionEffect>{
+        morph::ui::ActionEffect{.kind = "changes", .record = "T_Row"},
+        morph::ui::ActionEffect{.kind = "changesInstance", .record = std::nullopt}};
+    capture.records = {morph::ui::ActionRecordInfo{.record = "T_Row", .keyField = "id", .paths = {"rows"}},
+                       morph::ui::ActionRecordInfo{.record = "T_Note", .keyField = std::nullopt, .paths = {""}}};
     ActionInfo confirm;
     confirm.modelType = "Lims_SampleModel";
     reply.actions = std::map<std::string, ActionInfo, std::less<>>{{"Lims_CaptureConcentration", capture},
@@ -331,4 +336,26 @@ TEST_CASE("Explorer: an action the catalog has no facts for is decided when it r
     bool closed = false;
     explorer->requestClose([&closed](bool done) { closed = done; });
     CHECK(closed);
+}
+
+// Mutation: show `reads` for every action (the declared effects go missing), or drop the key field from a record.
+TEST_CASE("facts_show_changes_record_and_records_with_key_and_path", "[ui][explorer][push]") {
+    Fixture f;
+    auto const explorer = f.explorer();
+    REQUIRE(explorer->select("Lims_CaptureConcentration"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "effects"));
+    CHECK(f.shows("Text", "changes T_Row, changes its instance"));
+    CHECK(f.shows("Text", "records"));
+    CHECK(f.shows("Text", "T_Row by id at rows; T_Note keyless at the result"));
+}
+
+TEST_CASE("facts_show_reads_when_undeclared", "[ui][explorer][push]") {
+    Fixture f;
+    auto const explorer = f.explorer();
+    REQUIRE(explorer->select("Lims_ConfirmSample"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "effects"));
+    CHECK(f.shows("Text", "reads"));
+    CHECK_FALSE(f.shows("Text", "records"));
 }

@@ -770,7 +770,43 @@ private:
         if (info.listFields) {
             cells.insert(cells.end(), {"list fields", listed(*info.listFields)});
         }
+        cells.insert(cells.end(), {"effects", effectsText(info)});
+        if (!info.records.empty()) {
+            cells.insert(cells.end(), {"records", recordsText(info)});
+        }
         return cells;
+    }
+
+    // What an action declares it changes (spec 8 §5): why a screen did or did not update after it ran.
+    [[nodiscard]] static std::string effectsText(ActionInfo const& info) {
+        if (!info.effects) {
+            return "reads";
+        }
+        std::vector<std::string> effects;
+        for (ActionEffect const& effect : *info.effects) {
+            if (effect.kind == "changesInstance") {
+                effects.emplace_back("changes its instance");
+            } else if (effect.record) {
+                effects.push_back(effect.kind + " " + *effect.record);
+            } else {
+                effects.push_back(effect.kind);
+            }
+        }
+        return detail::explorer::joined(effects, ", ");
+    }
+
+    // The records an action's result holds, each with its key field and where the result holds it.
+    [[nodiscard]] static std::string recordsText(ActionInfo const& info) {
+        std::vector<std::string> records;
+        for (ActionRecordInfo const& record : info.records) {
+            std::vector<std::string> paths;
+            for (std::string const& path : record.paths) {
+                paths.push_back(path.empty() ? std::string{"the result"} : path);
+            }
+            std::string const key = record.keyField ? " by " + *record.keyField : std::string{" keyless"};
+            records.push_back(record.record + key + " at " + detail::explorer::joined(paths, ", "));
+        }
+        return detail::explorer::joined(records, "; ");
     }
 
     // The payload fingerprint and shape a schema carries, as label and value cells.
