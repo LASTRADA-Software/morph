@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <expected>
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -15,6 +17,7 @@
 #include <vector>
 
 #include "../session/session.hpp"
+#include "change_types.hpp"
 #include "profiler.hpp"
 
 namespace morph::wire {
@@ -638,6 +641,191 @@ struct EventBody {
     EventBody body{std::string{topic}, glz::raw_json{std::move(payloadJson)}};
     env.body = glz::write_json(body).value_or(std::string{});
     return env;
+}
+
+/// @brief The `changes` event topic: a `ChangesBody` payload naming what changed.
+inline constexpr std::string_view kChangesTopic = "changes";
+
+/// @brief The `resync` event topic: events were withheld, so a client re-reads what it shows.
+inline constexpr std::string_view kResyncTopic = "resync";
+
+/// @brief The envelope kind that adds topics to a connection's watch set (or replaces it).
+inline constexpr std::string_view kWatchKind = "watch";
+
+/// @brief The envelope kind that removes topics from a connection's watch set.
+inline constexpr std::string_view kUnwatchKind = "unwatch";
+
+/// @brief The most topics (records or instances) one `watch`, `unwatch` or `changes` body may list.
+///
+/// A watch set is one entry per record type and open instance of a screen, and the coalescer flushes
+/// well below this, so a body past it is a malformed or hostile peer rather than a large application.
+inline constexpr std::size_t kMaxWatchTopics = 4096;
+
+/// @brief The most keys one record entry of a `changes` body may list.
+///
+/// The server flushes a coalescing window at 256 keys; 4096 leaves room for several windows merged by
+/// one writer without letting a peer force an unbounded allocation.
+inline constexpr std::size_t kMaxChangeKeys = 4096;
+
+/// @brief The longest record name, model type or primary key text in a watch or changes body.
+inline constexpr std::size_t kMaxTopicNameBytes = 1024;
+
+/// @brief One instance topic: a model type, its directory key text and its instance id.
+struct InstanceTopic {
+    /// @brief The model's registered type name.
+    std::string modelType;
+    /// @brief The directory key's text for a keyed shared instance; empty for a private one.
+    std::string primary;
+    /// @brief The instance id; 0 where the topic is named by type and primary alone (a request).
+    std::uint64_t instance = 0;
+};
+
+/// @brief The body of a `watch` or `unwatch` request.
+struct WatchBody {
+    /// @brief Record wire names to watch (or stop watching).
+    std::vector<std::string> records;
+    /// @brief Instance topics to watch (or stop watching).
+    std::vector<InstanceTopic> instances;
+    /// @brief For `watch`: replace the connection's whole watch set instead of adding to it.
+    bool replace = false;
+};
+
+/// @brief The body of the `ok` reply to a `watch`: the topics the server refused.
+struct WatchReply {
+    /// @brief Record names the server does not publish or the caller may not read.
+    std::vector<std::string> refusedRecords;
+    /// @brief Instance topics the server refused.
+    std::vector<InstanceTopic> refusedInstances;
+};
+
+/// @brief The payload of a `changes` event.
+struct ChangesBody {
+    /// @brief Record changes; a record with no `keys` changed as a whole.
+    std::vector<effects::RecordChange> records;
+    /// @brief Instance changes.
+    std::vector<InstanceTopic> instances;
+};
+
+namespace detail {
+
+template <class T>
+[[nodiscard]] inline std::expected<T, std::string> readBody(std::string_view json, std::string_view what) {
+    if (json.size() > kMaxEnvelopeBytes) {
+        return std::unexpected(std::string{what} + " exceeds " + std::to_string(kMaxEnvelopeBytes) + " bytes");
+    }
+    T out{};
+    static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
+    if (auto ec = glz::read<kLenient>(out, json)) {
+        return std::unexpected(std::string{what} + ": " + glz::format_error(ec, json));
+    }
+    return out;
+}
+
+[[nodiscard]] inline std::optional<std::string> checkTopicName(std::string_view name, std::string_view what) {
+    if (name.size() > kMaxTopicNameBytes) {
+        return std::string{what} + " is longer than " + std::to_string(kMaxTopicNameBytes) + " bytes";
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] inline std::optional<std::string> checkNames(const std::vector<std::string>& names,
+                                                           std::string_view what) {
+    if (names.size() > kMaxWatchTopics) {
+        return std::string{what} + " list more than " + std::to_string(kMaxWatchTopics) + " topics";
+    }
+    for (const auto& name : names) {
+        if (auto reason = checkTopicName(name, what)) {
+            return reason;
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] inline std::optional<std::string> checkInstances(const std::vector<InstanceTopic>& topics,
+                                                               std::string_view what) {
+    if (topics.size() > kMaxWatchTopics) {
+        return std::string{what} + " list more than " + std::to_string(kMaxWatchTopics) + " topics";
+    }
+    for (const auto& topic : topics) {
+        if (auto reason = checkTopicName(topic.modelType, what)) {
+            return reason;
+        }
+        if (auto reason = checkTopicName(topic.primary, what)) {
+            return reason;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace detail
+
+/// @brief Reads the body of a `watch` or `unwatch` request.
+///
+/// Refused: input longer than `kMaxEnvelopeBytes`, text that is not a `WatchBody`, more than
+/// `kMaxWatchTopics` records or instances, or a name longer than `kMaxTopicNameBytes`. Unknown keys are
+/// ignored.
+/// @param json The envelope `body`.
+/// @return The body, or the reason it was refused.
+[[nodiscard]] inline std::expected<WatchBody, std::string> readWatchBody(std::string_view json) {
+    auto body = detail::readBody<WatchBody>(json, "the watch body");
+    if (!body) {
+        return body;
+    }
+    if (auto reason = detail::checkNames(body->records, "a record name")) {
+        return std::unexpected(*reason);
+    }
+    if (auto reason = detail::checkInstances(body->instances, "an instance topic")) {
+        return std::unexpected(*reason);
+    }
+    return body;
+}
+
+/// @brief Reads the body of the `ok` reply to a `watch`.
+///
+/// Bounded as `readWatchBody` is.
+/// @param json The envelope `body`.
+/// @return The reply, or the reason it was refused.
+[[nodiscard]] inline std::expected<WatchReply, std::string> readWatchReply(std::string_view json) {
+    auto body = detail::readBody<WatchReply>(json, "the watch reply");
+    if (!body) {
+        return body;
+    }
+    if (auto reason = detail::checkNames(body->refusedRecords, "a record name")) {
+        return std::unexpected(*reason);
+    }
+    if (auto reason = detail::checkInstances(body->refusedInstances, "an instance topic")) {
+        return std::unexpected(*reason);
+    }
+    return body;
+}
+
+/// @brief Reads the payload of a `changes` event.
+///
+/// Refused: input longer than `kMaxEnvelopeBytes`, text that is not a `ChangesBody`, more than
+/// `kMaxWatchTopics` records or instances, more than `kMaxChangeKeys` keys in one record, or a name longer
+/// than `kMaxTopicNameBytes`.
+/// @param json The event's `payload`.
+/// @return The payload, or the reason it was refused.
+[[nodiscard]] inline std::expected<ChangesBody, std::string> readChangesBody(std::string_view json) {
+    auto body = detail::readBody<ChangesBody>(json, "the changes payload");
+    if (!body) {
+        return body;
+    }
+    if (body->records.size() > kMaxWatchTopics) {
+        return std::unexpected("a record list more than " + std::to_string(kMaxWatchTopics) + " topics");
+    }
+    for (const auto& change : body->records) {
+        if (auto reason = detail::checkTopicName(change.record, "a record name")) {
+            return std::unexpected(*reason);
+        }
+        if (change.keys && change.keys->size() > kMaxChangeKeys) {
+            return std::unexpected("a record's keys list more than " + std::to_string(kMaxChangeKeys) + " keys");
+        }
+    }
+    if (auto reason = detail::checkInstances(body->instances, "an instance topic")) {
+        return std::unexpected(*reason);
+    }
+    return body;
 }
 
 /// @brief The `err` reply message `RemoteServer` sends when

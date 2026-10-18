@@ -684,7 +684,7 @@ public:
     ///
     /// What a transport calls when it has written enough of what it holds. If
     /// `post` held an event back since the last drain, the connection is sent
-    /// one `resync` event (`wire::makeEvent("resync", "{}")`), meaning
+    /// one `resync` event (`wire::makeEvent(wire::kResyncTopic, "{}")`), meaning
     /// everything it watches may have changed, and events flow again.
     /// Otherwise nothing is sent. The drain, not a later write, sends it, so a
     /// connection that only listens still receives it.
@@ -963,7 +963,8 @@ private:
             return;
         }
         found->second.owesResync = false;
-        writeTo(cid, found->second, ::morph::wire::encode(::morph::wire::makeEvent("resync", "{}")));
+        writeTo(cid, found->second,
+                ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}")));
     }
 
     /// @brief Hands @p envelope to @p outbox's writer, catching what it

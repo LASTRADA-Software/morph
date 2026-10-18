@@ -704,6 +704,33 @@ order is promised between an event and any reply.
 posts one to the installed handler, so the client's event path can be tested
 without a transport.
 
+## The watch, unwatch and changes bodies
+
+A connection that negotiated events chooses what it hears about with two core kinds, `"watch"` and
+`"unwatch"` (`kWatchKind`, `kUnwatchKind`). Both carry a `WatchBody`:
+`{"records": [<record wire name>…], "instances": [{"modelType", "primary", "instance"?}…], "replace"?: bool}`.
+`replace` is meaningful on `watch` only: the connection's whole watch set becomes the body instead of
+growing by it. An `InstanceTopic` names an instance by type and directory key text (`primary`, empty for a
+private instance); `instance` is the id and is 0 in a request that names the topic by type and primary.
+
+The `ok` reply to a `watch` carries a `WatchReply`, `{"refusedRecords": […], "refusedInstances": […]}`,
+naming the topics the server does not publish or the caller may not read; both lists are empty when
+nothing was refused.
+
+The payload of a `"changes"` event (`kChangesTopic`) is a `ChangesBody`:
+`{"records": [{"record", "keys"?}…], "instances": [{"modelType", "primary", "instance"}…]}`. A record entry
+without `keys` means the whole record type changed; `records` reuses `effects::RecordChange` from
+`core/change_types.hpp`, which this header includes alone of the effects layer. A `"resync"` event
+(`kResyncTopic`) tells the client events were withheld and it must re-read what it shows.
+
+**Readers.** `readWatchBody`, `readWatchReply` and `readChangesBody` return
+`std::expected<…, std::string>`. They refuse input longer than `kMaxEnvelopeBytes`, text that is not the
+body, more than `kMaxWatchTopics` (4096) records or instances in one list, more than `kMaxChangeKeys`
+(4096) keys in one record entry, and any record name, model type or primary longer than
+`kMaxTopicNameBytes` (1024). Unknown keys are ignored, so a newer peer may add fields. The list bounds sit
+well above the coalescer's 256-key flush and any real watch set, so only a malformed or hostile peer meets
+them.
+
 ## Action-evolution policy
 
 The passive forward-compat contract (`error_on_unknown_keys = false` on
@@ -865,6 +892,9 @@ client.
 | `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
 | `makeCancel` | `Envelope makeCancel(uint64_t targetCallId)` |
 | `makeEvent` | `Envelope makeEvent(std::string_view topic, std::string payloadJson)` |
+| `readWatchBody` | `std::expected<WatchBody, std::string> readWatchBody(std::string_view)` |
+| `readWatchReply` | `std::expected<WatchReply, std::string> readWatchReply(std::string_view)` |
+| `readChangesBody` | `std::expected<ChangesBody, std::string> readChangesBody(std::string_view)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
 | `makeErr` | `Envelope makeErr(std::string message, uint64_t callId = 0)` |
 

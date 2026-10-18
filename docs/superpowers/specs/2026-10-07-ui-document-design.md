@@ -884,7 +884,7 @@ places, none of which changes the document:
   children a document declares is the `arrange` point.
 - **Server push.** A document learns of a change by its own calls, by `refreshOn` over its own
   dispatch and by polling with `refreshEvery`. A server-initiated message (pushed progress, another
-  client's change) needs a wire kind the protocol does not have; it is a candidate for `ui/2`, as a
-  `ui-event` kind negotiated by `ui-hello`.
+  client's change) needs a wire kind the protocol does not have; it is carried by the core
+  `event` kind, which `ui-hello` negotiates per connection.
 - **Server-side composite actions.** Committing several models in one transaction is not part of this
   design; a dialog that must commit atomically runs one server action (§5).

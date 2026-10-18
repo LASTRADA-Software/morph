@@ -262,8 +262,9 @@ The wire gains its first server-initiated message.
   - A message handled without a connection (`handle(msg, reply)`, `cid` 0) gets throwaway facts with
     `events = false`.
   - `IEnvelopeService` keeps its two-parameter `handle` pure. The three-parameter one is a non-pure virtual whose
-    default calls it. A service that overrides the new one adds `using IEnvelopeService::handle;`, as the
-    `-Woverloaded-virtual` build requires.
+    default calls it. A service that overrides only one of the two
+    overloads adds `using IEnvelopeService::handle;`, as the `-Woverloaded-virtual` build requires; one that
+    overrides both needs none.
 - **The envelope.** `kind: "event"`, `callId: 0`, `body: {topic, payload}`. For this design the topic is
   `changes`. A client routes it by kind before reply matching, so an event is never taken for an orphaned reply.
 - **Writing to a connection.** `RemoteServer` gains `setConnectionWriter(cid, writer)`, which takes the transport's

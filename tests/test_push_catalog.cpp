@@ -230,3 +230,102 @@ TEST_CASE("hello_events_round_trip_on_the_wire", "[push][catalog]") {
     REQUIRE(oldReply);
     CHECK_FALSE(oldReply->events);
 }
+
+TEST_CASE("watch_body_round_trips_and_is_bounded", "[push][catalog]") {
+    morph::wire::WatchBody body;
+    body.records = {"Entry", "Tag"};
+    body.instances = {{"Editor", "k1", 0}, {"Editor", "", 7}};
+    body.replace = true;
+    auto const text = glz::write_json(body).value_or("");
+    auto const back = morph::wire::readWatchBody(text);
+    REQUIRE(back);
+    CHECK(back->records == body.records);
+    REQUIRE(back->instances.size() == 2);
+    CHECK(back->instances[0].primary == "k1");
+    CHECK(back->instances[1].instance == 7);
+    CHECK(back->replace);
+
+    SECTION("absent fields default; unknown keys are ignored") {
+        auto const bare = morph::wire::readWatchBody(R"({"records":["A"],"future":1})");
+        REQUIRE(bare);
+        CHECK_FALSE(bare->replace);
+        CHECK(bare->instances.empty());
+    }
+    SECTION("an over-long record list is refused") {
+        morph::wire::WatchBody big;
+        big.records.assign(morph::wire::kMaxWatchTopics + 1, "R");
+        CHECK_FALSE(morph::wire::readWatchBody(glz::write_json(big).value_or("")));
+        big.records.pop_back();
+        CHECK(morph::wire::readWatchBody(glz::write_json(big).value_or("")));
+    }
+    SECTION("an over-long instance list or name is refused") {
+        morph::wire::WatchBody big;
+        big.instances.assign(morph::wire::kMaxWatchTopics + 1, {"M", "", 0});
+        CHECK_FALSE(morph::wire::readWatchBody(glz::write_json(big).value_or("")));
+        morph::wire::WatchBody longName;
+        longName.records = {std::string(morph::wire::kMaxTopicNameBytes + 1, 'x')};
+        CHECK_FALSE(morph::wire::readWatchBody(glz::write_json(longName).value_or("")));
+    }
+    SECTION("garbage and oversized input are refused") {
+        CHECK_FALSE(morph::wire::readWatchBody("not json"));
+        CHECK_FALSE(morph::wire::readWatchBody(std::string(morph::wire::kMaxEnvelopeBytes + 1, ' ')));
+    }
+}
+
+TEST_CASE("watch_reply_round_trips", "[push][catalog]") {
+    morph::wire::WatchReply reply;
+    reply.refusedRecords = {"Secret"};
+    reply.refusedInstances = {{"Editor", "p", 3}};
+    auto const back = morph::wire::readWatchReply(glz::write_json(reply).value_or(""));
+    REQUIRE(back);
+    CHECK(back->refusedRecords == reply.refusedRecords);
+    REQUIRE(back->refusedInstances.size() == 1);
+    CHECK(back->refusedInstances[0].instance == 3);
+    CHECK(morph::wire::readWatchReply("{}"));
+
+    morph::wire::WatchReply big;
+    big.refusedRecords.assign(morph::wire::kMaxWatchTopics + 1, "R");
+    CHECK_FALSE(morph::wire::readWatchReply(glz::write_json(big).value_or("")));
+}
+
+TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
+    auto const text = R"({"records":[{"record":"Entry","keys":[1,"b"]},{"record":"Tag"}],)"
+                      R"("instances":[{"modelType":"Editor","primary":"p","instance":9}]})";
+    auto const back = morph::wire::readChangesBody(text);
+    REQUIRE(back);
+    REQUIRE(back->records.size() == 2);
+    REQUIRE(back->records[0].keys);
+    CHECK(back->records[0].keys->size() == 2);
+    CHECK_FALSE(back->records[1].keys);
+    REQUIRE(back->instances.size() == 1);
+    CHECK(back->instances[0].instance == 9);
+
+    SECTION("it is the payload makeEvent carries") {
+        auto const env = morph::wire::makeEvent(morph::wire::kChangesTopic, text);
+        morph::wire::EventBody event;
+        REQUIRE_FALSE(glz::read_json(event, env.body));
+        CHECK(event.topic == "changes");
+        CHECK(morph::wire::readChangesBody(event.payload.str));
+    }
+    SECTION("too many keys in one record is refused") {
+        std::string keys = "[";
+        for (std::size_t i = 0; i <= morph::wire::kMaxChangeKeys; ++i) {
+            keys += (i ? ",1" : "1");
+        }
+        keys += "]";
+        CHECK_FALSE(morph::wire::readChangesBody(R"({"records":[{"record":"E","keys":)" + keys + "}]}"));
+    }
+    SECTION("too many records is refused") {
+        std::string records = "[";
+        for (std::size_t i = 0; i <= morph::wire::kMaxWatchTopics; ++i) {
+            records += (i ? R"(,{"record":"R"})" : R"({"record":"R"})");
+        }
+        records += "]";
+        CHECK_FALSE(morph::wire::readChangesBody(R"({"records":)" + records + "}"));
+    }
+    SECTION("the kind and topic names are the wire names") {
+        CHECK(morph::wire::kWatchKind == "watch");
+        CHECK(morph::wire::kUnwatchKind == "unwatch");
+        CHECK(morph::wire::kResyncTopic == "resync");
+    }
+}
