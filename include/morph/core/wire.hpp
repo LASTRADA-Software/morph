@@ -75,6 +75,10 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 ///                   see `makeHello()` and `interpretHelloReply()`. A peer
 ///                   predating negotiation answers `err "unknown envelope kind:
 ///                   hello"`, which is how a legacy server is detected.
+/// - `"event"`     — server-initiated notification, sent unprompted on a
+///                   connection that negotiated events. `callId` is `0`; `body`
+///                   is an `EventBody`. A client routes it by kind before reply
+///                   matching; see `makeEvent()`.
 /// - `"cancel"`    — client asks the server to stop one of its own in-flight
 ///                   `execute` calls. Uses `cancelCallId` (the execute's
 ///                   `callId`) and `session`; its own `callId` correlates the
@@ -604,6 +608,35 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     env.kind = "err";
     env.callId = callId;
     env.message = detail::sanitizeControlChars(message);
+    return env;
+}
+
+/// @brief The envelope kind of a server-initiated event.
+inline constexpr std::string_view kEventKind = "event";
+
+/// @brief The decoded `body` of an `event` envelope.
+struct EventBody {
+    /// @brief What the event is about (`changes`, `resync`).
+    std::string topic;
+    /// @brief The topic's payload: a JSON value, carried verbatim.
+    glz::raw_json payload;
+};
+
+/// @brief Builds an `event` envelope: `callId` 0, `body` = `{"topic":…,"payload":…}`.
+///
+/// @param topic       Event topic.
+/// @param payloadJson The payload as a JSON value; embedded verbatim, so it
+///                    must be valid JSON (an empty string is sent as `null`).
+/// @return The event envelope.
+[[nodiscard]] inline Envelope makeEvent(std::string_view topic, std::string payloadJson) {
+    Envelope env;
+    env.kind = std::string{kEventKind};
+    env.callId = 0;
+    if (payloadJson.empty()) {
+        payloadJson = "null";
+    }
+    EventBody body{std::string{topic}, glz::raw_json{std::move(payloadJson)}};
+    env.body = glz::write_json(body).value_or(std::string{});
     return env;
 }
 

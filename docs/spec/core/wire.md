@@ -15,6 +15,7 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Cancelling a call](#cancelling-a-call)
 - [Serving action schemas](#serving-action-schemas)
 - [The UI service's kinds](#the-ui-services-kinds)
+- [The `event` kind](#the-event-kind)
 - [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -41,6 +42,7 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"ui-hello"` | request   | The UI service's handshake: what the client speaks; replies with the application, the vocabularies its bundle needs and the manifest digest. Answered only by a server configured with the UI service. See [The UI service's kinds](#the-ui-services-kinds). | `body`, `session` |
 | `"ui-catalog"` | request | The catalog filtered for the principal, its permitted actions and the load-time facts. UI service only. | `session` |
 | `"ui-fetch"` | request   | A bundle file by its content hash; replies with the file's exact bytes in `body`. UI service only. | `body`, `session` |
+| `"event"`    | server-initiated | An unprompted notification on a connection that negotiated events. Never a reply to anything. See [The `event` kind](#the-event-kind). | `callId` (always `0`), `body` (`{topic, payload}`) |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
 | `"err"`      | reply     | Server failure. | `callId`, `message` |
 
@@ -678,6 +680,30 @@ peer that predates the handshake. An old client never sends these kinds, so a
 server that has the UI service answers it as before; its `hello` reply is
 byte-for-byte the one a server without the service gives.
 
+## The `event` kind
+
+`"event"` is the wire's one server-initiated kind: every other kind is a
+request or the reply to one. Its `callId` is `0` and its `body` is an
+`EventBody`, `{"topic": <string>, "payload": <JSON value>}`; `payload` is
+carried verbatim (`glz::raw_json`), so the wire layer never interprets it.
+`makeEvent(topic, payloadJson)` builds one; an empty `payloadJson` is sent as
+`null`.
+
+**Routed before reply matching.** `callId` 0 names no request, so an event that
+reached reply matching would be counted as an orphaned reply. A client backend
+therefore tests each decoded envelope with `backend::detail::routeEvent`
+(`core/detail/reply_router.hpp`) first: an event goes to the handler installed
+by `IBackend::setEventHandler(handler, exec)`, posted to `exec`, and is never
+matched to a call. An event with no handler, or whose body does not decode, is
+dropped. A pending call is never resolved by an event.
+
+**Order.** Events on one connection are delivered in the order they arrived. No
+order is promised between an event and any reply.
+
+`LocalBackend` has no server and produces no events; `deliverEvent(EventBody)`
+posts one to the installed handler, so the client's event path can be tested
+without a transport.
+
 ## Action-evolution policy
 
 The passive forward-compat contract (`error_on_unknown_keys = false` on
@@ -838,6 +864,7 @@ client.
 | `makeDeregister` | `Envelope makeDeregister(uint64_t modelId)` |
 | `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
 | `makeCancel` | `Envelope makeCancel(uint64_t targetCallId)` |
+| `makeEvent` | `Envelope makeEvent(std::string_view topic, std::string payloadJson)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
 | `makeErr` | `Envelope makeErr(std::string message, uint64_t callId = 0)` |
 

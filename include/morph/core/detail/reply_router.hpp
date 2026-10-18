@@ -3,6 +3,8 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <glaze/glaze.hpp>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -79,6 +81,34 @@ enum class ExecuteReplyKind : std::uint8_t {
         return ExecuteReplyKind::Timeout;
     }
     return ExecuteReplyKind::Error;
+}
+
+/// @brief Routes a decoded incoming envelope that is a server-initiated
+///        event, before any reply matching.
+///
+/// A client backend calls this first on each envelope it decodes: an `event`
+/// carries `callId` 0, which names no request, so letting it reach reply
+/// matching would count it as an orphaned reply. An event whose body does not
+/// decode is consumed and dropped, not handed on, for the same reason.
+///
+/// @param env     Decoded incoming envelope.
+/// @param handler Receives the event; may be empty, in which case the event
+///                is consumed and dropped.
+/// @return `true` if @p env is an event (the caller must not match it to a
+///         call), `false` for any other kind.
+[[nodiscard]] inline bool routeEvent(const ::morph::wire::Envelope& env,
+                                     const std::function<void(::morph::wire::EventBody)>& handler) {
+    if (env.kind != ::morph::wire::kEventKind) {
+        return false;
+    }
+    if (handler) {
+        ::morph::wire::EventBody body;
+        constexpr glz::opts lenient{.error_on_unknown_keys = false};
+        if (!glz::read<lenient>(body, env.body)) {
+            handler(std::move(body));
+        }
+    }
+    return true;
 }
 
 /// @brief The map of in-flight calls, keyed by call id, owned by one executor.

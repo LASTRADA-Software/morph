@@ -24,6 +24,7 @@ add_executable(morph_tests
     test_example.cpp
     test_push_records.cpp
     test_push_effects.cpp
+    test_push_channel.cpp
     push_records_late.cpp
     test_executor_extra.cpp
     test_strand.cpp
