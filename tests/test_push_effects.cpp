@@ -3,6 +3,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
 #include <morph/core/bridge.hpp>
+#include <morph/core/changes.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/records.hpp>
 #include <optional>
@@ -339,4 +340,149 @@ TEST_CASE("every_problem_is_listed", "[push][records]") {
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("`V_Keyless`, which has no key"));
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("V_CycleA -> V_CycleA"));
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("record name `V_Row` is registered for two types"));
+}
+
+// ── Deriving changes ─────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::effects::Changes;
+using morph::effects::InstanceChange;
+using morph::effects::RecordChange;
+
+struct DTxn {};
+struct DReport {};
+struct DSummary {};
+struct DNamed {};
+
+std::vector<std::string> keyTexts(RecordChange const& change) {
+    std::vector<std::string> texts;
+    for (auto const& key : *change.keys) {
+        texts.push_back(key.str);
+    }
+    return texts;
+}
+
+// Records: D_Row (keyed), D_Txn (keyed), D_Report derived from D_Txn, D_Summary derived from D_Report.
+morph::effects::detail::Resolved derivation(EffectsMap declared) {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Rows", result({{typeid(VList), ""}, {typeid(VRow), "rows"}}));
+    slots.emplace("A_Root", result({{typeid(VRow), ""}}));
+    slots.emplace("A_Deep", result({{typeid(VList), ""}, {typeid(VRow), "header.rows"}}));
+    slots.emplace("A_Named", result({{typeid(VList), ""}, {typeid(DNamed), "byName"}}));
+    return morph::effects::detail::resolveForTesting(
+        {record("D_Row", typeid(VRow)), record("D_Txn", typeid(DTxn)),
+         record("D_Report", typeid(DReport), std::nullopt, {typeid(DTxn)}),
+         record("D_Summary", typeid(DSummary), std::nullopt, {typeid(DReport)}), record("D_Header", typeid(VHeader), {}),
+         record("D_Named", typeid(DNamed), "code")},
+        std::move(slots), declared);
+}
+
+EffectsMap declare(std::string id, std::vector<DeclaredEffect> effects) {
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, id, std::move(effects));
+    return declared;
+}
+
+InstanceChange const ranOnInstance{.modelType = "M", .instance = 7, .primary = "k"};
+
+}  // namespace
+
+TEST_CASE("derive_updates_reads_keys_at_paths", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {updatesOf(typeid(VRow))}));
+    auto const changes = morph::effects::detail::deriveChangesFrom(
+        resolved, "A_Rows", R"({"rows":[{"id":1,"n":"a"},{"id":2},{"n":"no key"}]})", ranOnInstance);
+    REQUIRE(changes.instances.empty());
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE(changes.records[0].record == "D_Row");
+    REQUIRE(changes.records[0].keys.has_value());
+    REQUIRE(keyTexts(changes.records[0]) == std::vector<std::string>{"1", "2"});
+}
+
+TEST_CASE("derive_updates_reads_every_result_shape", "[push][records]") {
+    auto const rootResolved = derivation(declare("A_Root", {updatesOf(typeid(VRow))}));
+    auto const one = morph::effects::detail::deriveChangesFrom(rootResolved, "A_Root", R"({"id":9007199254740993})",
+                                                               ranOnInstance);
+    REQUIRE(keyTexts(one.records.at(0)) == std::vector<std::string>{"9007199254740993"});
+
+    auto const absent = morph::effects::detail::deriveChangesFrom(rootResolved, "A_Root", "null", ranOnInstance);
+    REQUIRE(absent.records.at(0).keys.has_value());
+    REQUIRE(absent.records.at(0).keys->empty());
+
+    auto const deepResolved = derivation(declare("A_Deep", {updatesOf(typeid(VRow))}));
+    auto const deep = morph::effects::detail::deriveChangesFrom(
+        deepResolved, "A_Deep", R"({"header":{"rows":[{"id":"x"},{"id":"y"}]}})", ranOnInstance);
+    REQUIRE(keyTexts(deep.records.at(0)) == std::vector<std::string>{"\"x\"", "\"y\""});
+
+    auto const namedResolved = derivation(declare("A_Named", {updatesOf(typeid(DNamed))}));
+    auto const map = morph::effects::detail::deriveChangesFrom(
+        namedResolved, "A_Named", R"({"byName":{"a":{"code":"c1"},"b":{"code":"c2"}}})", ranOnInstance);
+    REQUIRE(keyTexts(map.records.at(0)) == std::vector<std::string>{"\"c1\"", "\"c2\""});
+}
+
+TEST_CASE("derive_updates_with_unparseable_result_reports_the_type", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {updatesOf(typeid(VRow))}));
+    auto const changes = morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", "{not json", ranOnInstance);
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE_FALSE(changes.records[0].keys.has_value());
+}
+
+TEST_CASE("derive_changes_has_no_keys", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {changesOf(typeid(VRow))}));
+    auto const changes =
+        morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", R"({"rows":[{"id":1}]})", ranOnInstance);
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE(changes.records[0].record == "D_Row");
+    REQUIRE_FALSE(changes.records[0].keys.has_value());
+}
+
+TEST_CASE("derive_changes_absorbs_updates_keys", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {updatesOf(typeid(VRow)), changesOf(typeid(VRow))}));
+    auto const changes =
+        morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", R"({"rows":[{"id":1}]})", ranOnInstance);
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE_FALSE(changes.records[0].keys.has_value());
+}
+
+TEST_CASE("derive_expands_derived_from", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {changesOf(typeid(DTxn))}));
+    auto const changes = morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", "{}", ranOnInstance);
+    REQUIRE(changes.records.size() == 3);
+    REQUIRE(changes.records[0].record == "D_Txn");
+    // A derived record of a derived record is reached too, and neither carries keys.
+    REQUIRE(changes.records[1].record == "D_Report");
+    REQUIRE(changes.records[2].record == "D_Summary");
+    REQUIRE_FALSE(changes.records[1].keys.has_value());
+    REQUIRE_FALSE(changes.records[2].keys.has_value());
+}
+
+TEST_CASE("derive_changes_instance_uses_ran_on", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {DeclaredEffect{.kind = Kind::ChangesInstance, .record = {}}}));
+    auto const changes = morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", "{}", ranOnInstance);
+    REQUIRE(changes.records.empty());
+    REQUIRE(changes.instances.size() == 1);
+    REQUIRE(changes.instances[0].modelType == "M");
+    REQUIRE(changes.instances[0].instance == 7);
+    REQUIRE(changes.instances[0].primary == "k");
+}
+
+TEST_CASE("derive_reads_nothing_for_reader", "[push][records]") {
+    auto const resolved = derivation(declare("A_Other", {changesOf(typeid(VRow))}));
+    REQUIRE(morph::effects::detail::deriveChangesFrom(resolved, "A_Rows", "{}", ranOnInstance).empty());
+    auto const none = derivation(declare("A_Rows", {DeclaredEffect{.kind = Kind::None, .record = {}}}));
+    REQUIRE(morph::effects::detail::deriveChangesFrom(none, "A_Rows", "{}", ranOnInstance).empty());
+    // The process registry: a registered action that declared nothing reads.
+    REQUIRE(morph::effects::deriveChanges("T_WalkerListRows", "{}", ranOnInstance).empty());
+}
+
+TEST_CASE("derive_from_process_registry", "[push][records]") {
+    auto const changes =
+        morph::effects::deriveChanges("T_EffectsEdit", R"({"items":[{"id":5,"name":"a"}]})", ranOnInstance);
+    // updates<Item> and changes<Item> together: the whole type.
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE(changes.records[0].record == "T_EItem");
+    REQUIRE_FALSE(changes.records[0].keys.has_value());
+    auto const instance = morph::effects::deriveChanges("T_EffectsLoad", "{}", ranOnInstance);
+    REQUIRE(instance.instances.size() == 1);
+    REQUIRE(instance.records.empty());
 }

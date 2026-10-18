@@ -455,6 +455,8 @@ target_sources(morph
         include/morph/core/registry.hpp
         include/morph/core/records.hpp
         include/morph/core/effects.hpp
+        include/morph/core/change_types.hpp
+        include/morph/core/changes.hpp
         include/morph/core/backend.hpp
         include/morph/core/envelope_transport.hpp
         include/morph/core/remote.hpp
