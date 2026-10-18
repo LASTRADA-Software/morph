@@ -33,6 +33,7 @@
 #include "changes.hpp"
 #include "completion.hpp"
 #include "connection_writer.hpp"
+#include "detail/change_coalescer.hpp"
 #include "detail/owner_probe.hpp"
 #include "detail/reply_router.hpp"
 #include "detail/watch_table.hpp"
@@ -326,6 +327,15 @@ struct ServerConfig {
     ///        answered `err "unknown envelope kind: <kind>"`. A null entry is
     ///        refused by the constructor.
     std::vector<std::shared_ptr<IEnvelopeService>> services;
+
+    /// @brief How long a connection's changes are merged before they are sent
+    ///        as one `changes` event.
+    ///
+    /// The window opens at the first change queued for the connection, and its
+    /// queue is sent when the window closes, or at once when
+    /// `detail::kCoalesceKeyLimit` keys are queued. Zero sends each fan-out's
+    /// event at once, unmerged. Negative is refused by the constructor.
+    std::chrono::milliseconds coalesceWindow{50};
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -758,11 +768,16 @@ public:
     /// Each recipient's watches are then re-authorised by the rule that
     /// admitted them (`reauthorise`): a topic whose watch fails is dropped
     /// from the table and from the event, and a connection that lost any
-    /// watch is sent one `resync` after its event (`sendResync`). A record registered with
-    /// `morph::record::privateKeys` reaches a principal other than
-    /// @p callerPrincipal without its keys. Each connection's event holds only
-    /// the topics left, is not sent when none are, and passes through
-    /// `post`'s backlog hold-back and size cap.
+    /// watch is sent one `resync` (`sendResync`), after whatever it had queued. A
+    /// record registered with `morph::record::privateKeys` reaches a principal
+    /// other than @p callerPrincipal without its keys.
+    ///
+    /// What is left is queued on the connection (`detail::ChangeCoalescer`),
+    /// not sent: the queue is merged for `ServerConfig::coalesceWindow` from
+    /// its first change, or until `detail::kCoalesceKeyLimit` keys are queued,
+    /// and then sent as one `changes` event through `post`'s backlog hold-back
+    /// and size cap. Nothing is queued for a connection with no writer, or one
+    /// held back behind its backlog, which its drain's `resync` covers.
     /// @param changes         What one execute changed, from `effects::deriveChanges`.
     /// @param caller          Connection the execute arrived on; `0` for unscoped.
     /// @param callerPrincipal The execute's verified principal; empty when none was.
@@ -785,11 +800,11 @@ public:
                     change.primary = inst->sharedKey->second;
                 }
             }
-            auto const recipients = change.primary.empty() ? scopesHolding(mid)
-                                                           : _watches.watchersOf(change.modelType, change.primary);
-            ::morph::wire::InstanceTopic const topic{
-                .modelType = std::move(change.modelType), .primary = std::move(change.primary),
-                .instance = change.instance};
+            auto const recipients =
+                change.primary.empty() ? scopesHolding(mid) : _watches.watchersOf(change.modelType, change.primary);
+            ::morph::wire::InstanceTopic const topic{.modelType = std::move(change.modelType),
+                                                     .primary = std::move(change.primary),
+                                                     .instance = change.instance};
             for (ConnectionId const cid : recipients) {
                 if (eventsNegotiated(cid)) {
                     bodies[cid].instances.push_back(topic);
@@ -800,15 +815,12 @@ public:
         for (auto& [cid, body] : bodies) {
             bool const dropped = reauthorise(cid, body, caller, callerPrincipal, authentications);
             if (!body.records.empty() || !body.instances.empty()) {
-                std::string payload;
-                (void)glz::write_json(body, payload);
-                auto envelope =
-                    ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
-                if (!oversized(cid, envelope)) {
-                    postHere(cid, std::move(envelope));
-                }
+                queueChanges(cid, body);
             }
             if (dropped) {
+                // What was queued before the drop goes first, so the resync is
+                // the last word on everything the connection watched.
+                flushChanges(cid);
                 sendResync(cid);
             }
         }
@@ -921,6 +933,12 @@ private:
     struct ConnectionOutbox {
         ConnectionWriter writer;
         bool owesResync{false};
+        // The changes merged for the connection's next `changes` event.
+        detail::ChangeCoalescer queued;
+        // The armed coalescing window, `0` when none is: the timer's handle,
+        // and the number the flush it posts must match to send the queue.
+        ::morph::async::detail::TimeoutScheduler::Handle windowTimer{0};
+        std::uint64_t window{0};
     };
 
     /// @brief Rejects a configuration whose protocol range is empty.
@@ -930,6 +948,9 @@ private:
     static ServerConfig validated(ServerConfig config) {
         if (config.minProtocolVersion > config.maxProtocolVersion) {
             throw std::invalid_argument("ServerConfig: minProtocolVersion must not exceed maxProtocolVersion");
+        }
+        if (config.coalesceWindow.count() < 0) {
+            throw std::invalid_argument("ServerConfig: coalesceWindow must not be negative");
         }
         if (std::ranges::find(config.services, nullptr) != config.services.end()) {
             throw std::invalid_argument("ServerConfig: services must not hold a null entry");
@@ -991,6 +1012,10 @@ private:
     /// @param cid Connection scope to close.
     void closeConnectionHere(ConnectionId cid) {
         noteOwner("RemoteServer::closeConnection");
+        // The connection's queued changes go with its writer.
+        if (auto found = _writers.find(cid); found != _writers.end() && found->second.windowTimer != 0) {
+            _strandTimer->cancel(found->second.windowTimer);
+        }
         _writers.erase(cid);
         _facts.erase(cid);
         _watches.dropConnection(cid);
@@ -1185,6 +1210,89 @@ private:
     void sendResync(ConnectionId cid) {
         if (eventsNegotiated(cid)) {
             postHere(cid, ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}")));
+        }
+    }
+
+    /// @brief Queues @p body for connection @p cid's next `changes` event. On
+    ///        the server strand.
+    ///
+    /// Sent at once when the queue reaches `detail::kCoalesceKeyLimit` or the
+    /// window is zero; otherwise the first change queued opens the window,
+    /// whose close posts `closeWindow` back to the strand. Dropped for a
+    /// connection with no writer, and for one owed a `resync`, which tells it
+    /// more than the changes would.
+    /// @param cid  Recipient connection.
+    /// @param body Its re-authorised share of one fan-out.
+    void queueChanges(ConnectionId cid, ::morph::wire::ChangesBody const& body) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || found->second.owesResync) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        outbox.queued.add(body);
+        if (_config.coalesceWindow.count() == 0 || outbox.queued.keyCount() >= detail::kCoalesceKeyLimit) {
+            flushChanges(cid);
+            return;
+        }
+        if (outbox.window != 0) {
+            return;
+        }
+        if (!_strandTimer) {
+            _strandTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        }
+        std::uint64_t const window = ++_nextWindow;
+        outbox.window = window;
+        // Weak, as a drain deadline is: the timer does not keep alive a server
+        // nothing else refers to, whose connections are gone with it. The
+        // strand task it posts holds the server, as every strand task does.
+        outbox.windowTimer = _strandTimer->schedule(_config.coalesceWindow, [weak = weak_from_this(), cid, window] {
+            if (auto self = weak.lock()) {
+                self->_strand.postTask([self, cid, window] { self->closeWindow(cid, window); });
+            }
+        });
+    }
+
+    /// @brief Sends connection @p cid's queue when its window @p window
+    ///        closes. On the server strand.
+    ///
+    /// Nothing is sent when the queue was sent since (by the key limit or a
+    /// `resync`) and a later window is open, or when the connection closed.
+    /// @param cid    Connection whose window closed.
+    /// @param window The number its `queueChanges` gave the window.
+    void closeWindow(ConnectionId cid, std::uint64_t window) {
+        noteOwner("RemoteServer::closeWindow");
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || found->second.window != window) {
+            return;
+        }
+        found->second.window = 0;
+        found->second.windowTimer = 0;
+        flushChanges(cid);
+    }
+
+    /// @brief Sends what connection @p cid has queued as one `changes` event
+    ///        through `postHere`, and closes its window. On the server strand.
+    /// @param cid Connection whose queue is sent.
+    void flushChanges(ConnectionId cid) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.windowTimer != 0) {
+            _strandTimer->cancel(outbox.windowTimer);
+        }
+        outbox.window = 0;
+        outbox.windowTimer = 0;
+        if (outbox.queued.empty()) {
+            return;
+        }
+        std::string payload;
+        (void)glz::write_json(outbox.queued.take(), payload);
+        auto envelope =
+            ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
+        if (!oversized(cid, envelope)) {
+            postHere(cid, std::move(envelope));
         }
     }
 
@@ -1414,13 +1522,13 @@ private:
             return;
         }
         std::uint64_t const waiterId = ++_nextDrainWaiter;
-        if (!_drainTimer) {
-            _drainTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        if (!_strandTimer) {
+            _strandTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
         }
         // Weak: a pending deadline does not keep a server alive that nothing
         // else refers to. The expiry is posted back, since the waiters are
         // strand state and the timer fires on its I/O loop.
-        auto const handle = _drainTimer->schedule(deadline, [weak = weak_from_this(), waiterId] {
+        auto const handle = _strandTimer->schedule(deadline, [weak = weak_from_this(), waiterId] {
             if (auto self = weak.lock()) {
                 self->_strand.postTask([self, waiterId] { self->expireDrainWaiter(waiterId); });
             }
@@ -1455,7 +1563,7 @@ private:
         auto waiters = std::move(_drainWaiters);
         _drainWaiters.clear();
         for (auto& waiter : waiters) {
-            _drainTimer->cancel(waiter.timer);
+            _strandTimer->cancel(waiter.timer);
             waiter.promise->resolve(true);
         }
     }
@@ -2623,8 +2731,12 @@ private:
     };
     std::vector<DrainWaiter> _drainWaiters;
     std::uint64_t _nextDrainWaiter{0};
-    // Arms drain deadlines; created by the first waiter that needs one.
-    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _drainTimer;
+    // Arms drain deadlines and coalescing windows; created by the first that
+    // needs one. Its callbacks only post back to the strand.
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _strandTimer;
+    // Numbers each coalescing window, so a window's late close cannot send a
+    // queue a later window holds.
+    std::uint64_t _nextWindow{0};
 
     // Drawn off the strand by openConnection(), which answers at once.
     std::atomic<uint64_t> _nextConnectionId{0};

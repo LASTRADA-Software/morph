@@ -1069,8 +1069,8 @@ server one per connection.
   keeping a `resync` the connection is owed — the held-back events were the
   connection's, not the old writer's; an
   empty `write` removes it. `closeConnection(cid)` drops it. The writer lives
-  next to the connection scopes, in a `cid → {writer, owesResync}` map that
-  only the strand touches.
+  next to the connection scopes, in a `cid → {writer, owesResync, queued
+  changes}` map that only the strand touches ([Coalescing](#coalescing)).
 - `post(cid, envelope)` is callable from any thread. On the calling thread, an
   envelope larger than `wire::kMaxEnvelopeBytes` is dropped, logged at `warn`
   and counted as `Metric::eventOversize` — the peer would refuse to decode it.
@@ -1190,7 +1190,9 @@ execute path reads it. The UI layer sends them; nothing on the server outside
   one `resync` event (`RemoteServer::sendResync`): one per envelope or per
   fan-out, however many watches went. It is sent only to a connection that
   negotiated events, and through `post`'s hold-back, so a connection already
-  held back behind its backlog gets the one `resync` its drain owes. The
+  held back behind its backlog gets the one `resync` its drain owes. A
+  fan-out first sends what the connection had queued
+  ([Coalescing](#coalescing)), so its `resync` comes after those changes. The
   client answers every `resync` by marking its watched entries stale and
   sending its whole watch set again with `replace: true`; a topic still
   refused comes back in the `WatchReply`. An `unwatch` and a `replace` are the
@@ -1231,8 +1233,9 @@ through `dispatchExecute`.
   keys derived, and its instance topics as `InstanceTopic{modelType, primary,
   instance}`. Before it is encoded, the body passes through
   `RemoteServer::reauthorise`, the one place a recipient's topics are
-  narrowed. An event left with no topic is not sent. The event is then
-  written as `post` writes: dropped above
+  narrowed. A body left with no topic is not sent. What is left is queued
+  on the connection and sent merged with the connection's other changes
+  ([Coalescing](#coalescing)), written as `post` writes: dropped above
   `wire::kMaxEnvelopeBytes`, held back behind a full backlog.
 - **Re-authorised at send time, by the rule that admitted it.** For each
   watched topic in a recipient's body:
@@ -1262,6 +1265,38 @@ through `dispatchExecute`.
   caller's verified principal. Two connections with no verified principal are
   not the same principal for this purpose. See
   [security.md](../security.md#what-an-event-reveals).
+- <a id="coalescing"></a>**Coalescing.** Each connection's writer entry
+  holds a `detail::ChangeCoalescer`, the changes queued for its next
+  `changes` event. Re-authorisation happens at fan-out, before a body is
+  queued; the queue only merges what each fan-out already allowed.
+  - *Merging.* Records are merged per type, each key text once, in arrival
+    order. A whole-type record (keys absent) absorbs that type's keys, queued
+    before or after it, so a type a recipient was sent without keys
+    (`privateKeys`) is never given keys by a merge. A record whose merged keys
+    would exceed `effects::kMaxChangeKeys` (4096) becomes whole-type: the
+    client's reader refuses a longer list, and a whole-type change
+    over-notifies but never misses. Instance topics are deduplicated on
+    `{modelType, primary, instance}`.
+  - *When the queue is sent.* The first change queued opens a window of
+    `ServerConfig::coalesceWindow` (50 ms by default) on the server's strand
+    timer — the `TimeoutScheduler` drain deadlines use, created by the first
+    that needs it. Its callback holds the server weakly and posts the flush
+    to the strand, where the task holds the server; each window is numbered,
+    so a late close cannot send a later window's queue. The queue is sent at
+    once, without waiting for the window, when `keyCount()` reaches
+    `detail::kCoalesceKeyLimit` (256: one per key, one per whole-type record,
+    one per instance topic), and before a `resync` a fan-out owes the
+    connection. A window of zero sends each fan-out at once.
+  - *What is not queued.* Nothing is queued for a connection with no writer,
+    or one held back behind its backlog: its drain sends a `resync`, which
+    covers every change since. A closed connection drops its queue with its
+    writer, and its window's close then finds nothing to send.
+  - *Volume.* A window opens only when the previous one has closed, so window
+    closes send a connection at most 20 events a second at 50 ms. A queue
+    sent at the key limit can come sooner, so the full bound is 20 events a
+    second plus one per 256 keys (or topics) the connection is sent.
+    A burst of one hundred writes to one type reaches each watching
+    connection as one event, so one refetch per showing query.
 - **The registries are read at construction.** Every `RemoteServer`
   constructor reads the record and effects registries once, so a process whose
   declarations are invalid fails with `EffectsRegistrationError` when the server
@@ -2398,6 +2433,7 @@ server: each call is a loop task, so the loop serialises them.
 | `minProtocolVersion`, `maxProtocolVersion` | Inclusive `hello` range; default `{kProtocolVersion, kProtocolVersion}`. |
 | `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
 | `services` | `std::vector<std::shared_ptr<IEnvelopeService>>`: extensions consulted, in order, for a kind the server does not answer itself; a null entry throws `std::invalid_argument`. See [Envelope services](#envelope-services). |
+| `coalesceWindow` | `std::chrono::milliseconds`, default `50 ms`: how long a connection's changes are merged before one `changes` event is sent; zero sends each fan-out at once; negative throws `std::invalid_argument`. See [Coalescing](#coalescing). |
 
 ### `SimulatedRemoteBackend`
 

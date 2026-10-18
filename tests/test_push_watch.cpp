@@ -14,6 +14,8 @@
 #include <map>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/connection_writer.hpp>
+#include <morph/core/detail/change_coalescer.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/records.hpp>
@@ -790,6 +792,8 @@ public:
 struct EventWire {
     std::mutex mtx;
     std::vector<std::string> sent;
+    /// What `backlog()` reports; the test raises it to hold events back.
+    std::atomic<std::size_t> backlog{0};
 
     ::morph::backend::ConnectionWriter writer() {
         return {.write =
@@ -797,7 +801,7 @@ struct EventWire {
                         std::scoped_lock const lock{mtx};
                         sent.push_back(std::move(frame));
                     },
-                .backlog = [] { return std::size_t{0}; }};
+                .backlog = [this] { return backlog.load(); }};
     }
 
     std::vector<std::string> snapshot() {
@@ -846,10 +850,14 @@ struct FanRig {
     std::shared_ptr<RemoteServer> server;
     std::map<ConnectionId, std::unique_ptr<EventWire>> wires;
 
+    /// @p coalesceWindow defaults to zero, so each fan-out's event is written
+    /// before its strand task ends; the coalescing cases pass their own.
     explicit FanRig(std::chrono::milliseconds executeTimeout = std::chrono::milliseconds{0},
-                    std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr) {
+                    std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr,
+                    std::chrono::milliseconds coalesceWindow = std::chrono::milliseconds{0}) {
         ::morph::backend::ServerConfig config;
         config.limits.executeTimeout = executeTimeout;
+        config.coalesceWindow = coalesceWindow;
         config.services.push_back(std::make_shared<FanHello>());
         server = authorizer ? std::make_shared<RemoteServer>(pool, std::move(authorizer), std::move(config))
                             : std::make_shared<RemoteServer>(pool, std::move(config));
@@ -914,6 +922,19 @@ struct FanRig {
         server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, cid);
         REQUIRE(waiter->await());
         return waiter->env;
+    }
+
+    /// Runs @p batch through `fanOut` in one server-strand task, as executes
+    /// on @p caller, and waits for it.
+    void fanOut(std::vector<::morph::effects::Changes> batch, ConnectionId caller, std::string const& principal = {}) {
+        std::latch done{1};
+        server->strand().post([&] {
+            for (auto& changes : batch) {
+                server->fanOut(std::move(changes), caller, principal);
+            }
+            done.count_down();
+        });
+        done.wait();
     }
 
     /// Runs every task already posted to the server strand.
@@ -1434,4 +1455,235 @@ TEST_CASE("private_keys_kept_for_the_calling_connection", "[push][watch]") {
     auto const theirs = rig.wire(bob).changes();
     REQUIRE(theirs.size() == 1U);
     CHECK_FALSE(theirs.front().records.front().keys.has_value());
+}
+
+// ── Coalescing: one connection's changes merged into one event ───────────────
+
+namespace {
+
+using ::morph::backend::detail::ChangeCoalescer;
+
+/// A change to `T_FanRow` naming @p keys, or the whole type when @p keys is empty.
+::morph::effects::Changes rowChange(std::vector<std::string> const& keys) {
+    ::morph::effects::RecordChange change{.record = "T_FanRow", .keys = std::nullopt};
+    if (!keys.empty()) {
+        change.keys.emplace();
+        for (auto const& key : keys) {
+            change.keys->push_back(glz::raw_json{key});
+        }
+    }
+    return {.records = {std::move(change)}, .instances = {}};
+}
+
+/// @p count changes to `T_FanRow`, one key each, numbered from @p first.
+std::vector<::morph::effects::Changes> rowBurst(std::size_t count, std::size_t first = 0) {
+    std::vector<::morph::effects::Changes> burst;
+    for (std::size_t idx = 0; idx < count; ++idx) {
+        burst.push_back(rowChange({std::to_string(first + idx)}));
+    }
+    return burst;
+}
+
+/// The keys "0" up to @p count - 1, as text.
+std::vector<std::string> numbered(std::size_t count) {
+    std::vector<std::string> keys;
+    for (std::size_t idx = 0; idx < count; ++idx) {
+        keys.push_back(std::to_string(idx));
+    }
+    return keys;
+}
+
+constexpr auto kForever = std::chrono::hours{1};
+
+}  // namespace
+
+TEST_CASE("burst_of_100_is_one_event", "[push][watch]") {
+    // The default window, as a deployment runs it.
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, ::morph::backend::ServerConfig{}.coalesceWindow};
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}));
+
+    rig.fanOut(rowBurst(100), cid);
+    REQUIRE(::morph::testing::waitUntil([&] { return !rig.wire(cid).snapshot().empty(); }));
+    rig.flush();
+
+    auto const bodies = rig.wire(cid).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().records.size() == 1U);
+    CHECK(keysOf(bodies.front().records.front()) == numbered(100));
+}
+
+TEST_CASE("changes_absorbs_updates_keys", "[push][watch]") {
+    ChangeCoalescer queue;
+    queue.add(rowChange({"1", "2"}));
+    queue.add(rowChange({}));
+    queue.add(rowChange({"3"}));
+    queue.add(::morph::effects::Changes{.records = {{.record = "T_FanOther", .keys = std::vector{glz::raw_json{"9"}}}},
+                                        .instances = {}});
+    CHECK(queue.keyCount() == 2U);
+
+    auto const body = queue.take();
+    REQUIRE(body.records.size() == 2U);
+    CHECK(body.records[0].record == "T_FanRow");
+    CHECK_FALSE(body.records[0].keys.has_value());
+    CHECK(body.records[1].record == "T_FanOther");
+    CHECK(keysOf(body.records[1]) == std::vector<std::string>{"9"});
+    CHECK(queue.empty());
+    CHECK(queue.keyCount() == 0U);
+}
+
+TEST_CASE("updates_keys_merge_once_each", "[push][watch]") {
+    ChangeCoalescer queue;
+    queue.add(rowChange({"1", "2"}));
+    queue.add(rowChange({"2", "3"}));
+    CHECK(queue.keyCount() == 3U);
+    auto const body = queue.take();
+    REQUIRE(body.records.size() == 1U);
+    CHECK(keysOf(body.records.front()) == std::vector<std::string>{"1", "2", "3"});
+}
+
+TEST_CASE("flush_at_256_keys_without_waiting", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, kForever};
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}));
+
+    rig.fanOut(rowBurst(::morph::backend::detail::kCoalesceKeyLimit - 1), cid);
+    CHECK(rig.wire(cid).snapshot().empty());
+
+    rig.fanOut(rowBurst(1, ::morph::backend::detail::kCoalesceKeyLimit - 1), cid);
+    auto const bodies = rig.wire(cid).changes();
+    REQUIRE(bodies.size() == 1U);
+    CHECK(keysOf(bodies.front().records.front()) == numbered(::morph::backend::detail::kCoalesceKeyLimit));
+}
+
+TEST_CASE("burst_over_backlog_yields_one_resync", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, kForever};
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}));
+    rig.wire(cid).backlog = ::morph::backend::kEventBacklogHigh + 1;
+
+    // Past the key limit, so the queue is sent, and held back, at once.
+    rig.fanOut(rowBurst(300), cid);
+    CHECK(rig.wire(cid).snapshot().empty());
+
+    rig.wire(cid).backlog = 0;
+    rig.server->connectionDrained(cid);
+    rig.server->connectionDrained(cid);
+    rig.flush();
+    CHECK(rig.wire(cid).topics() == std::vector<std::string>{"resync"});
+}
+
+TEST_CASE("merged_keys_never_exceed_client_bound", "[push][watch]") {
+    std::vector<std::string> many;
+    for (std::size_t idx = 0; idx < ::morph::effects::kMaxChangeKeys; ++idx) {
+        many.push_back(std::to_string(idx));
+    }
+
+    SECTION("one body at the bound stays keyed") {
+        ChangeCoalescer queue;
+        queue.add(rowChange(many));
+        CHECK(queue.keyCount() == ::morph::effects::kMaxChangeKeys);
+        auto const body = queue.take();
+        REQUIRE(body.records.front().keys.has_value());
+        CHECK(body.records.front().keys->size() == ::morph::effects::kMaxChangeKeys);
+    }
+    SECTION("a merge past the bound becomes whole-type") {
+        ChangeCoalescer queue;
+        queue.add(rowChange({"first"}));
+        queue.add(rowChange(many));
+        CHECK(queue.keyCount() == 1U);
+        auto const body = queue.take();
+        REQUIRE(body.records.size() == 1U);
+        CHECK_FALSE(body.records.front().keys.has_value());
+
+        // What the client's reader accepts.
+        std::string payload;
+        REQUIRE_FALSE(glz::write_json(body, payload));
+        CHECK(::morph::wire::readChangesBody(payload).has_value());
+    }
+}
+
+TEST_CASE("instance_topics_deduplicated", "[push][watch]") {
+    ChangeCoalescer queue;
+    ::morph::effects::InstanceChange const keyed{.modelType = std::string{kFanModel}, .instance = 4, .primary = "k1"};
+    ::morph::effects::InstanceChange const other{.modelType = std::string{kFanModel}, .instance = 5, .primary = {}};
+    queue.add(::morph::effects::Changes{.records = {}, .instances = {keyed, other}});
+    queue.add(::morph::effects::Changes{.records = {}, .instances = {keyed}});
+    queue.add(::morph::wire::ChangesBody{
+        .records = {}, .instances = {{.modelType = std::string{kFanModel}, .primary = "k1", .instance = 4}}});
+    CHECK(queue.keyCount() == 2U);
+
+    auto const body = queue.take();
+    REQUIRE(body.instances.size() == 2U);
+    CHECK(body.instances[0].primary == "k1");
+    CHECK(body.instances[0].instance == 4U);
+    CHECK(body.instances[1].instance == 5U);
+}
+
+TEST_CASE("closed_connection_drops_its_queue", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, ::morph::backend::ServerConfig{}.coalesceWindow};
+    auto const closing = rig.connect();
+    auto const staying = rig.connect();
+    rig.watch(closing, records({"T_FanRow"}));
+    rig.watch(staying, records({"T_FanRow"}));
+
+    std::latch done{1};
+    rig.server->strand().post([&] {
+        rig.server->fanOut(rowChange({"1"}), staying, {});
+        rig.server->closeConnection(closing);
+        done.count_down();
+    });
+    done.wait();
+
+    // Both windows opened in the same task, the closed connection's first.
+    REQUIRE(::morph::testing::waitUntil([&] { return !rig.wire(staying).snapshot().empty(); }));
+    rig.flush();
+    CHECK(rig.wire(closing).snapshot().empty());
+    CHECK(rig.wire(staying).changes().size() == 1U);
+}
+
+TEST_CASE("resync_follows_queued_changes", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard, kForever};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, records({"T_FanRow"}), "carol");
+
+    rig.fanOut({rowChange({"1"})}, caller, "alice");
+    CHECK(rig.wire(watcher).snapshot().empty());
+
+    // This fan-out drops carol's watch: what was queued goes first, then the resync.
+    guard->expire("carol");
+    rig.fanOut({rowChange({"2"})}, caller, "alice");
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"changes", "resync"});
+    auto const bodies = rig.wire(watcher).changes();
+    REQUIRE(bodies.size() == 1U);
+    CHECK(keysOf(bodies.front().records.front()) == std::vector<std::string>{"1"});
+}
+
+TEST_CASE("resync_held_back_is_sent_once_on_drain", "[push][watch]") {
+    auto guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard, ::morph::backend::ServerConfig{}.coalesceWindow};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, records({"T_FanRow"}), "carol");
+    rig.wire(watcher).backlog = ::morph::backend::kEventBacklogHigh + 1;
+
+    guard->expire("carol");
+    rig.fanOut({rowChange({"1"})}, caller, "alice");
+    CHECK(rig.recordWatchers("T_FanRow").empty());
+    CHECK(rig.wire(watcher).snapshot().empty());
+
+    rig.wire(watcher).backlog = 0;
+    rig.server->connectionDrained(watcher);
+    rig.server->connectionDrained(watcher);
+    rig.flush();
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"resync"});
+}
+
+TEST_CASE("negative_coalesce_window_refused", "[push][watch]") {
+    ::morph::exec::ThreadPoolExecutor pool{1};
+    ::morph::backend::ServerConfig config;
+    config.coalesceWindow = std::chrono::milliseconds{-1};
+    CHECK_THROWS_AS(std::make_shared<RemoteServer>(pool, std::move(config)), std::invalid_argument);
 }
