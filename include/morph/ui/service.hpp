@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/logger.hpp"
 #include "../core/remote.hpp"
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
@@ -324,6 +325,7 @@ public:
         if (!loaded->view) {
             return refuse(entry.id, "the app document is added with addFile");
         }
+        logWarnings(*loaded);
         detail::DocumentActions const named{*loaded};
         Screen screen{.served = ServedScreen{.entry = std::move(entry),
                                              .hash = contentHash(text),
@@ -503,10 +505,19 @@ private:
         if (loaded->id != kAppFile) {
             return refuse(file.id, "the app document's id is `app`");
         }
+        logWarnings(*loaded);
         detail::DocumentActions const named{*loaded};
         _appActions = named.actions();
         _appModelTypes = named.modelTypes();
         return {};
+    }
+
+    /// @brief Logs what load-time validation found in @p document that does not refuse it.
+    /// @param document The loaded document.
+    static void logWarnings(Document const& document) {
+        for (LoadWarning const& warning : document.warnings) {
+            morph::log::logWarn(warning.message(document.id));
+        }
     }
 
     /// @brief A refusal of the registration of @p document.

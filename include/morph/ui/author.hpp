@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "../core/effects.hpp"
+#include "../core/logger.hpp"
 #include "../core/model_key.hpp"
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
@@ -4231,6 +4232,9 @@ public:
         }
         if (auto refusal = checkAccessibility(*loaded)) {
             return std::unexpected(std::move(*refusal));
+        }
+        for (LoadWarning const& warning : loaded->warnings) {
+            morph::log::logWarn(warning.message(loaded->id));
         }
         _facts = std::move(facts);
         _screens.push_back(std::make_unique<RegisteredScreen>(

@@ -23,6 +23,7 @@ Read this before changing what a document may say. The expression language insid
 - [Load-time rules](#load-time-rules)
 - [The catalog](#the-catalog)
 - [Refusals](#refusals)
+- [Warnings](#warnings)
 - [Design decisions](#design-decisions)
 - [Out of scope](#out-of-scope)
 
@@ -68,6 +69,7 @@ declare the app-only customization kinds.
 | `components` | `components` | Name to `Component` |
 | `customize` | `customize` | Name to `CustomizePoint` |
 | `view` | `view` | The root `DocNode`; required on a screen |
+| `warnings` | — | What validation found that does not refuse the document ([Warnings](#warnings)) |
 
 A key a client does not know is ignored, so additions within `ui/1` are compatible; a key whose
 name begins with `!` is must-understand, and an unknown one refuses the document wherever it
@@ -243,8 +245,16 @@ know the result's shape, and a patch that finds no list is reported by the inter
 record's wire name for the first two; it is absent when the action declared nothing, which makes the action a read.
 `records` lists the records the action's result holds as `{record, keyField?, paths}`, empty when it holds none. They
 are read from the registries where `CatalogFacts::action` records the action, so an invalid effects and records
-configuration (`EffectsRegistrationError`) fails at that call, at startup. No load-time rule reads them yet; they
-are what a client's watch is derived from.
+configuration (`EffectsRegistrationError`) fails at that call, at startup. They are what a client's watch is derived
+from, and the loader reads them for one refusal and three warnings:
+
+- **A query must read.** A query whose action declares effects, `none` included, is refused: a fetch then never
+  produces a change, so two clients cannot refetch each other through their queries. An `evaluate` query is exempt,
+  because an evaluation runs no handler.
+- **The warnings** are in [Warnings](#warnings).
+
+An action the catalog does not answer is refused before either is asked, so effects registered for an action id that
+no action registers are never seen by a document: the catalog describes registered actions only.
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
 an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
 an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's
@@ -258,6 +268,33 @@ view document whose `v-query` is the action (a `collection` node's), and `wizard
 `message()` prints `document <id> at <path>: <reason>`. A refusal from inside an expression points
 at the expression node. Text that is not JSON (`loadDocumentText`) is refused at the root, and so is text nested deeper than 64
 objects and arrays (`kMaxJsonDepth`), which is checked before the JSON parser runs.
+
+## Warnings
+
+`Document::warnings` holds the `LoadWarning{kind, path, text}` findings that do not refuse the document, in the order
+found; `message(documentId)` prints them as a refusal is printed. They need the catalog's `action` lookup, and a
+document loaded without it has none. A warning is given only where the declared effects certainly cover, or
+certainly miss, what the document declares.
+
+| Kind | When |
+|---|---|
+| `Redundant` | An `invalidates` entry, a `patch` or a `refreshOn` entry that the effects already cover (below). The path names the entry. |
+| `Uncovered` | A mutation whose action declares nothing, not even `none`, that has no `invalidates` or `patch`, no `refetch` anywhere in its `onSuccess`, and that no query of the document names in `refreshOn`. After it succeeds nothing on any screen updates. `effects::none` silences it for an action that changes nothing, such as one that opens or attaches. |
+| `WatchFeedback` | A `watch` declaration whose `source` is `any` (the default), whose `on` reads a query's value (`{"query": q}` or a `ref` to it, directly or through a `let`), and whose `do` runs (`run`, `upload`, `signIn`, at any depth) a mutation whose action declares an effect other than `none`. Another client's change refetches the query, the watch runs the mutation, and its change reaches the other client. `"source": "user"` silences it. |
+
+**What covers a query.** A query holds exactly the records of its action (`records`); an `evaluate` query holds none.
+
+- `updates R` or `changes R` covers a query that holds `R`.
+- `changesInstance` covers a query that reads through the same model alias declaration as the mutation, since that
+  is the instance the action ran on. Two aliases of one model type are two instances, so it covers nothing through
+  another alias.
+- A `patch` is covered only by `updates R` of a record the patched query holds: the reply then patches the rows
+  itself. `changes R` refetches instead, which a patch exists to avoid.
+- A `refreshOn` entry names an action run through any instance, so it is covered by the action's `updates` and
+  `changes` alone, never by `changesInstance`.
+
+`UiRegistry::addScreen`, `UiRegistry::addFile` for the app document, and `author::ScreenRegistry::add` log each warning at `warn`
+(`morph::log`) when they register a document; the document registers as it would without them.
 
 ## Design decisions
 
