@@ -135,6 +135,19 @@ canonical body is the body's JSON with record fields in name order.
     - A `latest` run whose reply is discarded applies its effects as marks only: its `updates` act as
       `changes`, because its values are older than the reply already applied. It runs no `refreshOn`.
     - One reply's effects are applied in one reactive batch.
+- **Server events** reach the cache through `Session::deliverEvent`, which the source wires to its
+  backend's `setEventHandler`. Each event is applied in one reactive batch, and other clients' changes
+  only mark, so each receiver refetches through its own authorised read.
+    - A `changes` event's record change with keys marks each entry holding the record whose value has
+      a row with one of the keys (by the key field, at the record's paths). An entry still waiting
+      for its first value is marked too, because it may come to hold the key. A record change without
+      keys, or on a keyless record, marks every entry holding the record.
+    - An instance change marks every entry read through that instance: for a primary key, the keyed
+      shared alias with that key (`shared:<key>`); without one, the connection's private instances of
+      that model type.
+    - A `resync` marks every entry but an `evaluate` one. Another topic, or a payload that cannot be
+      read, is ignored.
+    - A marked entry that no query uses is only marked, and fetches when a query mounts on it.
 - **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

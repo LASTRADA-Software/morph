@@ -210,3 +210,92 @@ TEST_CASE("changes_instance_refetches_only_that_instance", "[push][cache]") {
     REQUIRE(h.dispatcher.count("Push_Rows") == 3);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Push_Rows")).channel == resetChannel);
 }
+
+namespace {
+
+// A local backend's event seam, wired to the session as a remote source wires its transport.
+struct EventSeam {
+    explicit EventSeam(Harness& h) : backend{h.owner} {
+        backend.setEventHandler([&h](morph::wire::EventBody const& event) { h.session.deliverEvent(event); },
+                                &h.owner);
+    }
+    void changes(Harness& h, std::string payload) {
+        backend.deliverEvent({.topic = std::string{morph::wire::kChangesTopic}, .payload = {std::move(payload)}});
+        h.settle();
+    }
+    morph::backend::LocalBackend backend;
+};
+
+}  // namespace
+
+TEST_CASE("changes_event_via_local_seam_refetches", "[push][cache]") {
+    Harness h;
+    EventSeam seam{h};
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    seam.changes(h, R"({"records":[{"record":"T_Row","keys":["b"]}]})");
+    REQUIRE(h.dispatcher.count("Push_ListRows") == 2);
+    h.reply(h.dispatcher.last("Push_ListRows"), R"([{"code":"a","name":"x"},{"code":"b","name":"other"}])");
+    CHECK(rowTexts(h) == std::vector<std::string>{"a:x", "b:other"});
+}
+
+TEST_CASE("event_keys_filter_entries_without_them", "[push][cache]") {
+    Harness h;
+    EventSeam seam{h};
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    seam.changes(h, R"({"records":[{"record":"T_Row","keys":["zzz", 7]}]})");
+    CHECK(h.dispatcher.count("Push_ListRows") == 1);
+    seam.changes(h, R"({"records":[{"record":"T_Other"}]})");
+    CHECK(h.dispatcher.count("Push_ListRows") == 1);
+    // Without keys the whole type changed, so every entry holding it refetches.
+    seam.changes(h, R"({"records":[{"record":"T_Row"}]})");
+    CHECK(h.dispatcher.count("Push_ListRows") == 2);
+}
+
+TEST_CASE("resync_marks_all_watched", "[push][cache]") {
+    Harness h;
+    EventSeam seam{h};
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "two",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "queries": { "rows": { "model": "sample", "action": "Push_ListRows" },
+                   "results": { "model": "sample", "action": "Lims_ListResults" } },
+      "view": { "kind": "text", "text": { "fn": "format", "args": [ "{0} {1}", { "query": "rows" }, { "query": "results" } ] } } })");
+    h.reply(h.dispatcher.last("Push_ListRows"), "[]");
+    h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+    seam.backend.deliverEvent({.topic = std::string{morph::wire::kResyncTopic}, .payload = {"null"}});
+    h.settle();
+    CHECK(h.dispatcher.count("Push_ListRows") == 2);
+    CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+}
+
+TEST_CASE("event_on_unmounted_entry_marks_only", "[push][cache]") {
+    Harness h;
+    EventSeam seam{h};
+    auto screen = h.mount(kRows);
+    REQUIRE(h.dispatcher.count("Push_ListRows") == 1);
+    screen.reset();
+    h.settle();
+    // The entry is kept, unused, with its fetch in flight when the change arrives.
+    seam.changes(h, R"({"records":[{"record":"T_Row"}]})");
+    h.reply(0, kTwoRows);
+    CHECK(h.dispatcher.count("Push_ListRows") == 1);
+    auto again = h.mount(kRows);
+    CHECK(h.dispatcher.count("Push_ListRows") == 2);
+}
+
+TEST_CASE("instance_event_refetches_reads_of_that_instance", "[push][cache]") {
+    Harness h;
+    EventSeam seam{h};
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "instance",
+      "models": { "sample": { "type": "Lims_SampleModel", "instance": "private" } },
+      "queries": { "info": { "model": "sample", "action": "Push_Rows" } },
+      "view": { "kind": "text", "text": { "fn": "format", "args": [ "{0}", { "query": "info" } ] } } })");
+    h.reply(0, "[]");
+    seam.changes(h, R"({"instances":[{"modelType":"Lims_ClientModel","primary":""}]})");
+    CHECK(h.dispatcher.count("Push_Rows") == 1);
+    seam.changes(h, R"({"instances":[{"modelType":"Lims_SampleModel","primary":""}]})");
+    CHECK(h.dispatcher.count("Push_Rows") == 2);
+}

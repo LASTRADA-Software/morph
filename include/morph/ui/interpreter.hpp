@@ -27,6 +27,7 @@
 #include "../core/backend.hpp"
 #include "../core/bridge.hpp"
 #include "../core/completion.hpp"
+#include "../core/wire.hpp"
 #include "../forms/engine/collection.hpp"
 #include "../forms/engine/collection_view.hpp"
 #include "../forms/engine/field_model.hpp"
@@ -1130,6 +1131,23 @@ public:
     /// @param instanceToken The instance token of the alias the call went through.
     void actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
                          std::string const& instanceToken);
+
+    /// @brief Applies a server event to the cache (spec 8 §9).
+    ///
+    /// A `changes` event marks the entries it names stale, and a `resync` marks every entry but an `evaluate` one;
+    /// each marked entry refetches through a mounted query that uses it, and one no query uses refetches when a
+    /// query mounts on it. An event of another topic, or a payload that cannot be read, is ignored.
+    /// @param event The event.
+    void deliverEvent(wire::EventBody const& event);
+
+    /// @brief Applies a `changes` event's payload to the cache, in one reactive batch.
+    ///
+    /// A record change with keys marks each entry holding the record whose value has a row with one of the keys,
+    /// and an entry holding it keyless; a record change without keys marks every entry holding the record. An
+    /// instance change marks every entry read through that instance: the keyed shared one its primary key names,
+    /// or, with no primary key, the connection's own private ones of that model type.
+    /// @param changes The payload.
+    void applyChanges(wire::ChangesBody const& changes);
 
     /// @brief Marks an entry stale. While its fetch is in flight, the entry also refetches once that fetch settles,
     ///        because the fetch may have read before the change.
@@ -2781,6 +2799,99 @@ inline void Session::applyReplyEffects(std::string const& typeId, std::string co
     for (detail::CacheEntry* const entry : marked) {
         refetchMounted(*entry);
     }
+}
+
+inline void Session::deliverEvent(wire::EventBody const& event) {
+    if (event.topic == wire::kResyncTopic) {
+        _runtime->batch([this] {
+            std::vector<detail::CacheEntry*> marked;
+            for (auto const& [key, entry] : _entries) {
+                static_cast<void>(key);
+                if (!entry->evaluate) {
+                    markStale(*entry);
+                    marked.push_back(entry.get());
+                }
+            }
+            for (detail::CacheEntry* const entry : marked) {
+                refetchMounted(*entry);
+            }
+        });
+        return;
+    }
+    if (event.topic != wire::kChangesTopic) {
+        return;
+    }
+    if (auto changes = wire::readChangesBody(event.payload.str)) {
+        applyChanges(*changes);
+    }
+}
+
+inline void Session::applyChanges(wire::ChangesBody const& changes) {
+    // A key's canonical text, so a key the server wrote is compared with the rows' own.
+    auto const keyText = [](glz::raw_json const& key) -> std::optional<std::string> {
+        auto json = parseJson(key.str);
+        auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+        return value ? std::optional<std::string>{detail::canonicalJson(*value)} : std::nullopt;
+    };
+    _runtime->batch([&] {
+        std::vector<detail::CacheEntry*> marked;
+        auto const mark = [&](detail::CacheEntry& entry) {
+            if (std::ranges::find(marked, &entry) == marked.end()) {
+                markStale(entry);
+                marked.push_back(&entry);
+            }
+        };
+        for (effects::RecordChange const& change : changes.records) {
+            std::set<std::string, std::less<>> keys;
+            if (change.keys) {
+                for (glz::raw_json const& key : *change.keys) {
+                    if (auto text = keyText(key)) {
+                        keys.insert(std::move(*text));
+                    }
+                }
+            }
+            for (auto const& [name, entry] : _entries) {
+                static_cast<void>(name);
+                ActionRecordInfo const* const held = entry->holding(change.record);
+                if (held == nullptr) {
+                    continue;
+                }
+                if (!change.keys || !held->keyField) {
+                    mark(*entry);
+                    continue;
+                }
+                std::vector<Value const*> rows;
+                for (std::string const& path : held->paths) {
+                    std::vector<std::string> const members = detail::pathMembers(path);
+                    detail::keyedRowsAt(entry->confirmed, members, *held->keyField, rows);
+                }
+                bool const holdsKey = std::ranges::any_of(rows, [&](Value const* row) {
+                    return keys.contains(detail::canonicalJson(*row->field(*held->keyField)));
+                });
+                // An entry still waiting for its first value may come to hold the key.
+                if (holdsKey || !entry->hasValue.peek()) {
+                    mark(*entry);
+                }
+            }
+        }
+        for (wire::InstanceTopic const& instance : changes.instances) {
+            std::string const shared = "shared:" + instance.primary;
+            for (auto const& [name, entry] : _entries) {
+                static_cast<void>(name);
+                if (entry->evaluate || entry->typeId != instance.modelType) {
+                    continue;
+                }
+                bool const same = instance.primary.empty() ? !entry->instanceToken.starts_with("shared")
+                                                           : entry->instanceToken == shared;
+                if (same) {
+                    mark(*entry);
+                }
+            }
+        }
+        for (detail::CacheEntry* const entry : marked) {
+            refetchMounted(*entry);
+        }
+    });
 }
 
 inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply,
