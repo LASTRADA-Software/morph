@@ -280,7 +280,48 @@ TEST_CASE("duplicate_record_name_throws", "[push][records]") {
     auto const byName = refusal({record("V_Row", typeid(VRow)), record("V_Row", typeid(VOther))}, {}, {});
     REQUIRE_THAT(byName, Catch::Matchers::ContainsSubstring("record name `V_Row` is registered for two types"));
     auto const byType = refusal({record("V_Row", typeid(VRow)), record("V_Row2", typeid(VRow))}, {}, {});
-    REQUIRE_THAT(byType, Catch::Matchers::ContainsSubstring("registered as a record twice (`V_Row` and `V_Row2`)"));
+    REQUIRE_THAT(byType, Catch::Matchers::ContainsSubstring("registered under two record names (`V_Row` and `V_Row2`)"));
+}
+
+TEST_CASE("identical_record_registrations_are_one", "[push][records]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_List", result({{typeid(VList), ""}, {typeid(VRow), "rows"}}));
+    auto const resolved = morph::effects::detail::resolveForTesting(
+        {record("V_Row", typeid(VRow)), record("V_Row", typeid(VRow))}, std::move(slots), {});
+    REQUIRE(resolved.records.size() == 1);
+    REQUIRE(resolved.recordNamed("V_Row") != nullptr);
+    REQUIRE(resolved.recordsOf("A_List") == std::vector<morph::effects::ActionRecord>{{"V_Row", "id", {"rows"}}});
+}
+
+TEST_CASE("record_same_type_different_options_throws", "[push][records]") {
+    auto const message = refusal({record("V_Row", typeid(VRow)), record("V_Row", typeid(VRow), "code")}, {}, {});
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("record `V_Row` is registered twice with different options"));
+}
+
+TEST_CASE("keyed_derived_record_throws", "[push][records]") {
+    auto const message =
+        refusal({record("V_Row", typeid(VRow)), record("V_Header", typeid(VHeader), "id", {typeid(VRow)})}, {}, {});
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("record `V_Header` is derived from other records but has a key"));
+}
+
+TEST_CASE("effect_none_with_others_throws", "[push][records]") {
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Mixed",
+                                       {changesOf(typeid(VRow)), DeclaredEffect{.kind = Kind::None, .record = {}}});
+    auto const message = refusal({record("V_Row", typeid(VRow))}, {}, std::move(declared));
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("action `A_Mixed` declares none together with other effects"));
+}
+
+TEST_CASE("repeated_effect_in_declaration_is_one", "[push][records]") {
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_List", {updatesOf(typeid(VRow)), updatesOf(typeid(VRow))});
+    morph::effects::detail::addEffects(declared, "A_List", {updatesOf(typeid(VRow))});
+    REQUIRE(declared.at("A_List").size() == 1);
+    ActionResultSlotMap slots;
+    slots.emplace("A_List", result({{typeid(VRow), ""}}));
+    auto const resolved = morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, std::move(slots),
+                                                                    std::move(declared));
+    REQUIRE(resolved.effectsOf("A_List") == std::vector<morph::effects::Effect>{{Kind::Updates, "V_Row"}});
 }
 
 TEST_CASE("every_problem_is_listed", "[push][records]") {

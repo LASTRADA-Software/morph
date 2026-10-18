@@ -177,8 +177,9 @@ struct EffectOf<none> {
 
 /// @brief Adds one declaration for an action, unless an equal one is already there.
 ///
-/// Two declarations are equal when they hold the same effects in any order, so
-/// one repeated in several translation units is stored once.
+/// A declaration is a set: a repeated effect is stored once, and two
+/// declarations holding the same effects in any order are equal, so one
+/// repeated in several translation units is stored once.
 /// @param map The registry to add to.
 /// @param actionId The action's id.
 /// @param declared The effects.
@@ -187,12 +188,18 @@ inline void addEffects(EffectsMap& map, std::string_view actionId, std::vector<D
     if (entry == map.end()) {
         entry = map.emplace(std::string{actionId}, std::vector<std::vector<DeclaredEffect>>{}).first;
     }
+    std::vector<DeclaredEffect> distinct;
+    for (auto& effect : declared) {
+        if (std::ranges::find(distinct, effect) == distinct.end()) {
+            distinct.push_back(std::move(effect));
+        }
+    }
     auto& declarations = entry->second;
     bool const known = std::ranges::any_of(declarations, [&](std::vector<DeclaredEffect> const& existing) {
-        return std::ranges::is_permutation(existing, declared);
+        return std::ranges::is_permutation(existing, distinct);
     });
     if (!known) {
-        declarations.push_back(std::move(declared));
+        declarations.push_back(std::move(distinct));
     }
 }
 
@@ -223,7 +230,7 @@ inline bool registerEffectsOnce() noexcept {
 
 /// @brief The matched and validated registries: what every read is answered from.
 struct Resolved {
-    /// @brief The records, as registered.
+    /// @brief The records, one entry per registered type, in registration order.
     std::vector<record::RecordInfo> records;
     /// @brief Each action's effects, by action id; actions that declared none are absent.
     std::map<std::string, std::vector<Effect>, std::less<>> effects;
@@ -282,8 +289,18 @@ struct Resolved {
     return path.size() > prefix.size() && path.starts_with(prefix) && path[prefix.size()] == '.';
 }
 
+/// @brief Whether two registrations of one record type declared the same record.
+/// @param lhs One registration.
+/// @param rhs The other.
+/// @return True when name, key, sources and privacy all match.
+[[nodiscard]] inline bool sameRegistration(record::RecordInfo const& lhs, record::RecordInfo const& rhs) {
+    return lhs.name == rhs.name && lhs.type == rhs.type && lhs.keyField == rhs.keyField &&
+           lhs.derivedFrom == rhs.derivedFrom && lhs.privateKeys == rhs.privateKeys &&
+           lhs.keyIsString == rhs.keyIsString;
+}
+
 /// @brief Appends a problem for every `derivedFrom` cycle among the records.
-/// @param records The records, as registered.
+/// @param records The records, one registration per type.
 /// @param indexOf Each record type's first registration.
 /// @param problems Where to append.
 inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
@@ -315,7 +332,8 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         path.pop_back();
         marks[index] = Mark::Done;
     };
-    for (auto const& [type, index] : indexOf) {
+    // Registration order, so the cycle a message names does not depend on how `type_index` sorts.
+    for (std::size_t index = 0; index < records.size(); ++index) {
         if (marks[index] == Mark::Unvisited) {
             visit(visit, index);
         }
@@ -334,19 +352,37 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
                                       std::vector<std::string> const& slotConflicts) {
     std::vector<std::string> problems;
 
+    // An identical registration, as a record registered in a header gives once per translation unit, is
+    // one registration. Any other second registration of a type or a name is a conflict.
+    std::vector<record::RecordInfo> distinct;
+    for (auto& info : records) {
+        auto const sameType = std::ranges::find(distinct, info.type, &record::RecordInfo::type);
+        if (sameType != distinct.end()) {
+            if (sameType->name != info.name) {
+                problems.push_back(std::string{"type "} + info.type.name() + " is registered under two record names (`" +
+                                   sameType->name + "` and `" + info.name + "`)");
+            } else if (!sameRegistration(*sameType, info)) {
+                problems.push_back("record `" + info.name + "` is registered twice with different options");
+            }
+            continue;
+        }
+        auto const sameName = std::ranges::find(distinct, info.name, &record::RecordInfo::name);
+        if (sameName != distinct.end()) {
+            problems.push_back("record name `" + info.name + "` is registered for two types (" +
+                               sameName->type.name() + " and " + info.type.name() + ")");
+            continue;
+        }
+        distinct.push_back(std::move(info));
+    }
+    records = std::move(distinct);
+
     std::map<std::type_index, std::size_t> indexOf;
-    std::map<std::string_view, std::size_t> nameIndex;
     for (std::size_t index = 0; index < records.size(); ++index) {
         auto const& info = records[index];
-        if (auto const [held, added] = indexOf.emplace(info.type, index); !added) {
-            problems.push_back(std::string{"type "} + info.type.name() + " is registered as a record twice (`" +
-                               records[held->second].name + "` and `" + info.name + "`)");
-        }
-        if (auto const [held, added] = nameIndex.emplace(info.name, index); !added) {
-            if (records[held->second].type != info.type) {
-                problems.push_back("record name `" + info.name + "` is registered for two types (" +
-                                   records[held->second].type.name() + " and " + info.type.name() + ")");
-            }
+        indexOf.emplace(info.type, index);
+        if (info.keyField && !info.derivedFrom.empty()) {
+            problems.push_back("record `" + info.name +
+                               "` is derived from other records but has a key; a derived record is keyless");
         }
     }
     findDerivationCycles(records, indexOf, problems);
@@ -396,8 +432,15 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
             problems.push_back("action `" + actionId + "` declares different effects in two registrations");
             continue;
         }
+        auto const& declaration = declarations.front();
+        if (declaration.size() > 1 && std::ranges::any_of(declaration, [](DeclaredEffect const& effect) {
+                return effect.kind == Kind::None;
+            })) {
+            problems.push_back("action `" + actionId + "` declares none together with other effects");
+            continue;
+        }
         std::vector<Effect> effects;
-        for (auto const& effect : declarations.front()) {
+        for (auto const& effect : declaration) {
             if (!effect.record) {
                 effects.push_back(Effect{.kind = effect.kind, .record = {}});
                 continue;

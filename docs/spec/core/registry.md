@@ -1641,6 +1641,8 @@ read through `detail::recordRegistry()`.
 - The registry is raw: duplicate names or types, `derivedFrom` cycles and keyless
   records that an effect names are not checked at registration. They are
   checked on the first read through `morph::effects` (see [Effects](#effects)).
+  There, an identical registration repeated is one registration, so a record
+  may be registered in a model header.
 - Record types need external linkage: glaze reflects member names through an
   external-linkage object, so a record in an anonymous namespace does not compile.
 
@@ -1758,17 +1760,32 @@ for every action, which records its result holds.
   `recordsOf` names the record.
 - **Validation.** Resolution refuses, all problems at once:
   - an action id registered by two action types (`actionResultConflicts()`);
-  - an action with two different effects declarations;
+  - an action with two different effects declarations. A declaration is a
+    set, so a repeated effect counts once and order does not matter;
+  - `none` together with any other effect in one declaration;
   - `updates<R>` or `changes<R>` where `R` is not a registered record;
   - `updates<R>` where `R` has no key, or where the action's `recordsOf` does
     not name `R`;
-  - a type registered as a record twice, or one name registered for two types;
+  - conflicting record registrations: one type under two names, one name on
+    two types, or one type registered twice with different options (key,
+    sources, `privateKeys`). An identical registration repeated is one
+    registration, as `registerActionOnce` treats a repeated action, so
+    `BRIDGE_REGISTER_RECORD` may sit in a model header. `BRIDGE_REGISTER_EFFECTS`
+    may not: it is also idempotent, but in a header it runs once per
+    translation unit for nothing;
+  - a keyed record with `derivedFrom`: a key-level change to a source does not
+    say which derived rows moved, so a derived record is keyless;
   - a `derivedFrom` cycle among registered records, a record derived from
-    itself included. A source that is not a registered record is ignored.
+    itself included, found in registration order so the message is the same on
+    every platform. A source that is not a registered record is ignored.
 - **Failure.** A refusal throws `morph::model::EffectsRegistrationError`, a
   `std::logic_error` whose `what()` lists every problem, one per line, each
   naming the action or record. The error is kept and the same error is thrown
   by every later read, so no read ever sees a partly valid registry.
+- **Registrations after the first read are not seen.** Resolution runs once;
+  a record, action or effects registration made after it (which a debug build
+  already asserts against, since the read closed the latch) is not in any
+  later answer.
 - **Reads.** `effectsOf(id)` is `nullopt` for an action that declared nothing:
   it reads. `effectsOf` gives each record as its wire name, empty for
   `changesInstance` and `none`. `recordNamed(name)` points into the resolved
