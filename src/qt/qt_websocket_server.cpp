@@ -9,14 +9,47 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <morph/core/connection_writer.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace morph::qt {
+
+namespace {
+
+/// @brief Bytes a server-side `QWebSocket` puts on the socket for a text
+///        message whose UTF-8 payload is @p payload bytes.
+///
+/// `QWebSocket` splits a message into frames of at most @p maxFrame payload
+/// bytes, each with its own header; a server's frames are unmasked, so a
+/// header is 2 bytes plus a 2- or 8-byte extended length.
+/// @param payload  The message's UTF-8 length.
+/// @param maxFrame The socket's `outgoingFrameSize()`.
+/// @return The framed size.
+qint64 framedSize(qint64 payload, quint64 maxFrame) {
+    auto const header = [](qint64 size) -> qint64 {
+        if (size < 126) {
+            return 2;
+        }
+        return size <= 0xFFFF ? 4 : 10;
+    };
+    auto const cap = static_cast<qint64>(std::max<quint64>(maxFrame, 1));
+    qint64 const whole = payload / cap;
+    qint64 const rest = payload % cap;
+    qint64 total = payload + (whole * header(cap));
+    if (rest != 0 || whole == 0) {
+        total += header(rest);
+    }
+    return total;
+}
+
+}  // namespace
 
 QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, quint16 port,
 #ifndef QT_NO_SSL
@@ -80,6 +113,7 @@ void QtWebSocketServer::close() {
             state.handshakeTimer->stop();
             state.handshakeTimer->deleteLater();
         }
+        forgetConnection(state);
         socket->abort();
         socket->deleteLater();
     }
@@ -182,6 +216,7 @@ void QtWebSocketServer::onNewConnection() {
     }
     connect(socket, &QWebSocket::textMessageReceived, this, &QtWebSocketServer::onTextMessage);
     connect(socket, &QWebSocket::disconnected, this, &QtWebSocketServer::onDisconnected);
+    connect(socket, &QWebSocket::bytesWritten, this, &QtWebSocketServer::onBytesWritten);
 
     ClientState state;
     state.socket = socket;
@@ -212,7 +247,176 @@ void QtWebSocketServer::onNewConnection() {
         state.handshakeTimer = timer;
     }
 
-    _clients.emplace(socket, state);
+    // The handshake response may still be on the socket; its bytes are
+    // written ahead of any frame, so they start the count below zero.
+    state.written = -socket->bytesToWrite();
+    if (_cfg.sendTimeout.count() > 0) {
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — QObject parent owns this
+        auto* timer = new QTimer(this);
+        timer->setSingleShot(true);
+        connect(timer, &QTimer::timeout, this, [this, socket] { onSendTimer(socket); });
+        state.sendTimer = timer;
+    }
+
+    auto const cid = state.cid;
+    auto const backlog = state.backlog;
+    _clients.emplace(socket, std::move(state));
+
+    // QWebSocketServer hands over a socket whose upgrade is already complete,
+    // so a frame written from here on cannot precede the handshake response.
+    QPointer<QtWebSocketServer> const self{this};
+    QPointer<QWebSocket> const weakSocket{socket};
+    _server.setConnectionWriter(
+        cid, ::morph::backend::ConnectionWriter{
+                 .write =
+                     [self, weakSocket, backlog](std::string envelope) {
+                         if (!queueEnvelope(self, weakSocket, backlog, std::move(envelope))) {
+                             throw std::runtime_error("no Qt application to write the connection from");
+                         }
+                     },
+                 .backlog = [backlog] { return backlog->load(); }});
+}
+
+bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server, QPointer<QWebSocket> const& socket,
+                                      std::shared_ptr<std::atomic<std::size_t>> const& backlog,
+                                      std::string envelope) {
+    auto* app = QCoreApplication::instance();
+    if (app == nullptr) {
+        return false;
+    }
+    std::size_t const counted = envelope.size();
+    // Before the queueing, so a backlog read on the server strand already
+    // covers a frame still on its way to the Qt thread.
+    backlog->fetch_add(counted);
+    bool const queued = QMetaObject::invokeMethod(
+        app,
+        [server, socket, backlog, counted, envelope = std::move(envelope)]() {
+            if (server && socket) {
+                auto iter = server->_clients.find(socket.data());
+                if (iter != server->_clients.end()) {
+                    server->writeCounted(socket.data(), iter->second, envelope);
+                    return;
+                }
+            }
+            backlog->fetch_sub(counted);
+        },
+        Qt::QueuedConnection);
+    if (!queued) {
+        backlog->fetch_sub(counted);
+    }
+    return queued;
+}
+
+void QtWebSocketServer::writeNow(QWebSocket* socket, ClientState& state, std::string const& envelope) {
+    state.backlog->fetch_add(envelope.size());
+    writeCounted(socket, state, envelope);
+}
+
+void QtWebSocketServer::writeCounted(QWebSocket* socket, ClientState& state, std::string const& envelope) {
+    qint64 const payload = socket->sendTextMessage(QString::fromStdString(envelope));
+    if (payload <= 0) {
+        // Not connected any more: nothing reached the socket.
+        releaseBacklog(state, envelope.size());
+        return;
+    }
+    // The frame ends where the socket's written count will stand once its
+    // last byte is out: after the frame ahead of it, or after whatever the
+    // socket has written so far. `bytesWritten` reports framed bytes, so the
+    // position is framed too; only the envelope's size is counted.
+    qint64 const base = state.unwritten.empty() ? state.written : state.unwritten.back().end;
+    state.unwritten.push_back(UnwrittenFrame{.end = base + framedSize(payload, socket->outgoingFrameSize()),
+                                             .counted = envelope.size(),
+                                             .queuedAt = std::chrono::steady_clock::now()});
+    if (state.unwritten.size() == 1) {
+        armSendTimer(state);
+    }
+}
+
+void QtWebSocketServer::releaseBacklog(ClientState const& state, std::size_t bytes) {
+    if (bytes == 0) {
+        return;
+    }
+    // Judged from the value this subtraction replaced, so of several releases
+    // that pass the bound together exactly one reports it. A second report,
+    // after other threads lift the count again, is harmless: the server sends
+    // nothing when no resync is owed.
+    std::size_t const before = state.backlog->fetch_sub(bytes);
+    bool const crossed =
+        before >= ::morph::backend::kEventBacklogLow && before - bytes < ::morph::backend::kEventBacklogLow;
+    if (crossed && state.socket != nullptr && state.socket->state() == QAbstractSocket::ConnectedState) {
+        _server.connectionDrained(state.cid);
+    }
+}
+
+void QtWebSocketServer::onBytesWritten(qint64 bytes) {
+    auto* socket = qobject_cast<QWebSocket*>(sender());
+    if (socket == nullptr) {
+        return;
+    }
+    auto iter = _clients.find(socket);
+    if (iter == _clients.end()) {
+        return;
+    }
+    ClientState& state = iter->second;
+    state.written += bytes;
+    // An empty socket buffer means every frame handed to it is out, whatever
+    // the positions say: a frame whose framed size was misjudged is still
+    // released, rather than holding its bytes and tripping `sendTimeout`.
+    bool const allWritten = socket->bytesToWrite() == 0;
+    bool released = false;
+    while (!state.unwritten.empty() && (allWritten || state.unwritten.front().end <= state.written)) {
+        std::size_t const counted = state.unwritten.front().counted;
+        state.unwritten.pop_front();
+        releaseBacklog(state, counted);
+        released = true;
+    }
+    if (released) {
+        armSendTimer(state);
+    }
+}
+
+void QtWebSocketServer::armSendTimer(ClientState& state) const {
+    if (state.sendTimer == nullptr) {
+        return;
+    }
+    if (state.unwritten.empty()) {
+        state.sendTimer->stop();
+        return;
+    }
+    auto const due = state.unwritten.front().queuedAt + _cfg.sendTimeout;
+    auto const remaining = std::chrono::ceil<std::chrono::milliseconds>(due - std::chrono::steady_clock::now());
+    state.sendTimer->start(std::max(std::chrono::milliseconds{0}, remaining));
+}
+
+void QtWebSocketServer::onSendTimer(QWebSocket* socket) {
+    auto iter = _clients.find(socket);
+    if (iter == _clients.end() || iter->second.unwritten.empty()) {
+        return;
+    }
+    ClientState& state = iter->second;
+    if (std::chrono::steady_clock::now() - state.unwritten.front().queuedAt < _cfg.sendTimeout) {
+        armSendTimer(state);
+        return;
+    }
+    ::morph::log::logWarn("[QtWebSocketServer] connection {} closed: send timeout, {} bytes unwritten after {} ms",
+                          state.cid, state.backlog->load(), _cfg.sendTimeout.count());
+    // An abort, not a close: a close frame would queue behind what the peer
+    // is not reading. It may disconnect synchronously, erasing `state`.
+    socket->abort();
+}
+
+void QtWebSocketServer::forgetConnection(ClientState& state) {
+    if (state.sendTimer != nullptr) {
+        state.sendTimer->stop();
+        state.sendTimer->deleteLater();
+        state.sendTimer = nullptr;
+    }
+    std::size_t dropped = 0;
+    for (auto const& frame : state.unwritten) {
+        dropped += frame.counted;
+    }
+    state.unwritten.clear();
+    state.backlog->fetch_sub(dropped);
 }
 
 bool QtWebSocketServer::consumeToken(ClientState& state) const {
@@ -264,8 +468,8 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     };
 
     if (std::cmp_greater(utf8.size(), _cfg.maxMessageBytes)) {
-        socket->sendTextMessage(QString::fromStdString(
-            ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", peekedCallId()))));
+        writeNow(socket, state,
+                 ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", peekedCallId())));
         return;
     }
 
@@ -279,23 +483,18 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         // the same reply-without-full-decode pattern the maxMessageBytes
         // branch above uses. The connection stays open: rate limiting throttles
         // a client, it does not evict one.
-        socket->sendTextMessage(
-            QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
+        writeNow(socket, state, ::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId())));
         return;
     }
 
+    // A reply counts toward the connection's backlog like an event, and is
+    // never held back.
+    QPointer<QtWebSocketServer> const self{this};
     QPointer<QWebSocket> const weakSocket{socket};
     _server.handle(
         message.toStdString(),
-        [weakSocket](const std::string& reply) {
-            QMetaObject::invokeMethod(
-                QCoreApplication::instance(),
-                [weakSocket, reply]() {
-                    if (weakSocket) {
-                        weakSocket->sendTextMessage(QString::fromStdString(reply));
-                    }
-                },
-                Qt::QueuedConnection);
+        [self, weakSocket, backlog = state.backlog](const std::string& reply) {
+            static_cast<void>(queueEnvelope(self, weakSocket, backlog, reply));
         },
         state.cid);
 }
@@ -319,6 +518,7 @@ void QtWebSocketServer::onDisconnected() {
             iter->second.handshakeTimer->stop();
             iter->second.handshakeTimer->deleteLater();
         }
+        forgetConnection(iter->second);
         _clients.erase(iter);
         socket->deleteLater();
     }

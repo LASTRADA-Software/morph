@@ -610,8 +610,13 @@ because it needs no Qt gets none of it.
   bounds connection count (`maxConnections`), per-frame size (`maxMessageBytes`,
   defaulting to the wire-layer `kMaxEnvelopeBytes` cap), per-connection message rate
   (`messagesPerSecond`, token bucket), and handshake/idle time
-  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled, so an
-  unconfigured server behaves exactly as before. See
+  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled.
+- **A peer that stops reading is closed.** `QtWebSocketServerConfig::sendTimeout`
+  (default 30 s, as `morph::net`'s) aborts a connection whose oldest frame
+  handed to the socket is still unwritten after it, so a stalled reader cannot
+  hold replies and events on the server indefinitely. Each connection's
+  backlog — encoded envelopes handed to the socket and not yet written — is
+  what `RemoteServer::post` reads to hold events back from a slow reader. See
   [backend.md](core/backend.md#qtwebsocketserver--server-side-websocket-transport).
 
 ### The Qt-free reference transport (`morph::net`)
@@ -727,9 +732,9 @@ responsibility:
   `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
   (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
   `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out
-  **on the Qt transport**. Both default to unbounded/off, so **installing
-  neither changes anything** — a deployer exposing `RemoteServer` publicly
-  should configure both. On `morph::net` only the `LimitPolicy` half exists:
+  **on the Qt transport**. Both default to unbounded/off — save the Qt
+  transport's `sendTimeout` (30 s), which closes a peer that stops reading — so
+  a deployer exposing `RemoteServer` publicly should configure both. On `morph::net` only the `LimitPolicy` half exists:
   `SocketServerConfig` has no connection, size, rate or timeout limits at all
   (above). See
   [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
@@ -821,7 +826,8 @@ contrast the "Transport security" section above describes.
 strand result and `TimeoutError` surfacing through `SimulatedRemoteBackend`);
 `tests/qt/test_qt_websocket.cpp` covers `QtWebSocketServerConfig`
 (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
-`handshakeTimeout`/`idleTimeout`) and their composition with `LimitPolicy`.
+`handshakeTimeout`/`idleTimeout`, `sendTimeout`) and their composition with
+`LimitPolicy`.
 
 `examples/vetted_hmac/test_libsodium_adapter.cpp` and
 `test_openssl_adapter.cpp` (built only with `MORPH_BUILD_HMAC_EXAMPLES=ON` and

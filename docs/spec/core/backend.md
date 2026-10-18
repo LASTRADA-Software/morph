@@ -1437,6 +1437,58 @@ client socket was destroyed before the reply is ready, the `QPointer` is null an
 the reply is silently dropped. A malformed frame produces an `err` reply from the
 `RemoteServer` and does not disconnect the client or affect other clients.
 
+**Server-initiated events.** `QtWebSocketServer` carries events the way the
+`net` transport does (see
+[Server-initiated events over the socket transport](#server-initiated-events-over-the-socket-transport)
+and [Writing to a connection](#writing-to-a-connection)):
+
+- **One writer per connection,** handed to `RemoteServer::setConnectionWriter`
+  in `onNewConnection`, right after `openConnection()`.
+  `QWebSocketServer::newConnection` fires only once the upgrade is complete,
+  so no frame the writer queues can precede the handshake response.
+  `closeConnection(cid)`, on disconnect or `close()`, drops it. `write` counts
+  the envelope and queues it to the Qt thread through
+  `QMetaObject::invokeMethod`, as a reply is queued; it throws only when there
+  is no `QCoreApplication`. Neither callable keeps the socket or the server
+  alive: both are held by `QPointer`, and a frame that arrives after either is
+  gone is dropped and its count released.
+- **The backlog counts encoded envelopes.** Each connection has an atomic
+  count of the bytes of encoded envelopes handed to it — replies, rejection
+  replies and events alike — and not yet written. The size is added on the
+  handing thread before the frame is queued, so a `backlog()` read on the
+  strand already covers a frame still on its way to the socket. Once
+  `sendTextMessage` has taken the frame, the connection records where in the
+  socket's running count of written bytes the frame ends (its framed size:
+  `QWebSocket` splits a message into `outgoingFrameSize()` frames, each with
+  an unmasked 2-, 4- or 10-byte header) in a FIFO, next to the envelope size
+  it counted. `QWebSocket::bytesWritten` advances the running count and
+  releases, by its envelope size, every frame it completes. The running count
+  starts below zero by what the socket still held at accept — the handshake
+  response — so those bytes are not taken for a frame's. When the socket
+  reports nothing left to write, every frame still in the FIFO is released, so
+  a misjudged framed size cannot strand a count. Over TLS, `bytesWritten`
+  reports encrypted bytes, which run ahead of the framed ones, so a frame can
+  be released a little before its last byte is out; never after. A connection
+  that goes away releases whatever it still held.
+- **The drain call.** A release that takes the backlog from at least
+  `kEventBacklogLow` to below it calls `RemoteServer::connectionDrained(cid)`
+  on the Qt thread, judged from the value its own subtraction replaced; a
+  socket no longer connected is not reported.
+- **A peer that stops reading** is aborted by `sendTimeout`: a per-connection
+  one-shot timer armed for the oldest unwritten frame aborts the socket — an
+  abort, since a close frame would queue behind what the peer is not reading —
+  once that frame is older than `sendTimeout`, logging at `warn`. The
+  disconnect that follows reclaims the connection's scope as any other does.
+
+`tests/qt/test_qt_websocket.cpp` pins it (`[push][channel]`): an event posted
+to a connection reaches the client's handler; an event carrying a pending
+call's own `callId` reaches the handler and leaves the call to its real reply;
+the connect handler fires on the first connect and on a reconnect, ahead of
+the reconnect handler; a 2 MiB event holds the next one back, and the drain
+after it is written sends one `resync`, after which events flow again; and a
+peer that completes the upgrade and never reads is aborted no sooner than a
+200 ms `sendTimeout`.
+
 **Multi-client / concurrency.** One server serves many clients; each client
 registers its own model instances on the shared `RemoteServer`, so per-client
 model state is isolated. Because `handle()` posts to the pool, replies for
@@ -1483,6 +1535,7 @@ reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
 | `messagesPerSecond` | `0` (unbounded) | A per-connection token bucket (capacity = `messagesPerSecond`, refilled continuously). A frame that finds an empty bucket is refused — it never reaches `RemoteServer` — and answered with an `err "rate limited"` addressed to that frame's own `callId`. Not queued, and the connection is not closed. |
 | `handshakeTimeout` | `0` (disabled) | A one-shot timer per connection; if no frame arrives before it fires, the socket is closed. Cancelled on the first frame. Because `QWebSocketServer::newConnection()` only fires after the WS (and TLS, in `SecureMode`) opening handshake completes, this in practice bounds time-to-first-frame after that point, not the handshake itself. |
 | `idleTimeout` | `0` (disabled) | A shared ~1-second housekeeping sweep closes any connection whose last frame is older than `idleTimeout`; the actual close can lag the configured value by up to the sweep interval. |
+| `sendTimeout` | `30000` ms, as `morph::net` | A per-connection one-shot timer aborts a connection whose oldest frame handed to the socket is still unwritten after `sendTimeout` (see "Server-initiated events" above). `0` disables it. |
 | `bindAddress` | `QHostAddress::LocalHost` | The address `listen()` binds to (see "Flow" above). |
 | `allowPlaintextExposure` | `false` | Deliberate opt-out of the exposure guard: set `true` only to knowingly serve plaintext on a non-loopback `bindAddress` (see "Flow" above). |
 
@@ -2145,6 +2198,7 @@ server: each call is a loop task, so the loop serialises them.
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 | `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
 | `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
+| `setEventHandler(handler, exec)` | Stores the handler under a mutex (callable from any thread). `onTextMessage` hands every decoded envelope to `routeEvent` before any reply matching, so an `event` never settles a call, whatever its `callId`; each is posted to `exec` in arrival order. `nullptr` clears; with none installed, events are dropped. |
 
 ### `QtWebSocketServerConfig` (namespace `morph::qt`)
 
@@ -2155,6 +2209,7 @@ server: each call is a loop task, so the loop serialises them.
 | `messagesPerSecond` | `std::size_t` | `0` (unbounded) |
 | `handshakeTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
 | `idleTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
+| `sendTimeout` | `std::chrono::milliseconds` | `30000` |
 | `bindAddress` | `QHostAddress` | `QHostAddress::LocalHost` |
 | `allowPlaintextExposure` | `bool` | `false` |
 

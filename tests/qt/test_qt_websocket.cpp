@@ -10,8 +10,10 @@
 #include <QSslConfiguration>
 #include <QSslKey>
 #include <QSslSocket>
+#include <QTcpSocket>
 #include <QThread>
 #include <QWebSocket>
+#include <QWebSocketServer>
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_session.hpp>
@@ -2970,4 +2972,278 @@ TEST_CASE("morph::qt::QtWebSocketBackend: cancelPending rejects a request still 
     auto held = backend.request(probeRequest("probe-ok", "early"), cbExec);
     backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled before connect"}));
     CHECK_THROWS_WITH(awaitOn(cbExec, std::move(held)), "cancelled before connect");
+}
+
+// ── Server-initiated events over the Qt transport ───────────────────────────
+namespace {
+
+/// Runs each task inline on the posting thread, and counts them.
+struct PushCountingExec final : morph::exec::IExecutor {
+    std::atomic<int> posted{0};
+    void post(std::function<void()> task) override {
+        posted.fetch_add(1);
+        task();
+    }
+};
+
+/// What an event handler saw.
+struct PushEventLog {
+    std::mutex mtx;
+    std::vector<morph::wire::EventBody> events;
+
+    std::function<void(morph::wire::EventBody)> handler() {
+        return [this](morph::wire::EventBody body) {
+            std::scoped_lock const lock{mtx};
+            events.push_back(std::move(body));
+        };
+    }
+    std::size_t size() {
+        std::scoped_lock const lock{mtx};
+        return events.size();
+    }
+    std::vector<morph::wire::EventBody> snapshot() {
+        std::scoped_lock const lock{mtx};
+        return events;
+    }
+};
+
+/// The connection id the next `QtWebSocketServer` connection to @p server gets:
+/// `RemoteServer` numbers connections in order.
+morph::backend::ConnectionId nextQtConnectionId(morph::backend::RemoteServer& server) {
+    auto const probe = server.openConnection();
+    server.closeConnection(probe);
+    return probe + 1;
+}
+
+/// A JSON string payload of @p bytes characters.
+std::string bigPayload(std::size_t bytes) { return "\"" + std::string(bytes, 'x') + "\""; }
+
+}  // namespace
+
+TEST_CASE("qt_posted_event_reaches_handler", "[push][channel]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    auto const cid = nextQtConnectionId(*server);
+
+    PushCountingExec exec;
+    PushEventLog log;
+    morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(wsServer.port())}};
+    backend.setEventHandler(log.handler(), &exec);
+    REQUIRE(backend.waitForConnected());
+
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"n":1})")));
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("resync", "{}")));
+    pumpUntil([&] { return log.size() == 2; }, 300);
+    REQUIRE(log.size() == 2);
+
+    auto const got = log.snapshot();
+    CHECK(got[0].topic == "changes");
+    CHECK(got[0].payload.str == R"({"n":1})");
+    CHECK(got[1].topic == "resync");
+    CHECK(exec.posted.load() == 2);
+
+    // Cleared: a later event is dropped, and the connection keeps working.
+    backend.setEventHandler(nullptr, nullptr);
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", "{}")));
+    morph::exec::MainThreadExecutor cbExec;
+    CHECK(registerPrivate(backend, cbExec, "WsEchoModel").v != 0U);
+    CHECK(log.size() == 2);
+}
+
+TEST_CASE("qt_event_is_routed_before_reply_matching", "[push][channel]") {
+    ensureApp();
+    // A fake server, so an event can carry the very callId a pending execute
+    // was filed under: only routing by kind first keeps it off that call.
+    QWebSocketServer fake{QStringLiteral("fake"), QWebSocketServer::NonSecureMode};
+    REQUIRE(fake.listen(QHostAddress::LocalHost, 0));
+    morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(fake.serverPort())}};
+    REQUIRE(backend.waitForConnected());
+    pumpUntil([&] { return fake.hasPendingConnections(); }, 100);
+    std::unique_ptr<QWebSocket> peer{fake.nextPendingConnection()};
+    REQUIRE(peer != nullptr);
+    std::vector<std::string> received;
+    QObject::connect(peer.get(), &QWebSocket::textMessageReceived,
+                     [&](const QString& msg) { received.push_back(msg.toStdString()); });
+
+    PushCountingExec exec;
+    PushEventLog log;
+    backend.setEventHandler(log.handler(), &exec);
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "WsEchoModel";
+    call.actionTypeId = "WsEchoAction";
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
+    call.deserializeResult = [](std::string_view body) -> std::shared_ptr<void> {
+        return std::make_shared<int>(std::stoi(std::string{body}));
+    };
+    morph::exec::MainThreadExecutor owner;
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &owner)
+        .then([&](const std::shared_ptr<void>& value) { result.store(*std::static_pointer_cast<int>(value)); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    pumpUntil([&] { return !received.empty(); }, 200);
+    REQUIRE(received.size() == 1);
+    auto const request = morph::wire::decode(received.front());
+    REQUIRE(request.kind == "execute");
+    REQUIRE(request.callId != 0);
+
+    auto sameId = morph::wire::makeEvent("changes", R"({"which":"same"})");
+    sameId.callId = request.callId;
+    peer->sendTextMessage(QString::fromStdString(morph::wire::encode(sameId)));
+    peer->sendTextMessage(
+        QString::fromStdString(morph::wire::encode(morph::wire::makeEvent("changes", R"({"which":"zero"})"))));
+    pumpUntil(
+        [&] {
+            owner.drain();
+            return log.size() == 2;
+        },
+        200);
+    REQUIRE(log.size() == 2);
+    pumpUntil([&] {
+        owner.drain();
+        return false;
+    }, 5);
+    CHECK(result.load() == -1);
+    CHECK_FALSE(failed.load());
+
+    // The call is still pending, and its own reply settles it.
+    peer->sendTextMessage(QString::fromStdString(morph::wire::encode(morph::wire::makeOk(request.callId, "7"))));
+    pumpUntil(
+        [&] {
+            owner.drain();
+            return result.load() != -1 || failed.load();
+        },
+        200);
+    CHECK(result.load() == 7);
+    CHECK_FALSE(failed.load());
+}
+
+TEST_CASE("qt_connect_handler_fires_on_reconnect", "[push][channel]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    quint16 port = 0;
+    std::vector<std::string> seen;
+    PushCountingExec reconnectExec;
+    std::unique_ptr<morph::qt::QtWebSocketBackend> backend;
+    {
+        morph::qt::QtWebSocketServer first{*server, 0};
+        REQUIRE(first.listen());
+        port = first.port();
+        backend = std::make_unique<morph::qt::QtWebSocketBackend>(
+            QUrl{QString("ws://127.0.0.1:%1").arg(port)},
+            morph::qt::QtWebSocketBackend::Config{.initialReconnectDelay = std::chrono::milliseconds{20},
+                                                  .maxReconnectDelay = std::chrono::milliseconds{100}});
+        // Installed before the Qt loop runs, so before the first connect.
+        backend->setConnectHandler([&] { seen.emplace_back("connect"); });
+        backend->setReconnectHandler([&] { seen.emplace_back("reconnect"); }, &reconnectExec);
+        REQUIRE(backend->waitForConnected());
+        pumpUntil([&] { return seen.size() == 1; }, 100);
+        REQUIRE(seen == std::vector<std::string>{"connect"});
+    }
+    pumpUntil([] { return false; }, 10);
+
+    morph::qt::QtWebSocketServer second{*server, port};
+    REQUIRE(second.listen());
+    pumpUntil([&] { return seen.size() == 3; }, 300);
+    // The connect handler runs before the reconnect handler is posted.
+    CHECK(seen == std::vector<std::string>{"connect", "connect", "reconnect"});
+}
+
+TEST_CASE("qt_stalled_peer_closed_after_send_timeout", "[push][channel]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.sendTimeout = std::chrono::milliseconds{200};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+    auto const cid = nextQtConnectionId(*server);
+
+    std::mutex logMtx;
+    std::vector<std::pair<std::chrono::steady_clock::time_point, std::string>> logged;
+    morph::log::ScopedLoggerOverride guard{[&](morph::log::LogLevel /*level*/, std::string_view msg) {
+                                               std::scoped_lock const lock{logMtx};
+                                               logged.emplace_back(std::chrono::steady_clock::now(),
+                                                                   std::string{msg});
+                                           },
+                                           morph::log::LogLevel::debug};
+    auto findLogged = [&](std::string_view needle) -> std::optional<std::chrono::steady_clock::time_point> {
+        std::scoped_lock const lock{logMtx};
+        for (auto const& [when, msg] : logged) {
+            if (msg.find(needle) != std::string::npos) {
+                return when;
+            }
+        }
+        return std::nullopt;
+    };
+
+    // A peer that completes the upgrade, then never reads again: a small
+    // kernel receive buffer and a one-byte Qt read buffer leave the server's
+    // frame stuck in its own write buffer.
+    QTcpSocket peer;
+    peer.setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 4096);
+    peer.connectToHost(QHostAddress::LocalHost, wsServer.port());
+    pumpUntil([&] { return peer.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(peer.state() == QAbstractSocket::ConnectedState);
+    peer.write(QString("GET / HTTP/1.1\r\nHost: 127.0.0.1:%1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                       "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")
+                   .arg(wsServer.port())
+                   .toUtf8());
+    QByteArray response;
+    pumpUntil(
+        [&] {
+            response += peer.readAll();
+            return response.contains("\r\n\r\n");
+        },
+        200);
+    REQUIRE(response.startsWith("HTTP/1.1 101"));
+    peer.setReadBufferSize(1);
+
+    auto const posted = std::chrono::steady_clock::now();
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(std::size_t{4} << 20))));
+    pumpUntil([&] { return findLogged("send timeout").has_value() && findLogged("disconnected").has_value(); }, 300);
+
+    auto const closedAt = findLogged("send timeout");
+    REQUIRE(closedAt.has_value());
+    CHECK(*closedAt - posted >= std::chrono::milliseconds{200});
+    CHECK(findLogged("disconnected").has_value());
+}
+
+TEST_CASE("qt_backlog_drains_and_sends_resync", "[push][channel]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    auto const cid = nextQtConnectionId(*server);
+
+    PushCountingExec exec;
+    PushEventLog log;
+    morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(wsServer.port())}};
+    backend.setEventHandler(log.handler(), &exec);
+    REQUIRE(backend.waitForConnected());
+
+    // The first event alone lifts the backlog past kEventBacklogHigh, so the
+    // second is held back and owed as a resync, sent only once the first has
+    // been written and the backlog reported drained.
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", bigPayload(std::size_t{2} << 20))));
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"held":true})")));
+    pumpUntil([&] { return log.size() == 2; }, 500);
+    REQUIRE(log.size() == 2);
+
+    // Events flow again after the resync.
+    server->post(cid, morph::wire::encode(morph::wire::makeEvent("changes", R"({"after":true})")));
+    pumpUntil([&] { return log.size() == 3; }, 300);
+    auto const got = log.snapshot();
+    REQUIRE(got.size() == 3);
+    CHECK(got[0].topic == "changes");
+    CHECK(got[1].topic == "resync");
+    CHECK(got[2].payload.str == R"({"after":true})");
 }
