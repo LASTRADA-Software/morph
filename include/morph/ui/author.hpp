@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/effects.hpp"
 #include "../core/model_key.hpp"
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
@@ -113,6 +114,45 @@ template <typename Result>
     }
 }
 
+/// @brief The catalog's form of an action's declared effects.
+/// @param actionId The action's id.
+/// @return Its effects, or `std::nullopt` when it declared none: the action reads.
+/// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid.
+[[nodiscard]] inline std::optional<std::vector<ActionEffect>> effectsInfo(std::string_view actionId) {
+    auto const declared = ::morph::effects::effectsOf(actionId);
+    if (!declared) {
+        return std::nullopt;
+    }
+    std::vector<ActionEffect> out;
+    out.reserve(declared->size());
+    for (auto const& effect : *declared) {
+        std::string_view kind = "none";
+        if (effect.kind == ::morph::effects::Kind::Updates) {
+            kind = "updates";
+        } else if (effect.kind == ::morph::effects::Kind::Changes) {
+            kind = "changes";
+        } else if (effect.kind == ::morph::effects::Kind::ChangesInstance) {
+            kind = "changesInstance";
+        }
+        out.push_back(ActionEffect{.kind = std::string{kind},
+                                   .record = effect.record.empty() ? std::nullopt
+                                                                   : std::optional<std::string>{effect.record}});
+    }
+    return out;
+}
+
+/// @brief The catalog's form of the records an action's result holds.
+/// @param actionId The action's id.
+/// @return One entry per record; empty when the result holds none.
+/// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid.
+[[nodiscard]] inline std::vector<ActionRecordInfo> recordsInfo(std::string_view actionId) {
+    std::vector<ActionRecordInfo> out;
+    for (auto const& held : ::morph::effects::recordsOf(actionId)) {
+        out.push_back(ActionRecordInfo{.record = held.record, .keyField = held.keyField, .paths = held.paths});
+    }
+    return out;
+}
+
 }  // namespace detail
 
 /// @brief The catalog facts the builders gathered from the model and action types a screen names.
@@ -151,11 +191,15 @@ struct CatalogFacts {
     /// @brief Records an action as one of a model type's.
     /// @tparam Model  The model type that runs it.
     /// @tparam Action The action type; `::morph::model::ActionTraits<Action>` names its id.
+    /// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid: the
+    ///         action's effects and records are read from the process registry here, so a misconfigured registry
+    ///         fails at the start, not on a client's first watch.
     template <typename Model, typename Action>
         requires Runs<Model, Action>
     void action() {
         model<Model>();
-        actions.emplace(std::string{::morph::model::ActionTraits<Action>::typeId()},
+        auto const actionId = std::string{::morph::model::ActionTraits<Action>::typeId()};
+        actions.emplace(actionId,
                         ActionInfo{
                             .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
                             .calculatedFields = ActionFacts<Action>::calculatedFields(),
@@ -163,6 +207,8 @@ struct CatalogFacts {
                             .credential = ActionFacts<Action>::credential,
                             .listFields = detail::listFields<::morph::model::HandlerResultT<
                                 decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
+                            .effects = detail::effectsInfo(actionId),
+                            .records = detail::recordsInfo(actionId),
                         });
     }
 

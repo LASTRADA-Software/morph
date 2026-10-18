@@ -228,7 +228,7 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 `ui::Catalog` holds two lookups the caller supplies: `model(typeId)` → `ModelInfo{stateless,
 keyed}` and `action(actionId)` → `ActionInfo{modelType, calculatedFields, secretFields,
-credential, listFields}`. In local mode the caller answers them in-process from the model registry; on the
+credential, listFields, effects, records}`. In local mode the caller answers them in-process from the model registry; on the
 server, registration answers them from the same registry; a remote client answers them from the UI
 service's `ui-catalog` reply. With them, a document is also refused when a model type or action is
 unknown, an `instance` expression names a model that is not keyed, an action belongs to another
@@ -238,6 +238,13 @@ the server calculates, or a mutation that sends a credential or returns a secret
 that hold a list; a `patch` or `optimistic` of such a query is then refused without an `at` (it could
 never find a list) or with an `at` that is not one of them. When it is absent, the catalog does not
 know the result's shape, and a patch that finds no list is reported by the interpreter when it runs.
+`effects` and `records` are what the core registries hold for the action: `effects` is the list of
+`{kind, record?}` the action declared, `kind` one of `updates`, `changes`, `changesInstance` and `none`, `record` the
+record's wire name for the first two; it is absent when the action declared nothing, which makes the action a read.
+`records` lists the records the action's result holds as `{record, keyField?, paths}`, empty when it holds none. They
+are read from the registries where `CatalogFacts::action` records the action, so an invalid effects and records
+configuration (`EffectsRegistrationError`) fails at that call, at startup. No load-time rule reads them yet; they
+are what a client's watch is derived from.
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
 an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
 an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's

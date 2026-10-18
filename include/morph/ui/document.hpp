@@ -44,6 +44,36 @@ struct ModelInfo {
     bool keyed = false;
 };
 
+/// @brief One effect an action declares, as the catalog states it.
+struct ActionEffect {
+    /// @brief What the effect is: `updates`, `changes`, `changesInstance` or `none`.
+    std::string kind;
+    /// @brief The wire name of the record the effect names; absent for `changesInstance` and `none`.
+    std::optional<std::string> record;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One effect.
+    /// @param rhs The other.
+    /// @return True when kind and record match.
+    friend bool operator==(ActionEffect const& lhs, ActionEffect const& rhs) = default;
+};
+
+/// @brief A record an action's result holds, as the catalog states it.
+struct ActionRecordInfo {
+    /// @brief The record's wire name.
+    std::string record;
+    /// @brief The record's key field; absent for a keyless record.
+    std::optional<std::string> keyField;
+    /// @brief The JSON paths at which the result holds the record; `""` is the result itself.
+    std::vector<std::string> paths;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One entry.
+    /// @param rhs The other.
+    /// @return True when record, key field and paths match.
+    friend bool operator==(ActionRecordInfo const& lhs, ActionRecordInfo const& rhs) = default;
+};
+
 /// @brief What the catalog says about an action.
 struct ActionInfo {
     /// @brief The registered type id of the model the action belongs to.
@@ -59,6 +89,12 @@ struct ActionInfo {
     ///        `optimistic` of a query of the action may name as its `at`. Empty when the catalog does not say, or the
     ///        result is not a record.
     std::optional<std::vector<std::string>> listFields;
+    /// @brief What the action declares it changes. Absent when it declared nothing, which makes it a read; present
+    ///        and empty is not produced by the registry.
+    std::optional<std::vector<ActionEffect>> effects;
+    /// @brief The records the action's result holds, with the paths to each. Empty when it holds none or the
+    ///        catalog does not say.
+    std::vector<ActionRecordInfo> records;
 };
 
 /// @brief The facts load-time validation needs from the application's catalog. Local mode answers them from the

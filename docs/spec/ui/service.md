@@ -109,7 +109,8 @@ For each registered entry, in registration order:
 - `models` and `actions` carry the `ui::Catalog` facts (`ModelInfo`, `ActionInfo`) the registry's catalog gave,
   for the documents the principal may fetch: the app document, and every listed screen that is available or
   public. They are absent when the registry had no lookup, which leaves the client's lookup empty and skips its
-  rules, as on the server. `CatalogReply::facts()` turns them into the lookups `loadDocument` takes.
+  rules, as on the server. `ActionInfo` carries each action's `effects` and `records` as optional keys: a reply
+  without `effects` reads as no declared effects (a read), one without `records` as none. `CatalogReply::facts()` turns them into the lookups `loadDocument` takes.
 - `views` and `wizards` carry the forms documents a `collection` or `wizard` node builds from, keyed by
   the action the node names, for the same documents. The registry takes them from its catalog's `view`
   and `wizard` lookups, for every action a document names. The author builders put them there
