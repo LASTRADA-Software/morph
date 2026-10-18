@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "push_conformance.hpp"
 #include "test_support.hpp"
 
 namespace {
@@ -365,4 +366,19 @@ TEST_CASE("throwing_backlog_read_is_caught_like_a_throwing_write", "[push][chann
     server->handle(::morph::wire::encode(::morph::wire::makeHello()), std::ref(hello), cid);
     REQUIRE(hello.await());
     CHECK(hello.env.kind == "ok");
+}
+
+TEST_CASE("simulated_backend_channel_conformance", "[push][channel]") {
+    ::morph::testing::push::channelConformance([](const auto& body) {
+        ::morph::exec::ThreadPoolExecutor pool{2};
+        auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
+        auto const cid = server->openConnection();
+        ::morph::backend::SimulatedRemoteBackend backend{*server, cid};
+        ::morph::testing::push::ChannelFixture fixture{
+            .server = server.get(),
+            .cid = cid,
+            .backend = &backend,
+            .waitFor = [](const std::function<bool()>& done) { return ::morph::testing::waitUntil(done); }};
+        body(fixture);
+    });
 }

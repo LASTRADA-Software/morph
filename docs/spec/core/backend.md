@@ -1195,6 +1195,27 @@ connection is gone" moment to hook here — so a caller that wants the scope
 reclaimed calls `server.closeConnection(cid)` explicitly (or lets the server
 itself be destroyed).
 
+**Events.** The scoped constructor also makes the backend its connection's event
+receiver: it hands the server a `ConnectionWriter` for the `ConnectionId`, and
+`setEventHandler(handler, exec)` posts each `event` envelope the server writes
+to `exec`, in the order the server posted them. The writer's `backlog` always
+reads `0`: an in-process hand-off queues nothing, so `RemoteServer::post` never
+holds an event back from it and never owes it a `resync`. The writer replaces
+any writer the connection already had, so a second backend on the same scope
+takes the events over. It shares its handler state with the backend rather than
+pointing at it, so the server can keep posting after the backend is destroyed:
+the destructor clears the handler and later envelopes are dropped. The
+unscoped constructor has no connection, so it receives no events and
+`setEventHandler` on it stores nothing.
+
+One conformance case, `channelConformance` in `tests/push_conformance.hpp`, runs
+on this backend, `SocketBackend` and `QtWebSocketBackend` (`[push][channel]`).
+Each suite hands it a factory for a server, a connected backend and the
+connection's id. It checks that a posted event reaches the handler, that an
+event carrying the `callId` of a call in flight reaches the handler and leaves
+that call to its real reply, and that 50 events on one connection arrive in
+the order they were posted.
+
 ## `QtWebSocketBackend` — client-side WebSocket transport
 
 `morph::qt::QtWebSocketBackend` is the concrete `IBackend` that talks to a

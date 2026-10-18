@@ -2065,6 +2065,12 @@ private:
 /// Its pending list and session belong to the caller's owner (`setOwner`) and
 /// are touched only there, without a lock; the server's reply callback touches
 /// only the completion it settles.
+///
+/// A backend scoped to a connection also receives the server's events for it
+/// (`setEventHandler`): it registers a `ConnectionWriter` whose `write` hands
+/// each envelope to the handler, in the order the server posted them, with a
+/// `backlog` that always reads `0` -- an in-process hand-off holds nothing
+/// back, so the server never withholds an event or owes a `resync`.
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
@@ -2104,8 +2110,33 @@ public:
     /// the simulated connection should be reclaimed.
     /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
     ///               on the same terms as the constructor above.
+    ///
+    /// The backend also becomes @p cid's event receiver: it gives the server a
+    /// `ConnectionWriter` for @p cid, replacing any writer the connection had,
+    /// so a second backend on the same scope takes the events over.
     /// @param cid    Connection scope, as returned by `server.openConnection()`.
-    SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND, ConnectionId cid) : _server{server}, _cid{cid} {}
+    SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND, ConnectionId cid)
+        : _server{server}, _cid{cid}, _inbox{std::make_shared<EventInbox>()} {
+        if (_cid == 0) {
+            return;
+        }
+        _server.setConnectionWriter(
+            _cid, ConnectionWriter{.write = [inbox = _inbox](std::string frame) { inbox->receive(frame); },
+                                   .backlog = [] { return std::size_t{0}; }});
+    }
+
+    /// @brief Stops delivering events: the server may still post to the
+    ///        connection, and those envelopes are dropped.
+    ~SimulatedRemoteBackend() override {
+        if (_inbox) {
+            _inbox->set(nullptr, nullptr);
+        }
+    }
+
+    SimulatedRemoteBackend(const SimulatedRemoteBackend&) = delete;
+    SimulatedRemoteBackend& operator=(const SimulatedRemoteBackend&) = delete;
+    SimulatedRemoteBackend(SimulatedRemoteBackend&&) = delete;
+    SimulatedRemoteBackend& operator=(SimulatedRemoteBackend&&) = delete;
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
@@ -2361,6 +2392,25 @@ public:
         }
     }
 
+    /// @brief Installs the handler each server-initiated event is posted to.
+    ///        See `IBackend::setEventHandler`.
+    ///
+    /// Only a backend scoped to a connection (the `ConnectionId` constructor)
+    /// receives events; an unscoped one has no connection to post to. Events
+    /// are posted to @p exec in the order the server posted them. An `event`
+    /// envelope is recognised by its kind, so it never settles a call.
+    /// @param handler Callable posted to @p exec once per event. Pass
+    ///                `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override {
+        if (_inbox) {
+            _inbox->set(std::move(handler), exec);
+        }
+    }
+
     /// @brief Installs the session stamped onto every control envelope this
     ///        backend subsequently builds (`register`, `registerShared`,
     ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
@@ -2371,6 +2421,45 @@ public:
     }
 
 private:
+    /// @brief The event handler and the entry point the connection's writer
+    ///        calls, shared with that writer so the server can outlive the backend.
+    ///
+    /// The writer runs on the server strand and `setEventHandler` on the
+    /// backend's owner, so both sit behind a mutex.
+    struct EventInbox {
+        /// @brief Replaces the handler and its executor.
+        /// @param next   New handler; empty clears it.
+        /// @param target Executor it is posted to.
+        void set(std::function<void(::morph::wire::EventBody)> next, ::morph::exec::IExecutor* target) {
+            std::lock_guard lock{mutex};
+            handler = next ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(next)) : nullptr;
+            exec = target;
+        }
+
+        /// @brief Decodes one envelope the server wrote and posts an event to the handler.
+        /// @param frame The encoded envelope. Anything that is not a well-formed event is dropped.
+        void receive(const std::string& frame) {
+            std::shared_ptr<std::function<void(::morph::wire::EventBody)>> current;
+            ::morph::exec::IExecutor* target = nullptr;
+            {
+                std::lock_guard lock{mutex};
+                current = handler;
+                target = exec;
+            }
+            if (!current || target == nullptr) {
+                return;
+            }
+            // By kind: an event's `callId` is not a reply's.
+            static_cast<void>(detail::routeEvent(::morph::wire::decode(frame), [&](::morph::wire::EventBody event) {
+                target->post([current, event = std::move(event)]() mutable { (*current)(std::move(event)); });
+            }));
+        }
+
+        std::mutex mutex;
+        std::shared_ptr<std::function<void(::morph::wire::EventBody)>> handler;
+        ::morph::exec::IExecutor* exec = nullptr;
+    };
+
     /// @brief Checks, in a debug build, that the caller is on the owner the
     ///        backend was given. Nothing to check before `setOwner`.
     /// @param site Name of the calling body.
@@ -2413,6 +2502,8 @@ private:
     // constructed with a ConnectionId from server.openConnection(). Threaded
     // through every handle()/handleInline() call this backend makes.
     ConnectionId _cid{0};
+    // Null for an unscoped backend, which has no connection to receive on.
+    std::shared_ptr<EventInbox> _inbox;
     // The owner every verb is called from, once `setOwner` has named it. The
     // two fields below are touched only there.
     std::optional<::morph::exec::detail::OwnerAffinity> _affinity;

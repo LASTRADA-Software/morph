@@ -49,6 +49,7 @@
 #include <utility>
 #include <vector>
 
+#include "../push_conformance.hpp"
 #include "../test_support.hpp"
 
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
@@ -3481,4 +3482,25 @@ TEST_CASE("qt_ledger_releases_a_frame_once_its_last_byte_is_written", "[push][ch
     ledger.push(/*pending=*/100, /*counted=*/70, t1);
     CHECK(ledger.clear() == 70);
     CHECK_FALSE(ledger.oldest().has_value());
+}
+
+TEST_CASE("qt_channel_conformance", "[push][channel]") {
+    ensureApp();
+    morph::testing::push::channelConformance([](const auto& body) {
+        morph::exec::ThreadPoolExecutor serverPool{2};
+        auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+        morph::qt::QtWebSocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+        auto const cid = nextQtConnectionId(*server);
+        morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(wsServer.port())}};
+        REQUIRE(backend.waitForConnected());
+        morph::testing::push::ChannelFixture fixture{.server = server.get(),
+                                                     .cid = cid,
+                                                     .backend = &backend,
+                                                     .waitFor = [](const std::function<bool()>& done) {
+                                                         pumpUntil(done, 300);
+                                                         return done();
+                                                     }};
+        body(fixture);
+    });
 }

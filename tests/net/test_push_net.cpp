@@ -39,6 +39,7 @@
 #include <utility>
 #include <vector>
 
+#include "../push_conformance.hpp"
 #include "../test_support.hpp"
 
 // External linkage: glaze reflection and the BRIDGE_REGISTER_* macros need it.
@@ -547,4 +548,22 @@ TEST_CASE("net_backlog_holds_events_and_drain_sends_resync", "[push][channel]") 
     auto const next = client.receive();
     CHECK(next.kind == "event");
     CHECK(::morph::wire::encode(next) == ::morph::wire::encode(::morph::wire::makeEvent("resync", "{}")));
+}
+
+TEST_CASE("net_channel_conformance", "[push][channel]") {
+    ::morph::testing::push::channelConformance([](const auto& body) {
+        ::morph::exec::ThreadPoolExecutor pool{2};
+        auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
+        ::morph::net::SocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+        auto const cid = nextConnectionId(*server);
+        ::morph::net::SocketBackend backend{wsUrl(wsServer.port())};
+        REQUIRE(backend.waitForConnected());
+        ::morph::testing::push::ChannelFixture fixture{
+            .server = server.get(),
+            .cid = cid,
+            .backend = &backend,
+            .waitFor = [](const std::function<bool()>& done) { return ::morph::testing::waitUntil(done); }};
+        body(fixture);
+    });
 }
