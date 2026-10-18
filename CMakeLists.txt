@@ -515,6 +515,7 @@ target_sources(morph
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/explorer.hpp
+        include/morph/ui/agent.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp

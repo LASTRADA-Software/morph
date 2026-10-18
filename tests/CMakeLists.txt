@@ -28,6 +28,7 @@ add_executable(morph_tests
     test_push_channel.cpp
     test_push_watch.cpp
     test_push_cache.cpp
+    test_push_agent.cpp
     test_push_documents.cpp
     push_records_late.cpp
     test_executor_extra.cpp
