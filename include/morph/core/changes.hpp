@@ -214,6 +214,12 @@ inline void addDerivedChanges(Resolved const& resolved, std::string const& sourc
             break;
         }
     }
+    // A record naming more rows than a reader accepts is reported whole: it over-notifies, never misses.
+    for (auto& change : changes.records) {
+        if (change.keys && change.keys->size() > kMaxChangeKeys) {
+            change.keys.reset();
+        }
+    }
     return changes;
 }
 

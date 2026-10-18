@@ -307,9 +307,19 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
         CHECK(event.topic == "changes");
         CHECK(morph::wire::readChangesBody(event.payload.str));
     }
+    SECTION("exactly the key bound is accepted") {
+        std::string keys = "[";
+        for (std::size_t i = 0; i < morph::effects::kMaxChangeKeys; ++i) {
+            keys += (i ? ",1" : "1");
+        }
+        keys += "]";
+        auto const at = morph::wire::readChangesBody(R"({"records":[{"record":"E","keys":)" + keys + "}]}");
+        REQUIRE(at);
+        CHECK(at->records[0].keys->size() == morph::effects::kMaxChangeKeys);
+    }
     SECTION("too many keys in one record is refused") {
         std::string keys = "[";
-        for (std::size_t i = 0; i <= morph::wire::kMaxChangeKeys; ++i) {
+        for (std::size_t i = 0; i <= morph::effects::kMaxChangeKeys; ++i) {
             keys += (i ? ",1" : "1");
         }
         keys += "]";

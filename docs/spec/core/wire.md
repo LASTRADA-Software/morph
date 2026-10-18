@@ -725,11 +725,12 @@ without `keys` means the whole record type changed; `records` reuses `effects::R
 
 **Readers.** `readWatchBody`, `readWatchReply` and `readChangesBody` return
 `std::expected<…, std::string>`. They refuse input longer than `kMaxEnvelopeBytes`, text that is not the
-body, more than `kMaxWatchTopics` (4096) records or instances in one list, more than `kMaxChangeKeys`
-(4096) keys in one record entry, and any record name, model type or primary longer than
-`kMaxTopicNameBytes` (1024). Unknown keys are ignored, so a newer peer may add fields. The list bounds sit
-well above the coalescer's 256-key flush and any real watch set, so only a malformed or hostile peer meets
-them.
+body, more than `kMaxWatchTopics` (4096) records or instances in one list, more than `effects::kMaxChangeKeys`
+(4096, `core/change_types.hpp`) keys in one record entry, and any record name, model type or primary longer
+than `kMaxTopicNameBytes` (1024); the message says which one. Unknown keys are ignored, so a newer peer may
+add fields. The bounds keep a peer-supplied list from forcing an unbounded allocation and sit above any
+real watch set. The producer honours the key bound too: `deriveChanges` reports a record whose keys would
+exceed it as a whole-type change (keys absent), so a change is never refused for its size.
 
 ## Action-evolution policy
 

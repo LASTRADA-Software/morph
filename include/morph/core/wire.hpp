@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <glaze/glaze.hpp>
 #include <expected>
+#include <glaze/glaze.hpp>
 #include <limits>
 #include <optional>
 #include <span>
@@ -657,17 +657,13 @@ inline constexpr std::string_view kUnwatchKind = "unwatch";
 
 /// @brief The most topics (records or instances) one `watch`, `unwatch` or `changes` body may list.
 ///
-/// A watch set is one entry per record type and open instance of a screen, and the coalescer flushes
-/// well below this, so a body past it is a malformed or hostile peer rather than a large application.
+/// A watch set is one entry per record type and open instance of a screen, so a list past this is a
+/// malformed or hostile peer rather than a large application, and the bound keeps its allocation finite.
 inline constexpr std::size_t kMaxWatchTopics = 4096;
 
-/// @brief The most keys one record entry of a `changes` body may list.
-///
-/// The server flushes a coalescing window at 256 keys; 4096 leaves room for several windows merged by
-/// one writer without letting a peer force an unbounded allocation.
-inline constexpr std::size_t kMaxChangeKeys = 4096;
-
 /// @brief The longest record name, model type or primary key text in a watch or changes body.
+///
+/// The most keys one record entry of a `changes` body may list is `effects::kMaxChangeKeys`.
 inline constexpr std::size_t kMaxTopicNameBytes = 1024;
 
 /// @brief One instance topic: a model type, its directory key text and its instance id.
@@ -747,10 +743,10 @@ template <class T>
         return std::string{what} + " list more than " + std::to_string(kMaxWatchTopics) + " topics";
     }
     for (const auto& topic : topics) {
-        if (auto reason = checkTopicName(topic.modelType, what)) {
+        if (auto reason = checkTopicName(topic.modelType, "a model type")) {
             return reason;
         }
-        if (auto reason = checkTopicName(topic.primary, what)) {
+        if (auto reason = checkTopicName(topic.primary, "a primary key")) {
             return reason;
         }
     }
@@ -802,7 +798,7 @@ template <class T>
 /// @brief Reads the payload of a `changes` event.
 ///
 /// Refused: input longer than `kMaxEnvelopeBytes`, text that is not a `ChangesBody`, more than
-/// `kMaxWatchTopics` records or instances, more than `kMaxChangeKeys` keys in one record, or a name longer
+/// `kMaxWatchTopics` records or instances, more than `effects::kMaxChangeKeys` keys in one record, or a name longer
 /// than `kMaxTopicNameBytes`.
 /// @param json The event's `payload`.
 /// @return The payload, or the reason it was refused.
@@ -818,8 +814,8 @@ template <class T>
         if (auto reason = detail::checkTopicName(change.record, "a record name")) {
             return std::unexpected(*reason);
         }
-        if (change.keys && change.keys->size() > kMaxChangeKeys) {
-            return std::unexpected("a record's keys list more than " + std::to_string(kMaxChangeKeys) + " keys");
+        if (change.keys && change.keys->size() > effects::kMaxChangeKeys) {
+            return std::unexpected("a record's keys list more than " + std::to_string(effects::kMaxChangeKeys) + " keys");
         }
     }
     if (auto reason = detail::checkInstances(body->instances, "an instance topic")) {

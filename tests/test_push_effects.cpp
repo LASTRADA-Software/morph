@@ -399,6 +399,28 @@ TEST_CASE("derive_updates_reads_keys_at_paths", "[push][records]") {
     REQUIRE(keyTexts(changes.records[0]) == std::vector<std::string>{"1", "2"});
 }
 
+TEST_CASE("derive_updates_collapses_past_the_key_bound", "[push][records]") {
+    auto const resolved = derivation(declare("A_Rows", {updatesOf(typeid(VRow))}));
+    auto const rowsJson = [](std::size_t count) {
+        std::string json = R"({"rows":[)";
+        for (std::size_t i = 0; i < count; ++i) {
+            json += (i == 0 ? "" : ",") + std::string{R"({"id":)"} + std::to_string(i + 1) + "}";
+        }
+        return json + "]}";
+    };
+    auto const atBound = morph::effects::detail::deriveChangesFrom(
+        resolved, "A_Rows", rowsJson(morph::effects::kMaxChangeKeys), ranOnInstance);
+    REQUIRE(atBound.records.size() == 1);
+    REQUIRE(atBound.records[0].keys.has_value());
+    CHECK(atBound.records[0].keys->size() == morph::effects::kMaxChangeKeys);
+
+    auto const pastBound = morph::effects::detail::deriveChangesFrom(
+        resolved, "A_Rows", rowsJson(morph::effects::kMaxChangeKeys + 1), ranOnInstance);
+    REQUIRE(pastBound.records.size() == 1);
+    CHECK(pastBound.records[0].record == "D_Row");
+    CHECK_FALSE(pastBound.records[0].keys.has_value());
+}
+
 TEST_CASE("derive_updates_reads_every_result_shape", "[push][records]") {
     auto const rootResolved = derivation(declare("A_Root", {updatesOf(typeid(VRow))}));
     auto const one = morph::effects::detail::deriveChangesFrom(rootResolved, "A_Root", R"({"id":9007199254740993})",

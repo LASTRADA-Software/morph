@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <optional>
@@ -12,6 +13,13 @@
 /// forms layer, so the wire types can use it.
 
 namespace morph::effects {
+
+/// @brief The most keys one `RecordChange` carries.
+///
+/// The wire readers refuse a record entry with more keys, so a producer never emits one: a change that
+/// would name more rows is reported as a whole-type change (keys absent), which over-notifies but never
+/// misses. The bound keeps one peer-supplied list from forcing an unbounded allocation.
+inline constexpr std::size_t kMaxChangeKeys = 4096;
 
 /// @brief A change to the rows of one record type.
 struct RecordChange {
