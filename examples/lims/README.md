@@ -574,7 +574,7 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
 - **`lims.register`** registers a client, then a sample for it, through mutations over a private
   instance of `SampleModel`, and opens the new sample's lifecycle.
 - **`lims.lifecycle`** (`sampleId`) attaches the keyed `SampleModel` instance with `OpenSample` and
-  shows the sample from a `GetSample` query that refetches after each transition. Each of the four
+  shows the sample from a `GetSample` query that each transition's reply updates. Each of the four
   transitions is a serial mutation enabled only in the state that allows it.
 - **`lims.results`** (`sampleId`) captures a concentration through a `form` node over
   `CaptureConcentration`, built from the schema the registry serves, lists the results with their
@@ -588,6 +588,11 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
   whose built-in fallbacks are what a client without them shows. A "choose project" dialog picks from
   `ListProjects`, which the table engine sorts, filters and pages. The screen's identity is its sample,
   and it is dirty while the working copy holds unsaved edits.
+
+Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS` in
+`include/lims/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
+actions change their instance's working copy, and `OpenSample` changes nothing. A reply refreshes the queries it
+changed, so the screens declare no refreshes; `lims_bundle_loads_without_warnings` keeps it so.
 
 A model's refusal reaches the screen as the mutation's own error. Every typed field is schema-driven:
 the `x-rules` of `CaptureConcentration` run in the forms engine, not in hand-written UI code.

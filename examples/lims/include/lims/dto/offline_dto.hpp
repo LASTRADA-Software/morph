@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/records.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/tagged.hpp>
 #include <string>
@@ -285,3 +286,5 @@ struct glz::meta<lims::ReplayOutcome> {
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(Applied, Conflicted, Skipped);
 };
+
+BRIDGE_REGISTER_RECORD(lims::ConflictView, "Lims_Conflict")

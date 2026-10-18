@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/session/session_auth.hpp>
 
 #include "lims/dto/auth_dto.hpp"
@@ -39,5 +40,7 @@ void setTokenIssuer(std::shared_ptr<::morph::session::TokenIssuer> issuer);
 // macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
 BRIDGE_REGISTER_MODEL(lims::LimsAuthModel, "LimsAuth")
+// Signing in changes no row a screen shows: the screen that runs it signs the session in, which reloads the catalog.
 BRIDGE_REGISTER_ACTION(lims::LimsAuthModel, lims::LimsLogin, "LimsLogin", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::LimsLogin, ::morph::effects::none)
 // NOLINTEND(misc-const-correctness)

@@ -2,6 +2,7 @@
 #pragma once
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -65,7 +66,9 @@ private:
 
 BRIDGE_REGISTER_MODEL(lims::AnalysisCatalogModel, "AnalysisCatalogModel")
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::DefineAnalysis, "DefineAnalysis")
+BRIDGE_REGISTER_EFFECTS(lims::DefineAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ReviseAnalysis, "ReviseAnalysis")
+BRIDGE_REGISTER_EFFECTS(lims::ReviseAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses")
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion")
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisSchema, "GetAnalysisSchema",
