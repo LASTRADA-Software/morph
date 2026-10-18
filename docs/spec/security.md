@@ -304,8 +304,9 @@ auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz);
   policy admits. An invalid/absent/expired token → `false` → the server replies
   `err "unauthorized"`.
 - `authenticate(ctx)` returns the verified `principal`. `RemoteServer`
-  (`dispatchExecute`) calls it after `authorize` succeeds and **overwrites**
-  `env.session.principal` with the verified value before building the
+  (`dispatchExecute`) calls it once, on entry, before any admission check, and
+  once `authorize` has succeeded **overwrites** `env.session.principal` with
+  the verified value before building the
   `ScopedContext`. So a model reading `session::current()->principal` sees the
   authenticated identity, not the client's claim.
 
@@ -315,13 +316,13 @@ returns `nullopt` — the authorizer cannot vouch for the caller —
 dispatch rather than leaving the client-supplied claim in place. Two cases
 depend on this:
 
-- **TOCTOU (time-of-check/time-of-use).** `authorize` and `authenticate` each
-  verify the token independently against a fresh clock reading. A token can pass
-  `authorize` and then expire in the window before `authenticate` runs, so
-  `authenticate` returns `nullopt`. Without the clear, the request would have
-  been dispatched carrying the *client's* asserted principal as if it were
-  authoritative. With the clear, the worst case is an empty principal — never
-  the attacker's chosen value.
+- **TOCTOU (time-of-check/time-of-use).** `authenticate` and `authorize` each
+  verify the token independently against a fresh clock reading. A token
+  `authenticate` refuses can still pass a lenient `authorize`, so
+  `authenticate` returns `nullopt` for a call that is admitted. Without the
+  clear, the request would be dispatched carrying the *client's* asserted
+  principal as if it were authoritative. With the clear, the worst case is an
+  empty principal — never the attacker's chosen value.
 - **Authorize-only / allow-all authorizers.** An authorizer that admits calls
   but never authenticates (a custom authorize-only policy, or the default
   `AllowAllAuthorizer` whose `authenticate` inherits the `nullopt` default) now
@@ -380,8 +381,12 @@ after `openConnection`.
 
 `stampVerifiedPrincipal(env, cid)` is where every kind that authorises stamps
 its principal — `register`, `attach`, `assign`, `instances`, `schemas`,
-`deregister`, `execute`, `cancel`, `watch`, `unwatch`, and every service kind.
-After stamping, it compares the stamped principal with `cid`'s baseline:
+`deregister`, `cancel`, `watch`, `unwatch`, and every service kind. After
+stamping, it compares the stamped principal with `cid`'s baseline. An
+`execute` makes the same comparison on entry to `dispatchExecute`, before the
+in-flight cap or `authorize` can refuse it, so a client that keeps sending
+executes after a sign-out loses its watches even though every one is refused.
+It reuses that one `authenticate` result for its stamp.
 
 - **The first stamp sets the baseline**, whatever it is — an empty principal
   included, from a token `authenticate` refuses or an authorizer that never

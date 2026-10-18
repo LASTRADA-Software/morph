@@ -166,6 +166,7 @@ struct InstanceQuestion {
 /// token.
 struct SecretGuard final : ::morph::session::IAuthorizer {
     mutable std::atomic<int> authorizeCalls{0};
+    mutable std::atomic<int> authenticateCalls{0};
     mutable std::mutex mtx;
     mutable std::vector<InstanceQuestion> instanceQuestions;
 
@@ -175,6 +176,7 @@ struct SecretGuard final : ::morph::session::IAuthorizer {
         return modelType != kSecretModel && !ctx.token.ends_with(":scoped");
     }
     [[nodiscard]] std::optional<std::string> authenticate(const ::morph::session::Context& ctx) const override {
+        authenticateCalls.fetch_add(1);
         if (ctx.token.empty()) {
             return std::nullopt;
         }
@@ -568,6 +570,24 @@ namespace {
     return ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(env), cid));
 }
 
+/// Sends an `execute` of @p actionType on @p modelId of @p modelType through
+/// @p cid, signed with @p token, and waits for the reply.
+::morph::wire::Envelope executeOn(Rig& rig, ConnectionId cid, std::string_view modelType, std::string_view actionType,
+                                  std::uint64_t modelId, std::string const& token) {
+    ::morph::wire::Envelope env;
+    env.kind = "execute";
+    env.callId = 11;
+    env.modelId = modelId;
+    env.modelType = std::string{modelType};
+    env.actionType = std::string{actionType};
+    env.body = R"({"limit":1})";
+    env.session.token = token;
+    auto waiter = std::make_shared<::morph::testing::WaitReply>();
+    rig.server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, cid);
+    REQUIRE(waiter->await());
+    return waiter->env;
+}
+
 /// Sends a core `hello` on @p cid, signed with @p token, and returns its reply's kind.
 std::string hello(Rig& rig, ConnectionId cid, std::string const& token) {
     ::morph::wire::Envelope env = ::morph::wire::makeHello();
@@ -660,6 +680,36 @@ TEST_CASE("first_stamp_sets_baseline_even_when_unauthenticated", "[push][watch]"
     CHECK(rig.recordWatchers("T_WatchRow").empty());
 }
 
+TEST_CASE("refused_execute_still_drops_watches", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    (void)rig.watch(cid, records({"T_WatchRow"}), "alice");
+    REQUIRE(rig.recordWatchers("T_WatchRow") == std::vector<ConnectionId>{cid});
+
+    // Signed out, the client sends only executes, each refused at `authorize`.
+    auto const reply = executeOn(rig, cid, kSecretModel, "T_WatchListSecrets", 1, "");
+    CHECK(reply.kind == "err");
+    CHECK(reply.message == "unauthorized");
+
+    CHECK(rig.recordWatchers("T_WatchRow").empty());
+}
+
+TEST_CASE("execute_authenticates_once", "[push][watch]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    auto registerRow = ::morph::wire::makeRegister("T_WatchRowModel");
+    registerRow.session.token = "alice";
+    auto const registered = ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(registerRow), cid));
+    REQUIRE(registered.kind == "ok");
+
+    int const before = rig.guard->authenticateCalls.load();
+    CHECK(executeOn(rig, cid, "T_WatchRowModel", "T_WatchListRows", registered.modelId, "alice").kind == "ok");
+    CHECK(rig.guard->authenticateCalls.load() == before + 1);
+
+    CHECK(executeOn(rig, cid, kSecretModel, "T_WatchListSecrets", 1, "alice").kind == "err");
+    CHECK(rig.guard->authenticateCalls.load() == before + 2);
+}
+
 // ── Fan-out: what a successful execute tells the watching connections ───────
 
 namespace {
@@ -730,11 +780,13 @@ struct FanRig {
     std::shared_ptr<RemoteServer> server;
     std::map<ConnectionId, std::unique_ptr<EventWire>> wires;
 
-    explicit FanRig(std::chrono::milliseconds executeTimeout = std::chrono::milliseconds{0}) {
+    explicit FanRig(std::chrono::milliseconds executeTimeout = std::chrono::milliseconds{0},
+                    std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr) {
         ::morph::backend::ServerConfig config;
         config.limits.executeTimeout = executeTimeout;
         config.services.push_back(std::make_shared<FanHello>());
-        server = std::make_shared<RemoteServer>(pool, std::move(config));
+        server = authorizer ? std::make_shared<RemoteServer>(pool, std::move(authorizer), std::move(config))
+                            : std::make_shared<RemoteServer>(pool, std::move(config));
     }
 
     /// Opens a connection with a writer, negotiating events when @p events.
@@ -754,10 +806,11 @@ struct FanRig {
 
     EventWire& wire(ConnectionId cid) { return *wires.at(cid); }
 
-    void watch(ConnectionId cid, ::morph::wire::WatchBody const& body) {
+    void watch(ConnectionId cid, ::morph::wire::WatchBody const& body, std::string const& token = {}) {
         ::morph::wire::Envelope env;
         env.kind = std::string{::morph::wire::kWatchKind};
         env.callId = 2;
+        env.session.token = token;
         env.body = glz::write_json(body).value_or(std::string{});
         auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(env), cid));
         REQUIRE(reply.kind == "ok");
@@ -768,9 +821,10 @@ struct FanRig {
     }
 
     /// Registers a private instance on @p cid, or a keyed shared one when @p primary is set.
-    std::uint64_t create(ConnectionId cid, std::string primary = {}) {
-        auto const env = primary.empty() ? ::morph::wire::makeRegister(std::string{kFanModel})
+    std::uint64_t create(ConnectionId cid, std::string primary = {}, std::string const& token = {}) {
+        auto env = primary.empty() ? ::morph::wire::makeRegister(std::string{kFanModel})
                                          : ::morph::wire::makeRegisterShared(std::string{kFanModel}, primary);
+        env.session.token = token;
         auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(env), cid));
         REQUIRE(reply.kind == "ok");
         REQUIRE(reply.modelId != 0U);
@@ -780,9 +834,10 @@ struct FanRig {
     /// Executes @p actionType with @p body on @p modelId through @p cid and
     /// waits for the reply.
     ::morph::wire::Envelope execute(ConnectionId cid, std::uint64_t modelId, std::string_view actionType,
-                                    std::string body) {
+                                    std::string body, std::string const& token = {}) {
         ::morph::wire::Envelope env;
         env.kind = "execute";
+        env.session.token = token;
         env.callId = 9;
         env.modelId = modelId;
         env.modelType = std::string{kFanModel};
@@ -799,6 +854,18 @@ struct FanRig {
         std::latch done{1};
         server->strand().post([&done] { done.count_down(); });
         done.wait();
+    }
+
+    /// The connections watching record type @p record, read on the server strand.
+    std::vector<ConnectionId> recordWatchers(std::string_view record) {
+        std::vector<ConnectionId> watchers;
+        std::latch done{1};
+        server->strand().post([&] {
+            watchers = server->watchTable().watchersOf(record);
+            done.count_down();
+        });
+        done.wait();
+        return watchers;
     }
 };
 
@@ -950,4 +1017,22 @@ TEST_CASE("failed_execute_posts_nothing", "[push][watch]") {
 
     CHECK(rig.wire(caller).snapshot().empty());
     CHECK(rig.wire(other).snapshot().empty());
+}
+
+TEST_CASE("execute_under_other_principal_drops_watches_before_its_fanout", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, std::make_shared<SecretGuard>()};
+    auto const shared = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(shared, records({"T_FanRow"}), "alice");
+    rig.watch(other, records({"T_FanRow"}), "alice");
+    auto const mid = rig.create(shared, {}, "alice");
+
+    // bob executes on alice's connection: admitted, and its change fans out...
+    CHECK(rig.execute(shared, mid, "T_FanEdit", R"({"id":5})", "bob").kind == "ok");
+    rig.flush();
+
+    // ...to the connection still watching, but not to the watch bob's execute dropped.
+    CHECK(rig.wire(other).changes().size() == 1U);
+    CHECK(rig.wire(shared).changes().empty());
+    CHECK(rig.recordWatchers("T_FanRow") == std::vector<ConnectionId>{other});
 }

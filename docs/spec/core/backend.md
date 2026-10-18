@@ -635,22 +635,30 @@ external reference is dropped.
 **Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
 action on the model's strand. Admission, in order:
 
+0. **Verify and compare, before anything can refuse.** The server calls
+   `_authorizer->authenticate(env.session)` once, on entry, and compares the
+   result (empty when it returns `nullopt`) with the connection's principal
+   baseline ([security.md](../security.md#a-connections-principal-baseline)).
+   An execute under another principal, or under none, therefore drops the
+   connection's watches even when a later step refuses it, and before its own
+   fan-out when none does. The verified value is kept for step 3; `authorize`
+   still sees the session as the client sent it.
 1. **In-flight cap.** With `LimitPolicy::maxInFlightExecutes` set and the
    in-flight count at it → `err "server busy"`. The count is server-strand
    state, so the check and the increment in step 7 cannot be separated by
    another admission: the cap is exact.
 2. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
    Denied → `err "unauthorized"` (with the request's `callId`), no dispatch.
-3. **Authenticate / make the principal authoritative.** After `authorize`
-   succeeds, the server calls `_authorizer->authenticate(env.session)`. If it
-   returns a value, the server **overwrites** `env.session.principal` with that
+3. **Make the principal authoritative.** After `authorize` succeeds, the
+   server uses the `authenticate` result from step 0. If it returned a value,
+   the server **overwrites** `env.session.principal` with that
    verified principal *before* building the `ScopedContext`. So model code that
    reads `session::current()->principal` on the remote path sees the identity the
    authorizer extracted from a valid token, not the client's asserted claim
    (`Context::principal` is untrusted wire input on its own). If `authenticate`
    returns `nullopt` — a non-verifying authorizer, including the default
-   `AllowAllAuthorizer`, or a token that passed `authorize` but expired in the
-   window before `authenticate` — the server **clears** `env.session.principal`
+   `AllowAllAuthorizer`, or a token that had already expired when it was
+   verified — the server **clears** `env.session.principal`
    to the empty string. The client's unverified claim is therefore never
    presented to the model as authoritative: the worst case is an empty
    principal, never an attacker-chosen one (see security.md). This is the only

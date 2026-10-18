@@ -1415,34 +1415,51 @@ private:
     /// `authenticate()` returns `nullopt` the authorizer cannot vouch for the
     /// caller, so the client-asserted principal is cleared rather than passed
     /// through unverified — every envelope kind this is called for (register,
-    /// attach, assign, instances, schemas, deregister, execute, cancel, watch,
-    /// unwatch, a service's kind) makes an authorization or ownership decision
-    /// that must key on the verified identity, never the client's raw claim.
-    /// `hello`, which a client sends with no session, is not stamped. See
-    /// docs/spec/security.md.
+    /// attach, assign, instances, schemas, deregister, cancel, watch, unwatch,
+    /// a service's kind) makes an authorization or ownership decision that
+    /// must key on the verified identity, never the client's raw claim.
+    /// `execute` does the same in `dispatchExecute`, split in two around its
+    /// `authorize`. `hello`, which a client sends with no session, is not
+    /// stamped. See docs/spec/security.md.
     ///
-    /// It then compares the stamped principal with @p cid's baseline, the
-    /// principal of the first envelope stamped on that connection. A different
-    /// one, including the empty principal of a token `authenticate` refuses,
-    /// drops every watch @p cid holds and becomes the baseline: a watch was
-    /// admitted for one principal, and must not keep delivering to another who
-    /// now speaks on the same connection. A new token for the same principal
-    /// keeps them. `cid == 0` and a connection not open have no baseline.
+    /// It then compares the stamped principal with @p cid's baseline
+    /// (`compareWithBaseline`).
     /// @param env Envelope whose `session.principal` is stamped or cleared in place.
     /// @param cid Connection @p env arrived on; `0` for unscoped.
     void stampVerifiedPrincipal(::morph::wire::Envelope& env, ConnectionId cid) {
-        if (auto verified = _authorizer->authenticate(env.session)) {
-            env.session.principal = std::move(*verified);
-        } else {
-            env.session.principal.clear();
-        }
+        env.session.principal = verifiedPrincipal(env.session);
+        compareWithBaseline(env.session.principal, cid);
+    }
+
+    /// @brief The principal `_authorizer` verifies from @p session, or empty
+    ///        when it cannot vouch for one.
+    /// @param session An envelope's session, its principal the client's claim.
+    /// @return The verified principal, or an empty string.
+    [[nodiscard]] std::string verifiedPrincipal(const ::morph::session::Context& session) const {
+        auto verified = _authorizer->authenticate(session);
+        return verified ? std::move(*verified) : std::string{};
+    }
+
+    /// @brief Compares @p principal with @p cid's baseline, dropping the
+    ///        connection's watches when they differ. On the server strand.
+    ///
+    /// The baseline is the principal of the first envelope verified on the
+    /// connection. A different one, including the empty principal of a token
+    /// `authenticate` refuses, drops every watch @p cid holds and becomes the
+    /// baseline: a watch was admitted for one principal, and must not keep
+    /// delivering to another who now speaks on the same connection. A new
+    /// token for the same principal keeps them. `cid == 0` and a connection
+    /// not open have no baseline.
+    /// @param principal The envelope's verified principal, or empty.
+    /// @param cid       Connection the envelope arrived on; `0` for unscoped.
+    void compareWithBaseline(const std::string& principal, ConnectionId cid) {
         if (cid == 0 || !_connectionScopes.contains(cid)) {
             return;
         }
-        auto const [baseline, first] = _principalBaselines.try_emplace(cid, env.session.principal);
-        if (!first && baseline->second != env.session.principal) {
+        auto const [baseline, first] = _principalBaselines.try_emplace(cid, principal);
+        if (!first && baseline->second != principal) {
             _watches.dropConnection(cid);
-            baseline->second = env.session.principal;
+            baseline->second = principal;
         }
     }
 
@@ -1997,6 +2014,12 @@ private:
         auto reject = [&env, &reply](const char* message) {
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
+        // Verified once, on entry, and compared with the connection's baseline
+        // before any check below can refuse the call: an execute under another
+        // principal, or under none, drops the connection's watches even when it
+        // is refused, and before its own fan-out when it is not.
+        std::string verified = verifiedPrincipal(env.session);
+        compareWithBaseline(verified, cid);
         LimitPolicy const& limits = _config.limits;
         // Exact, not advisory: the count is this strand's own state, so nothing
         // can be admitted between this check and the increment below.
@@ -2008,17 +2031,16 @@ private:
             reject("unauthorized");
             return;
         }
-        // Make the identity authoritative. A verifying authorizer returns the
-        // principal it extracted from a valid token; we stamp it so model code
-        // reading session::current()->principal can trust it. If authenticate()
-        // returns nullopt the authorizer cannot vouch for the caller, so we CLEAR
-        // the client-asserted principal rather than passing it through unverified.
-        // This closes two holes: (1) the TOCTOU window where a token that passed
-        // authorize() expires before authenticate() (worst case is an empty
-        // principal, never the attacker's claim), and (2) an authorize-only or
-        // allow-all authorizer that never authenticates (the model never sees an
-        // untrusted principal as authoritative). See docs/spec/security.md.
-        stampVerifiedPrincipal(env, cid);
+        // Make the identity authoritative: the principal verified on entry
+        // replaces the client's claim, so model code reading
+        // session::current()->principal can trust it. When authenticate()
+        // could not vouch for the caller it is empty, never the client's claim:
+        // a token that expires between the two checks yields at worst an empty
+        // principal, and an authorize-only or allow-all authorizer, which never
+        // authenticates, never presents an unverified principal to the model.
+        // `authorize` above saw the session as the client sent it; the verified
+        // principal lands only here. See docs/spec/security.md.
+        env.session.principal = std::move(verified);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         // One lookup for the holder, its recorded owner and its hydration state
         // together: they are fields of one record.
@@ -2408,7 +2430,7 @@ private:
     detail::WatchTable _watches;
     // The verified principal of the first stamped envelope on each open
     // connection, which a later one under another principal replaces after
-    // dropping the connection's watches (`stampVerifiedPrincipal`). Dropped
+    // dropping the connection's watches (`compareWithBaseline`). Dropped
     // with the connection's scope.
     std::unordered_map<ConnectionId, std::string> _principalBaselines;
     /// Names one cancellable call: the connection it arrived on and the
