@@ -368,6 +368,10 @@ public:
 // Session
 // ---------------------------------------------------------------------------------------------------------------
 
+/// @brief Sends a `watch` or `unwatch` request for a session's cache (spec 8 §7): the kind, and the `WatchBody` as
+///        JSON. `ui::watcherOver` builds one over a remote source's exchange.
+using Watcher = std::function<async::Completion<std::string>(std::string const& kind, std::string const& bodyJson)>;
+
 /// @brief What a `Session` is built with.
 struct SessionOptions {
     /// @brief Timers for `debounce`, `refreshEvery` and the cache's eviction. Without one, `debounce` fetches at once,
@@ -385,6 +389,9 @@ struct SessionOptions {
     std::function<std::string(std::exception_ptr const&)> classify;
     /// @brief Development mode: whether this session's screens record what the inspector reads. Off by default.
     DevelopmentTools developmentTools = DevelopmentTools::Off;
+    /// @brief Sends the cache's watch changes to the server. Empty: the session still counts what its cache holds,
+    ///        and sends nothing, which is right for a local source, whose replies carry every change it sees.
+    Watcher watcher;
 };
 
 namespace detail {
@@ -910,6 +917,7 @@ public:
                 static_cast<void>(key);
                 ++entry->generation;
                 entry->evict.cancel();
+                countTopics(*entry, -1);
             }
             _entries.clear();
             for (detail::QueryRuntime* const query : _mounted) {
@@ -1016,6 +1024,7 @@ public:
                     }
                 }
             }
+            countTopics(*entry, +1);
             found = _entries.emplace(std::move(key), std::move(entry)).first;
         }
         ++found->second->users;
@@ -1033,7 +1042,9 @@ public:
         entry->evict = _options.scheduler->after(_options.keepUnused, [this, weak] {
             auto const held = weak.lock();
             if (held && held->users == 0) {
+                countTopics(*held, -1);
                 _entries.erase(held->key);
+                flushWatches();
             }
         });
     }
@@ -1042,6 +1053,9 @@ public:
     /// @param entry   The entry.
     /// @param channel The channel to send it through; `nullptr` fails the request at once.
     void fetch(std::shared_ptr<detail::CacheEntry> const& entry, std::shared_ptr<ModelChannel> const& channel) {
+        // The watch goes out before the read, on the same connection, so a change committed after the read is
+        // seen as an event.
+        flushWatches();
         std::uint64_t const generation = ++entry->generation;
         if (channel == nullptr) {
             settleFailure(*entry, "the model alias has no instance", "error");
@@ -1132,9 +1146,21 @@ public:
     void actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
                          std::string const& instanceToken);
 
+    /// @brief The connection to the server was made again (spec 8 §7, "Reconnect"): sends the whole watch set with
+    ///        `replace: true`, then marks every entry but an `evaluate` one stale. A mounted entry refetches, and one
+    ///        whose fetch is in flight fetches once more when that fetch settles, so a change missed while the
+    ///        connection was down is read again.
+    void reconnected();
+
+    /// @brief The topics the cache holds now: every record an entry holds, and the keyed shared instance of every
+    ///        entry whose action holds no record. What `reconnected` sends.
+    /// @return The topics, records and instances each in name order; `replace` is false.
+    [[nodiscard]] wire::WatchBody watchSet() const;
+
     /// @brief Applies a server event to the cache (spec 8 §9).
     ///
-    /// A `changes` event marks the entries it names stale, and a `resync` marks every entry but an `evaluate` one;
+    /// A `changes` event marks the entries it names stale, and a `resync` sends the whole watch set again, as
+    /// `reconnected` does, and marks every entry but an `evaluate` one;
     /// each marked entry refetches through a mounted query that uses it, and one no query uses refetches when a
     /// query mounts on it. An event of another topic, or a payload that cannot be read, is ignored.
     /// @param event The event.
@@ -1195,6 +1221,24 @@ private:
     void applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
                            std::string const& instanceToken);
 
+    /// @brief Counts an entry's topics in or out, queueing a `watch` for a count that leaves zero and an `unwatch`
+    ///        for one that returns to it.
+    /// @param entry The entry.
+    /// @param delta `+1` when the entry is made, `-1` when it is dropped.
+    void countTopics(detail::CacheEntry const& entry, int delta);
+
+    /// @brief Sends the queued watch changes, at most one `watch` and one `unwatch`; drops them when there is no
+    ///        watcher.
+    void flushWatches();
+
+    /// @brief Sends one watch request, ignoring its reply: a refused topic simply sends no events.
+    /// @param kind The kind, `watch` or `unwatch`.
+    /// @param body The body.
+    void sendWatch(std::string_view kind, wire::WatchBody const& body);
+
+    /// @brief Marks every entry but an `evaluate` one stale and refetches the mounted ones, in one batch.
+    void markAllStale();
+
     void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
         _runtime->batch([&] {
             noteWrite();
@@ -1209,6 +1253,12 @@ private:
     reactive::Runtime* _runtime;
     SessionOptions _options;
     reactive::Signal<std::set<std::string, std::less<>>> _permitted;
+    std::map<std::string, int, std::less<>> _recordRefs;
+    std::map<std::pair<std::string, std::string>, int> _instanceRefs;
+    std::set<std::string, std::less<>> _watchRecords;
+    std::set<std::string, std::less<>> _unwatchRecords;
+    std::set<std::pair<std::string, std::string>> _watchInstances;
+    std::set<std::pair<std::string, std::string>> _unwatchInstances;
     reactive::Signal<std::shared_ptr<FormatContext const>> _format;
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
@@ -2801,21 +2851,114 @@ inline void Session::applyReplyEffects(std::string const& typeId, std::string co
     }
 }
 
+inline void Session::countTopics(detail::CacheEntry const& entry, int delta) {
+    if (entry.evaluate) {
+        return;
+    }
+    // One topic: its count, and the queues a change of the count from or to zero goes to.
+    auto const count = [delta](auto& refs, auto const& topic, auto& watches, auto& unwatches) {
+        int& refsOf = refs[topic];
+        refsOf += delta;
+        if (delta > 0 && refsOf == 1 && unwatches.erase(topic) == 0) {
+            watches.insert(topic);
+        } else if (refsOf <= 0) {
+            refs.erase(topic);
+            if (watches.erase(topic) == 0) {
+                unwatches.insert(topic);
+            }
+        }
+    };
+    if (!entry.records.empty()) {
+        for (ActionRecordInfo const& record : entry.records) {
+            count(_recordRefs, record.record, _watchRecords, _unwatchRecords);
+        }
+        return;
+    }
+    constexpr std::string_view kShared = "shared:";
+    if (entry.instanceToken.starts_with(kShared)) {
+        count(_instanceRefs, std::pair{entry.typeId, entry.instanceToken.substr(kShared.size())}, _watchInstances,
+              _unwatchInstances);
+    }
+}
+
+inline void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) {
+    auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
+    completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+}
+
+inline void Session::flushWatches() {
+    if (!_options.watcher) {
+        _watchRecords.clear();
+        _unwatchRecords.clear();
+        _watchInstances.clear();
+        _unwatchInstances.clear();
+        return;
+    }
+    auto const take = [](auto& records, auto& instances) {
+        wire::WatchBody body;
+        body.records.assign(records.begin(), records.end());
+        for (auto const& [modelType, primary] : instances) {
+            body.instances.push_back(wire::InstanceTopic{.modelType = modelType, .primary = primary, .instance = 0});
+        }
+        records.clear();
+        instances.clear();
+        return body;
+    };
+    if (!_watchRecords.empty() || !_watchInstances.empty()) {
+        sendWatch(wire::kWatchKind, take(_watchRecords, _watchInstances));
+    }
+    if (!_unwatchRecords.empty() || !_unwatchInstances.empty()) {
+        sendWatch(wire::kUnwatchKind, take(_unwatchRecords, _unwatchInstances));
+    }
+}
+
+inline wire::WatchBody Session::watchSet() const {
+    wire::WatchBody body;
+    for (auto const& [record, refs] : _recordRefs) {
+        static_cast<void>(refs);
+        body.records.push_back(record);
+    }
+    for (auto const& [topic, refs] : _instanceRefs) {
+        static_cast<void>(refs);
+        body.instances.push_back(
+            wire::InstanceTopic{.modelType = topic.first, .primary = topic.second, .instance = 0});
+    }
+    return body;
+}
+
+inline void Session::markAllStale() {
+    _runtime->batch([this] {
+        std::vector<detail::CacheEntry*> marked;
+        for (auto const& [key, entry] : _entries) {
+            static_cast<void>(key);
+            if (!entry->evaluate) {
+                markStale(*entry);
+                marked.push_back(entry.get());
+            }
+        }
+        for (detail::CacheEntry* const entry : marked) {
+            refetchMounted(*entry);
+        }
+    });
+}
+
+inline void Session::reconnected() {
+    // The whole set replaces what the server holds, so the queued changes are superseded.
+    _watchRecords.clear();
+    _unwatchRecords.clear();
+    _watchInstances.clear();
+    _unwatchInstances.clear();
+    if (_options.watcher) {
+        wire::WatchBody body = watchSet();
+        body.replace = true;
+        sendWatch(wire::kWatchKind, body);
+    }
+    markAllStale();
+}
+
 inline void Session::deliverEvent(wire::EventBody const& event) {
     if (event.topic == wire::kResyncTopic) {
-        _runtime->batch([this] {
-            std::vector<detail::CacheEntry*> marked;
-            for (auto const& [key, entry] : _entries) {
-                static_cast<void>(key);
-                if (!entry->evaluate) {
-                    markStale(*entry);
-                    marked.push_back(entry.get());
-                }
-            }
-            for (detail::CacheEntry* const entry : marked) {
-                refetchMounted(*entry);
-            }
-        });
+        reconnected();
         return;
     }
     if (event.topic != wire::kChangesTopic) {

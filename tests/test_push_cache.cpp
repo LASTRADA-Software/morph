@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <morph/ui/service_client.hpp>
 #include <string>
 #include <vector>
 
@@ -298,4 +299,138 @@ TEST_CASE("instance_event_refetches_reads_of_that_instance", "[push][cache]") {
     CHECK(h.dispatcher.count("Push_Rows") == 1);
     seam.changes(h, R"({"instances":[{"modelType":"Lims_SampleModel","primary":""}]})");
     CHECK(h.dispatcher.count("Push_Rows") == 2);
+}
+
+namespace {
+
+// Two queries over different records: `rows` holds `T_Row`, `head` holds `T_Row` at `header.rows`.
+constexpr char const* kSameRecordTwice = R"({
+  "vocab": "ui/1", "id": "same",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "queries": { "rows": { "model": "sample", "action": "Push_ListRows" },
+               "head": { "model": "sample", "action": "Push_Header" } },
+  "view": { "kind": "text", "text": { "fn": "format", "args": [ "{0} {1}", { "query": "rows" }, { "query": "head" } ] } } })";
+
+}  // namespace
+
+TEST_CASE("watch_sent_before_first_fetch", "[push][cache]") {
+    Harness h{true};
+    auto screen = h.mount(kRows);
+    REQUIRE(h.dispatcher.count("Push_ListRows") == 1);
+    REQUIRE(h.watches.size() == 1);
+    CHECK(h.watches.front().kind == "watch");
+    CHECK(h.watches.front().body == R"({"records":["T_Row"],"instances":[],"replace":false})");
+    CHECK(h.watches.front().callsBefore == 0);
+}
+
+TEST_CASE("one_watch_message_per_batch", "[push][cache]") {
+    Harness h{true};
+    // Two entries holding one record are one topic, watched once.
+    auto screen = h.mount(kSameRecordTwice);
+    CHECK(h.dispatcher.calls.size() == 2);
+    REQUIRE(h.watches.size() == 1);
+    CHECK(h.watches.front().body == R"({"records":["T_Row"],"instances":[],"replace":false})");
+    // A read whose action holds no record, through a private instance, needs no watch.
+    auto other = h.mount(kList);
+    CHECK(h.watches.size() == 1);
+}
+
+TEST_CASE("unwatch_after_eviction", "[push][cache]") {
+    Harness h{true};
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    screen.reset();
+    h.settle();
+    CHECK(h.watches.size() == 1);  // still kept, so still watched
+    h.advance(std::chrono::minutes{5});
+    REQUIRE(h.watches.size() == 2);
+    CHECK(h.watches.back().kind == "unwatch");
+    CHECK(h.watches.back().body == R"({"records":["T_Row"],"instances":[],"replace":false})");
+    CHECK(h.session.watchSet().records.empty());
+}
+
+TEST_CASE("no_watcher_counts_and_sends_nothing", "[push][cache]") {
+    Harness h;
+    auto screen = h.mount(kSameRecordTwice);
+    CHECK(h.session.watchSet().records == std::vector<std::string>{"T_Row"});
+    CHECK(h.watches.empty());
+}
+
+TEST_CASE("reconnected_sends_replace_and_marks_stale", "[push][cache]") {
+    Harness h{true};
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    std::size_t const calls = h.dispatcher.calls.size();
+    h.session.reconnected();
+    h.settle();
+    REQUIRE(h.watches.size() == 2);
+    CHECK(h.watches.back().body == R"({"records":["T_Row"],"instances":[],"replace":true})");
+    CHECK(h.watches.back().callsBefore == calls);
+    CHECK(h.dispatcher.count("Push_ListRows") == 2);
+}
+
+TEST_CASE("fetch_filed_before_reconnected_refetches_once", "[push][cache]") {
+    Harness h{true};
+    auto screen = h.mount(kRows);
+    REQUIRE(h.dispatcher.count("Push_ListRows") == 1);
+    // The first fetch was filed before the connection came back, so it may have read before a missed change.
+    h.session.reconnected();
+    h.settle();
+    CHECK(h.dispatcher.count("Push_ListRows") == 1);
+    h.reply(0, kTwoRows);
+    REQUIRE(h.dispatcher.count("Push_ListRows") == 2);
+    h.reply(1, kTwoRows);
+    CHECK(h.dispatcher.count("Push_ListRows") == 2);
+}
+
+TEST_CASE("resync_sends_the_whole_watch_set", "[push][cache]") {
+    Harness h{true};
+    EventSeam seam{h};
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    seam.backend.deliverEvent({.topic = std::string{morph::wire::kResyncTopic}, .payload = {"null"}});
+    h.settle();
+    REQUIRE(h.watches.size() == 2);
+    CHECK(h.watches.back().body == R"({"records":["T_Row"],"instances":[],"replace":true})");
+}
+
+TEST_CASE("watcher_over_stamps_the_current_session_and_reports_refusals", "[push][cache]") {
+    morph::testing::StepExecutor owner;
+    std::vector<morph::wire::Envelope> sent;
+    bool refuse = false;
+    morph::ui::Exchange const exchange = [&](morph::wire::Envelope request,
+                                             std::function<void(morph::ui::ExchangeReply)> const& done) {
+        sent.push_back(request);
+        morph::wire::Envelope reply;
+        reply.kind = refuse ? "err" : "ok";
+        reply.message = refuse ? "unauthorized" : "";
+        reply.body = refuse ? "" : R"({"refusedRecords":[],"refusedInstances":[]})";
+        done(std::move(reply));
+    };
+    std::string principal = "ann";
+    auto const watcher =
+        morph::ui::watcherOver(exchange, [&] { return morph::session::Context{.principal = principal}; }, &owner);
+
+    std::optional<std::string> body;
+    watcher("watch", R"({"records":["T_Row"]})").then([&](std::string const& reply) { body = reply; });
+    principal = "bob";
+    std::optional<std::string> refusal;
+    refuse = true;
+    watcher("unwatch", R"({"records":["T_Row"]})").onError([&](std::exception_ptr const& error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (std::exception const& thrown) {
+            refusal = thrown.what();
+        }
+    });
+    owner.runAll();
+
+    REQUIRE(sent.size() == 2);
+    CHECK(sent.at(0).kind == "watch");
+    CHECK(sent.at(0).session.principal == "ann");
+    CHECK(sent.at(0).body == R"({"records":["T_Row"]})");
+    CHECK(sent.at(1).kind == "unwatch");
+    CHECK(sent.at(1).session.principal == "bob");
+    CHECK(body == R"({"refusedRecords":[],"refusedInstances":[]})");
+    CHECK(refusal == "unauthorized");
 }

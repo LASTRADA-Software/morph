@@ -42,7 +42,9 @@ Read this before changing what a mounted document does. What a document may say 
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
-`backendChanged`; everything else is `error`).
+`backendChanged`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
+(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source).
+
 
 ## The app root scope
 
@@ -148,6 +150,21 @@ canonical body is the body's JSON with record fields in name order.
     - A `resync` marks every entry but an `evaluate` one. Another topic, or a payload that cannot be
       read, is ignored.
     - A marked entry that no query uses is only marked, and fetches when a query mounts on it.
+- **Watching what the cache holds** (spec 8 §7). The session counts, per topic, the entries that hold
+  it: a record name for every record an entry's action returns, and `(model type, primary key)` for an
+  entry read through a keyed shared alias whose action returns no record. A private instance needs no
+  watch, because the server knows its owner. A count that leaves zero queues a `watch`, and one that
+  returns to zero (the entry evicted, or the cache cleared) queues an `unwatch`.
+    - **Watch before fetch.** `fetch` sends the queued changes first, on the same connection, so the
+      server holds the watch before the read. A change committed before the read is in its value, and
+      one committed after arrives as an event, which a mark during the fetch keeps.
+    - The changes queued before one fetch go out as at most one `watch` and one `unwatch`. A screen
+      whose queries hold different records sends one small `watch` per fetch.
+    - Without a `watcher` the session still counts, so `Session::watchSet()` answers, and sends nothing.
+    - **`Session::reconnected()`**, and every `resync`, sends the whole set with `replace: true`, which
+      supersedes anything queued, then marks every entry but an `evaluate` one stale. A mounted entry
+      refetches, and an entry whose fetch is in flight fetches once more when it settles: that fetch
+      may have been filed before the connection came back.
 - **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

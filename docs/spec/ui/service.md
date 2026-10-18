@@ -268,6 +268,13 @@ the action's body with its computed fields filled and its field errors, without 
   members, with the field errors under `errors` and the verdict under `ready`, so `errors.<field>` attaches each
   error to its element. An action field named `errors` or `ready` is shadowed by them.
 
+`watcherOver(exchange, currentSession, cbExec)` is the client's route for the cache's `watch` and
+`unwatch` (spec 8 §7), which `RemoteServer` handles itself rather than `UiService`. Each request goes
+through the exchange with the session `currentSession` returns when it is sent: the exchange does not
+stamp one, and the server refuses an unsigned `watch`. An `ok` resolves with its body (the topics the
+server refused); a transport failure or an `err` rejects with its reason. A remote source builds it
+beside its evaluator and hands it to the shell as `SessionOptions::watcher`.
+
 ## Files
 
 `ui-file` is the file side channel of `files/1` (spec 6 §18). A server serves it when its `UiService` is built with
