@@ -84,6 +84,11 @@ env:
   # FASTCACHE_PREFETCH_GROUP), so this partitions the *statistics* and never
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
+  # A UTF-8 locale on every runner. The hosted image sets one and the
+  # self-hosted Docker runners do not; under "C", Qt warns that it switched to
+  # C.UTF-8, and the ladder's render smokes fail on any Qt warning.
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
   CLANG_VERSION: "22"
   # The Catch2 the `clang-tidy` job analyses against, through the
   # clang-tidy-diff.py run inside it. Not a version this
