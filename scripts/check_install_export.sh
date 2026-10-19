@@ -170,7 +170,8 @@ for required in \
     "lib/cmake/morph/morphConfigVersion.cmake" \
     "lib/cmake/morph/morphTargets.cmake" \
     "include/morph/util/rational.hpp" \
-    "include/morph/core/bridge.hpp"; do
+    "include/morph/core/bridge.hpp" \
+    "include/morph/client/shell.hpp"; do
     if [ ! -f "${prefix}/${required}" ]; then
         fail "cmake --install exited 0 but installed no ${required} -- it reported success having installed nothing"
     fi
@@ -183,6 +184,13 @@ if [ -f "$targets_file" ]; then
     # README and the consumer below all say morph::net.
     if grep -q '^add_library(morph::morph_' "$targets_file"; then
         fail "an optional target is exported as '$(grep -o 'morph::morph_[a-z_]*' "$targets_file" | head -1)' rather than under its alias name -- install(EXPORT NAMESPACE morph::) prefixes the target name, so each optional target needs EXPORT_NAME"
+    fi
+
+    # morph::client is built by default and is a compiled archive: an install
+    # without it would leave the generic client's consumers with headers and no
+    # library, or with neither.
+    if ! grep -q '^add_library(morph::client ' "$targets_file"; then
+        fail "morph::client was not installed: MORPH_BUILD_CLIENT is on by default and the component must be exported"
     fi
 
     # Vacuity guard. With no optional component installed, the export-name
@@ -223,10 +231,10 @@ project(morph_install_check_consumer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(morph CONFIG REQUIRED COMPONENTS net)
+find_package(morph CONFIG REQUIRED COMPONENTS net client)
 
 add_executable(consumer main.cpp)
-target_link_libraries(consumer PRIVATE morph::morph morph::net)
+target_link_libraries(consumer PRIVATE morph::morph morph::net morph::client)
 CONSUMER_CMAKE
 
 mapfile -t installed_public_headers < <(
@@ -248,11 +256,18 @@ fi
     cat <<'CONSUMER_MAIN'
 
 #include <cstdio>
+#include <string>
 
 int main() {
     const morph::math::Rational half{morph::math::Numerator{1}, morph::math::Denominator{2},
                                      morph::math::DecimalPlaces{2}};
     if (half.numerator != 1 || half.denominator != 2) {
+        return 1;
+    }
+    // A call into morph::client's archive, so the consumer links it rather than only compiling its headers.
+    morph::ui::ValueRecord reply;
+    reply.insert_or_assign("principal", morph::ui::Value{std::string{"ada"}});
+    if (!morph::client::defaultSignIn(morph::ui::Value{reply}).has_value()) {
         return 1;
     }
     std::printf("morph %d.%d.%d consumed from the install prefix\n", MORPH_VERSION_MAJOR,
@@ -268,7 +283,7 @@ if run_step "the consumer project could not configure against the install prefix
     cmake -S "$consumer_dir" -B "$consumer_build" ${generator_args[@]+"${generator_args[@]}"} \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH="$prefix"; then
-    note "find_package(morph CONFIG REQUIRED COMPONENTS net) resolves"
+    note "find_package(morph CONFIG REQUIRED COMPONENTS net client) resolves"
 
     if run_step "the consumer project did not compile against the install prefix" \
         cmake --build "$consumer_build"; then

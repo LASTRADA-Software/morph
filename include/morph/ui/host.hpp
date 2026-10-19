@@ -1038,6 +1038,14 @@ private:
                   std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr && _options.application->download(file, option, name, std::move(done));
     }
+    bool readFile(Value const& file, std::size_t maxBytes,
+                  std::function<void(std::expected<InlineFile, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->readFile(file, maxBytes, std::move(done));
+    }
+    bool saveFile(InlineFile const& file, std::string const& option,
+                  std::function<void(std::expected<Value, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->saveFile(file, option, std::move(done));
+    }
     void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override {
         if (_options.application != nullptr) {
             _options.application->preferenceChanged(screen, point, value);

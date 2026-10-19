@@ -4,12 +4,12 @@
 #include <QMessageLogContext>
 #include <QString>
 #include <QtGlobal>
-#include <app/app_source.hpp>
-#include <app/client_shell.hpp>
 #include <chrono>
 #include <cstddef>
 #include <expected>
 #include <memory>
+#include <morph/client/shell.hpp>
+#include <morph/client/source.hpp>
 #include <morph/qt_quick/frontend.hpp>
 #include <morph/ui/frontend.hpp>
 #include <string>
@@ -20,7 +20,7 @@
 /// The render smoke of spec 4 §4: opens every screen of an application in the Qt Quick renderer, one after another,
 /// and reports a source that did not open, a document that did not load, a refused mount, an interpreter diagnostic
 /// and every Qt warning (a QML error, a component that failed to load). Header-only: a test that includes it links
-/// `morph::qt_quick`; `morph_examples_common` itself does not.
+/// `morph::qt_quick`; `morph::client` itself does not.
 
 namespace morph::examples::testing {
 
@@ -61,8 +61,8 @@ inline void recordQtMessage(QtMsgType type, QMessageLogContext const& /*context*
 /// @brief Mounts each screen in turn, one per settle period, and quits when the last has been shown.
 class SmokeShell final : public ui::MountedShell {
 public:
-    SmokeShell(ui::AppContext& context, ui::IViewBackend& backend, ClientSource& source, SmokeReport& report,
-               std::chrono::milliseconds settle)
+    SmokeShell(ui::AppContext& context, ui::IViewBackend& backend, ::morph::client::Source& source,
+               SmokeReport& report, std::chrono::milliseconds settle)
         : _context{&context}, _backend{&backend}, _source{&source}, _report{&report}, _settle{settle} {}
 
     ~SmokeShell() override = default;
@@ -91,9 +91,9 @@ private:
             return;
         }
         std::string const screenId = _report->screens.at(_index++);
-        _shell = mountClientShell(
+        _shell = ::morph::client::mountShell(
             *_context, *_backend, _opened, *_source,
-            ClientShellOptions{
+            ::morph::client::ShellOptions{
                 .startScreen = screenId,
                 .onProblem =
                     [this, screenId](std::string const& problem) {
@@ -113,7 +113,7 @@ private:
 
     ui::AppContext* _context;
     ui::IViewBackend* _backend;
-    ClientSource* _source;
+    ::morph::client::Source* _source;
     SmokeReport* _report;
     std::chrono::milliseconds _settle;
     std::expected<ui::Bundle, ui::ConnectError> _opened;
@@ -131,7 +131,7 @@ private:
 /// @param source The source; the frontend opens and closes it.
 /// @param settle How long each screen stays mounted, rendering, before the next.
 /// @return The report.
-[[nodiscard]] inline SmokeReport runRenderSmoke(int& argc, char** argv, ClientSource& source,
+[[nodiscard]] inline SmokeReport runRenderSmoke(int& argc, char** argv, ::morph::client::Source& source,
                                                 std::chrono::milliseconds settle = std::chrono::milliseconds{200}) {
     SmokeReport report;
     std::vector<std::string> warnings;

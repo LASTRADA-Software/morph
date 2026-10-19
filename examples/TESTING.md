@@ -427,9 +427,8 @@ Open framework facts every WASM client must respect (verified):
   `testkit/` and are listed as sources of `morph_ladder_testkit`, which is
   what keeps AUTOMOC seeing `fault_proxy.hpp`'s `Q_OBJECT`.
 - `examples/common/` declares the testkit, `morph_ladder_testkit` (morph +
-  Catch2 + Qt), and `examples/common/app` declares `morph_examples_common`
-  (Qt-free: the argument reader, the remote and local sources, and the client
-  shell). Rungs link targets, never paths; the testkit never grows per-rung
+  Catch2 + Qt); the argument reader, the remote and local sources and the
+  client shell are the library's `morph::client`. Rungs link targets, never paths; the testkit never grows per-rung
   options.
 - A `morph_add_rung()` function creates `ladder_<rung>_{lib,server,screens,
   screen_tests,render_smoke,tests}` with `catch_discover_tests` + ctest labels

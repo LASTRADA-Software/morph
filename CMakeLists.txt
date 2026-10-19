@@ -64,6 +64,11 @@ option(MORPH_BUILD_QT_QUICK      "Build morph::qt_quick, the Qt Quick renderer a
 if(MORPH_BUILD_QT_QUICK AND NOT MORPH_BUILD_QT)
     message(FATAL_ERROR "MORPH_BUILD_QT_QUICK=ON needs MORPH_BUILD_QT=ON: morph::qt_quick runs its runtime on morph::qt's QtExecutor.")
 endif()
+option(MORPH_BUILD_CLIENT        "Build morph::client, the generic client's source and shell (a compiled library; needs only morph)" ON)
+if(MORPH_BUILD_EXAMPLES AND NOT MORPH_BUILD_CLIENT)
+    message(FATAL_ERROR "MORPH_BUILD_EXAMPLES=ON needs MORPH_BUILD_CLIENT=ON: the examples' client and their screen "
+                        "tests run on morph::client.")
+endif()
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
 # Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
@@ -721,7 +726,8 @@ set(_morph_optional_components
     "include/morph/qt/:morph_qt"
     "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite"
     "include/morph/tui/:morph_tui"
-    "include/morph/qt_quick/:morph_qt_quick")
+    "include/morph/qt_quick/:morph_qt_quick"
+    "include/morph/client/:morph_client")
 
 file(GLOB_RECURSE _morph_public_headers
      RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -729,7 +735,7 @@ file(GLOB_RECURSE _morph_public_headers
 
 # Union of every header set this configuration actually created.
 set(_morph_listed_headers "")
-foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_offline_sqlite morph_tui morph_qt_quick)
+foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_offline_sqlite morph_tui morph_qt_quick morph_client)
     if(TARGET ${_morph_target})
         get_target_property(_morph_target_headers ${_morph_target} HEADER_SET)
         if(_morph_target_headers)
@@ -1148,15 +1154,23 @@ if(MORPH_BUILD_OFFLINE_SQLITE AND MORPH_BUILD_TESTS)
     add_subdirectory(tests/offline_sqlite)
 endif()
 
+# ── morph::client, the generic client's source and shell (optional, compiled) ──
+# Here, after every optional component and the Tests section: the library links
+# the transports that were built (morph_qt_impl, morph::net), and its tests use
+# Catch2 and morph_test_main. Under Emscripten too: the generic client runs in
+# the browser, over bank's in-memory models.
+if(MORPH_BUILD_CLIENT)
+    add_subdirectory(src/client)
+    if(MORPH_BUILD_TESTS)
+        add_subdirectory(tests/client)
+    endif()
+endif()
+
 # ── Examples on server-defined screens (spec 4) ─────────────────────────────
-# examples/common/app (morph_examples_common), the gallery and the generic
-# client. Here, after every optional component and the Tests section: the
-# common target links the transports that were built (morph::qt, morph::net),
-# and its tests and the gallery's use Catch2 and morph_test_main. The client is
-# built when a frontend is (Qt Quick or the terminal).
-# Under Emscripten too: the generic client runs in the browser, over bank's in-memory models.
+# The gallery, the screens of the forms and bank examples, and the generic
+# client, all over morph::client. The client is built when a frontend is (Qt
+# Quick or the terminal).
 if(MORPH_BUILD_EXAMPLES)
-    add_subdirectory(examples/common/app)
     add_subdirectory(examples/gallery)
     add_subdirectory(examples/forms/screens)
     if(TARGET bank_lib OR TARGET bank_memory_lib)
@@ -1302,6 +1316,18 @@ if(MORPH_INSTALL)
         unset(_morph_qq_export_name)
     endif()
 
+    # morph::client is a compiled archive like morph::tui: its headers and its library. It links the transports
+    # that were built PRIVATE, so the export names them only as link dependencies, which are installed above.
+    if(TARGET morph_client)
+        set_target_properties(morph_client PROPERTIES EXPORT_NAME client)
+        install(TARGETS morph_client
+            EXPORT morphTargets
+            FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        )
+        list(APPEND MORPH_INSTALLED_COMPONENTS client)
+    endif()
+
     install(EXPORT morphTargets
         FILE morphTargets.cmake
         NAMESPACE morph::
@@ -1324,7 +1350,8 @@ if(MORPH_INSTALL)
     # morph::qt_quick) is in the package.
     set(_morph_arch_independent ARCH_INDEPENDENT)
     if(TARGET morph_qt_impl
-       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS OR "qt_quick" IN_LIST MORPH_INSTALLED_COMPONENTS)
+       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS OR "qt_quick" IN_LIST MORPH_INSTALLED_COMPONENTS
+       OR "client" IN_LIST MORPH_INSTALLED_COMPONENTS)
         set(_morph_arch_independent "")
     endif()
     write_basic_package_version_file(

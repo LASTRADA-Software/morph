@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# The generic client (spec 4 §3), built from one main for every frontend that is built: morph_client links no
+# The generic client (spec 4 §3), built from one main for every frontend that is built: morph_remote_client links no
 # application and runs remote only; morph_examples_client links every example for local mode (`--app NAME`).
 
 set(_morph_client_qt_quick 0)
@@ -14,12 +14,12 @@ endif()
 
 # In a WebAssembly build only the example client is built, as a Qt executable so it gets its HTML loader, and it opens
 # bank in local mode: a browser has no command line to name an application.
-set(_morph_clients morph_client morph_examples_client)
+set(_morph_clients morph_remote_client morph_examples_client)
 if(EMSCRIPTEN)
     set(_morph_clients morph_examples_client)
 endif()
 foreach(_morph_client IN LISTS _morph_clients)
-    if(_morph_client STREQUAL "morph_client")
+    if(_morph_client STREQUAL "morph_remote_client")
         add_executable(${_morph_client} main.cpp local_apps.hpp no_local_apps.cpp)
     else()
         if(EMSCRIPTEN)
@@ -70,7 +70,7 @@ foreach(_morph_client IN LISTS _morph_clients)
         endif()
         target_compile_definitions(${_morph_client} PRIVATE MORPH_CLIENT_HAS_BANK=${_morph_client_bank})
     endif()
-    target_link_libraries(${_morph_client} PRIVATE morph::examples_common)
+    target_link_libraries(${_morph_client} PRIVATE morph::client)
     if(_morph_client_qt_quick)
         target_link_libraries(${_morph_client} PRIVATE morph::qt_quick)
     endif()

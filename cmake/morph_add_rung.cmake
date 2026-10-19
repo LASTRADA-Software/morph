@@ -382,11 +382,11 @@ endfunction()
 
 # ── ladder_<rung>_screen_tests: screens/tests/*.cpp on the screen harness ────
 # Deferred to the end of the top-level directory by the screens block above:
-# morph::examples_common, whose ScreenHarness the tests drive, is added after
+# morph::client, whose ScreenHarness the tests drive, is added after
 # the ladder, and exists only when MORPH_BUILD_EXAMPLES is on. Without it the
 # rung's screens still build; only these tests are skipped.
 function(_morph_rung_screen_tests _rung _dir)
-    if(NOT MORPH_BUILD_TESTS OR NOT TARGET morph::examples_common OR NOT TARGET ladder_${_rung}_screens)
+    if(NOT MORPH_BUILD_TESTS OR NOT TARGET morph::client OR NOT TARGET ladder_${_rung}_screens)
         return()
     endif()
     _morph_rung_render_smoke("${_rung}" "${_dir}")
@@ -397,7 +397,7 @@ function(_morph_rung_screen_tests _rung _dir)
     add_executable(ladder_${_rung}_screen_tests ${_sources}
         "${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp")
     target_link_libraries(ladder_${_rung}_screen_tests PRIVATE
-        morph::ladder_${_rung}_screens morph::examples_common morph::ladder_testkit)
+        morph::ladder_${_rung}_screens morph::client morph::ladder_testkit)
     target_include_directories(ladder_${_rung}_screen_tests PRIVATE "${_dir}/tests")
     if(TARGET ladder_${_rung}_lib)
         # As for ladder_<rung>_tests: the schema TU registers its migrations
@@ -443,7 +443,7 @@ function(_morph_rung_render_smoke _rung _dir)
     endif()
     add_executable(ladder_${_rung}_render_smoke ${_sources})
     target_link_libraries(ladder_${_rung}_render_smoke PRIVATE
-        morph::ladder_${_rung}_screens morph::examples_common morph::qt_quick morph::ladder_testkit morph_test_main)
+        morph::ladder_${_rung}_screens morph::client morph::qt_quick morph::ladder_testkit morph_test_main)
     target_include_directories(ladder_${_rung}_render_smoke PRIVATE "${_dir}/tests")
     if(TARGET ladder_${_rung}_lib)
         target_link_libraries(ladder_${_rung}_render_smoke PRIVATE

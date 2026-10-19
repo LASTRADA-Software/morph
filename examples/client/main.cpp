@@ -6,14 +6,14 @@
 // without a problem and 1 otherwise. `--dev`, or `MORPH_UI_DEV=1`, turns development mode on (spec 6 §21): the screens
 // reload when the server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick.
 
-#include <app/app_source.hpp>
-#include <app/client_shell.hpp>
 #include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <expected>
 #include <iostream>
 #include <memory>
+#include <morph/client/shell.hpp>
+#include <morph/client/source.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/frontend.hpp>
 #include <span>
@@ -41,15 +41,15 @@ namespace ui = morph::ui;
 
 /// The shell factory both frontends use: the client shell, and with `--exit-after-mount`, a quit once it mounted.
 struct ShellFactory {
-    examples::ClientSource* source = nullptr;
-    examples::ClientArgs const* args = nullptr;
+    morph::client::Source* source = nullptr;
+    morph::client::Args const* args = nullptr;
 
     std::unique_ptr<ui::MountedShell> operator()(ui::AppContext& context, ui::IViewBackend& backend,
                                                  std::expected<ui::Bundle, ui::ConnectError> opened) const {
         auto problems = std::make_shared<int>(0);
         auto const mounted = std::make_shared<bool>(false);
         bool const exitAfterMount = args->exitAfterMount;
-        examples::ClientShellOptions options{
+        morph::client::ShellOptions options{
             .startScreen = args->screen,
             .onProblem =
                 [&context, problems, mounted, exitAfterMount](std::string const& problem) {
@@ -76,7 +76,7 @@ struct ShellFactory {
             };
         }
         bool const failed = !opened.has_value();
-        auto shell = examples::mountClientShell(context, backend, std::move(opened), *source, std::move(options));
+        auto shell = morph::client::mountShell(context, backend, std::move(opened), *source, std::move(options));
         if (failed && args->exitAfterMount) {
             context.quit(1);
         }
@@ -94,7 +94,7 @@ int run(int argc, char** argv) {
         args.emplace_back(MORPH_CLIENT_DEFAULT_APP);
     }
 #endif
-    auto clientArgs = examples::readClientArgs(args);
+    auto clientArgs = morph::client::readArgs(args);
     if (!clientArgs) {
         std::cerr << "client: " << clientArgs.error() << '\n';
         return 2;
@@ -104,7 +104,7 @@ int run(int argc, char** argv) {
     if (char const* const dev = std::getenv("MORPH_UI_DEV"); dev != nullptr && std::string_view{dev} == "1") {
         clientArgs->dev = true;
     }
-    auto source = examples::makeSource(*clientArgs, examples::client::localApps());
+    auto source = morph::client::makeSource(*clientArgs, examples::client::localApps());
     if (!source) {
         std::cerr << "client: " << source.error() << '\n';
         return 2;

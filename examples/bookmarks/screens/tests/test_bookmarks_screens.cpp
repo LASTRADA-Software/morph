@@ -5,10 +5,10 @@
 // empties the active list, and showing archived ones brings them back. The models run in process over the rung's test
 // database.
 
-#include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/client/source.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
 #include <testkit/bundle_warnings.hpp>
@@ -20,8 +20,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 using morph::ladder::testkit::DbFixture;

@@ -7,8 +7,6 @@
 #include <morph/ui/value.hpp>
 // clang-format on
 
-#include <app/app_source.hpp>
-#include <app/client_shell.hpp>
 #include <atomic>
 #include <chrono>
 #include <concepts>
@@ -19,6 +17,8 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <morph/client/shell.hpp>
+#include <morph/client/source.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
@@ -61,11 +61,11 @@ enum class RigMode : std::uint8_t {
 
 /// @brief A source behind a `RemoteServer` in process: the bundle served by its `UiService`, the models by the
 ///        server, both reached through the server's own envelope handling.
-class SimulatedAppSource final : public ClientSource {
+class SimulatedAppSource final : public ::morph::client::Source {
 public:
     /// @brief A source for @p app.
     /// @param app The application.
-    explicit SimulatedAppSource(LocalApp app) : _app{std::move(app)} {}
+    explicit SimulatedAppSource(::morph::client::LocalApp app) : _app{std::move(app)} {}
     ~SimulatedAppSource() override { close(); }
     SimulatedAppSource(SimulatedAppSource const&) = delete;
     SimulatedAppSource& operator=(SimulatedAppSource const&) = delete;
@@ -80,7 +80,7 @@ protected:
                 ui::ConnectError{.kind = ui::ConnectError::Kind::Unsupported, .message = bundle.error().message()});
         }
         if (_app.setUp) {
-            _app.setUp(LocalSetup{});
+            _app.setUp(::morph::client::LocalSetup{});
         }
         _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
         backend::ServerConfig config;
@@ -106,7 +106,7 @@ protected:
     }
 
 private:
-    LocalApp _app;
+    ::morph::client::LocalApp _app;
     std::unique_ptr<exec::ThreadPoolExecutor> _workers;
     std::shared_ptr<backend::RemoteServer> _server;
 };
@@ -123,10 +123,10 @@ public:
     /// @param params   The screen's params.
     /// @param setup    Local mode's options, such as the user its calls run as; simulated mode ignores them.
     /// @throws std::runtime_error when the application does not open or the screen does not mount.
-    ScreenHarness(LocalApp const& app, std::string screenId, RigMode mode, ui::ParamMap params = {},
-                  LocalSetup setup = {}) {
+    ScreenHarness(::morph::client::LocalApp const& app, std::string screenId, RigMode mode, ui::ParamMap params = {},
+                  ::morph::client::LocalSetup setup = {}) {
         if (mode == RigMode::Local) {
-            _source = std::make_unique<LocalAppSource>(app, std::move(setup));
+            _source = std::make_unique<::morph::client::LocalSource>(app, std::move(setup));
         } else {
             _source = std::make_unique<SimulatedAppSource>(app);
         }
@@ -140,13 +140,14 @@ public:
         if (!bundle) {
             throw std::runtime_error{"ScreenHarness: " + bundle.error().message};
         }
-        _shell = mountClientShell(
+        _shell = ::morph::client::mountShell(
             _context, _backend, std::move(bundle), *_source,
-            ClientShellOptions{.startScreen = std::move(screenId),
-                               .startParams = std::move(params),
-                               .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
-                               .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); },
-                               .downloads = _downloads});
+            ::morph::client::ShellOptions{
+                .startScreen = std::move(screenId),
+                .startParams = std::move(params),
+                .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
+                .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); },
+                .downloads = _downloads});
         if (_mounted.empty()) {
             throw std::runtime_error{"ScreenHarness: no screen mounted" +
                                      (_problems.empty() ? std::string{} : ": " + _problems.front())};
@@ -384,7 +385,7 @@ private:
 
     FakeAppContext _context;
     ui::testing::RecordingBackend _backend;
-    std::unique_ptr<ClientSource> _source;
+    std::unique_ptr<::morph::client::Source> _source;
     std::unique_ptr<ui::MountedShell> _shell;
     // One directory per harness, so two tests never read each other's downloads.
     std::filesystem::path _downloads = [] {

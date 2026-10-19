@@ -3,15 +3,18 @@
 
 #include <expected>
 #include <memory>
-#include <morph/core/backend.hpp>
-#include <morph/core/envelope_transport.hpp>
-#include <morph/ui/frontend.hpp>
 #include <string>
 
-/// @file
-/// The transport a remote client connects with, chosen by the frontend it runs under (spec 4 §3).
+#include "../core/backend.hpp"
+#include "../core/envelope_transport.hpp"
+#include "../ui/frontend.hpp"
 
-namespace morph::examples {
+/// @file
+/// @brief The transport a remote client connects with, chosen by the frontend it runs under (spec 4 §3).
+///
+/// Specified in `docs/spec/client/client.md`.
+
+namespace morph::client {
 
 /// @brief A connection to a server: the bridge's backend and its request verb, which are one object.
 struct RemoteTransport {
@@ -46,4 +49,4 @@ namespace detail {
 
 }  // namespace detail
 
-}  // namespace morph::examples
+}  // namespace morph::client

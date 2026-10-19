@@ -4,10 +4,10 @@
 // mode over the rung's test database. A refused document, a mount error, an interpreter diagnostic or a Qt warning
 // fails it.
 
-#include <app/app_source.hpp>
 #include <array>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/client/source.hpp>
 #include <string>
 #include <testkit/db_fixture.hpp>
 #include <testkit/render_smoke.hpp>
@@ -17,9 +17,9 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalAppSource;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
+using morph::client::LocalSource;
 using morph::examples::testing::runRenderSmoke;
 using morph::examples::testing::SmokeReport;
 using morph::ladder::testkit::DbFixture;
@@ -40,8 +40,8 @@ char** argValues() {
 // Mutation: drop a screen from the bundle (the mounted list misses it).
 TEST_CASE("lims render smoke: local mode, every screen, offscreen", "[lims][render-smoke]") {
     DbFixture fixture;
-    LocalAppSource source{LocalApp{.name = "lims", .bundle = &lims::screens::bundle, .setUp = {}},
-                          LocalSetup{.db = {}, .user = "tech"}};
+    LocalSource source{LocalApp{.name = "lims", .bundle = &lims::screens::bundle, .setUp = {}},
+                       LocalSetup{.db = {}, .user = "tech"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted ==
           std::vector<std::string>{std::string{lims::screens::kRegister}, std::string{lims::screens::kLifecycle},

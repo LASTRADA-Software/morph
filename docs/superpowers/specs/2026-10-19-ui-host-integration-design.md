@@ -635,6 +635,12 @@ public:
   over the loaded bundle, so an application that builds its own shell mounts with the same source.
 - **Examples.** `examples/common/app` is removed; the client and the rungs' screen tests link `morph::client`; its
   tests move to `tests/client/` (with their probe application).
+- **As built.** The examples' remote-only client executable is `morph_remote_client`, so the library keeps the target
+  name `morph_client`. The examples that read the ladder testkit's headers
+  through the old example library's include path now name `examples/common` themselves. `DocumentScreenHost`
+  forwards `readFile` and `saveFile` to the application host as it forwards `uploadFor` and `download`. The application
+  host also takes an optional `onProblem`, which
+  reports a mapper answering no principal.
 - **Specs.** A new `docs/spec/client/client.md` (packaging, the sources, sign-in mapping, the shell, transports, the
   application host's file commands, tests); `ui/service.md` "The generic client" points at it; `docs/spec/README.md`
   lists it.

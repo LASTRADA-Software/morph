@@ -62,7 +62,7 @@ saw before, and an old client reading a new reply ignores the key.
 - A hello handled with no connection behind it is still answered `events: true` when it offers them, and the
   acceptance is recorded nowhere: there is no connection to send events on.
 - `UiService` therefore overrides both `handle` overloads; the two-parameter one answers with throwaway facts.
-- The generic client (`examples/common/app`'s `clientHello()`) offers events on every `ui-hello` it sends. `UiClient`
+- The generic client (`morph::client`'s `clientHello()`, [`../client/client.md`](../client/client.md)) offers events on every `ui-hello` it sends. `UiClient`
   sends the `HelloRequest` it was given, unchanged.
 
 ## Content addressing
@@ -349,7 +349,7 @@ switch are the client's.
      mounts. Matching it to the old screen's would need the two documents compared node by node, not by name.
    - A remount is refused while a close or a save is waiting, and on a closed screen.
 
-**The generic client.** `--dev`, or `MORPH_UI_DEV=1` in the environment, turns development mode on
+**The generic client** ([`../client/client.md`](../client/client.md)). `--dev`, or `MORPH_UI_DEV=1` in the environment, turns development mode on
 (`ClientArgs::dev`, `ClientShellOptions::dev`). The shell then calls `ClientSource::poll` every second. The source
 keeps one poll in flight at a time, and once a changed bundle and its schemas are current, the shell hands the changed
 ids to `reloadDocuments` with the shown screen and reports each refusal as a problem. Without development mode

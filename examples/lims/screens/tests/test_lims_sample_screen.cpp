@@ -5,10 +5,10 @@
 // measurement is added and removed; a registration is deleted. The recording backend loads no host component, so the
 // series shows through its fallbacks.
 
-#include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/client/source.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/util/rational.hpp>
@@ -27,8 +27,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 using morph::ladder::testkit::DbFixture;

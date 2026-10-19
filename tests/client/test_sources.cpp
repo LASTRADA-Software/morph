@@ -7,13 +7,13 @@
 // clang-format on
 
 #include <algorithm>
-#include <app/app_source.hpp>
-#include <app/client_shell.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <expected>
 #include <functional>
 #include <memory>
+#include <morph/client/shell.hpp>
+#include <morph/client/source.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
@@ -34,9 +34,9 @@
 
 #include "probe_app.hpp"
 
-using morph::examples::ClientShellOptions;
-using morph::examples::LocalAppSource;
-using morph::examples::LocalSetup;
+using morph::client::LocalSetup;
+using morph::client::LocalSource;
+using morph::client::ShellOptions;
 using morph::examples::testing::FakeAppContext;
 using morph::examples::testing::pumpUntil;
 using Opened = std::expected<morph::ui::Bundle, morph::ui::ConnectError>;
@@ -48,10 +48,10 @@ struct ShellLog {
     std::vector<std::string> problems;
     std::vector<std::string> mounted;
 
-    ClientShellOptions options(std::string start = {}) {
-        return ClientShellOptions{.startScreen = std::move(start),
-                                  .onProblem = [this](std::string const& problem) { problems.push_back(problem); },
-                                  .onMounted = [this](std::string const& screenId) { mounted.push_back(screenId); }};
+    ShellOptions options(std::string start = {}) {
+        return ShellOptions{.startScreen = std::move(start),
+                            .onProblem = [this](std::string const& problem) { problems.push_back(problem); },
+                            .onMounted = [this](std::string const& screenId) { mounted.push_back(screenId); }};
     }
 };
 
@@ -74,10 +74,10 @@ Opened openAndWait(FakeAppContext& context, morph::ui::AppSource& source) {
 
 }  // namespace
 
-TEST_CASE("LocalAppSource: opens the linked application's bundle, verified, through the UI service in process",
-          "[examples-common][source]") {
+TEST_CASE("LocalSource: opens the linked application's bundle, verified, through the UI service in process",
+          "[client][source]") {
     FakeAppContext context;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     Opened const opened = openAndWait(context, source);
     REQUIRE(opened.has_value());
     CHECK(opened->applicationId == "probe");
@@ -88,15 +88,13 @@ TEST_CASE("LocalAppSource: opens the linked application's bundle, verified, thro
 }
 
 // Mutation: mount the bundle's last screen instead of the first — the answer text is missing.
-TEST_CASE("Client shell: mounts the start screen, and the query's answer crosses the bridge",
-          "[examples-common][shell]") {
+TEST_CASE("Client shell: mounts the start screen, and the query's answer crosses the bridge", "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     {
-        auto shell =
-            morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
+        auto shell = morph::client::mountShell(context, backend, openAndWait(context, source), source, log.options());
         CHECK(log.mounted == std::vector<std::string>{"probe.home"});
         CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "answer") == "answer 42"; }));
         CHECK(log.problems.empty());
@@ -107,14 +105,13 @@ TEST_CASE("Client shell: mounts the start screen, and the query's answer crosses
 // Mutation: mount the navigated screen from inside the click handler — the old screen is destroyed under its own
 // handler (ASan) or the mount order changes.
 TEST_CASE("Client shell: a document's navigate opens the screen as a tab and shows it, after the handler returns",
-          "[examples-common][shell]") {
+          "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     {
-        auto shell =
-            morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
+        auto shell = morph::client::mountShell(context, backend, openAndWait(context, source), source, log.options());
         auto const next = backend.find("Button", "testId", "next");
         REQUIRE(next.has_value());
         backend.click(next.value());
@@ -129,21 +126,20 @@ TEST_CASE("Client shell: a document's navigate opens the screen as a tab and sho
     source.close();
 }
 
-TEST_CASE("Client shell: --screen picks the start screen; an unknown one is shown as a problem",
-          "[examples-common][shell]") {
+TEST_CASE("Client shell: --screen picks the start screen; an unknown one is shown as a problem", "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     {
-        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
-                                                       log.options("probe.other"));
+        auto shell = morph::client::mountShell(context, backend, openAndWait(context, source), source,
+                                               log.options("probe.other"));
         CHECK(log.mounted == std::vector<std::string>{"probe.other"});
     }
     ShellLog missing;
     {
-        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
-                                                       missing.options("probe.none"));
+        auto shell = morph::client::mountShell(context, backend, openAndWait(context, source), source,
+                                               missing.options("probe.none"));
         CHECK(missing.mounted.empty());
         REQUIRE(missing.problems.size() == 1);
         CHECK(missing.problems.front() == "Cannot open probe.none: unknown screen");
@@ -154,18 +150,18 @@ TEST_CASE("Client shell: --screen picks the start screen; an unknown one is show
 
 // Mutation: mount a moved-to entry from a posted task (the history pushes it, and forward is lost).
 TEST_CASE("Client shell: the shown screen's route is kept in the history, and back and forward reopen it",
-          "[examples-common][shell][route-history]") {
+          "[client][shell][route-history]") {
     using Entries = std::vector<std::string>;
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     morph::ui::testing::MemoryHistory history;
     {
-        ClientShellOptions options = log.options();
+        ShellOptions options = log.options();
         options.history = &history;
-        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
-                                                       std::move(options));
+        auto shell =
+            morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
         CHECK(history.entries() == Entries{"probe.home"});
         auto const next = backend.find("Button", "testId", "next");
         REQUIRE(next.has_value());
@@ -191,7 +187,7 @@ TEST_CASE("Client shell: the shown screen's route is kept in the history, and ba
 
 // Mutation: ignore the history's route at start (the start screen mounts instead of probe.other).
 TEST_CASE("Client shell: a reloaded page opens the route it holds, and a route it cannot open shows the start screen",
-          "[examples-common][shell][route-history]") {
+          "[client][shell][route-history]") {
     using Entries = std::vector<std::string>;
     for (auto const& [initial, expected] : {std::pair<std::string, std::string>{"probe.other", "probe.other"},
                                             std::pair<std::string, std::string>{"probe.none", "probe.home"},
@@ -199,14 +195,14 @@ TEST_CASE("Client shell: a reloaded page opens the route it holds, and a route i
         CAPTURE(initial);
         FakeAppContext context;
         morph::ui::testing::RecordingBackend backend;
-        LocalAppSource source{probe::app(), LocalSetup{}};
+        LocalSource source{probe::app(), LocalSetup{}};
         ShellLog log;
         morph::ui::testing::MemoryHistory history{initial};
         {
-            ClientShellOptions options = log.options();
+            ShellOptions options = log.options();
             options.history = &history;
-            auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
-                                                           std::move(options));
+            auto shell =
+                morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
             CHECK(log.mounted == Entries{expected});
             CHECK(history.entries() == Entries{expected});
         }
@@ -216,33 +212,32 @@ TEST_CASE("Client shell: a reloaded page opens the route it holds, and a route i
 
 // Mutation: open the history's route even when a start screen is named (probe.other mounts).
 TEST_CASE("Client shell: a start screen asked for by name wins over the history's route",
-          "[examples-common][shell][route-history]") {
+          "[client][shell][route-history]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     morph::ui::testing::MemoryHistory history{"probe.other"};
     {
-        ClientShellOptions options = log.options("probe.home");
+        ShellOptions options = log.options("probe.home");
         options.history = &history;
-        auto shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source), source,
-                                                       std::move(options));
+        auto shell =
+            morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
         CHECK(log.mounted == std::vector<std::string>{"probe.home"});
         CHECK(history.entries() == std::vector<std::string>{"probe.home"});
     }
     source.close();
 }
 
-TEST_CASE("Client shell: a source that did not open is shown, not mounted", "[examples-common][shell]") {
+TEST_CASE("Client shell: a source that did not open is shown, not mounted", "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
-    auto shell =
-        morph::examples::mountClientShell(context, backend,
-                                          std::unexpected(morph::ui::ConnectError{
-                                              .kind = morph::ui::ConnectError::Kind::Unreachable, .message = "down"}),
-                                          source, log.options());
+    auto shell = morph::client::mountShell(context, backend,
+                                           std::unexpected(morph::ui::ConnectError{
+                                               .kind = morph::ui::ConnectError::Kind::Unreachable, .message = "down"}),
+                                           source, log.options());
     CHECK(log.mounted.empty());
     CHECK(log.problems == std::vector<std::string>{"Cannot open the application: down"});
     CHECK(backend.find("Text", "text", "Cannot open the application: down").has_value());
@@ -251,7 +246,7 @@ TEST_CASE("Client shell: a source that did not open is shown, not mounted", "[ex
 namespace {
 
 /// A source whose exchange the test answers by hand.
-class ManualSource final : public morph::examples::ClientSource {
+class ManualSource final : public morph::client::Source {
 public:
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test answers and inspects these.
     std::vector<std::function<void(morph::ui::ExchangeReply)>> waiting;
@@ -288,7 +283,7 @@ public:
 }  // namespace
 
 // Mutation: drop the liveness check in the guarded exchange — the closed source sends a second request.
-TEST_CASE("ClientSource: once closed, it delivers nothing and sends nothing more", "[examples-common][source]") {
+TEST_CASE("Source: once closed, it delivers nothing and sends nothing more", "[client][source]") {
     FakeAppContext context;
     ManualSource source;
     int readies = 0;
@@ -306,8 +301,7 @@ TEST_CASE("ClientSource: once closed, it delivers nothing and sends nothing more
 }
 
 // Mutation: leave the timeout unarmed — the source never answers.
-TEST_CASE("ClientSource: a source that does not answer in time is reported unreachable, once",
-          "[examples-common][source]") {
+TEST_CASE("Source: a source that does not answer in time is reported unreachable, once", "[client][source]") {
     FakeAppContext context;
     ManualSource source;
     source.timeout = std::chrono::milliseconds{100};
@@ -325,7 +319,7 @@ TEST_CASE("ClientSource: a source that does not answer in time is reported unrea
     CHECK(answers.size() == 1);
 }
 
-TEST_CASE("ClientSource: switching backends is refused", "[examples-common][source]") {
+TEST_CASE("Source: switching backends is refused", "[client][source]") {
     ManualSource source;
     std::optional<std::string> refusal;
     source.switchBackend(morph::ui::Backend{.name = "local"}, [&refusal](std::expected<void, std::string> done) {
@@ -364,7 +358,7 @@ std::shared_ptr<morph::ui::UiService> serving(std::string_view text) {
 
 /// A source whose server the test redeploys: its exchange answers through whichever service it holds now, and counts
 /// the `ui-hello` requests.
-class RedeployedSource final : public morph::examples::ClientSource {
+class RedeployedSource final : public morph::client::Source {
 public:
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test redeploys and counts.
     std::shared_ptr<morph::ui::UiService> service = serving(kCounterServed);
@@ -405,7 +399,7 @@ private:
 TEST_CASE(
     "Client shell: in development mode a changed served document remounts the shown screen, keeping its state; "
     "without it nothing is polled",
-    "[examples-common][shell][dev-reload]") {
+    "[client][shell][dev-reload]") {
     std::vector<bool> modes{false};
     modes.push_back(true);
     for (bool const dev : modes) {
@@ -415,12 +409,12 @@ TEST_CASE(
         RedeployedSource source;
         ShellLog log;
         std::vector<std::vector<std::string>> reloads;
-        ClientShellOptions options = log.options();
+        ShellOptions options = log.options();
         options.dev = dev;
         options.onReloaded = [&reloads](std::vector<std::string> const& remounted) { reloads.push_back(remounted); };
         {
-            auto const shell = morph::examples::mountClientShell(context, backend, openAndWait(context, source),
-                                                                 source, std::move(options));
+            auto const shell =
+                morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
             REQUIRE(log.mounted == std::vector<std::string>{"dev.counter"});
             auto const bump = backend.find("Button", "testId", "bump");
             REQUIRE(bump.has_value());
@@ -454,14 +448,14 @@ TEST_CASE(
 }
 
 // Mutation: hide the frame whenever no sign-in happened (the probe has none, so its sidebar would never show).
-TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[examples-common][shell]") {
+TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
-    LocalAppSource source{probe::app(), LocalSetup{}};
+    LocalSource source{probe::app(), LocalSetup{}};
     ShellLog log;
     {
         auto const shell =
-            morph::examples::mountClientShell(context, backend, openAndWait(context, source), source, log.options());
+            morph::client::mountShell(context, backend, openAndWait(context, source), source, log.options());
         auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
         REQUIRE(sidebar.has_value());
         CHECK(backend.prop(*sidebar, "visible") != "false");
@@ -533,7 +527,7 @@ private:
 
 // The probe application behind a server-like transport: the UI service answers the `ui-*` kinds in process, the
 // exchange answers `watch` itself, as `RemoteServer` does, and every request's kind is logged in order.
-class ReconnectingSource final : public morph::examples::ClientSource {
+class ReconnectingSource final : public morph::client::Source {
 public:
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test fires and inspects these.
     std::vector<std::string> kinds;
@@ -591,14 +585,13 @@ private:
 }  // namespace
 
 // Mutation: call the listeners before the ui-hello, or forward no events — the order or the last watch changes.
-TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[examples-common][source][push]") {
+TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[client][source][push]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend screens;
     ReconnectingSource source;
     ShellLog log;
     {
-        auto shell =
-            morph::examples::mountClientShell(context, screens, openAndWait(context, source), source, log.options());
+        auto shell = morph::client::mountShell(context, screens, openAndWait(context, source), source, log.options());
         REQUIRE(log.mounted == std::vector<std::string>{"probe.home"});
         REQUIRE(source.connectHook != nullptr);
 
@@ -622,14 +615,14 @@ TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[examples-commo
 
 // Mutation: run the connect listeners in the connect hook's own task, ahead of the bridge's reconnect handler — the
 // mounted query refetches through the old connection's binding before the rebind.
-TEST_CASE("remote_source_refetches_after_the_bridge_rebinds", "[examples-common][source][push]") {
+TEST_CASE("remote_source_refetches_after_the_bridge_rebinds", "[client][source][push]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend screens;
     ReconnectingSource source;
     ShellLog log;
     {
         auto const shell =
-            morph::examples::mountClientShell(context, screens, openAndWait(context, source), source, log.options());
+            morph::client::mountShell(context, screens, openAndWait(context, source), source, log.options());
         REQUIRE(log.mounted == std::vector<std::string>{"probe.home"});
         REQUIRE(source.backend != nullptr);
         // The screen's query has run, through a bound private instance.

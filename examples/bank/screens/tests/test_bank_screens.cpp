@@ -5,12 +5,12 @@
 // the deposit causes (the A/B ordering); signing out returns to the login; a loan's schedule is the model's. The
 // models run in process over the bank's test database.
 
-#include <app/app_source.hpp>
 #include <atomic>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <morph/client/source.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -23,8 +23,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 

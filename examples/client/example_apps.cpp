@@ -2,9 +2,9 @@
 //
 // morph_examples_client links every example application for local mode.
 
-#include <app/app_source.hpp>
 #include <forms_screens.hpp>
 #include <gallery/gallery.hpp>
+#include <morph/client/source.hpp>
 #include <string>
 #include <vector>
 
@@ -33,35 +33,41 @@
 
 namespace morph::examples::client {
 
-std::vector<LocalApp> localApps() {
-    std::vector<LocalApp> apps{gallery::localApp()};
-    apps.push_back(LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}});
+std::vector<::morph::client::LocalApp> localApps() {
+    std::vector<::morph::client::LocalApp> apps{gallery::localApp()};
+    apps.push_back(::morph::client::LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}});
 #if MORPH_CLIENT_HAS_BANK
 #ifdef __EMSCRIPTEN__
     // In the browser: bank's in-memory models, seeded with the hosted demo's customer (demo / demo1234).
-    apps.push_back(LocalApp{
-        .name = "bank", .bundle = &bank::screens::bundle, .setUp = [](LocalSetup const&) { bank::wasm::seedDemo(); }});
+    apps.push_back(::morph::client::LocalApp{
+        .name = "bank", .bundle = &bank::screens::bundle, .setUp = [](::morph::client::LocalSetup const&) {
+            bank::wasm::seedDemo();
+        }});
 #else
-    apps.push_back(LocalApp{.name = "bank", .bundle = &bank::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                                std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
-                                bank::db::setup("DRIVER=SQLite3;Database=" + file);
-                            }});
+    apps.push_back(::morph::client::LocalApp{
+        .name = "bank", .bundle = &bank::screens::bundle, .setUp = [](::morph::client::LocalSetup const& setup) {
+            std::string const file = setup.db.empty() ? std::string{"bank.db"} : setup.db;
+            bank::db::setup("DRIVER=SQLite3;Database=" + file);
+        }});
 #endif
 #endif
 #if MORPH_CLIENT_HAS_BOOKMARKS
-    apps.push_back(
-        LocalApp{.name = "bookmarks", .bundle = &bookmarks::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                     std::string const file = setup.db.empty() ? std::string{"bookmarks.db"} : setup.db;
-                     bookmarks::db::setup("DRIVER=SQLite3;Database=" + file);
-                     bookmarks::screens::prepareLocal();
-                 }});
+    apps.push_back(::morph::client::LocalApp{.name = "bookmarks",
+                                             .bundle = &bookmarks::screens::bundle,
+                                             .setUp = [](::morph::client::LocalSetup const& setup) {
+                                                 std::string const file =
+                                                     setup.db.empty() ? std::string{"bookmarks.db"} : setup.db;
+                                                 bookmarks::db::setup("DRIVER=SQLite3;Database=" + file);
+                                                 bookmarks::screens::prepareLocal();
+                                             }});
 #endif
 #if MORPH_CLIENT_HAS_LIMS
-    apps.push_back(LocalApp{.name = "lims", .bundle = &lims::screens::bundle, .setUp = [](LocalSetup const& setup) {
-                                std::string const file = setup.db.empty() ? std::string{"lims.db"} : setup.db;
-                                lims::db::setup("DRIVER=SQLite3;Database=" + file);
-                                lims::screens::prepareLocal();
-                            }});
+    apps.push_back(::morph::client::LocalApp{
+        .name = "lims", .bundle = &lims::screens::bundle, .setUp = [](::morph::client::LocalSetup const& setup) {
+            std::string const file = setup.db.empty() ? std::string{"lims.db"} : setup.db;
+            lims::db::setup("DRIVER=SQLite3;Database=" + file);
+            lims::screens::prepareLocal();
+        }});
 #endif
     return apps;
 }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <app/app_source.hpp>
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <morph/client/source.hpp>
 #include <morph/forms/flows.hpp>
 #include <morph/forms/views.hpp>
 #include <morph/ui/service.hpp>
@@ -101,6 +101,6 @@ inline constexpr std::string_view kHomeScreen = "gallery.home";
 
 /// @brief The gallery as a linked application, for a local-mode client.
 /// @return It.
-[[nodiscard]] morph::examples::LocalApp localApp();
+[[nodiscard]] morph::client::LocalApp localApp();
 
 }  // namespace gallery

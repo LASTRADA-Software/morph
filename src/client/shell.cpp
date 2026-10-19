@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include "app/client_shell.hpp"
-
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -13,6 +11,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <morph/client/shell.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/ui/dev_reload.hpp>
@@ -29,13 +28,14 @@
 #include <morph/ui/workspace.hpp>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
 
-namespace morph::examples {
+namespace morph::client {
 
 namespace {
 
@@ -72,163 +72,23 @@ std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
     return std::nullopt;
 }
 
-/// The application's side of the commands the library's host does not answer itself: sign-in and sign-out, which
-/// install the principal a sign-in mutation answered into the source; and the file commands, which read a picked file
-/// from disk to upload it and save a downloaded one, moving the bytes over the source's file side channel.
-class Application final : public ui::InterpreterHost {
-    // Writes @p bytes under the suggested name, else @p own, in @p directory, and answers the saved path. Only the
-    // name's last component is kept: a file never lands outside the downloads directory.
-    static std::expected<ui::Value, std::string> save(std::filesystem::path const& directory,
-                                                      std::string const& suggested, std::string const& own,
-                                                      std::string const& bytes) {
-        auto const leaf = std::filesystem::path{suggested.empty() ? own : suggested}.filename();
-        auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);
-        std::ofstream out{target, std::ios::binary};
-        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        if (!out) {
-            return std::unexpected("cannot write " + target.string());
-        }
-        return ui::Value{target.string()};
+/// Writes @p bytes under the suggested name, else @p own, in @p directory, and answers the saved path. Only the name's
+/// last component is kept: a file never lands outside the downloads directory.
+std::expected<ui::Value, std::string> save(std::filesystem::path const& directory, std::string const& suggested,
+                                           std::string const& own, std::string const& bytes) {
+    auto const leaf = std::filesystem::path{suggested.empty() ? own : suggested}.filename();
+    auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);
+    std::ofstream out{target, std::ios::binary};
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!out) {
+        return std::unexpected("cannot write " + target.string());
     }
-
-public:
-    /// The shell's side of a sign-in: install the principal and token, reload, then mount.
-    using SignedIn = std::function<void(std::string principal, std::string token)>;
-
-    Application(ClientSource& source, std::filesystem::path downloads, SignedIn signedIn,
-                std::function<void()> signedOut)
-        : _source{&source},
-          _downloads{std::move(downloads)},
-          _signedIn{std::move(signedIn)},
-          _signedOut{std::move(signedOut)} {}
-
-    // The reply's `principal`, and its `token` when it carries one, unless it says `ok: false`.
-    bool signIn(ui::Value const& reply) override {
-        ui::ValueRecord const* const record = reply.asRecord();
-        if (record == nullptr) {
-            return false;
-        }
-        auto const accepted = record->find("ok");
-        if (accepted != record->end() && accepted->second.asBool() != nullptr && !*accepted->second.asBool()) {
-            return false;
-        }
-        auto const text = [record](char const* field) {
-            auto const found = record->find(field);
-            std::string const* const value = found == record->end() ? nullptr : found->second.asString();
-            return value == nullptr ? std::string{} : *value;
-        };
-        std::string principal = text("principal");
-        if (principal.empty()) {
-            return false;
-        }
-        _signedIn(std::move(principal), text("token"));
-        return true;
-    }
-
-    void signOut() override { _signedOut(); }
-
-    bool uploadFor(ui::UploadRequest const& request, std::function<void(ui::Value)> progress,
-                   std::function<void(std::expected<ui::Value, std::string>)> done) override {
-        auto const files = _source->files();
-        auto const path = pickedPath(request.file);
-        if (!files || !path) {
-            return false;
-        }
-        std::ifstream input{*path, std::ios::binary};
-        if (!input) {
-            done(std::unexpected("cannot read " + path->string()));
-            return true;
-        }
-        std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-        files->upload(
-            ui::FileInfo{.name = path->filename().string(), .type = "application/octet-stream", .size = 0},
-            std::move(bytes), request.modelType, request.action,
-            [progress = std::move(progress)](double fraction) {
-                if (progress) {
-                    // An exact fraction at two places: a document's values are never floating point.
-                    auto const percent = static_cast<std::int64_t>(std::llround(fraction * 100.0));
-                    progress(ui::Value{ui::Decimal{
-                        math::Rational{math::Numerator{percent}, math::Denominator{100}, math::DecimalPlaces{2}}}});
-                }
-            },
-            [done = std::move(done)](std::expected<std::string, std::string> ref) {
-                done(ref ? std::expected<ui::Value, std::string>{ui::Value{*ref}}
-                         : std::expected<ui::Value, std::string>{std::unexpected(ref.error())});
-            });
-        return true;
-    }
-
-    // Reads a picked file whose bytes a document moves inline; its size is read first, and one over the cap is
-    // refused without reading it.
-    bool readFile(ui::Value const& file, std::size_t maxBytes,
-                  std::function<void(std::expected<ui::InlineFile, std::string>)> done) override {
-        auto const path = pickedPath(file);
-        if (!path) {
-            return false;
-        }
-        std::error_code error;
-        std::uintmax_t const size = std::filesystem::file_size(*path, error);
-        if (error) {
-            done(std::unexpected("cannot read " + path->string()));
-            return true;
-        }
-        if (size > maxBytes) {
-            done(std::unexpected(path->filename().string() + " is " + std::to_string(size) + " bytes, over the " +
-                                 std::to_string(maxBytes) + "-byte inline cap"));
-            return true;
-        }
-        std::ifstream input{*path, std::ios::binary};
-        if (!input) {
-            done(std::unexpected("cannot read " + path->string()));
-            return true;
-        }
-        std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-        done(ui::InlineFile{.name = path->filename().string(), .mediaType = {}, .bytes = std::move(bytes)});
-        return true;
-    }
-
-    // Saves a file a document holds the bytes of, as `download` saves a fetched one.
-    bool saveFile(ui::InlineFile const& file, std::string const& option,
-                  std::function<void(std::expected<ui::Value, std::string>)> done) override {
-        if (option == "preview") {
-            return false;
-        }
-        done(save(_downloads, file.name, file.name, file.bytes));
-        return true;
-    }
-
-    // Saves the file under the name the screen suggested, else its own, in the downloads directory, and answers the
-    // saved path. Only saving is supported: a preview needs a viewer the shell does not have.
-    bool download(ui::Value const& file, std::string const& option, ui::Value const& name,
-                  std::function<void(std::expected<ui::Value, std::string>)> done) override {
-        auto const files = _source->files();
-        std::string const* const ref = file.asString();
-        if (!files || ref == nullptr || option == "preview") {
-            return false;
-        }
-        std::string const* const suggested = name.asString();
-        files->download(*ref, {},
-                        [directory = _downloads, suggested = suggested == nullptr ? std::string{} : *suggested,
-                         done = std::move(done)](std::expected<ui::DownloadedFile, std::string> got) {
-                            if (!got) {
-                                done(std::unexpected(got.error()));
-                                return;
-                            }
-                            done(save(directory, suggested, got->name, got->bytes));
-                        });
-        return true;
-    }
-
-private:
-    ClientSource* _source;
-    std::filesystem::path _downloads;
-    SignedIn _signedIn;
-    std::function<void()> _signedOut;
-};
+    return ui::Value{target.string()};
+}
 
 class Shell final : public ui::MountedShell {
 public:
-    Shell(ui::AppContext& context, ui::IViewBackend& backend, ClientShellOptions options)
+    Shell(ui::AppContext& context, ui::IViewBackend& backend, ShellOptions options)
         : _context{&context}, _backend{&backend}, _options{std::move(options)} {}
 
     ~Shell() override {
@@ -244,7 +104,7 @@ public:
 
     /// Hands the session the source's connects and events. Registered once: they reach whichever session is
     /// current, and nothing once the shell is gone.
-    void listen(ClientSource& source) {
+    void listen(Source& source) {
         if (_listening) {
             return;
         }
@@ -262,7 +122,7 @@ public:
     }
 
     /// Loads the bundle's screens and mounts the start screen.
-    void start(ui::Bundle const& bundle, ClientSource& source) {
+    void start(ui::Bundle const& bundle, Source& source) {
         _source = &source;
         loadDocuments(bundle);
         std::string const start = _options.startScreen.empty() ? firstScreen(false) : _options.startScreen;
@@ -289,15 +149,14 @@ public:
             return generated == _generated.end() ? nullptr : generated->second;
         };
         hostOptions.backend = _backend;
-        _application = std::make_unique<Application>(
-            source, _options.downloads,
-            [this](std::string principal, std::string token) {
-                reloadThen(true,
-                           [this, principal = std::move(principal), token = std::move(token)](auto done) mutable {
-                               _source->signIn(std::move(principal), std::move(token), std::move(done));
-                           });
+        _application = std::make_unique<ApplicationHost>(
+            source, _options.signIn, _options.downloads,
+            [this](SignedIn signedIn) {
+                reloadThen(true, [this, signedIn = std::move(signedIn)](auto done) mutable {
+                    _source->signIn(std::move(signedIn.principal), std::move(signedIn.token), std::move(done));
+                });
             },
-            [this] { signOut(); });
+            [this] { signOut(); }, [this](std::string const& text) { problem(text); });
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
@@ -688,9 +547,9 @@ private:
 
     ui::AppContext* _context;
     ui::IViewBackend* _backend;
-    ClientShellOptions _options;
+    ShellOptions _options;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
-    ClientSource* _source = nullptr;
+    Source* _source = nullptr;
     bool _reloading = false;
     std::optional<std::pair<std::string, ui::ParamMap>> _pending;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
@@ -702,7 +561,7 @@ private:
     std::unique_ptr<ui::Session> _session;
     // Whether the source's connect and event listeners are registered.
     bool _listening = false;
-    std::unique_ptr<Application> _application;
+    std::unique_ptr<ApplicationHost> _application;
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ShellFrame> _frame;
     std::unique_ptr<ui::Workspace> _workspace;
@@ -719,9 +578,159 @@ private:
 
 }  // namespace
 
-std::unique_ptr<ui::MountedShell> mountClientShell(ui::AppContext& context, ui::IViewBackend& backend,
-                                                   std::expected<ui::Bundle, ui::ConnectError> opened,
-                                                   ClientSource& source, ClientShellOptions options) {
+std::optional<SignedIn> defaultSignIn(ui::Value const& reply) {
+    ui::ValueRecord const* const record = reply.asRecord();
+    if (record == nullptr) {
+        return std::nullopt;
+    }
+    auto const accepted = record->find("ok");
+    if (accepted != record->end() && accepted->second.asBool() != nullptr && !*accepted->second.asBool()) {
+        return std::nullopt;
+    }
+    auto const text = [record](char const* field) {
+        auto const found = record->find(field);
+        std::string const* const value = found == record->end() ? nullptr : found->second.asString();
+        return value == nullptr ? std::string{} : *value;
+    };
+    std::string principal = text("principal");
+    if (principal.empty()) {
+        return std::nullopt;
+    }
+    return SignedIn{.principal = std::move(principal), .token = text("token")};
+}
+
+ApplicationHost::ApplicationHost(Source& source, SignInMapper signIn, std::filesystem::path downloads,
+                                 std::function<void(SignedIn)> signedIn, std::function<void()> signedOut,
+                                 std::function<void(std::string const&)> onProblem)
+    : _source{&source},
+      _signIn{std::move(signIn)},
+      _downloads{std::move(downloads)},
+      _signedIn{std::move(signedIn)},
+      _signedOut{std::move(signedOut)},
+      _onProblem{std::move(onProblem)} {
+    if (!_signIn) {
+        throw std::invalid_argument{"morph::client::ApplicationHost: the sign-in mapper is empty"};
+    }
+}
+
+bool ApplicationHost::signIn(ui::Value const& reply) {
+    std::optional<SignedIn> mapped = _signIn(reply);
+    if (!mapped) {
+        return false;
+    }
+    // A mapper that answers no principal would install an anonymous session as if it were a sign-in.
+    if (mapped->principal.empty()) {
+        if (_onProblem) {
+            _onProblem("sign-in mapper answered no principal");
+        }
+        return false;
+    }
+    if (_signedIn) {
+        _signedIn(*std::move(mapped));
+    }
+    return true;
+}
+
+void ApplicationHost::signOut() {
+    if (_signedOut) {
+        _signedOut();
+    }
+}
+
+bool ApplicationHost::uploadFor(ui::UploadRequest const& request, std::function<void(ui::Value)> progress,
+                                std::function<void(std::expected<ui::Value, std::string>)> done) {
+    auto const files = _source->files();
+    auto const path = pickedPath(request.file);
+    if (!files || !path) {
+        return false;
+    }
+    std::ifstream input{*path, std::ios::binary};
+    if (!input) {
+        done(std::unexpected("cannot read " + path->string()));
+        return true;
+    }
+    std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    files->upload(
+        ui::FileInfo{.name = path->filename().string(), .type = "application/octet-stream", .size = 0},
+        std::move(bytes), request.modelType, request.action,
+        [progress = std::move(progress)](double fraction) {
+            if (progress) {
+                // An exact fraction at two places: a document's values are never floating point.
+                auto const percent = static_cast<std::int64_t>(std::llround(fraction * 100.0));
+                progress(ui::Value{ui::Decimal{
+                    math::Rational{math::Numerator{percent}, math::Denominator{100}, math::DecimalPlaces{2}}}});
+            }
+        },
+        [done = std::move(done)](std::expected<std::string, std::string> ref) {
+            done(ref ? std::expected<ui::Value, std::string>{ui::Value{*ref}}
+                     : std::expected<ui::Value, std::string>{std::unexpected(ref.error())});
+        });
+    return true;
+}
+
+bool ApplicationHost::download(ui::Value const& file, std::string const& option, ui::Value const& name,
+                               std::function<void(std::expected<ui::Value, std::string>)> done) {
+    auto const files = _source->files();
+    std::string const* const ref = file.asString();
+    if (!files || ref == nullptr || option == "preview") {
+        return false;
+    }
+    std::string const* const suggested = name.asString();
+    files->download(*ref, {},
+                    [directory = _downloads, suggested = suggested == nullptr ? std::string{} : *suggested,
+                     done = std::move(done)](std::expected<ui::DownloadedFile, std::string> got) {
+                        if (!got) {
+                            done(std::unexpected(got.error()));
+                            return;
+                        }
+                        done(save(directory, suggested, got->name, got->bytes));
+                    });
+    return true;
+}
+
+bool ApplicationHost::readFile(ui::Value const& file, std::size_t maxBytes,
+                               std::function<void(std::expected<ui::InlineFile, std::string>)> done) {
+    auto const path = pickedPath(file);
+    if (!path) {
+        return false;
+    }
+    std::error_code error;
+    std::uintmax_t const size = std::filesystem::file_size(*path, error);
+    if (error) {
+        done(std::unexpected("cannot read " + path->string()));
+        return true;
+    }
+    if (size > maxBytes) {
+        done(std::unexpected(path->filename().string() + " is " + std::to_string(size) + " bytes, over the " +
+                             std::to_string(maxBytes) + "-byte inline cap"));
+        return true;
+    }
+    std::ifstream input{*path, std::ios::binary};
+    if (!input) {
+        done(std::unexpected("cannot read " + path->string()));
+        return true;
+    }
+    std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    done(ui::InlineFile{.name = path->filename().string(), .mediaType = {}, .bytes = std::move(bytes)});
+    return true;
+}
+
+bool ApplicationHost::saveFile(ui::InlineFile const& file, std::string const& option,
+                               std::function<void(std::expected<ui::Value, std::string>)> done) {
+    if (option == "preview") {
+        return false;
+    }
+    done(save(_downloads, file.name, file.name, file.bytes));
+    return true;
+}
+
+std::unique_ptr<ui::MountedShell> mountShell(ui::AppContext& context, ui::IViewBackend& backend,
+                                             std::expected<ui::Bundle, ui::ConnectError> opened, Source& source,
+                                             ShellOptions options) {
+    if (!options.signIn) {
+        throw std::invalid_argument{
+            "morph::client::mountShell: ShellOptions::signIn is empty; it maps a sign-in reply"};
+    }
     auto shell = std::make_unique<Shell>(context, backend, std::move(options));
     if (!opened) {
         shell->show("Cannot open the application: " + opened.error().message);
@@ -731,4 +740,4 @@ std::unique_ptr<ui::MountedShell> mountClientShell(ui::AppContext& context, ui::
     return shell;
 }
 
-}  // namespace morph::examples
+}  // namespace morph::client
