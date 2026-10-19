@@ -443,10 +443,21 @@ void ClientSource::connected() {
         hello.body = ui::detail::writeMessage(clientHello());
         _exchange(std::move(hello), [](ui::ExchangeReply const&) {});
     }
-    std::vector<std::function<void()>> const listeners = _connectListeners;
-    for (auto const& listener : listeners) {
-        listener();
+    // The listeners re-watch and refetch. Posted, not run here: a transport posts the bridge's reconnect handler to
+    // this same owner right after the connect hook, so it runs first, clears the old connection's model ids and starts
+    // rebinding, and a refetch then waits for its new binding. The `ui-hello` above still goes out before any watch.
+    if (_bridge == nullptr) {
+        return;
     }
+    _bridge->owner().post([this, alive = std::weak_ptr<bool>{_alive}] {
+        if (auto const live = alive.lock(); !live || !*live) {
+            return;
+        }
+        std::vector<std::function<void()>> const listeners = _connectListeners;
+        for (auto const& listener : listeners) {
+            listener();
+        }
+    });
 }
 
 void ClientSource::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }

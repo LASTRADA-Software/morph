@@ -1164,6 +1164,10 @@ if(MORPH_BUILD_EXAMPLES)
     if(MORPH_BUILD_QT_QUICK OR MORPH_BUILD_TUI)
         add_subdirectory(examples/client)
     endif()
+elseif(TARGET ladder_bank_server)
+    # The bank server serves bank's screens, so it needs them without the generic examples; their tests, which use
+    # the generic app, are built only with them.
+    add_subdirectory(examples/bank/screens)
 endif()
 
 # ── Documentation ───────────────────────────────────────────────────────────

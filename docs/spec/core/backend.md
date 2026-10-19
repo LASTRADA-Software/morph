@@ -1235,8 +1235,9 @@ through `dispatchExecute`.
   `RemoteServer::reauthorise`, the one place a recipient's topics are
   narrowed. A body left with no topic is not sent. What is left is queued
   on the connection and sent merged with the connection's other changes
-  ([Coalescing](#coalescing)), written as `post` writes: dropped above
-  `wire::kMaxEnvelopeBytes`, held back behind a full backlog.
+  ([Coalescing](#coalescing)), written as `post` writes, held back behind a
+  full backlog. A merged event that would exceed `wire::kMaxEnvelopeBytes` is
+  never dropped: see *Size* under [Coalescing](#coalescing).
 - **Re-authorised at send time, by the rule that admitted it.** For each
   watched topic in a recipient's body:
   1. the watch's stored session must still `authenticate` as the principal it
@@ -1287,6 +1288,11 @@ through `dispatchExecute`.
     `detail::kCoalesceKeyLimit` (256: one per key, one per whole-type record,
     one per instance topic), and before a `resync` a fan-out owes the
     connection. A window of zero sends each fan-out at once.
+  - *Size.* The key count is bounded and the keys' size is not, so a merged
+    event can exceed `wire::kMaxEnvelopeBytes`. It is then sent with every
+    record as a whole-type change, which names what changed in a few bytes per
+    record type; one that still does not fit is sent as a `resync`. A watcher
+    is over-notified, never missed.
   - *What is not queued.* Nothing is queued for a connection with no writer,
     or one held back behind its backlog: its drain sends a `resync`, which
     covers every change since. A closed connection, and one whose writer is

@@ -1328,13 +1328,30 @@ private:
         if (outbox.queued.empty()) {
             return;
         }
-        std::string payload;
-        (void)glz::write_json(outbox.queued.take(), payload);
-        auto envelope =
-            ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
-        if (!oversized(cid, envelope)) {
-            postHere(cid, std::move(envelope));
+        ::morph::wire::ChangesBody body = outbox.queued.take();
+        std::string envelope = changesEnvelope(body);
+        // The key count is bounded, the keys' size is not: past the envelope cap, the same records go as whole-type
+        // changes, which name what changed in a few bytes each. A watcher must never miss a change, so what still
+        // does not fit is a `resync`.
+        if (envelope.size() > ::morph::wire::kMaxEnvelopeBytes) {
+            for (::morph::effects::RecordChange& change : body.records) {
+                change.keys.reset();
+            }
+            envelope = changesEnvelope(body);
         }
+        if (oversized(cid, envelope)) {
+            envelope = ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}"));
+        }
+        postHere(cid, std::move(envelope));
+    }
+
+    /// @brief The encoded `changes` event carrying @p body.
+    /// @param body The changes.
+    /// @return The envelope.
+    [[nodiscard]] static std::string changesEnvelope(::morph::wire::ChangesBody const& body) {
+        std::string payload;
+        (void)glz::write_json(body, payload);
+        return ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
     }
 
     /// @brief Body of `post`. On the server strand.

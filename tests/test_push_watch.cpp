@@ -1553,6 +1553,26 @@ TEST_CASE("updates_keys_merge_once_each", "[push][watch]") {
     CHECK(keysOf(body.records.front()) == std::vector<std::string>{"1", "2", "3"});
 }
 
+// Mutation: drop a coalesced event over the envelope cap, as an oversized post is — the watcher never hears of
+// either change.
+TEST_CASE("coalesced_event_over_the_cap_goes_as_whole_types", "[push][watch]") {
+    constexpr auto kWindow = std::chrono::milliseconds{20};
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, kWindow};
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}));
+    // Two keys that each fit an envelope, and together do not.
+    std::string const big = "\"" + std::string((::morph::wire::kMaxEnvelopeBytes / 2) + 16, 'k') + "\"";
+    rig.fanOut({rowChange({big}), rowChange({big + " "})}, cid);
+    REQUIRE(::morph::testing::waitUntil([&] { return !rig.wire(cid).snapshot().empty(); }));
+    rig.flush();
+
+    auto const bodies = rig.wire(cid).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().records.size() == 1U);
+    CHECK(bodies.front().records.front().record == "T_FanRow");
+    CHECK_FALSE(bodies.front().records.front().keys.has_value());
+}
+
 TEST_CASE("flush_at_256_keys_without_waiting", "[push][watch]") {
     FanRig rig{std::chrono::milliseconds{0}, nullptr, kForever};
     auto const cid = rig.connect();
