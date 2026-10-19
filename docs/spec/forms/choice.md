@@ -130,6 +130,15 @@ knows which action to call and which result fields to use — plus
 above). A non-optional `Choice` member is required by the `morph::forms`
 rules.
 
+The same three annotations have a second source: a plain member whose
+`FieldMeta` sets `optionsAction`, `valueField` and `labelField`
+([forms.md](forms.md#field-metadata--fieldmeta)) is emitted with them, and
+reads as a `Choice` field everywhere the schema is read. Schema generation
+refuses, at registration, a `Choice` member whose meta also sets
+`optionsAction` (`ConflictingOptionsError`: two sources of options), and a
+meta that sets some of the three without the others
+(`IncompleteOptionsError`). Only a `Choice` declares `x-optionsDependsOn`.
+
 ## Schema representation
 
 The `glz::meta` specialisation composes `name` **per instantiation**, from the

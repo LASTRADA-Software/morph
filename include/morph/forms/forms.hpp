@@ -325,6 +325,19 @@ struct FieldMeta {
     /// type.**
     BlankAs blankAs{BlankAs::Omit};
 
+    /// @brief Type id of the registered action whose result rows are this member's options, for a member that is not
+    ///        a `Choice<…>`: the member is emitted with `x-optionsAction`, `x-optionValue` and `x-optionLabel`, as a
+    ///        `Choice` is, so a renderer draws it as a lookup select. Empty emits nothing. Set together with
+    ///        `valueField` and `labelField`; a `Choice` member, whose type already names its options, refuses it.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
+    std::string_view optionsAction{};
+    /// @brief Field of each options row submitted as the value (`x-optionValue`); set with `optionsAction`.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
+    std::string_view valueField{};
+    /// @brief Field of each options row shown to the user (`x-optionLabel`); set with `optionsAction`.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
+    std::string_view labelField{};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -2009,6 +2022,40 @@ struct UnsatisfiableFormError : std::logic_error {
                            "rule.") {}
 };
 
+/// @brief Thrown by schema generation when a `Choice<…>` member's `FieldMeta` also sets `optionsAction`: the member's
+///        type already names where its options come from, and two sources cannot both hold.
+///
+/// A programming error in the action's declaration, so a `std::logic_error`, thrown when the action registers. The
+/// fix is to drop `optionsAction` from the meta, or to make the member a plain type.
+struct ConflictingOptionsError : std::logic_error {
+    /// @brief Constructs the error naming the action type and the member.
+    /// @param actionName The type declaring the member (`glz::name_v<Owner>`).
+    /// @param field      The member's wire name.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type, then its member, as a message names them.
+    ConflictingOptionsError(std::string_view actionName, std::string_view field)
+        : std::logic_error("morph::forms: '" + std::string{actionName} + "." + std::string{field} +
+                           "' is a Choice and its FieldMeta also sets optionsAction; the Choice already names its "
+                           "options action. Drop optionsAction from the FieldMeta, or make the member a plain type.") {
+    }
+};
+
+/// @brief Thrown by schema generation when a `FieldMeta` sets `optionsAction` without both `valueField` and
+///        `labelField`, or either of those without `optionsAction`: options need the action, the value field and the
+///        label field together.
+///
+/// A programming error in the action's declaration, so a `std::logic_error`, thrown when the action registers.
+struct IncompleteOptionsError : std::logic_error {
+    /// @brief Constructs the error naming the action type, the member and what it lacks.
+    /// @param actionName The type declaring the member (`glz::name_v<Owner>`).
+    /// @param field      The member's wire name.
+    /// @param missing    The `FieldMeta` members that must be set and are not.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type, its member and what is missing, in that order.
+    IncompleteOptionsError(std::string_view actionName, std::string_view field, std::string_view missing)
+        : std::logic_error("morph::forms: '" + std::string{actionName} + "." + std::string{field} +
+                           "' declares options in its FieldMeta without " + std::string{missing} +
+                           "; set optionsAction, valueField and labelField together.") {}
+};
+
 namespace detail {
 
 /// @brief One computed-field declaration: binds a destination member to the
@@ -2340,6 +2387,43 @@ void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
     return true;
 }
 
+/// @brief Emits the options annotations a `FieldMeta` declares for a member that is not a `Choice<…>`, refusing a
+///        declaration that cannot hold.
+/// @tparam Owner  The type declaring @p name.
+/// @tparam Member The member's type.
+/// @param property DOM node for the property.
+/// @param name     The member's wire name.
+/// @param meta     Its `FieldMeta`.
+/// @throws ConflictingOptionsError when @p Member is a `Choice` and @p meta sets `optionsAction`.
+/// @throws IncompleteOptionsError when `optionsAction`, `valueField` and `labelField` are not all set or all empty.
+template <typename Owner, typename Member>
+void annotateMetaOptions(glz::generic_u64& property, std::string_view name, FieldMeta const& meta) {
+    bool const action = !meta.optionsAction.empty();
+    if (!action && meta.valueField.empty() && meta.labelField.empty()) {
+        return;
+    }
+    if constexpr (isChoice<Member>) {
+        if (action) {
+            throw ConflictingOptionsError{glz::name_v<Owner>, name};
+        }
+    }
+    std::string missing;
+    auto const lacks = [&missing](bool set, std::string_view label) {
+        if (!set) {
+            missing += (missing.empty() ? "" : ", ") + std::string{label};
+        }
+    };
+    lacks(action, "optionsAction");
+    lacks(!meta.valueField.empty(), "valueField");
+    lacks(!meta.labelField.empty(), "labelField");
+    if (!missing.empty()) {
+        throw IncompleteOptionsError{glz::name_v<Owner>, name, missing};
+    }
+    property["x-optionsAction"] = std::string{meta.optionsAction};
+    property["x-optionValue"] = std::string{meta.valueField};
+    property["x-optionLabel"] = std::string{meta.labelField};
+}
+
 /// @brief Applies the title/`FieldMeta`/`Quantity`/`Choice`/widget/
 ///        ranged-bounds annotations to one property node. Shared by
 ///        `mergeSchemaExtras`'s top-level pass and `annotateNestedAggregate`
@@ -2395,6 +2479,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
         }
         annotateDeclaredBounds(property, *fieldMeta);
         annotateDisplayUnit<Member>(property, *fieldMeta);
+        annotateMetaOptions<Owner, Member>(property, name, *fieldMeta);
         if constexpr (std::is_same_v<Member, std::string> || std::is_same_v<Member, std::optional<std::string>>) {
             if (fieldMeta->blankAs == BlankAs::Empty) {
                 property["x-blankAs"] = std::string{"empty"};
