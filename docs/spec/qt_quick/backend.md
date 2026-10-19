@@ -82,7 +82,13 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
   nothing when the item already shows the value, so a re-asserted text keeps its cursor and its input-method
   composition. State the user can change — a field's text, a check mark, a marked option, a slider's value, an open
   overlay — is read back from the control itself, never from a property C++ last wrote, because the user may have
-  changed it since.
+  changed it since. A setter writes only a property the item declares: a name it does not declare would become a
+  dynamic property that no binding reads, so the write is refused and reported once per QML type and name, through
+  the `Components` callback and `failures()` (``MorphText does not declare the property `x`; the write is refused``),
+  or on `std::cerr` for a backend without components. It is reported rather than thrown because writes also run from
+  Qt signal handlers and from a table restriping its rows while one is destroyed, where an exception cannot pass. The
+  placement and scheme a container writes into each child (`fillsWidth`, `fillsHeight`, `inheritedScheme`) are
+  offered instead: every `MorphUi` item declares them, and a custom component takes part only if it does.
 - **is reached through an `ItemBase`.** The common properties of `ui::Widget` (visibility, enablement, layout hints,
   drag key, drop target, accessible name and role, test id as the item's `objectName`, tooltip, surface, chords,
   focus) are one implementation for every kind; `FieldItemWidget` adds `readOnly`, `required`, `errors` and `stale`.
@@ -308,7 +314,9 @@ software scene graph:
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
   `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a
-  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused.
+  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused; a write
+  of a property the item does not declare is refused and reported once, and a custom component in a container is
+  offered no placement it does not declare.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
   driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
   name and press action, a key-value pair named `"<caption>: <value>"`, the test id as `objectName` and, from Qt

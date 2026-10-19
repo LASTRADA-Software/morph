@@ -391,3 +391,23 @@ TEST_CASE(
                        [](QQuickItem const& candidate) { return candidate.objectName() == "fallback"; }) != nullptr);
     }
 }
+
+TEST_CASE("qt_quick components: a write of a property the item does not declare is refused and reported once",
+          "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    std::unique_ptr<ui::TextWidget> const text = scene.backend().createText(nullptr);
+    detail::ItemBase const* const base = detail::baseOf(*text);
+    REQUIRE(base != nullptr);
+    base->write("noSuchProperty", 1);
+    base->write("noSuchProperty", 2);
+    CHECK_FALSE(base->item()->property("noSuchProperty").isValid());
+    CHECK(reported ==
+          std::vector<ComponentFailure>{
+              {.name = "MorphText",
+               .reason = "MorphText does not declare the property `noSuchProperty`; the write is refused"}});
+    base->write("text", QStringLiteral("shown"));
+    CHECK(base->item()->property("text").toString() == QStringLiteral("shown"));
+    CHECK(reported.size() == 1);
+}

@@ -11,7 +11,9 @@
 #include <map>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
+#include <set>
 #include <string>
+#include <utility>
 
 namespace morph::qt_quick::detail {
 
@@ -57,6 +59,11 @@ public:
     /// row's background). Throws `std::runtime_error` when it does not compile.
     [[nodiscard]] QQmlComponent& component(QString const& type);
 
+    /// Reports, once per QML type and property, that C++ wrote @p name to @p item, which does not declare it: through
+    /// the components' failure callback, or on `std::cerr` without components. Not thrown: a write runs from Qt
+    /// signal handlers and from a table's restriping while a row is destroyed, where an exception cannot pass.
+    void undeclared(QObject const& item, char const* name);
+
 private:
     void widthChanged();
 
@@ -66,6 +73,7 @@ private:
     std::unique_ptr<ContainerCore> _roots;
     std::map<QString, std::unique_ptr<QQmlComponent>> _components;
     std::string _widthClass;
+    std::set<std::pair<std::string, std::string>> _undeclared;
 };
 
 }  // namespace morph::qt_quick::detail

@@ -95,8 +95,19 @@ void ItemBase::write(char const* name, QVariant const& value) const {
     if (_item == nullptr) {
         return;
     }
+    // A name the item does not declare would become a dynamic property no binding reads: refused and reported.
+    if (_item->metaObject()->indexOfProperty(name) < 0) {
+        _context->undeclared(*_item, name);
+        return;
+    }
     if (_item->property(name) != value) {
         _item->setProperty(name, value);
+    }
+}
+
+void ItemBase::offer(char const* name, QVariant const& value) const {
+    if (_item != nullptr && _item->metaObject()->indexOfProperty(name) >= 0) {
+        write(name, value);
     }
 }
 
@@ -276,11 +287,12 @@ void ContainerCore::adopt(ItemBase& child) {
     if (QQuickItem* const item = child.item(); item != nullptr && content != nullptr) {
         item->setParentItem(content);
     }
+    // Every MorphUi item declares these; a custom component takes part in the fill and the scheme only if it does.
     CrossFill const fill = crossFill();
-    child.write("fillsWidth", fill.width);
-    child.write("fillsHeight", fill.height);
+    child.offer("fillsWidth", fill.width);
+    child.offer("fillsHeight", fill.height);
     if (QObject* const inherited = scheme()) {
-        child.write("inheritedScheme", QVariant::fromValue(inherited));
+        child.offer("inheritedScheme", QVariant::fromValue(inherited));
     }
     _children.push_back(&child);
     adopted(child);
@@ -293,7 +305,7 @@ void ContainerCore::passSchemeDown() const {
         return;
     }
     for (ItemBase const* const child : _children) {
-        child->write("inheritedScheme", QVariant::fromValue(inherited));
+        child->offer("inheritedScheme", QVariant::fromValue(inherited));
         auto const* const nested = dynamic_cast<ContainerCore const*>(child);
         if (nested != nullptr && child->read("surface").toString().isEmpty()) {
             nested->passSchemeDown();

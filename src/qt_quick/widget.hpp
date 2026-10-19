@@ -53,8 +53,12 @@ public:
 
     /// A property of the item.
     [[nodiscard]] QVariant read(char const* name) const;
-    /// Writes a property of the item unless it already holds @p value.
+    /// Writes a property of the item unless it already holds @p value. A name the item does not declare is not
+    /// written, and is reported through the context.
     void write(char const* name, QVariant const& value) const;
+    /// As `write`, for a property the item takes part through only when it declares it (a custom component's
+    /// placement and scheme): a name it does not declare is skipped, not reported.
+    void offer(char const* name, QVariant const& value) const;
     /// The object a property of the item names (`control`, `content`), or null.
     [[nodiscard]] QObject* part(char const* name) const;
     /// Calls a QML function of the item with arguments of the types it declares (`bool`, `int`, `double` for
