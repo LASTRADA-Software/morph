@@ -386,6 +386,15 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
                                "` is derived from other records but has a key; a derived record is keyless");
         }
     }
+    // A source that is no record never changes, so the derived record would never be refreshed: refused, not ignored.
+    for (auto const& info : records) {
+        for (auto const& source : info.derivedFrom) {
+            if (!indexOf.contains(source)) {
+                problems.push_back("record `" + info.name + "` is derived from " + source.name() +
+                                   ", which is not a registered record");
+            }
+        }
+    }
     findDerivationCycles(records, indexOf, problems);
 
     for (auto const& id : slotConflicts) {

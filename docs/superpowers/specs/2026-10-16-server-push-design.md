@@ -149,8 +149,9 @@ BRIDGE_REGISTER_RECORD(bank::dto::SpendingReport, "Bank_SpendingReport",
   derives a change (§8). A derived type is keyless, because a key-level change to a source does not say which
   derived rows moved.
 - **`morph::record::privateKeys`** marks a type whose keys must not reach other principals (§12).
-- `derivedFrom` cycles and conflicting registrations (one type under two names, one name on two types, or one type
-  with different options) are refused when the registration phase closes. An identical registration repeated, as a
+- `derivedFrom` cycles, a `derivedFrom` source that is not a registered record, and conflicting registrations (one
+  type under two names, one name on two types, or one type with different options) are refused when the registration
+  phase closes. An identical registration repeated, as a
   record registered in a header gives once per translation unit, is one registration.
 
 ### Effects

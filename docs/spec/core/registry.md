@@ -1791,9 +1791,11 @@ for every action, which records its result holds.
     translation unit for nothing;
   - a keyed record with `derivedFrom`: a key-level change to a source does not
     say which derived rows moved, so a derived record is keyless;
+  - a `derivedFrom` source that is not a registered record: it never changes,
+    so the derived record would never be refreshed;
   - a `derivedFrom` cycle among registered records, a record derived from
     itself included, found in registration order so the message is the same on
-    every platform. A source that is not a registered record is ignored.
+    every platform.
 - **Failure.** A refusal throws `morph::model::EffectsRegistrationError`, a
   `std::logic_error` whose `what()` lists every problem, one per line, each
   naming the action or record. The error is kept and the same error is thrown

@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <typeindex>
+#include <utility>
 #include <vector>
 
 #include "push_records_late.hpp"
@@ -511,4 +512,194 @@ TEST_CASE("derive_from_process_registry", "[push][records]") {
     auto const instance = morph::effects::deriveChanges("T_EffectsLoad", "{}", ranOnInstance());
     REQUIRE(instance.instances.size() == 1);
     REQUIRE(instance.records.empty());
+}
+
+// ── Deriving changes, branch by branch ───────────────────────────────────────
+
+namespace {
+
+using morph::effects::ActionRecord;
+using morph::effects::Changes;
+using morph::effects::Effect;
+using morph::effects::detail::Resolved;
+
+std::vector<glz::raw_json> rawKeys(std::vector<std::string> const& texts) {
+    std::vector<glz::raw_json> keys;
+    keys.reserve(texts.size());
+    for (auto const& text : texts) {
+        keys.emplace_back(text);
+    }
+    return keys;
+}
+
+// One action, `A`, whose result holds `D_Row` (keyed by `id`) at @p path, and which updates it.
+Resolved rowsAt(std::string path) {
+    Resolved resolved;
+    resolved.records = {record("D_Row", typeid(VRow))};
+    resolved.effects["A"] = {Effect{.kind = Kind::Updates, .record = "D_Row"}};
+    resolved.actionRecords["A"] = {ActionRecord{.record = "D_Row", .keyField = "id", .paths = {std::move(path)}}};
+    return resolved;
+}
+
+std::vector<std::string> updatedKeys(Resolved const& resolved, std::string_view result) {
+    auto const changes = morph::effects::detail::deriveChangesFrom(resolved, "A", result, ranOnInstance());
+    REQUIRE(changes.records.size() == 1);
+    REQUIRE(changes.records[0].keys.has_value());
+    return keyTexts(changes.records[0]);
+}
+
+}  // namespace
+
+// Mutation: stop at the first array, or at an object lacking the segment — the nested and wrapped rows are missed.
+TEST_CASE("derive_walks_arrays_and_wrappers_before_the_path_ends", "[push][records]") {
+    auto const resolved = rowsAt("rows");
+    // An array before the path is consumed is entered without consuming a segment; a scalar in it holds nothing.
+    CHECK(updatedKeys(resolved, R"([{"rows":[{"id":1}]},5,{"rows":[{"id":2}]}])") ==
+          std::vector<std::string>{"1", "2"});
+    // An object without the segment is searched through its values, as a map would be.
+    CHECK(updatedKeys(resolved, R"({"wrap":{"rows":[{"id":3}]},"other":"text"})") == std::vector<std::string>{"3"});
+    // A map whose values lack the key, or are not records at all, names no row.
+    CHECK(updatedKeys(resolved, R"({"rows":{"a":{"n":1},"b":5,"c":{"id":4}}})") == std::vector<std::string>{"4"});
+}
+
+// Mutation: append keys without the duplicate check, or let keys narrow a whole-type change.
+TEST_CASE("record_changes_merge_keys_and_whole_types", "[push][records]") {
+    Changes changes;
+    morph::effects::detail::addRecordChange(changes, "R", rawKeys({"1", "2"}));
+    morph::effects::detail::addRecordChange(changes, "R", rawKeys({"2", "3"}));
+    REQUIRE(changes.records.size() == 1);
+    CHECK(keyTexts(changes.records[0]) == std::vector<std::string>{"1", "2", "3"});
+    morph::effects::detail::addRecordChange(changes, "R", std::nullopt);
+    CHECK_FALSE(changes.records[0].keys.has_value());
+    morph::effects::detail::addRecordChange(changes, "R", rawKeys({"4"}));
+    CHECK_FALSE(changes.records[0].keys.has_value());
+    morph::effects::detail::addRecordChange(changes, "S", rawKeys({"1"}));
+    CHECK(changes.records.size() == 2);
+}
+
+// Mutation: compare instances by model type alone — a second instance of the same model is lost.
+TEST_CASE("instance_changes_are_kept_once_each", "[push][records]") {
+    using morph::effects::InstanceChange;
+    Changes changes;
+    InstanceChange const first{.modelType = "M", .instance = 7, .primary = "k"};
+    morph::effects::detail::addInstanceChange(changes, first);
+    morph::effects::detail::addInstanceChange(changes, first);
+    CHECK(changes.instances.size() == 1);
+    morph::effects::detail::addInstanceChange(changes, {.modelType = "N", .instance = 7, .primary = "k"});
+    morph::effects::detail::addInstanceChange(changes, {.modelType = "M", .instance = 8, .primary = "k"});
+    morph::effects::detail::addInstanceChange(changes, {.modelType = "M", .instance = 7, .primary = "j"});
+    CHECK(changes.instances.size() == 4);
+}
+
+// Mutation: drop the visited check — a record derived along two routes is reported twice.
+TEST_CASE("derive_reports_a_record_derived_along_two_routes_once", "[push][records]") {
+    Resolved resolved;
+    resolved.records = {record("D_Txn", typeid(DTxn)),
+                        record("D_Report", typeid(DReport), std::nullopt, {typeid(DTxn)}),
+                        record("D_Summary", typeid(DSummary), std::nullopt, {typeid(DTxn), typeid(DReport)})};
+    resolved.effects["A"] = {Effect{.kind = Kind::Changes, .record = "D_Txn"}};
+    auto const changes = morph::effects::detail::deriveChangesFrom(resolved, "A", "{}", ranOnInstance());
+    REQUIRE(changes.records.size() == 3);
+    CHECK(changes.records[1].record == "D_Report");
+    CHECK(changes.records[2].record == "D_Summary");
+
+    // A record the registries do not know has no derived records to add.
+    Resolved unknown;
+    unknown.effects["A"] = {Effect{.kind = Kind::Changes, .record = "D_Ghost"}};
+    auto const ghost = morph::effects::detail::deriveChangesFrom(unknown, "A", "{}", ranOnInstance());
+    REQUIRE(ghost.records.size() == 1);
+    CHECK(ghost.records[0].record == "D_Ghost");
+}
+
+// Mutation: read every record the action holds as the updated one — D_Header's rows are reported as D_Row's.
+TEST_CASE("derive_updates_names_rows_only_of_a_known_keyed_record", "[push][records]") {
+    Resolved resolved;
+    resolved.records = {record("D_Row", typeid(VRow)), record("D_Header", typeid(VHeader), std::nullopt)};
+    resolved.effects["A"] = {
+        Effect{.kind = Kind::Updates, .record = "D_Row"}, Effect{.kind = Kind::Updates, .record = "D_Header"},
+        Effect{.kind = Kind::Updates, .record = "D_Ghost"}, Effect{.kind = static_cast<Kind>(99), .record = {}}};
+    resolved.actionRecords["A"] = {ActionRecord{.record = "D_Header", .keyField = std::nullopt, .paths = {"header"}},
+                                   ActionRecord{.record = "D_Row", .keyField = "id", .paths = {"rows"}}};
+    auto const changes = morph::effects::detail::deriveChangesFrom(
+        resolved, "A", R"({"header":{"id":9},"rows":[{"id":1}]})", ranOnInstance());
+    REQUIRE(changes.records.size() == 3);
+    CHECK(changes.records[0].record == "D_Row");
+    CHECK(keyTexts(changes.records[0]) == std::vector<std::string>{"1"});
+    // A keyless record, and one the registries do not know, are reported whole; an unknown kind adds nothing.
+    CHECK(changes.records[1].record == "D_Header");
+    CHECK_FALSE(changes.records[1].keys.has_value());
+    CHECK(changes.records[2].record == "D_Ghost");
+    CHECK_FALSE(changes.records[2].keys.has_value());
+    CHECK(changes.instances.empty());
+}
+
+// Mutation: accept a prefix that only shares leading characters ("rows" within "rowsTotal").
+TEST_CASE("path_within_is_a_whole_segment_prefix", "[push][records]") {
+    using morph::effects::detail::pathWithin;
+    CHECK(pathWithin("", "rows"));
+    CHECK(pathWithin("rows", "rows"));
+    CHECK(pathWithin("rows", "rows.items"));
+    CHECK_FALSE(pathWithin("rows", "rowsTotal"));
+    CHECK_FALSE(pathWithin("rows.items", "rows"));
+    CHECK_FALSE(pathWithin("rows", "header.rows"));
+}
+
+TEST_CASE("same_registration_compares_every_option", "[push][records]") {
+    using morph::effects::detail::sameRegistration;
+    RecordInfo const base = record("D_Row", typeid(VRow));
+    CHECK(sameRegistration(base, base));
+    auto const differing = [&](auto change) {
+        RecordInfo other = base;
+        change(other);
+        return !sameRegistration(base, other);
+    };
+    CHECK(differing([](RecordInfo& info) { info.name = "D_Other"; }));
+    CHECK(differing([](RecordInfo& info) { info.type = typeid(VOther); }));
+    CHECK(differing([](RecordInfo& info) { info.keyField = "code"; }));
+    CHECK(differing([](RecordInfo& info) { info.derivedFrom = {typeid(DTxn)}; }));
+    CHECK(differing([](RecordInfo& info) { info.privateKeys = true; }));
+    CHECK(differing([](RecordInfo& info) { info.keyIsString = true; }));
+}
+
+TEST_CASE("effects_and_action_records_compare_by_value", "[push][records]") {
+    CHECK(Effect{.kind = Kind::Updates, .record = "R"} == Effect{.kind = Kind::Updates, .record = "R"});
+    CHECK_FALSE(Effect{.kind = Kind::Updates, .record = "R"} == Effect{.kind = Kind::Changes, .record = "R"});
+    CHECK_FALSE(Effect{.kind = Kind::Updates, .record = "R"} == Effect{.kind = Kind::Updates, .record = "S"});
+    ActionRecord const held{.record = "R", .keyField = "id", .paths = {"rows"}};
+    CHECK(held == held);
+    CHECK_FALSE(held == ActionRecord{.record = "S", .keyField = "id", .paths = {"rows"}});
+    CHECK_FALSE(held == ActionRecord{.record = "R", .keyField = std::nullopt, .paths = {"rows"}});
+    CHECK_FALSE(held == ActionRecord{.record = "R", .keyField = "id", .paths = {"items"}});
+    CHECK(updatesOf(typeid(VRow)) == updatesOf(typeid(VRow)));
+    CHECK_FALSE(updatesOf(typeid(VRow)) == changesOf(typeid(VRow)));
+    CHECK_FALSE(updatesOf(typeid(VRow)) == updatesOf(typeid(VOther)));
+}
+
+// Mutation: keep one path per record — the second place the result holds D_Row is never read.
+TEST_CASE("a_record_held_at_two_paths_keeps_both", "[push][records]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Two", result({{.type = typeid(VList), .path = ""},
+                                   {.type = typeid(VRow), .path = "mine"},
+                                   {.type = typeid(VRow), .path = "theirs"}}));
+    auto const resolved = morph::effects::detail::resolveForTesting({record("D_Row", typeid(VRow))}, slots, {});
+    auto const held = resolved.recordsOf("A_Two");
+    REQUIRE(held.size() == 1);
+    CHECK(held[0].paths == std::vector<std::string>{"mine", "theirs"});
+}
+
+TEST_CASE("updates_on_a_record_the_result_does_not_hold_throws", "[push][records]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Header", result({{.type = typeid(VHeader), .path = ""}}));
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Header", {updatesOf(typeid(VRow))});
+    auto const message =
+        refusal({record("D_Row", typeid(VRow)), record("D_Header", typeid(VHeader))}, slots, declared);
+    CHECK_THAT(message, Catch::Matchers::ContainsSubstring("its result holds no `D_Row`"));
+}
+
+// Mutation: skip the check — a record derived from a type that is no record is accepted and never refreshed.
+TEST_CASE("derived_from_an_unregistered_type_throws", "[push][records]") {
+    auto const message = refusal({record("D_Loose", typeid(VOther), std::nullopt, {typeid(VInner)})}, {}, {});
+    CHECK_THAT(message, Catch::Matchers::ContainsSubstring("record `D_Loose` is derived from"));
+    CHECK_THAT(message, Catch::Matchers::ContainsSubstring("which is not a registered record"));
 }
