@@ -279,6 +279,27 @@ private:
 
 }  // namespace detail::host
 
+/// @brief The canonical text of a screen's identity: what `DocumentScreenHost::identityOf` answers, so
+///        `identityOf(id, params) == identityKey(handle.identity().peek())` says whether a mounted screen is the one
+///        those params would open.
+/// @param identity The identity value.
+/// @return Its JSON with record fields in name order, or `std::nullopt` for `null` (a screen without an identity).
+[[nodiscard]] inline std::optional<std::string> identityKey(Value const& identity) {
+    if (identity.isNull()) {
+        return std::nullopt;
+    }
+    return detail::canonicalJson(identity);
+}
+
+/// @brief Whether two identities name the same screen instance: their keys are equal, and neither is `null`.
+/// @param lhs One identity.
+/// @param rhs The other.
+/// @return True when both have a key and the keys are equal; `null` equals nothing, itself included.
+[[nodiscard]] inline bool sameIdentity(Value const& lhs, Value const& rhs) {
+    std::optional<std::string> const left = identityKey(lhs);
+    return left.has_value() && left == identityKey(rhs);
+}
+
 /// @brief The framework's `ScreenHost` over UI documents: it mounts them through an `Interpreter`, closes them by the
 ///        protocol of spec 6 §3, and hands a document's `navigate` to `onNavigate`, which the deriving host
 ///        implements.
@@ -337,10 +358,10 @@ public:
         }
         detail::host::ParamsEnv const env{params};
         Value const identity = evaluate(*document->identity, env);
-        if (env.unknown() || identity.isNull()) {
+        if (env.unknown()) {
             return std::nullopt;
         }
-        return detail::canonicalJson(identity);
+        return identityKey(identity);
     }
 
     /// @brief Starts the requests of a screen's `prefetch` queries before it mounts (spec 5 §5), so the screen mounts

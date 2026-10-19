@@ -109,7 +109,8 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
   ASCII case, and the headings of the groups that still show an entry.
   - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown.
-  - Without it, the title is the entry's string, or a message reference's `fallback`.
+  - Without it, the title is `catalogTitles(entry, nullptr)`: the entry's string, or a message reference's
+    `fallback`, else the entry's id.
   - `focusSearch()` is what the navigator's shortcut calls.
 - **Pins** are the person's ordered shortcuts, the buttons `pin_<id>` in `navigator_pins`.
   - The stored list is read once, dropping unknown and repeated ids and those past `maxPins`.

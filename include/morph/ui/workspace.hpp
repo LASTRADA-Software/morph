@@ -375,8 +375,7 @@ private:
     };
 
     [[nodiscard]] static std::string identityText(Tab const& tab) {
-        Value const identity = tab.handle->identity().peek();
-        return identity.isNull() ? std::string{} : detail::canonicalJson(identity);
+        return identityKey(tab.handle->identity().peek()).value_or(std::string{});
     }
 
     [[nodiscard]] static std::string captionOf(Tab const& tab) {

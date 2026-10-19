@@ -13,6 +13,7 @@
 
 #include "backend.hpp"
 #include "bundle.hpp"
+#include "catalogue.hpp"
 #include "view.hpp"
 
 /// @file
@@ -148,18 +149,7 @@ private:
                 return titles;
             }
         }
-        if (std::string const* const text = std::get_if<std::string>(&entry.title.data)) {
-            return {*text};
-        }
-        if (auto const* const object = std::get_if<Json::object_t>(&entry.title.data)) {
-            for (auto const& [key, value] : *object) {
-                std::string const* const text = std::get_if<std::string>(&value.data);
-                if (key == "fallback" && text != nullptr) {
-                    return {*text};
-                }
-            }
-        }
-        return {entry.id};
+        return catalogTitles(entry, nullptr);
     }
 
     [[nodiscard]] CatalogEntry const* entryOf(std::string_view screenId) const {

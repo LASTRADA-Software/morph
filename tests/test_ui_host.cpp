@@ -219,6 +219,36 @@ TEST_CASE("DocumentScreenHost mounts a screen whose title, dirty and identity fo
     CHECK(refused.error().screenId == "note");
 }
 
+// Mutation: let identityKey answer a key for `null` (a screen without an identity would equal another).
+TEST_CASE("identityKey is the canonical text identityOf answers, and null names no instance", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    ParamMap const params{{"noteId", Value{std::int64_t{7}}}};
+    auto mounted = shell.mount("note", params);
+    REQUIRE(mounted.has_value());
+    harness.settle();
+    std::optional<std::string> const key = morph::ui::identityKey((*mounted)->identity().peek());
+    REQUIRE(key.has_value());
+    CHECK(shell.identityOf("note", params) == key);
+    CHECK_FALSE(morph::ui::identityKey(Value{}).has_value());
+
+    auto const record = [](std::string_view json) {
+        auto parsed = glz::read_json<morph::ui::Json>(json);
+        REQUIRE(parsed.has_value());
+        auto value = morph::ui::valueFromJson(*parsed);
+        REQUIRE(value.has_value());
+        return *value;
+    };
+    Value const first = record(R"({"lab":"north","id":7})");
+    Value const second = record(R"({"id":7,"lab":"north"})");
+    CHECK(morph::ui::identityKey(first) == morph::ui::identityKey(second));
+    CHECK(morph::ui::identityKey(first) == R"({"id":7,"lab":"north"})");
+    CHECK(morph::ui::sameIdentity(first, second));
+    CHECK_FALSE(morph::ui::sameIdentity(first, record(R"({"id":8,"lab":"north"})")));
+    CHECK_FALSE(morph::ui::sameIdentity(Value{}, Value{}));
+    CHECK_FALSE(morph::ui::sameIdentity(first, Value{}));
+}
+
 // Mutation: call done inline (closed is set before the owner runs).
 TEST_CASE("A clean screen closes at once, and done is posted, not called inside the request", "[ui][host]") {
     Harness harness;

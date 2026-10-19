@@ -77,6 +77,10 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,
   the session), and one whose identity is `null` answer `std::nullopt`: their identity is known only once mounted,
   through the handle.
+- **`identityKey(identity)`** is that canonical text for a value (`std::nullopt` for `null`), so
+  `identityOf(id, params) == identityKey(handle.identity().peek())` is how a shell of its own decides whether a
+  mounted screen is the one those params would open. `sameIdentity(a, b)` compares two identities by their keys;
+  `null` equals nothing, itself included.
 - **`prefetch(screenId, params)`** starts the screen's `prefetch` queries before it mounts (spec 5 §5).
   - Each named query's body is evaluated over the params alone, and its cache entry is warmed under the token the
     mounted screen's alias will have: `shared:<key>` for a keyed alias, `shared` for a stateless model's.

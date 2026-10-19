@@ -8,7 +8,7 @@ loading rule of spec 5 §4.
 
 | Header | What it holds |
 |---|---|
-| `include/morph/ui/catalogue.hpp` | `catalogueLocale`, `parseCatalogue`, `Catalogue`, `MessageCatalogues`, `loadCatalogues`, `textInEveryLocale`, `matchesInAnyLocale` |
+| `include/morph/ui/catalogue.hpp` | `catalogueLocale`, `parseCatalogue`, `Catalogue`, `MessageCatalogues`, `loadCatalogues`, `textInEveryLocale`, `matchesInAnyLocale`, `catalogTitle`, `catalogTitles` |
 | `include/morph/ui/service.hpp` | `UiRegistry::addFile` checks a catalogue at registration |
 | `include/morph/ui/interpreter.hpp` | `Session::setTranslations` |
 
@@ -20,6 +20,7 @@ loading rule of spec 5 §4.
 - [Resolution](#resolution)
 - [Switching locale](#switching-locale)
 - [Search](#search)
+- [Catalog titles](#catalog-titles)
 - [Design decisions](#design-decisions)
 
 ## The file
@@ -76,6 +77,18 @@ order of `locales()`, the fallback where a locale has no entry. `matchesInAnyLoc
 is true when any of those texts, or the fallback, contains the query; ASCII letters compare without case, every
 other byte exactly. A message is formatted with no arguments, as a title is. The navigator that uses it is the
 workspace shell's (spec 6 §7).
+
+## Catalog titles
+
+A catalog entry's `title` is a string or a message reference (`{"t": key, "fallback": …}`). Two functions give a shell
+of its own what the built-in shell shows:
+
+- `catalogTitle(entry, catalogues, locale)`: a string title as is; a reference formatted in `locale` from
+  `catalogues` (the exact locale's catalogue, then its language's), else its fallback; else the entry's id.
+- `catalogTitles(entry, catalogues)`: the title in every locale the catalogues hold (`textInEveryLocale` of the key
+  and the fallback, the id standing in for a missing fallback), for a search. With `catalogues` null it is one title:
+  a string title as is, else a reference's fallback, else the entry's id — what the navigator shows without
+  `NavigatorOptions::titles`.
 
 ## Design decisions
 
