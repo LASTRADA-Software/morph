@@ -70,8 +70,12 @@ by name.
   converts to another when its value can: the same type, `Any` on either side, a `std::optional`
   of a type for the type (an expression propagates `null`), a C++ conversion, or a list of such
   elements. A wrong body type is therefore a compile error, as spec 5 §11 asks.
-- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path
-  and throws `AuthoringError` on any other expression (a call, a `result`). A member's JSON name is
+- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path.
+  A mutation's `result()` is a `ResultHandle`, a handle whose `at` overloads are deleted: reading a
+  field of it in place is a compile error, and the screen binds it first,
+  `auto r = screen.let("r", m.result());`, then reads `r.at(...)`. It converts to `Handle<T>`
+  wherever a handle is taken. `at` on any other expression that is not a named read (a call, or a
+  `result` built through `raw`) throws `AuthoringError`. A member's JSON name is
   glaze's, found by its address in a value-initialised object of its class: a member a `glz::meta`
   leaves out has no name and throws as well. A renamed member is a compile error.
 - **Absent handles.** A default-constructed handle is absent: an option left unset writes no key.

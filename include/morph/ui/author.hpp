@@ -1312,6 +1312,36 @@ private:
     std::string _name;
 };
 
+/// @brief A mutation's result: a `Handle` with no field reads.
+///
+/// A result is not a named read, so a field of it cannot be read in place: the screen binds it first,
+/// `auto r = screen.let("r", m.result());`, and reads `r.at(...)`. The `at` overloads are deleted, so the mistake is
+/// a compile error at the call rather than a refusal when the screen is registered. It converts to `Handle<T>`
+/// wherever a handle is taken.
+/// @tparam T The result's C++ type.
+template <typename T>
+class ResultHandle : public Handle<T> {
+public:
+    /// @brief The result read.
+    /// @param handle The `{"result": name}` expression.
+    explicit ResultHandle(Handle<T> const& handle) : Handle<T>{handle} {}
+
+    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
+    ///        `r.at(...)`.
+    /// @tparam Class  The class of the member.
+    /// @tparam Member The member's type.
+    /// @param member The member.
+    /// @return Nothing; the overload is deleted.
+    template <typename Class, typename Member>
+    Handle<Member> at(Member Class::* member) const = delete;
+
+    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
+    ///        `r.at(...)`.
+    /// @param field The field.
+    /// @return Nothing; the overload is deleted.
+    Handle<Any> at(std::string_view field) const = delete;
+};
+
 /// @brief A mutation declared by a scope.
 /// @tparam Action The action it runs; `::morph::model::ActionTraits<Action>::Result` is the result's type.
 template <typename Action>
@@ -1328,9 +1358,11 @@ public:
     /// @return The name.
     [[nodiscard]] std::string const& name() const noexcept { return _name; }
 
-    /// @brief The last run's result.
-    /// @return `{"result": name}`.
-    [[nodiscard]] Handle<Result> result() const { return Handle<Result>::raw(detail::single("result", _name)); }
+    /// @brief The last run's result; bind it with `let` to read its fields.
+    /// @return `{"result": name}`, with no `at`.
+    [[nodiscard]] ResultHandle<Result> result() const {
+        return ResultHandle<Result>{Handle<Result>::raw(detail::single("result", _name))};
+    }
 
     /// @brief Whether a run is in flight.
     /// @return `{"pending": name}`.

@@ -382,6 +382,19 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// The checks are templates: a requires-expression outside one makes a deleted call a hard error.
+template <typename M>
+concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };
+template <typename M>
+concept ResultReadsField = requires(M mutation) { mutation.result().at("id"); };
+template <typename M>
+concept ResultBinds = requires(ui::Scope& screen, M mutation) { screen.let("r", mutation.result()); };
+
+// Mutation: drop the deleted `at` overloads of ResultHandle; the first two assertions stop holding.
+static_assert(!ResultReadsMember<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no member read");
+static_assert(!ResultReadsField<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no named read");
+static_assert(ResultBinds<ui::MutationHandle<CaptureConcentration>>, "a mutation's result binds with let");
+
 TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     ui::QueryHandle<ListResults> const results{"results"};
     CHECK(text(results.pending()) == R"({"pending":"results"})");
@@ -392,7 +405,8 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     CHECK(text(header.at(&Header::sampleNumber)) == R"({"ref":"header.sampleNumber"})");
     ui::MutationHandle<CaptureConcentration> const capture{"capture"};
     CHECK(text(capture.result()) == R"({"result":"capture"})");
-    CHECK_THROWS_AS(capture.result().at(&ResultView::id), ui::AuthoringError);
+    // A result has no field reads at compile time; one built as a plain handle is refused when it is read.
+    CHECK_THROWS_AS(ui::Handle<ResultView>{capture.result()}.at(&ResultView::id), ui::AuthoringError);
     CHECK(text(capture.pending()) == R"({"pending":"capture"})");
     CHECK(text(capture.error()) == R"({"error":"capture"})");
     CHECK(text(capture.errorKind()) == R"({"errorKind":"capture"})");
