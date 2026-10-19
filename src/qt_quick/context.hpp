@@ -52,8 +52,12 @@ public:
     /// The item every widget's item is owned by, as a QObject, until the widget deletes it.
     [[nodiscard]] QObject* owner() const noexcept { return _holder; }
 
-private:
+    /// The component of the `MorphUi` type @p type, or of the restyle the map names for it, compiled once per
+    /// context: what `make` instantiates, and what a container is given for a part it instantiates itself (a table
+    /// row's background). Throws `std::runtime_error` when it does not compile.
     [[nodiscard]] QQmlComponent& component(QString const& type);
+
+private:
     void widthChanged();
 
     QQmlEngine* _engine;

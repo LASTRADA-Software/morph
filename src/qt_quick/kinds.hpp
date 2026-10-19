@@ -370,9 +370,13 @@ public:
 
 protected:
     void adopted(ItemBase& child) override;
+    void moved() override;
+    void releasing(ItemBase& child) noexcept override;
 
 private:
     void mark() const;
+    /// Writes `alternate` on every row but @p leaving: true at each odd position.
+    void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
 
     ui::SelectionMode _mode = ui::SelectionMode::None;

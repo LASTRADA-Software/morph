@@ -57,6 +57,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphBusy.qml
         qml/MorphTable.qml
         qml/MorphTableRow.qml
+        qml/MorphTableRowBackground.qml
         qml/MorphDateTimeInput.qml
         qml/MorphSlider.qml
         qml/MorphFilePicker.qml

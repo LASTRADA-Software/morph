@@ -236,6 +236,73 @@ TEST_CASE("qt_quick components: a restyle maps a kind to a component that declar
     CHECK_FALSE(Scene::itemOf(*text).property("brand").isValid());
 }
 
+// Mutation: make the row's background from the stock MorphUi component instead of the context's (the restyle's
+// marker and height never show); or stop writing `alternate` (the stripes do not follow the move).
+TEST_CASE("qt_quick components: a tableRow restyle draws every row's background, and the row takes its height",
+          "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost("BrandRow", 1,
+                       writeFile(dir, QStringLiteral("BrandRow.qml"),
+                                 "import QtQuick\nimport MorphUi\n"
+                                 "MorphTableRowBackground { property bool brand: true; implicitHeight: 40 }\n"));
+    components.addHost("PlainRow", 1,
+                       writeFile(dir, QStringLiteral("PlainRow.qml"),
+                                 "import QtQuick\nItem { property bool selected; property bool hovered }\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "tableRow", "PlainRow");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().name == "tableRow");
+    CHECK(refused.error().reason.contains("does not declare"));
+    CHECK(refused.error().reason.contains("alternate"));
+    REQUIRE(components.restyle(probeEngine, "tableRow", "BrandRow").has_value());
+
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Name"}});
+    std::vector<std::unique_ptr<ui::StackWidget>> rows;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (std::string const name : {"a", "b", "c"}) {
+        rows.push_back(scene.backend().createStack(table.get(), ui::Axis::Horizontal));
+        table->setRowKey(*rows.back(), ui::Key{name});
+        cells.push_back(scene.backend().createText(rows.back().get()));
+        cells.back()->setText(name);
+    }
+    table->setSelection({ui::Key{std::string{"b"}}});
+    scene.settle();
+    auto background = [](ui::StackWidget const& row) -> QObject& {
+        auto* const found = Scene::itemOf(row).property("backgroundItem").value<QObject*>();
+        REQUIRE(found != nullptr);
+        return *found;
+    };
+    auto alternates = [&rows] {
+        std::vector<bool> out;
+        for (auto const& row : rows) {
+            out.push_back(Scene::itemOf(*row).property("alternate").toBool());
+        }
+        return out;
+    };
+    for (auto const& row : rows) {
+        CHECK(background(*row).property("brand").toBool());
+        CHECK(Scene::itemOf(*row).implicitHeight() == 40.0);
+    }
+    CHECK(background(*rows.at(1)).property("selected").toBool());
+    CHECK_FALSE(background(*rows.at(0)).property("selected").toBool());
+    CHECK(alternates() == std::vector<bool>{false, true, false});
+    CHECK(background(*rows.at(1)).property("alternate").toBool());
+    // c moves first: c, a, b.
+    table->moveChild(*rows.at(2), 0);
+    scene.settle();
+    CHECK(alternates() == std::vector<bool>{true, false, false});
+    // a goes: c, b.
+    rows.erase(rows.begin());
+    scene.settle();
+    CHECK(alternates() == std::vector<bool>{true, false});
+    CHECK(reported.size() == 1);  // the refusal above, and nothing since
+}
+
 // Mutation: mount the fallback without asking the backend (the bundle component is never shown).
 TEST_CASE(
     "qt_quick components: a custom node mounted through the view tree shows its component, with its props "

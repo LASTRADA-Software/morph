@@ -4,8 +4,8 @@ import QtQuick
 import QtQuick.Layouts
 
 // One row of a table: its cells placed by column, so a hidden cell keeps its column and the cells after it stay
-// under their own headers. A click selects it, Ctrl+click toggles it, a double click or Enter activates it. C++
-// calls `place` again whenever a cell's implicit size changes.
+// under their own headers, over its background part. A click selects it, Ctrl+click toggles it, a double click or
+// Enter activates it. C++ calls `place` again whenever a cell's implicit size changes.
 MorphWidget {
     id: root
 
@@ -16,6 +16,24 @@ MorphWidget {
     property string rowKey: ""
     readonly property var widths: table ? table.widths : []
     readonly property Item content: cells
+    // What draws under the cells: MorphTableRowBackground, or the `tableRow` restyle. C++ sets it when it makes the
+    // row, and the row hands its state to the instance.
+    property Component background: null
+    readonly property bool hovered: rowHover.hovered
+    readonly property bool current: root.holdsFocus(Window.activeFocusItem)
+    // Whether the row is at an odd position in its table; C++ writes it as rows come, go and move.
+    property bool alternate: false
+    // The row's tone: -1 for none, else a tone index (Neutral, Info, Ok, Warn, Err).
+    property int tone: -1
+    readonly property Item backgroundItem: backgroundLoader.item as Item
+
+    function holdsFocus(focused: Item): bool {
+        for (let at = focused; at; at = at.parent) {
+            if (at === root)
+                return true
+        }
+        return false
+    }
 
     function place() {
         let x = 0
@@ -37,25 +55,52 @@ MorphWidget {
     onWidthsChanged: place()
     Layout.fillWidth: true
     implicitWidth: cells.implicitWidth
-    // A dense row: the control height less 8 px, or the cells' height when they need more.
-    implicitHeight: Math.max(cells.implicitHeight, Theme.controlHeight - 8)
+    // The cells' height, or the background's when it asks for more: the stock one is a dense row.
+    implicitHeight: Math.max(cells.implicitHeight, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
     Accessible.role: Accessible.Row
     Accessible.selected: selected
 
     Keys.onReturnPressed: root.fire("activate", undefined)
     Keys.onEnterPressed: root.fire("activate", undefined)
 
-    Rectangle {
+    Loader {
+        id: backgroundLoader
         anchors.fill: parent
-        color: root.selected ? root.scheme.selection : "transparent"
+        sourceComponent: root.background
     }
-    // The hairline between rows.
-    Rectangle {
-        anchors.bottom: parent.bottom
-        width: parent.width
-        height: 1
-        color: root.scheme.border
-        opacity: 0.6
+    Binding {
+        target: backgroundLoader.item
+        property: "selected"
+        value: root.selected
+    }
+    Binding {
+        target: backgroundLoader.item
+        property: "hovered"
+        value: root.hovered
+    }
+    Binding {
+        target: backgroundLoader.item
+        property: "current"
+        value: root.current
+    }
+    Binding {
+        target: backgroundLoader.item
+        property: "alternate"
+        value: root.alternate
+    }
+    Binding {
+        target: backgroundLoader.item
+        property: "tone"
+        value: root.tone
+    }
+    Binding {
+        target: backgroundLoader.item
+        property: "scheme"
+        value: root.scheme
+    }
+
+    HoverHandler {
+        id: rowHover
     }
 
     Item {

@@ -48,6 +48,23 @@ void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActi
 void TableImpl::adopted(ItemBase& child) {
     static_cast<void>(child);
     mark();
+    stripe(nullptr);
+}
+
+void TableImpl::moved() { stripe(nullptr); }
+
+void TableImpl::releasing(ItemBase& child) noexcept { stripe(&child); }
+
+void TableImpl::stripe(ItemBase const* leaving) const noexcept {
+    // Every child is a row, and one being adopted is still being made, so its type is not asked.
+    bool alternate = false;
+    for (ItemBase const* const child : children()) {
+        if (child == leaving) {
+            continue;
+        }
+        child->write("alternate", alternate);
+        alternate = !alternate;
+    }
 }
 
 bool TableImpl::marked(ItemBase const& row) { return row.read("selected").toBool(); }
@@ -112,8 +129,11 @@ void TableImpl::activated(TableRowImpl const& row) const {
 }
 
 TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableImpl& table)
-    : ContainerItemWidget{context, QStringLiteral("MorphTableRow"), parent,
-                          QVariantMap{{QStringLiteral("table"), QVariant::fromValue<QObject*>(table.item())}}} {
+    : ContainerItemWidget{
+          context, QStringLiteral("MorphTableRow"), parent,
+          QVariantMap{{QStringLiteral("table"), QVariant::fromValue<QObject*>(table.item())},
+                      {QStringLiteral("background"),
+                       QVariant::fromValue(&context.component(QStringLiteral("MorphTableRowBackground")))}}} {
     relay().on(QStringLiteral("tap"), [this](QVariant const& payload) {
         if (auto* const owner = dynamic_cast<TableImpl*>(container())) {
             owner->tapped(*this, payload.toBool());

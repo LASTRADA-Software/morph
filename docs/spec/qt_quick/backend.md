@@ -127,7 +127,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
-| Table | `MorphTable`, rows `MorphTableRow` | column headers over rows | selection and activation, below |
+| Table | `MorphTable`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
@@ -163,6 +163,12 @@ the rows again. A click selects the row, Ctrl+click toggles it in `Multiple` mod
 click or Enter activates it without toggling the selection. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
+
+A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
+`selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
+position, which C++ writes on every row after each append, destroy and move), `tone` and its `scheme`. The row's
+height is the larger of its cells' and the background's `implicitHeight`; the stock background draws the selection
+fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`.
 
 ## Keys
 
@@ -223,11 +229,21 @@ surface is `Theme.background`.
   in a directory no resource has, so a relative import finds nothing.
 - **Host components** (`addHost(name, version, url)`) are QML the client carries; they load into the backend's own
   engine, so they may import the application's other modules, at the version a document asks for or later.
-- **The restyle map** (`restyle(engine, kind, component)`) names a component for a built-in kind. The component must
-  declare every property and function of the kind's `MorphUi` component — one that extends it does — and one that
-  does not is refused when it is mapped; the kind then keeps its `MorphUi` component. The layout kinds (column, row,
-  grid, spacer, scroll, slot, splitter, drop zone) are not restyled. A text input's restyle replaces its single-line
-  component.
+- **The restyle map** (`restyle(engine, kind, component)`) names a component for a built-in kind or part. The
+  component must declare every property and function of its `MorphUi` base — one that extends it does — and one that
+  does not is refused when it is mapped, naming what it lacks; the kind then keeps its `MorphUi` component. A base's
+  properties are its restyle API, so a property a base gains is one a restyle written from scratch must then declare.
+  There are two kinds of restyle:
+  - **A kind restyle** replaces a kind's whole component. A text input's restyle replaces its single-line component.
+  - **A part restyle** replaces one drawn part inside a component C++ creates, never its layout. The container's
+    component declares the part as a `Component` property, and C++ passes the context's component for the part's
+    type, restyled or not, as an initial property when it makes the container.
+
+  | Restyle kind | `MorphUi` base | What it replaces | Base API (beyond its Qt type's) |
+  |---|---|---|---|
+  | `tableRow` | `MorphTableRowBackground` | a table row's background: selection, hover, focus, zebra, tone, and the row's minimum height | `selected`, `hovered`, `current`, `alternate`, `tone` (−1 none, else a `ui::Tone` index), `scheme` |
+
+  The layout kinds (column, row, grid, spacer, scroll, slot, splitter, drop zone) are not restyled as kinds.
 - `Backend::createCustom(parent, {name, props, minVersion})` loads a component and checks that it declares every
   prop the document declares. A component reports its events through `host.fire(event, payload)` (`host` a `var`
   property it declares and the backend sets); `CustomWidget::setOnEvent` receives the event's name and the payload
@@ -258,7 +274,9 @@ software scene graph:
   spec 5 §7's server-calculated values show in their rows, stale and never blank while a newer request is in flight,
   with the row's error on a failure.
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
-  and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused.
+  and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
+  `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a
+  destroy.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
   driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
   name and press action, a key-value pair named `"<caption>: <value>"`, the test id as `objectName` and, from Qt

@@ -37,8 +37,9 @@ struct ComponentFailure {
 /// - A **bundle component** is QML text delivered in the application's bundle and named by its SHA-256 digest. It
 ///   loads only when the text matches the digest, and compiles in a dedicated engine whose root context holds
 ///   nothing, so it sees nothing but what is set on it.
-/// - The **restyle map** names a component for a built-in kind. The component must declare every property and
-///   function of the kind's `MorphUi` component; one that does not is refused when it is mapped.
+/// - The **restyle map** names a component for a built-in kind, or for a part a built-in component draws (`tableRow`,
+///   a table row's background). The component must declare every property and function of its `MorphUi` base; one
+///   that does not is refused when it is mapped.
 ///
 /// Each component reports its events through `host.fire(event, payload)`, `host` being a `var` property it declares
 /// and the renderer sets. A component that fails to load is reported once, through the callback, and the caller
@@ -71,7 +72,8 @@ public:
     /// @brief Maps a built-in kind to a registered component, checking that the component declares every property
     ///        and function of the kind's `MorphUi` component.
     /// @param engine    The engine the backend renders with. Borrowed for the call.
-    /// @param kind      The kind as a document names it: `button`, `textInput`, `checkbox`, `select`, …
+    /// @param kind      The kind as a document names it (`button`, `textInput`, `checkbox`, `select`, …), or a part
+    ///                  kind (`tableRow`).
     /// @param component The registered component's name.
     /// @return Nothing, or why the mapping is refused; a refusal is also reported, and the kind keeps its
     ///         `MorphUi` component.
