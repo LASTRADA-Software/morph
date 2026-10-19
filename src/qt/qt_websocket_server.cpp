@@ -11,6 +11,7 @@
 #include <memory>
 #include <morph/core/connection_writer.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/core/profiler.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <stdexcept>
@@ -170,6 +171,7 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
 }
 
 void QtWebSocketServer::onNewConnection() {
+    MORPH_ZONE("QtWebSocketServer::accept");
     QWebSocket* socket = _wsServer.nextPendingConnection();
     if (socket == nullptr) {
         return;
@@ -254,6 +256,7 @@ void QtWebSocketServer::onNewConnection() {
                          }
                      },
                  .backlog = [backlog] { return backlog->load(); }});
+    MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
 }
 
 bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server, QPointer<QWebSocket> const& socket,
@@ -270,6 +273,7 @@ bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server,
     bool const queued = QMetaObject::invokeMethod(
         app,
         [server, socket, backlog, counted, envelope = std::move(envelope)]() {
+            MORPH_ZONE("QtWebSocketServer::sendReply");
             if (server && socket) {
                 auto iter = server->_clients.find(socket.data());
                 if (iter != server->_clients.end()) {
@@ -424,6 +428,7 @@ bool QtWebSocketServer::consumeToken(ClientState& state) const {
 }
 
 void QtWebSocketServer::onTextMessage(const QString& message) {
+    MORPH_ZONE("QtWebSocketServer::onTextMessage");
     auto* socket = qobject_cast<QWebSocket*>(sender());
     if (socket == nullptr) {
         return;
@@ -490,6 +495,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
 }
 
 void QtWebSocketServer::onDisconnected() {
+    MORPH_ZONE("QtWebSocketServer::disconnect");
     auto* socket = qobject_cast<QWebSocket*>(sender());
     if (socket == nullptr) {
         return;
@@ -510,6 +516,7 @@ void QtWebSocketServer::onDisconnected() {
         }
         forgetConnection(iter->second);
         _clients.erase(iter);
+        MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
         socket->deleteLater();
     }
 }

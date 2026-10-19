@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "../attributes.hpp"
+#include "../core/profiler.hpp"
 #include "session.hpp"
 
 /// @file session/session_auth.hpp
@@ -411,6 +412,7 @@ public:
     /// @throws TokenIssuanceError on encode failure (see `detail::throwOnGlazeError`
     ///         for why this is not realistically reachable for `SessionToken`).
     [[nodiscard]] std::string issue(const SessionToken& claims) const {
+        MORPH_ZONE("TokenIssuer::issue");
         std::string json;
         detail::throwOnGlazeError(glz::write<detail::EscapingWriteOpts{}>(claims, json), json);
         const std::string payload = detail::base64UrlEncode(json);
@@ -458,6 +460,7 @@ public:
     /// @param nowMs Current time (ms since epoch) to check expiry against.
     /// @return The verified claims, or an `AuthError`.
     [[nodiscard]] std::expected<SessionToken, AuthError> verify(std::string_view token, int64_t nowMs) const {
+        MORPH_ZONE("TokenVerifier::verify");
         const auto dot = token.find('.');
         if (dot == std::string_view::npos || token.find('.', dot + 1) != std::string_view::npos) {
             return std::unexpected(AuthError::Malformed);

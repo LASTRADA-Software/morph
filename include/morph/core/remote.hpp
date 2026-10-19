@@ -601,6 +601,7 @@ public:
     /// on the server strand, before any `handle()` the same thread makes next.
     /// @return A fresh, non-zero `ConnectionId`.
     [[nodiscard]] ConnectionId openConnection() {
+        MORPH_ZONE("RemoteServer::openConnection");
         ConnectionId const cid{_nextConnectionId.fetch_add(1) + 1};
         _strand.postTask([self = shared_from_this(), cid] {
             self->noteOwner("RemoteServer::openConnection");
@@ -996,6 +997,7 @@ private:
     /// @brief Body of `closeConnection`. On the server strand.
     /// @param cid Connection scope to close.
     void closeConnectionHere(ConnectionId cid) {
+        MORPH_ZONE("RemoteServer::closeConnection");
         noteOwner("RemoteServer::closeConnection");
         discardChanges(cid);
         _writers.erase(cid);
@@ -2091,6 +2093,8 @@ private:
         }
         try {
             if (env.kind == "register") {
+                MORPH_ZONE("RemoteServer::register");
+                MORPH_ZONE_TEXT(env.typeId);
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
@@ -2224,6 +2228,7 @@ private:
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, _dispatcher.schemasJson(env.typeId))));
             } else if (env.kind == "deregister") {
+                MORPH_ZONE("RemoteServer::deregister");
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
                 ::morph::exec::detail::ModelId const mid{env.modelId};
                 // The ownership check below compares the recorded owner against
@@ -2272,6 +2277,7 @@ private:
                 // to learn which calls exist.
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "hello") {
+                MORPH_ZONE("RemoteServer::hello");
                 const std::uint32_t minV = _config.minProtocolVersion;
                 const std::uint32_t maxV = _config.maxProtocolVersion;
                 if (env.protocolVersion < minV || env.protocolVersion > maxV) {

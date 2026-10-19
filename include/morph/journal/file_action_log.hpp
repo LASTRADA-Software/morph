@@ -19,6 +19,7 @@
 #include "../core/executor.hpp"
 #include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
+#include "../core/profiler.hpp"
 #include "action_log.hpp"
 #include "action_log_json.hpp"
 
@@ -311,6 +312,7 @@ private:
         State& operator=(State&&) = delete;
 
         void append(LogEntry entry) {
+            MORPH_ZONE("FileActionLog::append");
             requireOpen("append");
             if (_tornTail) {
                 throw std::runtime_error("FileActionLog::append: refusing to append to " + _path.string() +

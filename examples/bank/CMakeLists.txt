@@ -72,7 +72,11 @@ morph_use_cpm(Lightweight)
 CPMAddPackage(
     NAME Lightweight
     GITHUB_REPOSITORY LASTRADA-Software/Lightweight
-    GIT_TAG 17c4e70d7fb4ead01376be0f46f201ad41c9a701)
+    GIT_TAG 17c4e70d7fb4ead01376be0f46f201ad41c9a701
+    # Lightweight instruments its SQL with the same Tracy as morph, so its
+    # query zones land in the same capture; and with it off, its header
+    # defines Tracy's macros as no-op stubs that would clash with morph's.
+    OPTIONS "LIGHTWEIGHT_ENABLE_TRACY ${MORPH_ENABLE_TRACY}")
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 

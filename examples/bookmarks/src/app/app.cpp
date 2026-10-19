@@ -47,30 +47,16 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 
 /// @brief Live-instance cap this server installs.
 ///
-/// This rung's `authorizeRegister` is unconditionally permissive by choice
-/// (`bookmarks/auth/bookmarks_authorizer.hpp` — the framework can gate
-/// registration on identity now that `register` envelopes carry the
-/// caller's session, this rung's authorizer just doesn't), so an
-/// unauthenticated client *can* make the server create model instances even
-/// though it can never execute anything on them. `maxLiveModels` is the
-/// framework's own answer to that shape of churn: past the cap a `register`
-/// is answered `err "too many models"` and no instance is constructed. The
-/// value is generous on purpose — the shipped client registers six instances
-/// (the forms controller owns an `AuthModel`, a `BookmarkModel` and a
-/// `TagModel` handler; the three presenters own a `BookmarkModel`, a
-/// `TagModel` and a `SharedFeedModel` handler — see the README's "Six model
-/// instances per client, not four" gap for why they cannot be shared), so
-/// this is ~42 concurrent clients, not a limit a real session will meet.
-constexpr std::size_t kMaxLiveModels = 256;
 
-/// @brief The server's configuration: the live-model cap above, and @p services.
-/// @param services The envelope services the server answers besides the models.
-/// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
-::morph::backend::ServerConfig serverConfig(
-    std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services) {
+/// @brief The server's configuration: its live-model cap and @p services.
+/// @param services      The envelope services the server answers besides the models.
+/// @param maxLiveModels The cap on live model instances; `0` is unbounded.
+/// @return The `ServerConfig`.
+::morph::backend::ServerConfig serverConfig(std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services,
+                                            std::size_t maxLiveModels) {
     ::morph::backend::ServerConfig config;
     config.services = std::move(services);
-    config.limits.maxLiveModels = kMaxLiveModels;
+    config.limits.maxLiveModels = maxLiveModels;
     return config;
 }
 
@@ -81,7 +67,7 @@ constexpr std::size_t kMaxLiveModels = 256;
 App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
          std::shared_ptr<IBookmarkMetadataFetcher> fetcher, std::chrono::milliseconds fetchInterval,
          std::chrono::milliseconds relayInterval, std::size_t workers, QObject* parent,
-         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services)
+         std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services, std::size_t maxLiveModels)
     // NOLINTEND(bugprone-easily-swappable-parameters)
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety — see that header's comment.
@@ -97,10 +83,14 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
           _pool, std::make_shared<auth::BookmarksAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
-          serverConfig(std::move(services)))},
+          serverConfig(std::move(services), maxLiveModels))},
       _fetchBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _fetchExecutor},
       _fetcher{std::move(fetcher)} {
-    ::morph::journal::setActionLog(_actionLog);
+    // The in-memory store persists nothing, and the journal is persistence:
+    // with it installed, every write action would still be appended to a file.
+    if (storage() != Storage::Memory) {
+        ::morph::journal::setActionLog(_actionLog);
+    }
 
     // Installed process-wide so AuthModel::execute(const Login&) can mint
     // tokens against this exact secret — the same "registry-constructed

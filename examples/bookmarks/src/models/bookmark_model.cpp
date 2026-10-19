@@ -11,21 +11,26 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <morph/core/profiler.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/offline/replay_ledger.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/bookmark_entity.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
+#include "bookmarks/db/database.hpp"
 #include "bookmarks/db/imported_op_entity.hpp"
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
 #include "bookmarks/import/netscape_bookmarks.hpp"
 #include "clock.hpp"
+#include "memory_bookmark_store.hpp"
+#include "tag_names.hpp"
 
 namespace bookmarks {
 
@@ -187,6 +192,7 @@ private:
 ///        (this task) — both run inside the caller's own transaction.
 [[nodiscard]] std::uint64_t findOrCreateTagId(::Lightweight::DataMapper& mapper, const std::string& owner,
                                               const std::string& name) {
+    MORPH_ZONE("bookmarks::findOrCreateTag");
     auto existing = mapper.Query<db::TagRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
                         .Where(::Lightweight::FieldNameOf<&db::TagRecord::name>, "=", name)
@@ -227,6 +233,7 @@ void addTagAssociationIfAbsent(::Lightweight::DataMapper& mapper, std::uint64_t 
 template <typename Action, typename Result>
 void writeOutboxEntry(::Lightweight::DataMapper& mapper, const std::string& owner, const Action& action,
                       const Result& result, std::string_view actionType, std::string_view idempotencyKey) {
+    MORPH_ZONE("bookmarks::writeOutbox");
     db::BookmarkOutboxRecord entry;
     entry.modelType = "BookmarkModel";
     entry.entityKey = owner;
@@ -250,25 +257,8 @@ void writeOutboxEntry(::Lightweight::DataMapper& mapper, const std::string& owne
 /// caller has already established that the bookmark itself is readable.
 [[nodiscard]] static std::vector<std::string> readTagNames(::Lightweight::DataMapper& mapper,
                                                            std::uint64_t bookmarkId) {
-    auto junctionRows = mapper.Query<db::BookmarkTagRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", bookmarkId)
-                            .All();
-    std::vector<std::string> names;
-    names.reserve(junctionRows.size());
-    for (const auto& row : junctionRows) {
-        auto tagRows = mapper.Query<db::TagRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", row.tag.Value())
-                           .All();
-        if (!tagRows.empty()) {
-            // `TagRecord::name` is `Light::SqlAnsiString<kMaxTagNameBytes>`
-            // (`tag_entity.hpp`); `names` stays a plain `std::vector<std::string>`
-            // since tag names travel the wire as `std::string` per
-            // IMPLEMENTATION.md rule 4 -- the explicit `std::string{...}`
-            // conversion is the model-layer boundary that does that.
-            names.push_back(std::string{tagRows.front().name.Value()});
-        }
-    }
-    return names;
+    auto byBookmark = detail::readTagNamesByBookmark(mapper, std::span{&bookmarkId, 1});
+    return std::move(byBookmark[bookmarkId]);
 }
 
 /// @brief Replaces @p bookmarkId's tag set with exactly @p desiredNames,
@@ -350,7 +340,28 @@ static void applyTagSet(::Lightweight::DataMapper& mapper, std::uint64_t bookmar
     return rows.front();
 }
 
+namespace {
+
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): the process's storage choice, set once by the server at startup.
+std::atomic<Storage> gStorage{Storage::Sql};
+
+}  // namespace
+
+void setStorage(Storage storage) noexcept { gStorage.store(storage, std::memory_order_relaxed); }
+
+Storage storage() noexcept { return gStorage.load(std::memory_order_relaxed); }
+
+BookmarkModel::BookmarkModel()
+    : _memory{storage() == Storage::Memory ? std::make_unique<detail::MemoryBookmarkStore>() : nullptr} {}
+BookmarkModel::~BookmarkModel() = default;
+BookmarkModel::BookmarkModel(BookmarkModel&&) noexcept = default;
+BookmarkModel& BookmarkModel::operator=(BookmarkModel&&) noexcept = default;
+
 CreateBookmarkResult BookmarkModel::execute(const CreateBookmark& action) {
+    MORPH_ZONE("BookmarkModel::CreateBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"CreateBookmark: a non-empty url within the length bound is required"};
     }
@@ -367,21 +378,28 @@ CreateBookmarkResult BookmarkModel::execute(const CreateBookmark& action) {
     rec.createdAtMs = now;
     rec.updatedAtMs = now;
 
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     mapper->Create(rec);
     applyTagSet(mapper.Get(), rec.id.Value(), owner, action.tags);
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+        transaction.Commit();
+    }
 
     return CreateBookmarkResult{.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())}};
 }
 
 BookmarkView BookmarkModel::execute(const EditBookmark& action) {
+    MORPH_ZONE("BookmarkModel::EditBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"EditBookmark: id and a non-empty url within the length bound are required"};
     }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rec = loadOwned(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
 
     rec.url = action.url;
@@ -394,17 +412,24 @@ BookmarkView BookmarkModel::execute(const EditBookmark& action) {
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     mapper->Update(rec);
     applyTagSet(mapper.Get(), rec.id.Value(), owner, action.tags);
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+        transaction.Commit();
+    }
 
     return toView(rec, readTagNames(mapper.Get(), rec.id.Value()));
 }
 
 Ack BookmarkModel::execute(const ArchiveBookmark& action) {
+    MORPH_ZONE("BookmarkModel::ArchiveBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"ArchiveBookmark: id is required"};
     }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rec = loadOwned(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
     rec.isArchived = true;
     rec.updatedAtMs = nowMs();
@@ -413,11 +438,15 @@ Ack BookmarkModel::execute(const ArchiveBookmark& action) {
 }
 
 Ack BookmarkModel::execute(const UnarchiveBookmark& action) {
+    MORPH_ZONE("BookmarkModel::UnarchiveBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"UnarchiveBookmark: id is required"};
     }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rec = loadOwned(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
     rec.isArchived = false;
     rec.updatedAtMs = nowMs();
@@ -426,12 +455,16 @@ Ack BookmarkModel::execute(const UnarchiveBookmark& action) {
 }
 
 Ack BookmarkModel::execute(const DeleteBookmark& action) {
+    MORPH_ZONE("BookmarkModel::DeleteBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"DeleteBookmark: id is required"};
     }
     const auto& owner = requireOwner();
     const auto id = static_cast<std::uint64_t>(*action.id);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     (void)loadOwned(mapper.Get(), id, owner);  // NotFound/Forbidden, same as every other action
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
@@ -445,23 +478,34 @@ Ack BookmarkModel::execute(const DeleteBookmark& action) {
         stmt.Prepare("DELETE FROM bookmarks WHERE id = ?");
         (void)stmt.Execute(id);
     }
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+        transaction.Commit();
+    }
     return Ack{};
 }
 
 BookmarkView BookmarkModel::execute(const GetBookmark& action) {
+    MORPH_ZONE("BookmarkModel::GetBookmark");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     if (!action.validate()) {
         throw ValidationError{"GetBookmark: id is required"};
     }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     const auto rec = loadOwned(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
     return toView(rec, readTagNames(mapper.Get(), rec.id.Value()));
 }
 
 ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
+    MORPH_ZONE("BookmarkModel::ListBookmarks");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto query = mapper->Query<db::BookmarkRecord>();
     (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner);
     if (action.archiveFilter == ArchiveFilter::ActiveOnly) {
@@ -493,9 +537,16 @@ ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
         rows.resize(kPageSize);
     }
 
+    std::vector<std::uint64_t> pageIds;
+    pageIds.reserve(rows.size());
+    for (const auto& rec : rows) {
+        pageIds.push_back(rec.id.Value());
+    }
+    auto tagsByBookmark = detail::readTagNamesByBookmark(mapper.Get(), pageIds);
+
     ListBookmarksResult result;
     for (const auto& rec : rows) {
-        auto tags = readTagNames(mapper.Get(), rec.id.Value());
+        auto tags = std::move(tagsByBookmark[rec.id.Value()]);
         if (!action.tag.empty() && std::ranges::find(tags, action.tag) == tags.end()) {
             continue;
         }
@@ -533,6 +584,10 @@ ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
 }
 
 GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
+    MORPH_ZONE("BookmarkModel::GetChangesSince");
+    if (_memory) {
+        return _memory->execute(action);
+    }
     const auto& owner = requireOwner();
     // Captured *before* the query -- see this task's own doc comment for
     // why a later capture would let a racing write be lost across two
@@ -547,7 +602,7 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
     // tie-break recovers it without over-including: any row strictly after
     // sinceMs qualifies outright; a row *at* sinceMs qualifies only if its id
     // is past the last one already delivered at that same instant.
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rows =
         mapper->Query<db::BookmarkRecord>()
             .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
@@ -576,12 +631,18 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
             break;
         }
     }
+    std::vector<std::uint64_t> changedIds;
+    changedIds.reserve(rows.size());
+    for (const auto& rec : rows) {
+        changedIds.push_back(rec.id.Value());
+    }
+    auto tagsByBookmark = detail::readTagNamesByBookmark(mapper.Get(), changedIds);
     for (const auto& rec : rows) {
         BookmarkSummary summary;
         summary.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};
         summary.url = std::string{rec.url.Value()};
         summary.title = std::string{rec.title.Value()};
-        summary.tags = readTagNames(mapper.Get(), rec.id.Value());
+        summary.tags = std::move(tagsByBookmark[rec.id.Value()]);
         summary.createdAt = fromEpochMs(rec.createdAtMs.Value());
         summary.updatedAt = fromEpochMs(rec.updatedAtMs.Value());
         summary.readState = rec.isUnread.Value() ? ReadState::Unread : ReadState::Read;
@@ -593,12 +654,16 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
 }
 
 BulkEditResult BookmarkModel::execute(const BulkEdit& action) {
+    MORPH_ZONE("BookmarkModel::BulkEdit");
+    if (_memory) {
+        throw ValidationError{"BulkEdit is not available with the in-memory store"};
+    }
     if (!action.validate()) {
         throw ValidationError{"BulkEdit: at least one id is required"};
     }
     const auto& owner = requireOwner();
 
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
     // Ownership check first, for *every* id, before any write: one
@@ -661,11 +726,18 @@ BulkEditResult BookmarkModel::execute(const BulkEdit& action) {
     // clock resolution.
     writeOutboxEntry(mapper.Get(), owner, action, result, "BulkEdit",
                      owner + "-bulkedit-" + std::to_string(nowMs()) + "-" + std::to_string(nextOutboxSeq()));
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+        transaction.Commit();
+    }
     return result;
 }
 
 Ack BookmarkModel::execute(const RecordMetadata& action) {
+    MORPH_ZONE("BookmarkModel::RecordMetadata");
+    if (_memory) {
+        throw ValidationError{"RecordMetadata is not available with the in-memory store"};
+    }
     if (!action.validate()) {
         throw ValidationError{"RecordMetadata: id is required"};
     }
@@ -695,7 +767,7 @@ Ack BookmarkModel::execute(const RecordMetadata& action) {
         throw Forbidden{"RecordMetadata is dispatched only by the metadata-fetch service principal"};
     }
     const auto id = static_cast<std::uint64_t>(*action.id);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rows =
         mapper->Query<db::BookmarkRecord>().Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, "=", id).All();
     if (rows.empty()) {
@@ -714,6 +786,10 @@ Ack BookmarkModel::execute(const RecordMetadata& action) {
 }
 
 ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
+    MORPH_ZONE("BookmarkModel::ImportBookmarks");
+    if (_memory) {
+        throw ValidationError{"ImportBookmarks is not available with the in-memory store"};
+    }
     // Checked ahead of the general `validate()` so the size bound gets the
     // typed signal `TooLarge`'s own doc comment promises. `validate()` folds
     // three conditions into one bool, and a caller that chunked its file too
@@ -729,7 +805,7 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
     const auto& owner = requireOwner();
     const auto& opIdStr = *action.opId;
 
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     BookmarksReplayLedger ledger{mapper.Get(), nowMs()};
     if (ledger.lookup(owner, opIdStr).has_value()) {
         // Already applied -- a retried chunk after a dropped connection is
@@ -770,15 +846,22 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
         ++imported;
     }
     ledger.record(owner, opIdStr, "");
-    transaction.Commit();
+    {
+        MORPH_ZONE("bookmarks::db::commit");
+        transaction.Commit();
+    }
 
     return ImportBookmarksResult{.imported = Count::fromDouble(static_cast<double>(imported)),
                                  .skipped = Count::fromDouble(static_cast<double>(skipped))};
 }
 
 ExportBookmarksResult BookmarkModel::execute(const ExportBookmarks&) {
+    MORPH_ZONE("BookmarkModel::ExportBookmarks");
+    if (_memory) {
+        throw ValidationError{"ExportBookmarks is not available with the in-memory store"};
+    }
     const auto& owner = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto mapper = db::acquireMapper();
     auto rows = mapper->Query<db::BookmarkRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
                     .All();

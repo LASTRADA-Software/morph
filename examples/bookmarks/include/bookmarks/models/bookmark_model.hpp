@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
@@ -18,6 +20,28 @@
 /// `RecordMetadata` without touching this header again.
 
 namespace bookmarks {
+
+namespace detail {
+class MemoryBookmarkStore;
+}  // namespace detail
+
+/// @brief Where `BookmarkModel` instances keep their bookmarks.
+enum class Storage : std::uint8_t {
+    /// The SQL database every instance shares (the default).
+    Sql,
+    /// Each instance's own memory, for as long as the instance lives: nothing
+    /// is persisted and no instance sees another's bookmarks. For measuring
+    /// the framework without a database under it.
+    Memory,
+};
+
+/// @brief Chooses where `BookmarkModel` instances constructed from now on keep
+///        their bookmarks. Process-wide; set once, before the server serves.
+/// @param storage The storage.
+void setStorage(Storage storage) noexcept;
+
+/// @return Where `BookmarkModel` instances constructed now keep their bookmarks.
+[[nodiscard]] Storage storage() noexcept;
 
 /// @brief Create/read/edit/archive/delete/list/bulk-edit over the
 ///        `bookmarks`/`bookmark_tags` tables, scoped to the authenticated
@@ -54,6 +78,13 @@ namespace bookmarks {
 /// lifetime.
 class BookmarkModel {
 public:
+    BookmarkModel();
+    ~BookmarkModel();
+    BookmarkModel(BookmarkModel&&) noexcept;
+    BookmarkModel& operator=(BookmarkModel&&) noexcept;
+    BookmarkModel(const BookmarkModel&) = delete;
+    BookmarkModel& operator=(const BookmarkModel&) = delete;
+
     CreateBookmarkResult execute(const CreateBookmark& action);
     BookmarkView execute(const EditBookmark& action);
     Ack execute(const ArchiveBookmark& action);
@@ -66,6 +97,11 @@ public:
     Ack execute(const RecordMetadata& action);                     // Task 8, internal-only
     ImportBookmarksResult execute(const ImportBookmarks& action);  // Task 11
     ExportBookmarksResult execute(const ExportBookmarks& action);  // Task 11
+
+private:
+    /// Engaged under `Storage::Memory`: this instance's bookmarks, which the
+    /// actions it supports are answered from instead of the database.
+    std::unique_ptr<detail::MemoryBookmarkStore> _memory;
 };
 
 }  // namespace bookmarks

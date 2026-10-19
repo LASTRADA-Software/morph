@@ -16,6 +16,7 @@
 #include <memory>
 #include <morph/core/detail/owner_probe.hpp>
 #include <morph/core/io_loop.hpp>
+#include <morph/core/profiler.hpp>
 #include <morph/core/remote.hpp>
 #include <optional>
 #include <stdexcept>
@@ -262,6 +263,7 @@ private:
 
         /// Reclaims @p client's models and closes its socket. Idempotent.
         void finish(Client& client, bool flush) const {
+            MORPH_ZONE("SocketServer::finish");
             if (client.done) {
                 return;
             }
@@ -277,10 +279,13 @@ private:
         }
 
         void forget(Client const& client) {
+            MORPH_ZONE("SocketServer::forget");
             std::erase_if(clients, [&client](std::shared_ptr<Client> const& entry) { return entry.get() == &client; });
+            MORPH_PLOT("SocketServer::connections", clients.size());
         }
 
         void accepted(std::unique_ptr<::core::net::ISocket> socket) {
+            MORPH_ZONE("SocketServer::accept");
             note("SocketServer::accept");
             if (server == nullptr) {
                 return;
@@ -297,6 +302,7 @@ private:
             };
             auto client = std::make_shared<Client>(Client{.conn = std::move(conn), .cid = cid, .done = false});
             clients.push_back(client);
+            MORPH_PLOT("SocketServer::connections", clients.size());
             loop.loop().spawn(clientFlow(shared_from_this(), client));
         }
 
@@ -325,6 +331,7 @@ private:
         static bool sendEnvelope(::morph::exec::IoLoop::Weak const& loopHandle, std::weak_ptr<Client> const& weak,
                                  std::shared_ptr<std::atomic<std::size_t>> const& counter,
                                  std::string const& envelope) {
+            MORPH_ZONE("SocketServer::encodeReply");
             std::string frame =
                 ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText, envelope, /*mask=*/false);
             std::size_t const counted = envelope.size();
@@ -332,6 +339,7 @@ private:
             // covers a frame still on its way to the loop.
             counter->fetch_add(counted);
             bool const posted = loopHandle.post([weak, counter, counted, frame = std::move(frame)]() mutable {
+                MORPH_ZONE("SocketServer::queueReply");
                 auto const target = weak.lock();
                 if (!target) {
                     counter->fetch_sub(counted);
@@ -402,6 +410,9 @@ private:
             }
             std::optional<std::string> leftover;
             if (header) {
+                // A zone only in this block: a Tracy zone must not span the
+                // coroutine's suspension points around it.
+                MORPH_ZONE("SocketServer::handshake");
                 try {
                     auto const request = ::morph::net::detail::parseClientHandshakeRequest(header->header);
                     static_cast<void>(::morph::net::detail::enqueueFrame(
@@ -452,6 +463,7 @@ private:
         };
 
         Drain drainFrames(std::shared_ptr<Client> const& client, ::morph::net::detail::WsFrameReader& reader) const {
+            MORPH_ZONE("SocketServer::drainFrames");
             using ::morph::net::detail::WsOpcode;
             for (;;) {
                 std::optional<::morph::net::detail::WsFrame> frame;

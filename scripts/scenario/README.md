@@ -233,6 +233,58 @@ is load-bearing: were `client` to read its options raw, `$token` would go to
 the server as six literal characters and the run would fail several steps later
 with a bare `unauthorized` naming neither the step nor the cause.
 
+## Load benchmark
+
+`bench_bookmarks.py` measures how many concurrent users one bookmarks server
+carries. Each simulated user repeats a session: connect, `Login`, open the
+collection (`ListBookmarks`), a random 5-10 actions from a weighted mix with
+100-1000 ms of think time before each, then disconnect. It reports
+sessions/s, actions/s, latency per step, failures, the server's CPU (in total
+and per thread) and RSS read from `/proc`, and the clients' own CPU. Linux
+only.
+
+```bash
+python3 scripts/scenario/bench_bookmarks.py --users 1000
+python3 scripts/scenario/bench_bookmarks.py --store memory --transport net --sweep 2500,10000,20000 --json out.json
+python3 scripts/scenario/bench_bookmarks.py --workload framework --users 10000   # no model work at all
+python3 scripts/scenario/bench_bookmarks.py --users 64 --think-ms 0              # closed loop: the throughput ceiling
+```
+
+A sweep runs one fresh server per user count and ends with the largest count
+whose action p99 and failure rate meet `--slo-p99-ms` and
+`--slo-failure-rate`.
+
+What the server is made of, each passed to it through its environment:
+
+| Flag | Server variable | Choices |
+|---|---|---|
+| `--store` | `BOOKMARKS_STORE` | `sql` (default): the database. `memory`: each model instance keeps its own bookmarks and nothing is persisted or journalled, so a run measures the framework rather than the database. |
+| `--transport` | `BOOKMARKS_TRANSPORT` | `qt` (default): `QtWebSocketServer` on the main thread. `net`: `morph::net::SocketServer` on its own I/O loop. |
+| `--workers` | `BOOKMARKS_WORKERS` | The model worker pool size (default 4). |
+| `--max-live-models` | `BOOKMARKS_MAX_LIVE_MODELS` | The cap on live model instances; the benchmark's default `0` is unbounded. |
+
+With `--store memory` every session starts from an empty collection, so it
+first creates `--seed-bookmarks` (default 5-10) bookmarks before opening it.
+`--workload framework` replaces the session's actions with `Login` round
+trips, which never reach a model's storage. `--sqlite-wal` creates the SQL
+database in WAL mode; without it SQLite's rollback journal makes every writer
+block every reader. Users start over `--ramp` seconds (default users/500) so a
+large count does not connect in one burst.
+
+`--tracy DIR` records the server with `tracy-capture` from start-up to exit,
+writes `DIR/bookmarks-<users>.tracy` and its zone statistics
+`DIR/bookmarks-<users>-zones.csv`, and prints the hottest zones. It needs a
+server built with `-DMORPH_ENABLE_TRACY=ON -DMORPH_TRACY_ON_DEMAND=OFF` (pass
+that build's `--build-dir`), plus `tracy-capture` and `tracy-csvexport` from
+the same Tracy tag, on `PATH` or given with `--tracy-tools`. Lightweight's own
+SQL zones are recorded too. Instrumentation costs time, so take throughput
+from an uninstrumented build and the profile from this one.
+
+The users are asyncio tasks, one event loop in each of `--procs` processes,
+so a reply wakes the user waiting for it at once even with thousands per
+process. A run warns when clients and server together saturated the host: its
+figures are then a floor, not the server's ceiling.
+
 ## Proving a scenario's assertions are real
 
 A scenario that passes proves nothing until you know it *can* fail.

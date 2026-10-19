@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "../model.hpp"
+#include "../profiler.hpp"
 
 namespace morph::backend::detail {
 
@@ -179,6 +180,7 @@ public:
     void insertPrivate(::morph::exec::detail::ModelId mid,
                        std::shared_ptr<::morph::model::detail::IModelHolder> holder, std::string owner = {}) {
         _instances.insert_or_assign(mid, Instance{.holder = std::move(holder), .owner = std::move(owner)});
+        MORPH_PLOT("RemoteServer::liveModels", _instances.size());
     }
 
     /// @brief Records a freshly created shared instance and files it under @p key.
@@ -198,6 +200,7 @@ public:
                                                   .attachCount = 1,
                                                   .sharedKey = std::move(key),
                                                   .hydration = std::make_shared<HydrationState>()});
+        MORPH_PLOT("RemoteServer::liveModels", _instances.size());
     }
 
     /// @brief Takes one more attachment to the instance filed under @p key, if any.
@@ -302,6 +305,7 @@ public:
             }
         }
         _instances.erase(instIter);
+        MORPH_PLOT("RemoteServer::liveModels", _instances.size());
         return Release::destroyed;
     }
 
