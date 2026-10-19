@@ -120,7 +120,7 @@ TEST_CASE("formView: labels fall back to the wire key, follow x-order and come f
     Mounted const mounted{kSchema, {}, std::move(options)};
     int const zeta = mounted.widget("Text", "label_zeta");
     int const alpha = mounted.widget("Text", "label_alpha");
-    CHECK(mounted.backend.prop(zeta, "text") == "zeta *");  // the wire key, and required
+    CHECK(mounted.backend.prop(zeta, "text") == "zeta");    // the wire key; the control marks it required
     CHECK(mounted.backend.prop(alpha, "text") == "Alfa");   // the translation beats the schema's title
     CHECK(zeta < alpha);                                    // drawn in x-order
     CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_alpha"), "a11yName") == "Alfa");
@@ -153,8 +153,10 @@ TEST_CASE("formView: mounted controls drive the session", "[forms-engine][view]"
     CHECK(mounted.form->field("grade").text().peek() == R"("Low")");
 }
 
-TEST_CASE("formView: explicit mode adds a Submit button bound to readiness; the cell shows help and a live *",
-          "[forms-engine][view]") {
+TEST_CASE(
+    "formView: explicit mode adds a Submit button bound to readiness; the cell shows help, the control a live "
+    "required mark",
+    "[forms-engine][view]") {
     constexpr std::string_view kSchema = R"({"x-submitMode":"explicit","properties":{
       "label":{"type":"string","description":"What it is called","x-order":0},
       "note":{"type":["string","null"],"x-order":1},
@@ -167,7 +169,8 @@ TEST_CASE("formView: explicit mode adds a Submit button bound to readiness; the 
     CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note");
     mounted.backend.toggle(mounted.widget("Checkbox", "field_flag"));
     mounted.harness.settle();
-    CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note *");  // requiredWhen, live
+    // requiredWhen, live: the control is marked, the label keeps the field's label.
+    CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note");
     CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_note"), "required") == "true");
     mounted.edit("label", "x");
     mounted.edit("note", "n");

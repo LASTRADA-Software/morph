@@ -356,8 +356,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     return textInput(ui::TextInputMode::SingleLine);
 }
 
-/// @brief One field's cell: the label (with ` *` while required), the control (an override's, else the built-in)
-///        and the help text; shown while the field is visible.
+/// @brief One field's cell: the label, the control (an override's, else the built-in) and the help text; shown while
+///        the field is visible. The control marks a required field, so the label carries no mark of its own.
 /// @param session The session.
 /// @param state   The field.
 /// @param options The view options.
@@ -373,7 +373,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
-        ui::Text label{.text = [field] { return field->label() + (field->required().get() ? " *" : ""); }};
+        ui::Text label{.text = [field] { return field->label(); }};
         label.common.testId = "label_" + state.path();
         children.push_back(ui::text(std::move(label)));
     }

@@ -3,6 +3,7 @@
 // A `form` document mounted on the terminal backend: the forms engine's view tree drawn on a headless screen, typed
 // into through key events, submitting the exact body through the model alias.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <core/net/PlatformLoop.hpp>
@@ -12,6 +13,7 @@
 #include <core/tui/Screen.hpp>
 #include <core/tui/Terminal.hpp>
 #include <core/tui/TestHelpers.hpp>
+#include <cstddef>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
@@ -94,9 +96,20 @@ TEST_CASE("tui forms: a form document draws on the terminal and submits what is 
                                            {}, client.backend);
     REQUIRE(screen.has_value());
     client.settle();
-    CHECK(client.shows("Sample *"));
-    CHECK(client.shows("Concentration *"));
+    CHECK(client.shows("Sample"));
+    CHECK(client.shows("Concentration"));
     CHECK(client.shows("Remarks"));
+    // The two required fields are marked once each, by their controls; the labels carry no mark. The status line
+    // names the mark, and is not counted.
+    CHECK_FALSE(client.shows("Sample *"));
+    std::size_t marks = 0;
+    for (std::string const& row : rowsOf(client.screen)) {
+        if (!row.contains("fill the required")) {
+            marks += static_cast<std::size_t>(std::ranges::count(row, '*'));
+        }
+    }
+    INFO(client.drawn());
+    CHECK(marks == 2);
     client.backend.focusFirst();
     client.settle();
     client.type("9007199254740993");
@@ -129,13 +142,13 @@ TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its
     CHECK(client.shows("Samples"));
     CHECK(client.shows("Water"));
     CHECK(client.shows("Delete"));
-    CHECK_FALSE(client.shows("Concentration *"));  // the editor dialog is closed
+    CHECK_FALSE(client.shows("Concentration"));  // the editor dialog is closed
     client.backend.focusFirst();
     client.settle();
     client.key(KeyCode::Enter);
     INFO(client.drawn());
     CHECK(client.shows("9007199254740993"));
-    CHECK(client.shows("Concentration *"));
+    CHECK(client.shows("Concentration"));
 }
 
 TEST_CASE("tui forms: a wizard document steps on to its second step with the prefill", "[tui][forms]") {

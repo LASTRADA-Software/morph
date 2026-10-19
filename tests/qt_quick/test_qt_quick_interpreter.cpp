@@ -488,6 +488,26 @@ TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quic
     CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
 }
 
+// Mutation: put the ` *` suffix back on the cell's label (the label reads `Sample *` and the cell shows two marks).
+TEST_CASE("qt_quick interpreter: a required form field shows one required mark, its control's",
+          "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "capture",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration" } })");
+    CHECK(QtHarness::widget("label_sampleId").shownText() == "Sample");
+    QQuickItem* const cell = QtHarness::widget("cell_sampleId").item();
+    REQUIRE(cell != nullptr);
+    int marks = 0;
+    for (QQuickItem const* const text : Scene::itemsOf(*cell, "QQuickText")) {
+        if (text->isVisible() && text->property("text").toString().contains(QLatin1Char('*'))) {
+            ++marks;
+        }
+    }
+    CHECK(marks == 1);
+}
+
 // A `collection` node renders through Qt Quick: the rows' exact cells, the confirm dialog gating a row action, and
 // the row editor in its dialog, submitting through the model alias.
 TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits", "[qt_quick][interpreter][forms]") {
