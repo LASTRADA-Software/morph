@@ -6143,31 +6143,6 @@ inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerC
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a list of rows and a table.
-inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
-    if (value.isNull()) {
-        return std::nullopt;
-    }
-    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
-        {"neutral", Tone::Neutral},
-        {"info", Tone::Info},
-        {"ok", Tone::Ok},
-        {"warn", Tone::Warn},
-        {"err", Tone::Err},
-    }};
-    if (std::string const* const text = value.asString()) {
-        auto const found =
-            std::ranges::find(kTones, std::string_view{*text}, &std::pair<std::string_view, Tone>::first);
-        if (found != kTones.end()) {
-            return found->second;
-        }
-    }
-    if (!noted) {
-        noted = true;
-        report(path, "rowTone is " + canonicalJson(value) + "; a tone is neutral, info, ok, warn or err");
-    }
-    return std::nullopt;
-}
-
 inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     ExprPtr const rowsExpr = node.prop("rows");
     if (!rowsExpr) {
@@ -6317,6 +6292,33 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     commonOf(node, ctx, element, options.common);
     return ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn), std::move(cellsOf),
                             std::move(options));
+}
+
+inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (std::string const* const text = value.asString()) {
+        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
+        // others, so `auto` there reads differently to each.
+        for (auto const& [name, tone] : kTones) {
+            if (name == *text) {
+                return tone;
+            }
+        }
+    }
+    if (!noted) {
+        noted = true;
+        report(path, "rowTone is " + canonicalJson(value) + "; a tone is neutral, info, ok, warn or err");
+    }
+    return std::nullopt;
 }
 
 inline void ScreenCore::ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,

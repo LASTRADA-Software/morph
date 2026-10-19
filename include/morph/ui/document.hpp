@@ -2731,6 +2731,7 @@ private:
             }
         }
         if (!part) {
+            checkFlags(node);
             checkKindRules(node, outer);
         }
     }
@@ -2743,10 +2744,14 @@ private:
         }
     }
 
-    void checkKindRules(DocNode const& node, CheckContext const& context) {
+    // A flag that needs a key beside it.
+    static void checkFlags(DocNode const& node) {
         if (node.flag("showLabel") && node.prop("label") == nullptr) {
             refuse(pointerAppend(node.path, "showLabel"), "`showLabel` shows the `label`, and the node gives none");
         }
+    }
+
+    void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             auto const found = _doc->components.find(node.name("name"));
             if (found == _doc->components.end()) {

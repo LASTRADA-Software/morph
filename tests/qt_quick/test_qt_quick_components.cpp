@@ -317,6 +317,7 @@ TEST_CASE("qt_quick components: a tableRow restyle draws every row's background,
     };
     auto alternates = [&rows] {
         std::vector<bool> out;
+        out.reserve(rows.size());
         for (auto const& row : rows) {
             out.push_back(Scene::itemOf(*row).property("alternate").toBool());
         }

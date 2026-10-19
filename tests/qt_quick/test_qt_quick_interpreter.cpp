@@ -756,6 +756,8 @@ struct TwoPages {
     TwoPages& operator=(TwoPages const&) = delete;
     TwoPages(TwoPages&&) = delete;
     TwoPages& operator=(TwoPages&&) = delete;
+    // A throw while the pages go ends the test run, which is what a broken teardown should do.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     ~TwoPages() {
         screenB.reset();
         screenA.reset();

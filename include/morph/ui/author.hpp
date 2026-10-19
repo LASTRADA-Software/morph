@@ -1352,13 +1352,13 @@ public:
     /// @param member The member.
     /// @return Nothing; the overload is deleted.
     template <typename Class, typename Member>
-    Handle<Member> at(Member Class::* member) const = delete;
+    [[nodiscard]] Handle<Member> at(Member Class::* member) const = delete;
 
     /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
     ///        `r.at(...)`.
     /// @param field The field.
     /// @return Nothing; the overload is deleted.
-    Handle<Any> at(std::string_view field) const = delete;
+    [[nodiscard]] Handle<Any> at(std::string_view field) const = delete;
 };
 
 /// @brief A mutation declared by a scope.

@@ -55,7 +55,7 @@ struct FMOStrayAction {
 
 // Mutation: skip the emission in annotateMetaOptions (the member carries no options and reads as a number).
 TEST_CASE("Forms::FieldMeta::OptionsMakeAPlainMemberAChoice", "[forms][field_meta][choice]") {
-    std::string const schema = morph::forms::schemaJson<FMOAssignAction>();
+    std::string const& schema = morph::forms::schemaJson<FMOAssignAction>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
     auto const& owner = dom["properties"]["ownerId"];

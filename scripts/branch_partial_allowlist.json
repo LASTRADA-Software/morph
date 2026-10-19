@@ -135,14 +135,14 @@
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 2912,
+      "line": 2917,
       "source": "default:",
       "context": "if (cmd.value) {",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentValidator::checkCommand's switch."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 3247,
+      "line": 3252,
       "source": "default: {",
       "reason": "The default arm is unreachable: the switch names every enumerator of NameCategory, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ScopeResolver::ref's switch over what a name declares."
     },

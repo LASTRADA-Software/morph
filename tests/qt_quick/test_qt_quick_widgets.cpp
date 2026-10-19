@@ -129,7 +129,7 @@ TEST_CASE("qt_quick widgets: a text input draws its unit inside the field, and t
     scene.settle();
     QQuickItem& control = Scene::controlOf(*input);
     QQuickItem const* unit = nullptr;
-    for (QQuickItem* const text : Scene::itemsOf(control, "QQuickText")) {
+    for (QQuickItem const* const text : Scene::itemsOf(control, "QQuickText")) {
         if (text->isVisible() && text->property("text").toString() == QStringLiteral("kg")) {
             unit = text;
         }

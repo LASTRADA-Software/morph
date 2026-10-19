@@ -2419,9 +2419,11 @@ void annotateMetaOptions(glz::generic_u64& property, std::string_view name, Fiel
     if (!missing.empty()) {
         throw IncompleteOptionsError{glz::name_v<Owner>, name, missing};
     }
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
     property["x-optionsAction"] = std::string{meta.optionsAction};
     property["x-optionValue"] = std::string{meta.valueField};
     property["x-optionLabel"] = std::string{meta.labelField};
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }
 
 /// @brief Applies the title/`FieldMeta`/`Quantity`/`Choice`/widget/
