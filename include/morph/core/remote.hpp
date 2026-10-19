@@ -1722,8 +1722,8 @@ private:
     /// attach, assign, instances, schemas, deregister, cancel, watch, unwatch,
     /// a service's kind) makes an authorization or ownership decision that
     /// must key on the verified identity, never the client's raw claim.
-    /// `execute` does the same in `dispatchExecute`, split in two around its
-    /// `authorize`. `hello`, which a client sends with no session, is not
+    /// `execute` does the same in `dispatchExecute`, from the principal its
+    /// one `admit` returns. `hello`, which a client sends with no session, is not
     /// stamped. See docs/spec/security.md.
     ///
     /// It then compares the stamped principal with @p cid's baseline
@@ -2330,11 +2330,14 @@ private:
         auto reject = [&env, &reply](const char* message) {
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
-        // Verified once, on entry, and compared with the connection's baseline
-        // before any check below can refuse the call: an execute under another
-        // principal, or under none, drops the connection's watches even when it
-        // is refused, and before its own fan-out when it is not.
-        std::string verified = verifiedPrincipal(env.session);
+        // Authenticated and authorized together, once, on entry: one look at
+        // the token answers both, so a token cannot pass one check and expire
+        // before the other. The principal is compared with the connection's
+        // baseline before any check below can refuse the call: an execute under
+        // another principal, or under none, drops the connection's watches even
+        // when it is refused, and before its own fan-out when it is not.
+        auto admission = _authorizer->admit(env.session, env.modelType, env.actionType);
+        std::string verified = admission.principal ? std::move(*admission.principal) : std::string{};
         compareWithBaseline(verified, cid);
         LimitPolicy const& limits = _config.limits;
         // Exact, not advisory: the count is this strand's own state, so nothing
@@ -2343,19 +2346,17 @@ private:
             reject("server busy");
             return;
         }
-        if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
+        if (!admission.allowed) {
             reject("unauthorized");
             return;
         }
         // Make the identity authoritative: the principal verified on entry
         // replaces the client's claim, so model code reading
-        // session::current()->principal can trust it. When authenticate()
+        // session::current()->principal can trust it. When the authorizer
         // could not vouch for the caller it is empty, never the client's claim:
-        // a token that expires between the two checks yields at worst an empty
-        // principal, and an authorize-only or allow-all authorizer, which never
-        // authenticates, never presents an unverified principal to the model.
-        // `authorize` above saw the session as the client sent it; the verified
-        // principal lands only here. See docs/spec/security.md.
+        // an authorize-only or allow-all authorizer, which never authenticates,
+        // never presents an unverified principal to the model. See
+        // docs/spec/security.md.
         env.session.principal = std::move(verified);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         // One lookup for the holder, its recorded owner and its hydration state

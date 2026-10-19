@@ -297,18 +297,34 @@ auto authz  = std::make_shared<morph::session::SigningAuthorizer>(sharedSecret);
 auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz);
 ```
 
-`SigningAuthorizer` implements both `IAuthorizer` entry points:
+`SigningAuthorizer` implements the three `IAuthorizer` entry points that
+judge a token:
 
 - `authorize(ctx, modelType, actionType)` returns `true` only for a token with a
   valid signature and unexpired claims — and, if a `Policy` is supplied, one the
   policy admits. An invalid/absent/expired token → `false` → the server replies
   `err "unauthorized"`.
-- `authenticate(ctx)` returns the verified `principal`. `RemoteServer`
-  (`dispatchExecute`) calls it once, on entry, before any admission check, and
-  once `authorize` has succeeded **overwrites** `env.session.principal` with
-  the verified value before building the
-  `ScopedContext`. So a model reading `session::current()->principal` sees the
-  authenticated identity, not the client's claim.
+- `authenticate(ctx)` returns the verified `principal`.
+- `admit(ctx, modelType, actionType)` answers both from **one** verification.
+  It verifies the token, then calls `authenticate` and `authorize` through the
+  vtable, as the default does, so a subclass that overrides either keeps its
+  own decision — a carve-out that needs no token, or a rule stricter than the
+  token's. While `admit` runs, `SigningAuthorizer`'s own `authenticate` and
+  `authorize` answer from that verification instead of verifying again. `RemoteServer` (`dispatchExecute`) calls it once per `execute`, on
+  entry, before any admission check, and once the call is allowed
+  **overwrites** `env.session.principal` with the verified value before
+  building the `ScopedContext`. So a model reading
+  `session::current()->principal` sees the authenticated identity, not the
+  client's claim.
+
+**One verification per execute.** Verifying a token is the costliest step of
+an `execute` once the transport keeps up: base64url decoding, a MAC and a JSON
+parse. `admit` does it once. Its default, for an authorizer that overrides only
+`authorize` and `authenticate`, calls `authenticate` and then `authorize`, so
+such an authorizer behaves as it did. The verified claims are not cached across
+calls. A cache would have to honour each token's expiry and key on its exact
+bytes, and a mistake in either admits a call it should refuse; one
+verification per call needs no state to get right.
 
 **The principal is never passed through unverified.** When `authenticate(ctx)`
 returns `nullopt` — the authorizer cannot vouch for the caller —
@@ -316,13 +332,14 @@ returns `nullopt` — the authorizer cannot vouch for the caller —
 dispatch rather than leaving the client-supplied claim in place. Two cases
 depend on this:
 
-- **TOCTOU (time-of-check/time-of-use).** `authenticate` and `authorize` each
-  verify the token independently against a fresh clock reading. A token
-  `authenticate` refuses can still pass a lenient `authorize`, so
-  `authenticate` returns `nullopt` for a call that is admitted. Without the
-  clear, the request would be dispatched carrying the *client's* asserted
-  principal as if it were authoritative. With the clear, the worst case is an
-  empty principal — never the attacker's chosen value.
+- **An authorizer whose two answers disagree.** A custom authorizer whose
+  `authorize` admits a call its `authenticate` cannot vouch for — a lenient
+  policy, or two verifications against two clock readings in the default
+  `admit` — has the call admitted with no principal. Without the clear, the
+  request would be dispatched carrying the *client's* asserted principal as if
+  it were authoritative. With the clear, the worst case is an empty principal —
+  never the attacker's chosen value. `SigningAuthorizer` cannot disagree with
+  itself: its `admit` reads the clock once.
 - **Authorize-only / allow-all authorizers.** An authorizer that admits calls
   but never authenticates (a custom authorize-only policy, or the default
   `AllowAllAuthorizer` whose `authenticate` inherits the `nullopt` default) now
@@ -386,7 +403,7 @@ stamping, it compares the stamped principal with `cid`'s baseline. An
 `execute` makes the same comparison on entry to `dispatchExecute`, before the
 in-flight cap or `authorize` can refuse it, so a client that keeps sending
 executes after a sign-out loses its watches even though every one is refused.
-It reuses that one `authenticate` result for its stamp.
+It reuses that one `admit` result for its stamp.
 
 - **The first stamp sets the baseline**, whatever it is — an empty principal
   included, from a token `authenticate` refuses or an authorizer that never
