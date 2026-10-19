@@ -22,9 +22,8 @@ namespace morph::qt_quick {
 
 namespace {
 
-/// The `Theme` property each colour token of the set sets. The semantic `bg`, `border` and `dot` colours have no
-/// property yet: no built-in component draws them.
-constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorProperties = {{
+/// The `Theme` property each colour token of the set sets.
+constexpr std::array<std::pair<std::string_view, char const*>, 24> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -37,10 +36,22 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorPropert
     {"color.selection", "selection"},
     {"color.accent", "accent"},
     {"color.focus", "focus"},
+    {"color.ok.bg", "successBg"},
+    {"color.ok.border", "successBorder"},
+    {"color.ok.dot", "successDot"},
+    {"color.warn.bg", "warnBg"},
+    {"color.warn.border", "warnBorder"},
+    {"color.warn.dot", "warnDot"},
+    {"color.err.bg", "errorBg"},
+    {"color.err.border", "errorBorder"},
+    {"color.err.dot", "errorDot"},
+    {"color.info.bg", "infoBg"},
+    {"color.info.border", "infoBorder"},
+    {"color.info.dot", "infoDot"},
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 12> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 24> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -53,6 +64,18 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kSchemeProper
     {"color.ok", "success"},
     {"color.info", "info"},
     {"color.warn", "warn"},
+    {"color.ok.bg", "successBg"},
+    {"color.ok.border", "successBorder"},
+    {"color.ok.dot", "successDot"},
+    {"color.warn.bg", "warnBg"},
+    {"color.warn.border", "warnBorder"},
+    {"color.warn.dot", "warnDot"},
+    {"color.err.bg", "errorBg"},
+    {"color.err.border", "errorBorder"},
+    {"color.err.dot", "errorDot"},
+    {"color.info.bg", "infoBg"},
+    {"color.info.border", "infoBorder"},
+    {"color.info.dot", "infoDot"},
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.

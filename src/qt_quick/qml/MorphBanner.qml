@@ -20,8 +20,9 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.tint(root.scheme.surface, Qt.alpha(root.toneOf(root.tone), 0.15))
-        border.color: root.toneOf(root.tone)
+        // Over the surface, so a translucent fill (neutral's) still hides what is behind.
+        color: Qt.tint(root.scheme.surface, root.toneBgOf(root.tone))
+        border.color: root.toneBorderOf(root.tone)
     }
 
     RowLayout {

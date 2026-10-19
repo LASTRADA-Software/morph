@@ -16,4 +16,17 @@ QtObject {
     property color success: "#2e7d32"
     property color info: "#1565c0"
     property color warn: "#b26a00"
+    // A tone's fill, outline and marker: `color.<ok|warn|err|info>.<bg|border|dot>`.
+    property color successBg: "#e8f5e9"
+    property color successBorder: "#a5d6a7"
+    property color successDot: "#2e7d32"
+    property color warnBg: "#fff4e5"
+    property color warnBorder: "#ffcc80"
+    property color warnDot: "#b26a00"
+    property color errorBg: "#fdecea"
+    property color errorBorder: "#ef9a9a"
+    property color errorDot: "#c62828"
+    property color infoBg: "#e3f2fd"
+    property color infoBorder: "#90caf9"
+    property color infoDot: "#1565c0"
 }

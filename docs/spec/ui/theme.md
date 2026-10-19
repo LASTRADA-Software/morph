@@ -143,6 +143,10 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 |---|---|
 | `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus` | `color.<same name>` |
 | `error`, `success`, `info`, `warn` | `color.err`, `color.ok`, `color.info`, `color.warn` |
+| `successBg`, `successBorder`, `successDot` | `color.ok.bg`, `color.ok.border`, `color.ok.dot` |
+| `warnBg`, `warnBorder`, `warnDot` | `color.warn.bg`, `color.warn.border`, `color.warn.dot` |
+| `errorBg`, `errorBorder`, `errorDot` | `color.err.bg`, `color.err.border`, `color.err.dot` |
+| `infoBg`, `infoBorder`, `infoDot` | `color.info.bg`, `color.info.border`, `color.info.dot` |
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
@@ -154,8 +158,10 @@ platform font, the body its size and a heading 1.3 times the body.
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
-properties it could not set. The semantic `bg`, `border` and `dot` colours have no `Theme` property yet: no built-in
-component draws them.
+properties it could not set. Every colour row is also a role of each surface's `MorphScheme`, so a surface's own
+tokens set it there. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and
+marker in a widget's scheme (neutral: the muted colour, faint for the fill); a badge and a banner fill and outline
+with them.
 
 ## Design decisions
 

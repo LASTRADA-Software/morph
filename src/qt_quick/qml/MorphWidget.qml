@@ -79,6 +79,54 @@ Item {
         }
     }
 
+    // A tone's fill in this widget's scheme: `color.<tone>.bg`; neutral is the muted colour, faint.
+    function toneBgOf(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoBg
+        case 2:
+            return root.scheme.successBg
+        case 3:
+            return root.scheme.warnBg
+        case 4:
+            return root.scheme.errorBg
+        default:
+            return Qt.alpha(root.scheme.muted, 0.15)
+        }
+    }
+
+    // A tone's outline in this widget's scheme: `color.<tone>.border`; neutral is the muted colour.
+    function toneBorderOf(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoBorder
+        case 2:
+            return root.scheme.successBorder
+        case 3:
+            return root.scheme.warnBorder
+        case 4:
+            return root.scheme.errorBorder
+        default:
+            return root.scheme.muted
+        }
+    }
+
+    // A tone's marker colour in this widget's scheme: `color.<tone>.dot`; neutral is the muted colour.
+    function toneDotOf(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoDot
+        case 2:
+            return root.scheme.successDot
+        case 3:
+            return root.scheme.warnDot
+        case 4:
+            return root.scheme.errorDot
+        default:
+            return root.scheme.muted
+        }
+    }
+
     function fire(event: string, payload: var) {
         if (root.host)
             root.host.fire(event, payload)

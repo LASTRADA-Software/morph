@@ -17,10 +17,11 @@ MorphWidget {
     implicitHeight: label.implicitHeight + 2
 
     Rectangle {
+        objectName: "fill"
         anchors.fill: parent
         radius: height / 2
-        color: Qt.alpha(root.toneOf(root.tone), 0.15)
-        border.color: root.toneOf(root.tone)
+        color: root.toneBgOf(root.tone)
+        border.color: root.toneBorderOf(root.tone)
     }
 
     Label {

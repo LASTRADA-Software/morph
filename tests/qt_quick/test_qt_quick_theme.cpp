@@ -20,6 +20,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
+#include <string>
 #include <string_view>
 
 #include "qt_quick_harness.hpp"
@@ -123,6 +124,47 @@ TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
     CHECK(theme->property("cardShadowColor").value<QColor>() == QColor::fromRgb(0x11, 0x22, 0x33, 0x44));
     CHECK(theme->property("cardShadowOffsetY").toReal() == 3.0);
     CHECK(theme->property("cardShadowBlur").toReal() == 6.0);
+}
+
+// Mutation: drop the `color.ok.bg` row from the colour properties (Theme.successBg keeps its default).
+TEST_CASE("qt_quick theme: a tone's bg, border and dot reach Theme, its surfaces and the badge that draws them",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "ok": {"bg": {"$value": "#123456"}, "border": {"$value": "#234567"}, "dot": {"$value": "#345678"}},
+        "err": {"bg": {"$value": "#456789"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    auto const sidebarTokens =
+        ui::parseTokens(R"({"color": {"$type": "color", "warn": {"dot": {"$value": "#56789a"}}}})");
+    REQUIRE(sidebarTokens);
+    auto const sidebarResolved = ui::resolveTokens({&*sidebarTokens});
+    REQUIRE(sidebarResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*sidebarResolved)}};
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("successBg").value<QColor>() == QColor{"#123456"});
+    CHECK(theme->property("successBorder").value<QColor>() == QColor{"#234567"});
+    CHECK(theme->property("successDot").value<QColor>() == QColor{"#345678"});
+    CHECK(theme->property("errorBg").value<QColor>() == QColor{"#456789"});
+    CHECK(theme->property("infoBg").value<QColor>() == QColor{"#e3f2fd"});  // the default stands
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("warnDot").value<QColor>() == QColor{"#56789a"});
+    auto* const own = theme->property("themeScheme").value<QObject*>();
+    REQUIRE(own != nullptr);
+    CHECK(own->property("successBg").value<QColor>() == QColor{"#123456"});  // the theme's scheme follows Theme
+
+    auto badge = scene.backend().createBadge(nullptr);
+    badge->setTone(ui::Tone::Ok);
+    badge->setText("Done");
+    scene.settle();
+    auto const* const fill = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == QColor{"#123456"});
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#234567"});
 }
 
 namespace {
