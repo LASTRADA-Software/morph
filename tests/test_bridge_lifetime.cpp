@@ -470,26 +470,25 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 }
 #endif  // !defined(_WIN32)
 
-// ── Coverage: setDefaultSession on a Bridge constructed with a null backend ──
+// ── A bridge always has a backend ───────────────────────────────────────────
 //
-// Bridge's constructor explicitly tolerates a null initial backend (see its
-// own doc comment: "there is nothing yet to stamp a session onto"), and
-// setDefaultSession's `if (backend) { backend->setSession(...); }` guard
-// exists precisely so a later call on such a bridge does not dereference a
-// null backend pointer. A couple of existing tests construct `Bridge{nullptr}`
-// for other reasons (test_coverage_push95.cpp), but none of them go on to
-// call setDefaultSession, so this guard's `false` arm was never exercised.
-TEST_CASE("Bridge::setDefaultSession is a safe no-op on a Bridge with no active backend",
-          "[bridge][lifetime][null-backend]") {
+// Every handler binds on construction, so a bridge without a backend could not
+// serve its first one. Both ways of giving it a backend refuse a null.
+TEST_CASE("Bridge refuses a null backend at construction", "[bridge][lifetime][null-backend]") {
     morph::testing::InlineExecutor bridgeOwner;
-    morph::bridge::Bridge bridge{nullptr, bridgeOwner};
+    CHECK_THROWS_AS((morph::bridge::Bridge{nullptr, bridgeOwner}), std::invalid_argument);
+}
 
-    ::morph::session::Context ctx;
-    ctx.principal = "no-backend-yet";
-    REQUIRE_NOTHROW(bridge.setDefaultSession(ctx));
+TEST_CASE("Bridge::switchBackend refuses a null backend and keeps the one it has",
+          "[bridge][lifetime][null-backend]") {
+    auto const shared = std::make_shared<FakeReconnectBackend>();
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<BackendShim>(shared), bridgeOwner};
+    REQUIRE(shared->hasHandler());
 
-    // The session is still recorded for whenever a real backend arrives later
-    // (e.g. via switchBackend()) -- setDefaultSession's own doc comment says
-    // this default applies to "all subsequent calls".
-    CHECK(bridge.defaultSession().principal == "no-backend-yet");
+    CHECK_THROWS_AS(bridge.switchBackend(std::shared_ptr<morph::backend::detail::IBackend>{}), std::invalid_argument);
+    CHECK_THROWS_AS(bridge.switchBackend(std::unique_ptr<BackendShim>{}), std::invalid_argument);
+
+    // A committed switch would have moved the reconnect handler off this backend.
+    CHECK(shared->hasHandler());
 }
