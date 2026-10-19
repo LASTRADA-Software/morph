@@ -638,10 +638,10 @@ abridged):
 auto const marks = screen.model<BookmarkModel>("marks", {.instance = ui::Instance::Private});
 auto const list = ui::element("list");
 auto const bookmarks = screen.query<ListBookmarks>("bookmarks", marks, {});
-auto const archive = screen.mutation<BulkEdit>("archive", marks, {.invalidates = {bookmarks, tags}});
+auto const archive = screen.mutation<BulkEdit>("archive", marks);
 auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
 return ui::column({
-    ui::form<CreateBookmark>(marks, {.onSuccess = refreshed}).id(ui::element("createForm")).testId("createForm"),
+    ui::form<CreateBookmark>(marks).id(ui::element("createForm")).testId("createForm"),
     ui::table(rows, {.key = ui::row("id"), /* title and URL columns */, .selection = ui::Selection::Multiple})
         .id(list).testId("bookmarks"),
     ui::button({.label = "Archive selected",
@@ -652,8 +652,9 @@ return ui::column({
 ```
 
 The screen decides nothing about the domain. It names the model, the query
-that lists bookmarks, the mutation, and when the list refetches; every rule
-about what a bookmark may be stays in `BookmarkModel`. Archiving a selection is
+that lists bookmarks and the mutation; every rule about what a bookmark may be
+stays in `BookmarkModel`, and nothing on the screen says when the list
+refetches. Archiving a selection is
 one `BulkEdit` built from the table's own selection, so it is one transaction
 in the model however many rows are selected.
 
@@ -675,6 +676,32 @@ harness.editField("createForm", "url", "https://example.org/a");
 REQUIRE(harness.submitForm("createForm"));
 REQUIRE(harness.waitForText("count", "1 bookmarks"));
 ```
+
+### What refreshes after an action
+
+The action says what it changes, beside its registration, and every screen
+showing that data refreshes: on this client, on every other connected client,
+and when an AI agent runs the action over MCP. Two declarations do it
+([`models/bookmark_model.hpp`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp),
+[`dto/bookmark_dto.hpp`](../examples/bookmarks/include/bookmarks/dto/bookmark_dto.hpp)):
+
+```cpp
+// A result type that is shared data, keyed by its `id` member
+BRIDGE_REGISTER_RECORD(bookmarks::BookmarkSummary, "Bookmarks_Bookmark", ::morph::record::privateKeys)
+
+// What the action changes: archiving moves bookmarks between lists, and changes the tag counts
+BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::BulkEdit, "BulkEdit", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(bookmarks::BulkEdit, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
+```
+
+`changes<R>` refetches every query holding an `R`; `updates<R>` is for an
+action whose reply carries the changed rows, which the caller's screens show
+at once, before any fetch; `none` is for an action that changes nothing. A query whose
+action declares effects is refused, because a query must only read. How to
+choose, the checklist for a new action and every error message with its fix
+are in [`docs/KEEPING-SCREENS-CURRENT.md`](KEEPING-SCREENS-CURRENT.md).
 
 ## 10. Forms from the compiled action type
 
@@ -856,9 +883,10 @@ client.
 A guide that only sells is worth less than one that tells you when to stop.
 Read [`docs/spec/`](spec/) before relying on any of these; the short version:
 
-- **It is not a general-purpose RPC framework.** Request/response only. No
-  streaming, no bidirectional channels, no server-initiated push. bookmarks'
-  `GetChangesSince` is the polling answer a client uses instead.
+- **It is not a general-purpose RPC framework.** Request/response, plus one
+  kind of server-initiated message: the change notifications that keep
+  screens current ([`docs/KEEPING-SCREENS-CURRENT.md`](KEEPING-SCREENS-CURRENT.md)).
+  No streaming and no general bidirectional channel.
 - **`Completion<T>` is a leaf callback primitive, not a future.** No `T→U`
   chaining, no `co_await`, and no cancellation; lifetime binding is the opt-in
   `CallbackScope` of section 8.
@@ -871,9 +899,9 @@ Read [`docs/spec/`](spec/) before relying on any of these; the short version:
   the default; a server that configures none of them assumes a trusted,
   authenticated transport and is not a hardened public-internet server.
 - **Instance subscriptions are best-effort and in-process.** `subscribe<R>`
-  fans out to handlers on the same `Bridge`; two separate clients sharing an
-  instance do not see each other's results until they ask again. No replay, no
-  durability, no coalescing.
+  fans out to handlers on the same `Bridge`, with no replay and no durability.
+  Across clients, what keeps screens current is declared effects, which tell
+  every connection what changed but not the new values.
 - **Exact numbers are fixed-width.** `Rational` is an `int64` pair; `+`/`-`/`*`
   can overflow rather than returning an error, and high decimal precision
   shrinks the representable magnitude.
@@ -905,6 +933,8 @@ You now have a question rather than a topic, which is what the map is for.
 | who is allowed to do what? | `docs/spec/security.md`, `docs/spec/session/session.md` |
 | what serialises access to my model? | `docs/spec/concurrency_and_lifetimes.md` |
 | how do I keep several screens on one model instance? | `docs/spec/core/shared_instances.md` |
+| how do screens refresh after an action, and what do I declare? | [`docs/KEEPING-SCREENS-CURRENT.md`](KEEPING-SCREENS-CURRENT.md) |
+| how does an AI agent drive my app? | `docs/spec/ui/agent.md`, and bank's `--mcp-stdio` ([`examples/bank/README.md`](../examples/bank/README.md)) |
 | how do I generate a form? | `docs/spec/forms/forms.md`, and [`examples/forms`](../examples/forms) |
 | how do I test all this? | [`examples/TESTING.md`](../examples/TESTING.md) |
 | what are the rules for an app built on morph? | [`examples/IMPLEMENTATION.md`](../examples/IMPLEMENTATION.md) |

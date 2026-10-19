@@ -62,8 +62,8 @@ TEST_CASE("lims screens: every screen validates, and the bundle builds", "[lims-
     REQUIRE(bundle.has_value());
 }
 
-// Every document loads against the catalog the server serves with no warning: each mutation's action declares its
-// effects (or `none`), and no refresh declaration repeats what the effects already cover.
+// Every document loads against the catalog the server serves with no refusal and no warning: each mutation's action
+// declares its effects, or `none`.
 TEST_CASE("lims_bundle_loads_without_warnings", "[lims-screens]") {
     auto const bundle = lims::screens::bundle();
     INFO((bundle ? std::string{} : bundle.error().message()));

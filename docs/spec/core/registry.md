@@ -1751,8 +1751,9 @@ for every action, which records its result holds.
   asserts the registration latch, compiles out under `MORPH_CLIENT_ONLY`, and
   defines no specialisation, so a translation unit that does not see it is
   consistent with one that does (the `morph_effects_unseen_links` probe links
-  two such halves). It belongs beside the action's registration, not in a
-  header, where it would run once per translation unit.
+  two such halves). It belongs beside the action's registration, in a header
+  or a source file: each translation unit that sees it registers the same
+  declaration, which is one.
 - **Idempotent per action.** Each action id keeps its distinct declarations;
   one equal to a stored one, in any order, is not added again. Two distinct
   declarations are a conflict, recorded rather than thrown so the registrar
@@ -1786,9 +1787,10 @@ for every action, which records its result holds.
     two types, or one type registered twice with different options (key,
     sources, `privateKeys`). An identical registration repeated is one
     registration, as `registerActionOnce` treats a repeated action, so
-    `BRIDGE_REGISTER_RECORD` may sit in a model header. `BRIDGE_REGISTER_EFFECTS`
-    may not: it is also idempotent, but in a header it runs once per
-    translation unit for nothing;
+    `BRIDGE_REGISTER_RECORD` may sit in a model header. So may
+    `BRIDGE_REGISTER_EFFECTS`, beside the action's registration: a repeated
+    identical declaration is one, and a translation unit that does not see it
+    reads the same effects;
   - a keyed record with `derivedFrom`: a key-level change to a source does not
     say which derived rows moved, so a derived record is keyless;
   - a `derivedFrom` source that is not a registered record: it never changes,

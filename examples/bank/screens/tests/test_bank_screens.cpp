@@ -105,8 +105,8 @@ TEST_CASE("bank screens: every screen validates, and the bundle builds", "[bank-
     REQUIRE(bundle.has_value());
 }
 
-// Every document loads against the catalog the server serves with no warning: each mutation's action declares its
-// effects (or `none`), and no refresh declaration repeats what the effects already cover.
+// Every document loads against the catalog the server serves with no refusal and no warning: each mutation's action
+// declares its effects, or `none`.
 TEST_CASE("bank_bundle_loads_without_warnings", "[bank-screens]") {
     auto const bundle = bank::screens::bundle();
     INFO((bundle ? std::string{} : bundle.error().message()));

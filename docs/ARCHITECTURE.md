@@ -39,7 +39,9 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::log` | Configurable logging | `LogLevel`, `setLogger`, `setLogLevel`, `getLogLevel`, `logDebug`, `logInfo`, `logWarn`, `logError` |
 | `morph::exec` | Executor primitives | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` |
 | `morph::async` | Async result handle | `Completion<T>` |
-| `morph::model` | Model & action traits | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` |
+| `morph::model` | Model & action traits | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable`, `EffectsRegistrationError` |
+| `morph::record` | Result types that are shared data (see `docs/KEEPING-SCREENS-CURRENT.md`) | `BRIDGE_REGISTER_RECORD`, `key<&T::m>`, `keyless`, `derivedFrom<S...>`, `privateKeys`, `RecordInfo` |
+| `morph::effects` | What an action changes, and the changes an execute made | `BRIDGE_REGISTER_EFFECTS`, `updates<R>`, `changes<R>`, `changesInstance`, `none`, `Effect`, `ActionRecord`, `effectsOf`, `recordsOf`, `recordNamed`, `actionsHolding`, `deriveChanges`, `Changes`, `kMaxChangeKeys` |
 | `morph::backend` | Pluggable backends | `LocalBackend`, `RemoteServer`, `SimulatedRemoteBackend` |
 | `morph::bridge` | Bridge between handler and backend | `Bridge`, `BridgeHandler<M>` |
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `OfflineQueueFullError`, `InMemoryOfflineQueue`, `FileOfflineQueue`, `FileOfflineQueueError`, `SqliteOfflineQueue`, `SqliteOfflineQueueError`, `SyncWorker` (incl. `DeadLetterSink`), `SyncResult`, `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` |
@@ -422,6 +424,14 @@ BRIDGE_REGISTER_MODEL (MyModel,  "MyModel")
 BRIDGE_REGISTER_ACTION(MyModel, MyAction, "MyAction")
 ```
 
+   An action that changes data also says what it changes, so every screen showing it refreshes
+   (`docs/KEEPING-SCREENS-CURRENT.md`):
+
+```cpp
+BRIDGE_REGISTER_RECORD(MyRow, "MyRow")                                    // a result type that is shared data
+BRIDGE_REGISTER_EFFECTS(MyAction, ::morph::effects::changes<MyRow>)       // beside the action's registration
+```
+
 3. Use from the GUI (same code for local and remote):
 
 ```cpp
@@ -513,6 +523,26 @@ sidebar.execute(Deposit{.amountMinor = 5000});
 | **Durability** | None. Best-effort and unbuffered: no replay, no cursor, no coalescing. |
 | **Callback thread** | Always the executor passed at handler construction. |
 
+
+## Keeping screens current across clients
+
+`subscribe<R>` reaches handlers on one `Bridge`. What keeps every client's screens current, and an agent's changes
+visible to them, is declared effects:
+
+- `BRIDGE_REGISTER_RECORD` names a result type that is shared data, with its key.
+- `BRIDGE_REGISTER_EFFECTS`, beside an action's registration, says which records it changes (`updates<R>` when the
+  reply carries the changed rows, `changes<R>` when it does not, `changesInstance`, or `none`).
+- After a successful execute, `RemoteServer` derives the changes from the effects and the result, and sends an
+  `event` to every connection watching a changed record, after re-authorising each watch. A UI client watches the
+  records its query cache holds, before it fetches them, and applies a change by patching or refetching the entries
+  that hold the record. The caller applies its own reply's effects at once.
+- Screens declare no refreshes: a document naming `invalidates`, `patch` or `refreshOn` is refused, and so is a query
+  whose action declares effects.
+- `morph::ui::McpAdapter` (`ui/agent.hpp`) lets an AI agent drive the same server over MCP, as one more connection.
+
+The user guide is [`KEEPING-SCREENS-CURRENT.md`](KEEPING-SCREENS-CURRENT.md); the rules are in
+`docs/spec/core/registry.md` ("Effects"), `docs/spec/core/backend.md` ("Fan-out"), `docs/spec/ui/interpreter.md` and
+`docs/spec/ui/document.md`.
 
 ## Exact values, units, and schema-driven forms
 
@@ -657,6 +687,10 @@ folder.
 | `core/completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
 | `core/model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
 | `core/registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
+| `core/records.hpp` | `BRIDGE_REGISTER_RECORD` and its options `key<&T::m>`, `keyless`, `derivedFrom<S...>`, `privateKeys`; `RecordInfo` (`morph::record::`) — result types that are shared data. See `docs/spec/core/registry.md`, "Record registry". |
+| `core/effects.hpp` | `BRIDGE_REGISTER_EFFECTS` and `updates<R>`, `changes<R>`, `changesInstance`, `none`; `Effect`, `ActionRecord`, `effectsOf`, `recordsOf`, `recordNamed`, `actionsHolding` (`morph::effects::`); `EffectsRegistrationError` (`morph::model::`) — what each action changes, matched with the records its result holds and validated on the first read. See `docs/spec/core/registry.md`, "Effects". |
+| `core/changes.hpp`, `core/change_types.hpp` | `deriveChanges`, `Changes`, `RecordChange`, `InstanceChange`, `kMaxChangeKeys` (`morph::effects::`) — the changes a successful execute made. |
+| `core/connection_writer.hpp` | `ConnectionWriter`, `kEventBacklogHigh`, `kEventBacklogLow` (`morph::backend::`) — how `RemoteServer` writes events to a connection, and the backlog above which it holds them back. |
 | `core/backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
 | `core/remote.hpp` | `RemoteServer` (configured by `ServerConfig`, incl. `logProvider`), `SimulatedRemoteBackend` (`morph::backend::`) |
 | `core/bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (carrying `contextKey`), `MemberPointerTraits` (detail) |
@@ -736,6 +770,7 @@ folder.
 | `ui/expression.hpp` | `Expr`, `ExprKind`, `FunctionId`, `parseExpression`, `NameResolver`, `PermissiveResolver`, `checkExpression`, `Environment`, `StaticEnvironment`, `FormatContext`, `UnitTable`, `UnitInfo`, `evaluate`, `walk`, `isName`, `functionNames` — the `expr/1` language. See `docs/spec/ui/expressions.md`. |
 | `ui/document.hpp` | `Document`, `ScopeDecl` and the declaration structs, `Command`, `CommandKind`, `DocNode`, `Component`, `CustomizePoint`, `Catalog`, `ModelInfo`, `ActionInfo`, `LoadOptions`, `loadDocument`, `loadDocumentText`, `nodeKinds` — the document model and its load-time validation. See `docs/spec/ui/document.md`. |
 | `ui/interpreter.hpp` | `Interpreter`, `Screen`, `Session`, `SessionOptions`, `Dispatcher`, `ModelChannel`, `CallOptions`, `BridgeDispatcher`, `InterpreterHost`, `NavigateRequest`, `InterpreterOptions`, `MountOptions`, `BorrowedModel` (`morph::ui::`) — mounts a loaded document: scopes, the session's query cache, mutations, relations and commands, lowered to the view tree. See `docs/spec/ui/interpreter.md`. |
+| `ui/agent.hpp` | `McpAdapter`, `McpOptions`, `serveStdio` and the JSON-RPC error codes (`morph::ui::`) — an AI agent over MCP, as one more connection to the server. See `docs/spec/ui/agent.md`. |
 | `ui/author.hpp` | `Handle`, `AnyHandle`, `Body`, `ModelHandle`, `QueryHandle`, `MutationHandle`, `DeclScope`, `Scope`, `Command`, `Commands`, `Node`, `Nodes`, a builder per node kind and command, `Screen`, `screen`, `ScreenRegistry`, `screenRegistry`, `CatalogFacts`, `ModelFacts`, `ActionFacts`, `checkAccessibility`, `MORPH_REGISTER_SCREEN` (`morph::ui::author::`) — server-side authoring: typed builders that write a screen's document, and its registration with the load-time and accessibility rules. See `docs/spec/ui/author.md`. |
 | `ui/view.hpp` | `Node`, `NodeData`, `Prop<T>`, `SlotId`, `SlotBinding`, `slot()`, `Key`, `Common`, `Accessibility`, `KeyBinding`, `FieldState`, `MenuItem`, `Sizing`, `LayoutHints`, every node kind and its builder, `switchOn`, `forEach`, `table` (`morph::ui::`) — the immutable view tree whose properties are constants or slots. See `docs/spec/ui/view_tree.md`. |
 | `ui/backend.hpp` | `Widget`, `ContainerWidget`, `FieldWidget`, one widget interface per kind, `MenuEntry`, `IViewBackend` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |

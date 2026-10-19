@@ -95,6 +95,14 @@ not building UIs; we are proving morph can drive them.
 - Screens follow [`TESTING.md`](TESTING.md) exactly: toolkit-free, served by
   the rung's server, drawn by the generic client. A screen names models,
   queries and mutations; it never decides.
+- **Screens never say what to refresh.** Every action that changes data
+  declares its effects with `BRIDGE_REGISTER_EFFECTS` beside its registration,
+  over records registered with `BRIDGE_REGISTER_RECORD`, and every screen on
+  every client showing that data refreshes from them. An action a screen runs
+  that changes nothing declares `effects::none`. The rung's bundle loads with
+  no refusal and no warning. How to choose an effect, and the checklist for a
+  new action, are in
+  [`docs/KEEPING-SCREENS-CURRENT.md`](../docs/KEEPING-SCREENS-CURRENT.md).
 - **Zero styling effort.** Default Qt Quick controls, default fonts, no
   theming, no animations, no custom drawing. A rung that looks pretty has
   spent effort in the wrong place.
@@ -296,3 +304,5 @@ Every rung PR states, in its description:
    documented, any shortfall recorded in the rung README, matrix green.
 6. The rung README's design questions are resolved in writing
    ([`LADDER.md`](LADDER.md) discipline rule).
+7. Every new or changed action that changes data declares its effects, and the
+   rung's bundle loads with no refusal and no warning (rule 2).
