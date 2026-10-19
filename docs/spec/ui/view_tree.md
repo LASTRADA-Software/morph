@@ -107,7 +107,7 @@ lowers them to the kinds below.
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
-| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once) |
+| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once); a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
 | `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
 | `Spacer` | `spacer` | none |
 | `Panel` | `panel` | `title`, `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
@@ -117,7 +117,7 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells, and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |

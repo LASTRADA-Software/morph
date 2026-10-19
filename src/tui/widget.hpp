@@ -93,6 +93,10 @@ public:
     /// The surface the widget draws on: its own, or else its nearest container's. The terminal draws the `sidebar`
     /// and `toolbar` surfaces in the inverse of its colours and every other surface as it draws no surface.
     [[nodiscard]] std::string const& effectiveSurface() const noexcept;
+    /// Keeps a table row's tone, which its cells draw in.
+    void applyRowTone(std::optional<ui::Tone> tone) noexcept { _rowTone = tone; }
+    /// The tone the widget draws in: its own row tone, or else its nearest container's; none for no toned row.
+    [[nodiscard]] std::optional<ui::Tone> effectiveRowTone() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
     void applyTooltip(std::string_view text) { _tooltip = text; }
     /// What the hover shows: the tooltip, and a field adds its messages.
@@ -210,6 +214,7 @@ private:
     std::string _accessibleRole;
     std::string _testId;
     std::string _surface;
+    std::optional<ui::Tone> _rowTone;
     std::string _tooltip;
     std::vector<std::string> _chords;
     std::function<void(std::string)> _onChord;

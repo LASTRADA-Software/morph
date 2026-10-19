@@ -2,9 +2,9 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// A table row's background, under its cells: the selection fill and the hairline between rows. It is the `tableRow`
-// part a restyle replaces; the row writes its state here and keeps its placement. Its implicit height is the row's
-// least height.
+// A table row's background, under its cells: the selection fill, a toned row's fill and leading bar, and the hairline
+// between rows. It is the `tableRow` part a restyle replaces; the row writes its state here and keeps its placement.
+// Its implicit height is the row's least height.
 Item {
     id: root
 
@@ -23,9 +23,49 @@ Item {
     // A dense row: the control height less 8 px.
     implicitHeight: Theme.controlHeight - 8
 
+    // A tone's fill and marker in the scheme: `color.<tone>.bg` and `.dot`; neutral is the muted colour, faint.
+    function toneBg(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoBg
+        case 2:
+            return root.scheme.successBg
+        case 3:
+            return root.scheme.warnBg
+        case 4:
+            return root.scheme.errorBg
+        default:
+            return Qt.alpha(root.scheme.muted, 0.15)
+        }
+    }
+
+    function toneDot(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoDot
+        case 2:
+            return root.scheme.successDot
+        case 3:
+            return root.scheme.warnDot
+        case 4:
+            return root.scheme.errorDot
+        default:
+            return root.scheme.muted
+        }
+    }
+
     Rectangle {
+        objectName: "fill"
         anchors.fill: parent
-        color: root.selected ? root.scheme.selection : "transparent"
+        color: root.selected ? root.scheme.selection : root.tone >= 0 ? root.toneBg(root.tone) : "transparent"
+    }
+    // A toned row's leading bar, kept while the row is selected.
+    Rectangle {
+        objectName: "toneBar"
+        visible: root.tone >= 0
+        width: 3
+        height: parent.height
+        color: root.toneDot(root.tone)
     }
     // The hairline between rows.
     Rectangle {

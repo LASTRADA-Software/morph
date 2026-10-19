@@ -17,6 +17,7 @@
 #include <variant>
 
 #include "tui/container_widgets.hpp"
+#include "tui/display_widgets.hpp"
 #include "tui/drag.hpp"
 #include "tui/layout.hpp"
 
@@ -195,6 +196,15 @@ std::string const& WidgetBase::effectiveSurface() const noexcept {
     return widget->_surface;
 }
 
+std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
+    for (WidgetBase const* widget = this; widget != nullptr; widget = widget->_container) {
+        if (widget->_rowTone) {
+            return widget->_rowTone;
+        }
+    }
+    return std::nullopt;
+}
+
 namespace {
 
 /// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
@@ -214,6 +224,18 @@ void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
     }
 }
 
+/// Draws every cell of @p area in @p foreground: what a toned table row does to what its cells painted. A selected
+/// row's inverse, and every other attribute, stays.
+void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Color foreground) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.tryAt(row, col)) {
+                cell->style.fg = foreground;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 // A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
@@ -227,6 +249,9 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     } else {
         _drawShift = {.x = drawn.x - laidOut.x, .y = drawn.y - laidOut.y};
         paintClipped(canvas, laidOut.size());
+    }
+    if (auto const tone = effectiveRowTone()) {
+        colour(canvas.buffer(), drawn, toneStyle(canvas.theme(), *tone).fg);
     }
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);

@@ -170,9 +170,12 @@ selected.
 
 A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
 `selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
-position, which C++ writes on every row after each append, destroy and move), `tone` and its `scheme`. The row's
+position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
+else the `ui::Tone` index) and its `scheme`. The row's
 height is the larger of its cells' and the background's `implicitHeight`; the stock background draws the selection
-fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`.
+fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`. A toned
+row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
+the selection colour and keeps the bar.
 
 ## Keys
 

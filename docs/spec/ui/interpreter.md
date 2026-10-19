@@ -275,8 +275,10 @@ applies to the width.
   either way. A checkbox's and a button's label is their text, which already names them.
 - **`table`** from `rows`: the columns' labels and widths are set once; a column without a `cell`
   shows the row's field of the column's `id`; `columns` given as an expression is a list of
-  `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone`, `sort`, `filters` and
-  `hoveredKey` are not lowered.
+  `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
+  scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
+  none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
+  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

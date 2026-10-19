@@ -1311,6 +1311,18 @@ public:
         remark();
     }
 
+    /// @brief Records the row's property `tone` (`none` for no tone).
+    /// @param row One of this table's rows.
+    /// @param tone The tone, or none.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowTone(Widget& row, std::optional<Tone> tone) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowTone of a widget that is not this table's row"};
+        }
+        store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
+    }
+
     /// @brief Requests the rows with @p keys, and records property `selection` as the rows it marks.
     /// @param keys The selected keys.
     void setSelection(std::vector<Key> const& keys) override {

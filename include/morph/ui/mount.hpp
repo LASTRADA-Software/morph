@@ -47,7 +47,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
 }  // namespace site
 
 /// @brief Called for each newly mounted row with its widget and key; a Table tells its widget the row's key.
-using RowHook = std::function<void(Widget&, Key const&)>;
+using RowHook = std::function<void(reactive::Scope&, Node const&, Widget&, Key const&)>;
 
 /// @brief One mounted row of a ForEach or Table.
 struct KeyedRow {
@@ -660,6 +660,9 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
+        if (spec.tone && dynamic_cast<TableWidget*>(parent) == nullptr) {
+            throw std::logic_error{"morph::ui: a row's tone is a table row's; this row is not in a table"};
+        }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent);
     }
 
@@ -961,7 +964,16 @@ private:
         widget.setSelectionMode(spec.selectionMode);
         widget.setOnActivate(event(spec.onActivate));
         mountRows(scope, spec.rows, widget,
-                  [&widget](Widget& rowWidget, Key const& key) { widget.setRowKey(rowWidget, key); });
+                  [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
+                      widget.setRowKey(rowWidget, key);
+                      // A row's tone binds in the row's scope, after its key.
+                      Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
+                      if (view != nullptr && view->tone) {
+                          bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
+                              widget.setRowTone(rowWidget, tone);
+                          });
+                      }
+                  });
         widget.setOnSelectionChange(inputEvent(
             spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
                 widget.setSelection(keys);
@@ -1011,7 +1023,7 @@ private:
             row.slot = &row.scope->adopt(session.makeRow(index));
             row.widget = mount(*row.scope, row.slot->view(), &container);
             if (row.widget != nullptr && onRow) {
-                onRow(*row.widget, key);
+                onRow(*row.scope, row.slot->view(), *row.widget, key);
             }
             return row;
         });

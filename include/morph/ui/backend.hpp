@@ -428,6 +428,11 @@ public:
     /// @param key The row's key.
     virtual void setRowKey(Widget& row, Key const& key) = 0;
 
+    /// @brief Sets a row's tone; called after `setRowKey` for a row given a tone, and on every change.
+    /// @param row  One of this table's rows.
+    /// @param tone The tone, or none.
+    virtual void setRowTone(Widget& row, std::optional<Tone> tone) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;

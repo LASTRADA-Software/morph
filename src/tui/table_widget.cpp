@@ -56,6 +56,15 @@ void TableImpl::setRowKey(ui::Widget& row, ui::Key const& key) {
     refresh();
 }
 
+void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowTone of a widget that is not this table's row"};
+    }
+    base.applyRowTone(tone);
+    refresh();
+}
+
 void TableImpl::setSelection(std::vector<ui::Key> const& selection) {
     _selection = selection;
     refresh();

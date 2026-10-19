@@ -362,6 +362,7 @@ public:
     void setColumns(std::vector<ui::TableColumn> const& columns) override;
     void setSelectionMode(ui::SelectionMode mode) override;
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
+    void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;

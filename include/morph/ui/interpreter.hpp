@@ -2434,6 +2434,9 @@ private:
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
+    /// reported, at @p path, while @p noted is still false, and shows no tone.
+    std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
@@ -6140,6 +6143,31 @@ inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerC
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a list of rows and a table.
+inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (std::string const* const text = value.asString()) {
+        auto const found =
+            std::ranges::find(kTones, std::string_view{*text}, &std::pair<std::string_view, Tone>::first);
+        if (found != kTones.end()) {
+            return found->second;
+        }
+    }
+    if (!noted) {
+        noted = true;
+        report(path, "rowTone is " + canonicalJson(value) + "; a tone is neutral, info, ok, warn or err");
+    }
+    return std::nullopt;
+}
+
 inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     ExprPtr const rowsExpr = node.prop("rows");
     if (!rowsExpr) {
@@ -6206,7 +6234,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         fields.emplace_back(part->id);
     }
     auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
-    auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn](reactive::Signal<Value> const& row) {
+    // A value that names no tone is reported once for the table, whichever row and value it was.
+    auto toneReported = std::make_shared<bool>(false);
+    auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn,
+                    toneReported](reactive::Signal<Value> const& row) {
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
             if (column != nullptr) {
@@ -6235,7 +6266,14 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         if (!out.empty()) {
             out.front() = holding({out.front()}, scope);
         }
-        return out;
+        TableRowView view{.cells = std::move(out), .tone = std::nullopt};
+        if (ExprPtr const toneExpr = node.prop("rowTone")) {
+            view.tone = slotProp<std::optional<Tone>>(
+                [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
+                    return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
+                });
+        }
+        return view;
     };
     TableOptions options;
     std::string const mode =

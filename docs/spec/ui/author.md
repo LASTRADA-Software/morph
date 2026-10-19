@@ -151,7 +151,7 @@ input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)`
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
 - **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,
-  `rowTone`, `highlightKey`, `onActivate`), and optionally a row-scope builder that returns the
+  `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).

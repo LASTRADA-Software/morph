@@ -128,7 +128,7 @@ reorders children, and only through this.
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included |
-| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built. A hidden cell keeps its column: the cells after it stay under their own headers |
+| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
@@ -168,7 +168,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)` |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |

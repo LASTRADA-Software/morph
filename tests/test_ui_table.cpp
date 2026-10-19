@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <morph/reactive/detail/graph.hpp>
 #include <morph/reactive/runtime.hpp>
@@ -11,6 +12,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -139,7 +141,19 @@ TEST_CASE("ui::table: an empty rows, key or cells function is refused where it i
     auto const rows = [] { return fruit(); };
     CHECK_THROWS_AS(ui::table<Item>(columns, {}, keyOf, nameCell), std::invalid_argument);
     CHECK_THROWS_AS(ui::table<Item>(columns, rows, {}, nameCell), std::invalid_argument);
-    CHECK_THROWS_AS(ui::table<Item>(columns, rows, keyOf, {}), std::invalid_argument);
+    CHECK_THROWS_AS(ui::table<Item>(columns, rows, keyOf, std::function<std::vector<ui::Node>(Signal<Item> const&)>{}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(ui::table<Item>(columns, rows, keyOf, std::function<ui::TableRowView(Signal<Item> const&)>{}),
+                    std::invalid_argument);
+}
+
+TEST_CASE("ui::table: a row given a tone outside a table is refused when it mounts", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Row toned{.children = {ui::text({.text = "x"})}};
+    toned.tone = ui::Prop<std::optional<ui::Tone>>{std::optional<ui::Tone>{ui::Tone::Ok}};
+    CHECK_THROWS_AS((ui::Mounted{runtime, backend, ui::row(std::move(toned))}), std::logic_error);
 }
 
 TEST_CASE("ui::table: column captions are escaped as list items", "[ui]") {

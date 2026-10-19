@@ -553,3 +553,36 @@ TEST_CASE("interpreter commands: a field's label is its accessible name unless `
     h.settle();
     CHECK(name("TextInput", "text") == "Volume");
 }
+
+// Mutation: never call setRowTone (the rows show no tone).
+TEST_CASE("table: rowTone tones each row in its own scope, follows the row, and reports a value that is no tone",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "toned",
+      "state": { "items": { "init": { "lit": [ { "id": 1, "status": "ok" }, { "id": 2, "status": "err" },
+                                              { "id": 3, "status": null }, { "id": 4, "status": "purple" },
+                                              { "id": 5, "status": "purple" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "rows": { "ref": "items" }, "rowTone": { "row": "status" },
+          "columns": [ { "id": "id", "label": "Id" } ] },
+        { "kind": "button", "testId": "retone", "label": "retone",
+          "onClick": [ { "set": "items", "value": { "lit": [ { "id": 1, "status": "warn" }, { "id": 2, "status": "err" },
+                                                          { "id": 3, "status": "info" }, { "id": 4, "status": "purple" },
+                                                          { "id": 5, "status": "purple" } ] } } ] } ] } })");
+    auto const tones = [&h] {
+        std::vector<std::string> out;
+        for (int const row : h.backend.all("Row")) {
+            out.push_back(h.backend.prop(row, "tone"));
+        }
+        return out;
+    };
+    CHECK(tones() == std::vector<std::string>{"Ok", "Err", "none", "none", "none"});
+    auto const purple = std::ranges::count_if(h.diagnostics, [](morph::ui::Refusal const& refusal) {
+        return refusal.reason.contains(R"(rowTone is "purple")");
+    });
+    CHECK(purple == 1);
+    h.backend.click(h.byTestId("Button", "retone"));
+    h.settle();
+    CHECK(tones() == std::vector<std::string>{"Warn", "Err", "Info", "none", "none"});
+}

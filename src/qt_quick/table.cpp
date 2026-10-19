@@ -6,6 +6,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
+#include <stdexcept>
 #include <utility>
 
 #include "qt_quick/kinds.hpp"
@@ -32,6 +33,14 @@ void TableImpl::setRowKey(ui::Widget& row, ui::Key const& key) {
         tableRow->setKey(key);
         mark();
     }
+}
+
+void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowTone of a widget that is not this table's row"};
+    }
+    tableRow->write("tone", tone ? static_cast<int>(*tone) : -1);
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& keys) {

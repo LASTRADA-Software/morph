@@ -550,6 +550,9 @@ struct Row {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief A table row's tone: disengaged when none was given; an engaged `Prop` whose value is `nullopt` has no
+    ///        tone at the moment. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::optional<Tone>>> tone;
 };
 
 /// @brief One cell of a `Grid`.
@@ -1350,6 +1353,14 @@ struct TableOptions {
     Common common{};
 };
 
+/// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
+struct TableRowView {
+    /// @brief The cells, one non-null node per column.
+    std::vector<Node> cells;
+    /// @brief The row's tone, bound in the row's own scope; disengaged for none.
+    std::optional<Prop<std::optional<Tone>>> tone;
+};
+
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
 ///
 /// Rows are mounted, updated, unmounted and reordered as `forEach` does. A row whose cells are not exactly one
@@ -1372,18 +1383,46 @@ template <typename RowT>
     if (!rows || !keyOf || !cells) {
         throw std::invalid_argument{"ui::table: the rows, the key function and the cells must not be empty"};
     }
-    std::function<Node(reactive::Signal<RowT> const&)> rowView =
-        [cellsOf = std::move(cells), count = columns.size()](reactive::Signal<RowT> const& entry) {
-            std::vector<Node> rowCells = cellsOf(entry);
-            if (rowCells.size() != count ||
-                std::ranges::any_of(rowCells, [](Node const& cell) { return cell == nullptr; })) {
+    std::function<TableRowView(reactive::Signal<RowT> const&)> rowView =
+        [cellsOf = std::move(cells)](reactive::Signal<RowT> const& entry) {
+            return TableRowView{.cells = cellsOf(entry), .tone = std::nullopt};
+        };
+    return table<RowT>(std::move(columns), std::move(rows), std::move(keyOf), std::move(rowView), std::move(options));
+}
+
+/// @brief A table of keyed rows whose row view gives each row its tone as well as its cells.
+///
+/// As the other `table`, with @p rowView answering a `TableRowView`: the tone binds in the row's own scope, and the
+/// table is told it after the row's key and on every change.
+/// @tparam RowT The row type; copyable.
+/// @param columns The columns, in order.
+/// @param rows Reads the rows; every signal it reads is a dependency.
+/// @param keyOf A row's identity; a later duplicate of a key is reported and refused, and the first one is kept.
+/// @param rowView Builds a row's cells, one per column, and its tone, once, from a signal the mount keeps equal to
+///        the row.
+/// @param options Selection, activation and `Common`.
+/// @return The node.
+/// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
+template <typename RowT>
+[[nodiscard]] Node table(std::vector<TableColumn> columns, std::function<std::vector<RowT>()> rows,
+                         std::function<Key(RowT const&)> keyOf,
+                         std::function<TableRowView(reactive::Signal<RowT> const&)> rowView,
+                         TableOptions options = {}) {
+    if (!rows || !keyOf || !rowView) {
+        throw std::invalid_argument{"ui::table: the rows, the key function and the row view must not be empty"};
+    }
+    std::function<Node(reactive::Signal<RowT> const&)> rowNode =
+        [viewOf = std::move(rowView), count = columns.size()](reactive::Signal<RowT> const& entry) {
+            TableRowView made = viewOf(entry);
+            if (made.cells.size() != count ||
+                std::ranges::any_of(made.cells, [](Node const& cell) { return cell == nullptr; })) {
                 throw std::invalid_argument{"ui::table: a row needs exactly one non-null cell per column"};
             }
-            return row(Row{.children = std::move(rowCells)});
+            return row(Row{.children = std::move(made.cells), .tone = std::move(made.tone)});
         };
     Table spec{
         .rows =
-            std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
+            std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowNode)),
         .selectionMode = options.selectionMode,
     };
     spec.columns = std::move(columns);
