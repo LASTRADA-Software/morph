@@ -79,7 +79,7 @@ struct LocalApp {
     std::function<std::shared_ptr<session::IAuthorizer>()> serverAuthorizer;
 };
 
-/// @brief The vocabularies the generic client speaks.
+/// @brief The vocabularies the generic client speaks: both document vocabularies, `ui/1` and `ui/2`, and `expr/1`.
 [[nodiscard]] std::vector<std::string> clientVocabularies();
 
 /// @brief The `ui-hello` the generic client opens with, and sends again on each poll: its vocabularies, and the

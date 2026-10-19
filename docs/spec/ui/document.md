@@ -5,7 +5,7 @@ Design spec for the UI document's C++ model and its load-time validation
 (`include/morph/ui/value.hpp`). A server defines a screen as a JSON document (spec 5,
 `docs/superpowers/specs/2026-10-07-ui-document-design.md`); `ui::loadDocument` parses it into a
 `ui::Document` and refuses it, with the JSON Pointer and the reason, when it breaks a rule of
-`ui/1`. The interpreter mounts only a document that loaded; the server runs the same function when
+its vocabulary, `ui/1` or `ui/2`. The interpreter mounts only a document that loaded; the server runs the same function when
 a screen is registered, so a refused document is a server defect found in the server's own tests.
 
 Read this before changing what a document may say. The expression language inside it is
@@ -57,7 +57,7 @@ declare the app-only customization kinds.
 
 | Member | JSON key | Notes |
 |---|---|---|
-| `vocab` | `vocab` | Must be `ui/1` |
+| `vocab` | `vocab` | `ui/1` (`kVocabulary`) or `ui/2` (`kVocabulary2`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `params` | `params` | Name to type, in declaration order |
@@ -71,9 +71,17 @@ declare the app-only customization kinds.
 | `view` | `view` | The root `DocNode`; required on a screen |
 | `warnings` | — | What validation found that does not refuse the document ([Warnings](#warnings)) |
 
-A key a client does not know is ignored, so additions within `ui/1` are compatible; a key whose
+A key a client does not know is ignored, so additions within a vocabulary are compatible; a key whose
 name begins with `!` is must-understand, and an unknown one refuses the document wherever it
 appears (spec 5 §12).
+
+**The two vocabularies.** `ui/2` is `ui/1` without the refresh keys: a mutation's `invalidates` and `patch` and a
+query's `refreshOn`. An action declares what it changes in its effects, and every query holding a changed record
+refreshes, on every client, so a document that restates it per screen can only drift from the action. Removing keys
+is not an addition, so it is a new version, and a `ui/2` document that declares one is refused rather than having it
+ignored: the author meant a refresh the client would silently not do. Everything else is the same in both, including
+`optimistic`, `refreshEvery` and the `refetch` command, which is how a `ui/2` document refetches for a reason no
+action declares. A `ui/1` document loads with its refresh keys, their rules and their warnings as before.
 
 ## Declarations
 
@@ -84,9 +92,10 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 | Model alias | `"alias": {"type": "T", "instance": "private" \| "shared" \| e \| {"from": alias}}` | `ModelDecl`, `InstanceMode` `Default`, `Private`, `Shared`, `Keyed` (a key expression) or `Borrowed`; `"shared"` on a model the catalog does not mark stateless is refused |
 | State | `"name": {"type": "T"?, "init": e?}` | `StateDecl`; without a type, the type is the init's |
 | Derived | `"name": e` under `let` | `LetDecl` |
-| Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshOn", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |
-| Mutation | `{"model", "action", "body", "concurrency", "serialKey", "invalidates", "patch", "optimistic", "onSuccess", "onError", "offline"}` | `MutationDecl`, `Concurrency`, `PatchDecl` |
-| Patch | `{"query": q, "at": member, "key": e, "with": e}` under `patch` and `optimistic`; `at` is optional and not empty | `PatchDecl` |
+| Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshOn", "refreshEvery", "staleTime"}`; `refreshOn` is `ui/1` only | `QueryDecl`; exactly one of `action` and `evaluate` |
+| Mutation | `{"model", "action", "body", "concurrency", "serialKey", "invalidates", "patch", "optimistic", "onSuccess", "onError", "offline"}`; `invalidates` and `patch` are `ui/1` only | `MutationDecl`, `Concurrency` |
+| Patch | `{"query": q, "at": member, "key": e, "with": e}` under `patch`, read against the reply bound as `result`; `at` is optional and not empty | `PatchDecl` |
+| Optimistic write | The same shape under `optimistic`, read against the run's body bound as `body` | `OptimisticDecl` |
 | Watch | `{"on": e, "source": "any" \| "user", "do": commands}` under `watch` | `WatchDecl`, `WatchSource` |
 | Check | `{"id", "assert": e, "message": e, "targets": [ids], "blocking": bool}` under `checks` | `CheckDecl` |
 
@@ -194,8 +203,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 `loadDocument` returns the first refusal; each rule has a case in
 `tests/ui/corpus/documents.json`.
 
-- **Vocabulary.** `vocab` is `ui/1`; node kinds, commands, expression forms and functions are those
-  of `ui/1`; no unknown `!` key.
+- **Vocabulary.** `vocab` is `ui/1` or `ui/2`; node kinds, commands, expression forms and functions are
+  those of `ui/1`, which `ui/2` keeps; no unknown `!` key. A `ui/2` mutation declares no `invalidates` or
+  `patch` and a `ui/2` query no `refreshOn`; the refusal points at the key and says that effects replace it.
 - **Shape.** Each key has the shape its kind gives it; required keys are present; names match
   `[A-Za-z_][A-Za-z0-9_]*`; closed choices (`showErrors`, `concurrency`, `source`, `offline`,
   `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`) take one of their values; chords are
@@ -281,8 +291,8 @@ certainly miss, what the document declares.
 
 | Kind | When |
 |---|---|
-| `Redundant` | An `invalidates` entry, a `patch` or a `refreshOn` entry that the effects already cover (below). The path names the entry. |
-| `Uncovered` | A mutation whose action declares nothing, not even `none`, that has no `invalidates` or `patch`, no `refetch` anywhere in its `onSuccess`, and that no query of the document names in `refreshOn`. After it succeeds nothing on any screen updates. `effects::none` silences it for an action that changes nothing, such as one that opens or attaches. |
+| `Redundant` | An `invalidates` entry, a `patch` or a `refreshOn` entry that the effects already cover (below), in a `ui/1` document; a `ui/2` document has none of them. The path names the entry. |
+| `Uncovered` | A mutation whose action declares nothing, not even `none`, that has no `invalidates` or `patch`, no `refetch` anywhere in its `onSuccess`, and that no query of the document names in `refreshOn`. After it succeeds nothing on any screen updates. `effects::none` silences it for an action that changes nothing, such as one that opens or attaches. In a `ui/2` document the text names only `refetch`, the one refresh that vocabulary has. |
 | `WatchFeedback` | A `watch` declaration whose `source` is `any` (the default), whose `on` reads a query's value (`{"query": q}` or a `ref` to it, directly or through a `let`), and whose `do` runs (`run`, `upload`, `signIn`, at any depth) a mutation whose action declares an effect other than `none`. Another client's change refetches the query, the watch runs the mutation, and its change reaches the other client. `"source": "user"` silences it. |
 
 **What covers a query.** A query holds exactly the records of its action (`records`); an `evaluate` query holds none.

@@ -95,7 +95,8 @@ struct ServedScreen {
 struct ServedBundle {
     /// @brief The application.
     ApplicationInfo application;
-    /// @brief The vocabularies the bundle needs, sorted; always `expr/1` and `ui/1`.
+    /// @brief The vocabularies the bundle needs, sorted: `expr/1`, the vocabulary each document declares (`ui/1` when
+    ///        there is none), and those added with `requireVocabulary`.
     std::vector<std::string> vocabularies;
     /// @brief The manifest's text.
     std::string manifest;
@@ -326,6 +327,7 @@ public:
             return refuse(entry.id, "the app document is added with addFile");
         }
         logWarnings(*loaded);
+        _documentVocabularies.insert(loaded->vocab);
         detail::DocumentActions const named{*loaded};
         Screen screen{.served = ServedScreen{.entry = std::move(entry),
                                              .hash = contentHash(text),
@@ -400,8 +402,8 @@ public:
         return {};
     }
 
-    /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
-    ///        client that does not speak it is refused at `ui-hello`.
+    /// @brief Adds a vocabulary the bundle needs beyond `expr/1` and its documents' own, such as `forms/1` or
+    ///        `files/1`. A client that does not speak it is refused at `ui-hello`.
     /// @param vocabulary The vocabulary.
     void requireVocabulary(std::string vocabulary) { _vocabularies.insert(std::move(vocabulary)); }
 
@@ -417,7 +419,8 @@ public:
         }
         auto bundle = std::make_shared<ServedBundle>();
         bundle->application = _application;
-        bundle->vocabularies.assign(_vocabularies.begin(), _vocabularies.end());
+        std::set<std::string, std::less<>> const needed = vocabularies();
+        bundle->vocabularies.assign(needed.begin(), needed.end());
         bundle->appActions = _appActions;
         bundle->appModelTypes = _appModelTypes;
         serveFiles(*bundle);
@@ -426,6 +429,19 @@ public:
     }
 
 private:
+    /// @brief The vocabularies the bundle needs. A client is served the documents as they are written, so it must
+    ///        speak each document's vocabulary: a bundle whose documents are all `ui/1` serves a client that speaks
+    ///        only `ui/1`.
+    /// @return `expr/1`, the documents' vocabularies (`ui/1` when there is no document), and the required ones.
+    [[nodiscard]] std::set<std::string, std::less<>> vocabularies() const {
+        std::set<std::string, std::less<>> needed = _vocabularies;
+        if (_documentVocabularies.empty()) {
+            needed.emplace(kVocabulary);
+        }
+        needed.insert(_documentVocabularies.begin(), _documentVocabularies.end());
+        return needed;
+    }
+
     /// @brief Checks every theme index: each combination of its variants, densities and surfaces over `base`
     ///        resolves from the bundle's token files (`checkTheme`).
     /// @return The refusal, naming the index and the combination, or nothing.
@@ -506,6 +522,7 @@ private:
             return refuse(file.id, "the app document's id is `app`");
         }
         logWarnings(*loaded);
+        _documentVocabularies.insert(loaded->vocab);
         detail::DocumentActions const named{*loaded};
         _appActions = named.actions();
         _appModelTypes = named.modelTypes();
@@ -570,8 +587,9 @@ private:
                 .path = {},
                 .reason = "the bundle holds more than " + std::to_string(kMaxBundleFiles) + " files or entries"};
         }
-        std::vector<std::string> const vocabularies{_vocabularies.begin(), _vocabularies.end()};
-        if (auto reason = detail::checkNames(vocabularies, kMaxListItems, "the vocabularies", "a vocabulary")) {
+        std::set<std::string, std::less<>> const needed = vocabularies();
+        std::vector<std::string> const names{needed.begin(), needed.end()};
+        if (auto reason = detail::checkNames(names, kMaxListItems, "the vocabularies", "a vocabulary")) {
             return Refusal{.document = {}, .path = {}, .reason = std::move(*reason)};
         }
         return std::nullopt;
@@ -664,7 +682,8 @@ private:
     std::map<std::string, TokenSet, std::less<>> _tokenFiles;
     std::vector<ActionRef> _appActions;
     std::vector<std::string> _appModelTypes;
-    std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
+    std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}};
+    std::set<std::string, std::less<>> _documentVocabularies;
 };
 
 /// @brief Whether an authoriser is asked about one of the UI service's reads: `ui`'s `hello`, `catalog` or `fetch`.

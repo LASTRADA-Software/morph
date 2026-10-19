@@ -7,6 +7,11 @@ Design spec for the server-side builders of the UI document and their registrati
 `ui::loadDocument` and then the accessibility rules, so a screen that breaks a rule is a failing
 server test and never reaches a client.
 
+The builders write `ui/2` documents. `ui/2` has no `invalidates`, `patch` or `refreshOn`, because an action
+declares what it changes beside the action (its effects) and every query holding a changed record refreshes, so the
+builders offer no option for them and setting one does not compile. A screen that must refetch for a reason no action
+declares runs `refetch(query)`; data that changes with time rather than through actions polls with `.refreshEvery`.
+
 Read this before changing what a builder writes. What the JSON means is [`document.md`](document.md)
 and [`expressions.md`](expressions.md); the builders add no meaning of their own.
 
@@ -88,9 +93,9 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `model<M>(alias, {.instance = ...})` | `models.alias`: `type` is `ModelTraits<M>::typeId()`; `instance` is `Instance::Private`, `Instance::Shared`, a key handle, `Borrow{"alias"}`, or left out |
 | `state<T>(name)`, `state(name, constant)`, `state(name, handle)` | `state.name` with its type and `init`; `state<Any>` leaves the type to the init |
 | `let(name, handle)` | `let.name` |
-| `query<A>(name, model, body, {.when, .debounce, .refreshEvery, .staleTime, .refreshOn})` | `queries.name` with `action` |
+| `query<A>(name, model, body, {.when, .debounce, .refreshEvery, .staleTime})` | `queries.name` with `action` |
 | `evaluate<A>(name, model, body, options)` | `queries.name` with `evaluate` (spec 5 §7); its handle's value is typed as `A`, since the reply is the body with its computed fields filled |
-| `mutation<A>(name, model, {.body, .concurrency, .serialKey, .invalidates, .patch, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name` |
+| `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
@@ -102,8 +107,6 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 - **Bodies** are the action's own members: `{{&ListResults::sampleId, sampleId}, ...}`, a list of
   member pointer and value pairs (`Body<A>`). The member pointer must be the action's, and the
   value's type must be able to stand for the member's.
-- **`refreshOn`** is written `sample.actions<A, B>()`: the actions of the query's model type,
-  named through its model handle, which requires the model to run each of them.
 - **Names are given.** A query or mutation is named by its first argument; the builders invent no
   names.
 
@@ -194,15 +197,16 @@ which holds neither the UI facts nor which model an action belongs to:
 | A model type id | `ModelTraits<M>::typeId()` of each `model<M>` |
 | `keyed` | `model::KeyedModel<M>` |
 | `stateless` | `ModelFacts<M>::stateless`, `false` unless the application specialises it |
-| An action id and its model type | `ActionTraits<A>::typeId()`, and the model of the handle the action runs through (a query, mutation, `refreshOn`, form or table) |
+| An action id and its model type | `ActionTraits<A>::typeId()`, and the model of the handle the action runs through (a query, mutation, form or table) |
 | `calculatedFields`, `secretFields`, `credential` | `ActionFacts<A>`, empty unless the application specialises it |
 | `listFields` | The members glaze writes as a JSON array, when glaze writes the result type of the model's `execute(A)` as a record; absent for any other result |
 
 Facts gathered by a screen take precedence over the registry's, and the first fact recorded for an
 id is kept. Because the builders check model and action types at compile time, the catalog's
-unknown-model, unknown-action, wrong-model and `refreshOn` rules cannot fire on builder output;
-the keyed-instance, optimistic, patch `at` and offline rules can, and registration refuses them with
-their paths. A `Patch`'s `at` names the list member of a record result, and is written only when set.
+unknown-model, unknown-action and wrong-model rules cannot fire on builder output;
+the keyed-instance, optimistic, optimistic `at` and offline rules can, and registration refuses them with
+their paths. An `Optimistic`'s `at` names the list member of a record result, and is written only when set; one
+without a query is refused at registration.
 
 ## Accessibility rules
 
@@ -244,8 +248,10 @@ is reviewed like code.
   members retyped as handles, which `{.sampleId = id}` would need. A member pointer keeps both
   guarantees of spec 5 §11 — a renamed or foreign field and a value of the wrong type are compile
   errors — at the cost of naming the action in each pair.
-- **`refreshOn` through the model handle.** No trait says which model an action belongs to, so a
-  free `actions<A, B>()` could not check that they are the query's model type's; `M::execute` can.
+- **No refresh options.** The refresh keys restate, per document, what an action's effects already say once for
+  every client, and a restatement can drift from the action. The builders emit only `ui/2` rather than offering both
+  vocabularies: a server that must keep `ui/1` documents for older clients keeps them as hand-written JSON, which
+  the UI service still serves.
 - **Facts from the types.** `keyed` is a property of the C++ type, and the model of an action is
   the model it runs through. The facts a type cannot show are traits an application specialises
   beside the action, which keeps them next to the code they describe.

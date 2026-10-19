@@ -1,5 +1,5 @@
 {
-   "vocab": "ui/1",
+   "vocab": "ui/2",
    "id": "lims.results",
    "params": {
       "sampleId": "int"

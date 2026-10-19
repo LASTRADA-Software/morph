@@ -276,6 +276,9 @@ A query is spec 1 §4b's `Query`, declared as data:
   trigger each other. A change made by another client is not pushed; `refreshEvery` is the polling
   answer, and it refetches on a timer and **skips a tick while a request is in flight**.
 - `staleTime` (milliseconds, default 0) is how long a cached value counts as fresh (below).
+- `refreshOn` is `ui/1` only. In `ui/2` an action declares what it changes (its effects, spec 8 §10), and
+  every query holding a changed record refreshes, on every client; a `ui/2` query that declares `refreshOn`
+  is refused. `refreshEvery` is in both, for data that changes with time rather than through actions.
 
 ### The query cache
 
@@ -324,8 +327,11 @@ fetcher that goes through the cache.
 - `patch` replaces one row of a query's cached list (the row whose `id` field equals `key`) with
   `with` — a record `with` is merged over a record row, its fields replacing the row's —
   without refetching. `key` and `with` are evaluated against the reply, bound as `result`.
-- `optimistic` has `patch`'s shape — `{"query": "q", "key": e, "with": e}` — but is applied when the run
-  starts, evaluated against the run's body bound as `body`. A success confirms the written fields
+- `invalidates` and `patch` are `ui/1` only: in `ui/2` the action's effects refresh what it changed, and a
+  `ui/2` mutation that declares either is refused. A `ui/2` document that must refetch for a reason no action
+  declares runs `{"refetch": "q"}` in `onSuccess`.
+- `optimistic` is its own declaration, in both vocabularies, with the same shape as `patch` —
+  `{"query": "q", "at"?: m, "key": e, "with": e}` — but is applied when the run starts, evaluated against the run's body bound as `body`. A success confirms the written fields
   (and `patch`, when declared, then applies the reply); a failure rolls the row back to its value
   without that run's write, and
   `onError` runs after the rollback. Only client-owned fields may be written optimistically: a field
@@ -689,8 +695,7 @@ MORPH_REGISTER_SCREEN(screen);
   compile error on the server. A query or mutation body is the action's own members with
   expression handles in place of values, written as `{&Action::member, handle}` pairs: C++ cannot
   synthesise the action's struct with its members retyped, which `{.sampleId = sampleId}` would
-  need. A query's `refreshOn` names actions through its model handle, `sample.actions<A, B>()`,
-  which requires the model to run each one.
+  need. The builders write `ui/2`, so they offer no `invalidates`, `patch` or `refreshOn` (§5).
 - Registration emits the JSON once and runs the load-time validation of §3; a screen that fails is a
   failing server test, never a client surprise.
 - Registration also runs the **accessibility rules**: every text input, date-time input, slider, select,
@@ -701,7 +706,7 @@ MORPH_REGISTER_SCREEN(screen);
   rule. The client does not repeat these rules: they guard authoring, and a client must
   not refuse a document an older server registered.
 - The builders cover every construct of the document: the lifecycle keys (`identity`, `title`,
-  `dirty`, `onMount`, `onUnmount`, `onClose`, `onBackendChange`), `refreshOn` over action types,
+  `dirty`, `onMount`, `onUnmount`, `onClose`, `onBackendChange`),
   `form` with its `fields` overlay, `dataTable`, `custom` and host components, and the command
   forms. Registration answers the catalog of §3 from the types the builders saw: `keyed` from the
   model type, an action's model from the handle it runs through, and `stateless`, the calculated
@@ -746,9 +751,11 @@ MORPH_REGISTER_SCREEN(screen);
 - **Versions.** Within a vocabulary version, changes are additive: a client ignores an optional key it
   does not know, unless the key's name begins with `!` (`"!requires"`), which marks it
   must-understand: a client that does not know it refuses the node and renders its fallback, or
-  refuses the document. A new node kind, function or command is a new vocabulary version
-  (`ui/2`, `expr/2`). A server may keep documents for more than one version and sends the newest the
-  client speaks.
+  refuses the document. A new node kind, function or command, or a removed key, is a new vocabulary
+  version. `ui/2` is the first: `ui/1` without `invalidates`, `patch` and `refreshOn` (§5). A client
+  reads every version it speaks, and a document is served as written, so a bundle needs the
+  vocabulary of each of its documents: a server keeps `ui/1` documents to keep serving clients that
+  speak only `ui/1`, and the C++ builders (§11) write `ui/2`.
 - **Development reload.** A client started in development mode re-sends `ui-hello` every second. When
   the manifest digest changes, it fetches the changed entries and remounts the mounted screens whose
   documents changed, keeping the screen scope's state where the new document still declares it under

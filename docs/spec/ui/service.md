@@ -44,8 +44,11 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 
 Every request carries the envelope's `session`; the server stamps the verified principal onto it before the
 service sees it. `ui-hello` refuses a client that does not speak every vocabulary the bundle needs with
-`err "missing vocabulary: <v>[, <v>…]"`; the bundle always needs `expr/1` and `ui/1`, and whatever the
-registry adds (`requireVocabulary`). `hello` and `kProtocolVersion` are unchanged.
+`err "missing vocabulary: <v>[, <v>…]"`; the bundle needs `expr/1`, the vocabulary each of its documents declares
+(`ui/1` when it has none), and whatever the registry adds (`requireVocabulary`). A document is served as it was
+written, so a client must read each one: a bundle of `ui/1` documents keeps serving a client that speaks only
+`ui/1`, and one with a `ui/2` document, which the C++ builders write, needs a client that speaks `ui/2`. The generic
+client speaks both. `hello` and `kProtocolVersion` are unchanged.
 
 **Negotiating events.** `ui-hello` is where a connection negotiates server-sent `event` envelopes, since the generic
 client already opens with it, on the same connection as its executes. `HelloRequest::events: true` offers them;

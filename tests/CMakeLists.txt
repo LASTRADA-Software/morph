@@ -30,6 +30,7 @@ add_executable(morph_tests
     test_push_cache.cpp
     test_push_agent.cpp
     test_push_documents.cpp
+    test_push_ui2.cpp
     push_records_late.cpp
     test_executor_extra.cpp
     test_strand.cpp
