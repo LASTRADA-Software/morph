@@ -42,8 +42,8 @@ private:
     /// @throws Forbidden with no authenticated principal, or under another one.
     void requireOwner();
 
-    /// @brief The bookmark @p id. @throws NotFound when there is none.
-    [[nodiscard]] Entry& find(const BookmarkId& id);
+    /// @brief The bookmark @p bookmarkId. @throws NotFound when there is none.
+    [[nodiscard]] Entry& find(const BookmarkId& bookmarkId);
 
     /// Keyed by id; ordered, so a listing pages newest-first by walking it backwards.
     std::map<std::int64_t, Entry> _bookmarks;

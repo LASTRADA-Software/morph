@@ -10,6 +10,7 @@
 #include <morph/core/profiler.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,7 +23,8 @@ namespace bookmarks::detail {
 namespace {
 
 [[nodiscard]] std::int64_t nowMs() noexcept {
-    return (*::morph::ladder::now().value).value.time_since_epoch().count();
+    // The ladder's clock always holds an instant.
+    return ::morph::ladder::now().value.value_or(::morph::time::DateTime{}).value.time_since_epoch().count();
 }
 
 [[nodiscard]] ::morph::time::Timestamp fromEpochMs(std::int64_t epochMs) noexcept {
@@ -79,19 +81,23 @@ void MemoryBookmarkStore::requireOwner() {
     }
 }
 
-MemoryBookmarkStore::Entry& MemoryBookmarkStore::find(const BookmarkId& id) {
-    auto it = _bookmarks.find(*id);
-    if (it == _bookmarks.end()) {
+MemoryBookmarkStore::Entry& MemoryBookmarkStore::find(const BookmarkId& bookmarkId) {
+    auto const found = _bookmarks.find(*bookmarkId);
+    if (found == _bookmarks.end()) {
         throw NotFound{"no such bookmark"};
     }
-    return it->second;
+    return found->second;
 }
 
+namespace {
+
 /// Stamps a bookmark as changed now, on the clock `GetChangesSince` reads.
-static void touch(BookmarkView& view, std::int64_t& updatedAtMs) {
+void touch(BookmarkView& view, std::int64_t& updatedAtMs) {
     updatedAtMs = nowMs();
     view.updatedAt = fromEpochMs(updatedAtMs);
 }
+
+}  // namespace
 
 CreateBookmarkResult MemoryBookmarkStore::execute(const CreateBookmark& action) {
     MORPH_ZONE("MemoryBookmarkStore::CreateBookmark");
@@ -99,10 +105,10 @@ CreateBookmarkResult MemoryBookmarkStore::execute(const CreateBookmark& action) 
         throw ValidationError{"CreateBookmark: a non-empty url within the length bound is required"};
     }
     requireOwner();
-    const auto id = nextId();
+    const auto bookmarkId = nextId();
     Entry entry;
     entry.updatedAtMs = nowMs();
-    entry.view.id = BookmarkId{id};
+    entry.view.id = BookmarkId{bookmarkId};
     entry.view.url = action.url;
     entry.view.title = action.title;
     entry.view.description = action.description;
@@ -111,8 +117,8 @@ CreateBookmarkResult MemoryBookmarkStore::execute(const CreateBookmark& action) 
     entry.view.createdAt = fromEpochMs(entry.updatedAtMs);
     entry.view.updatedAt = entry.view.createdAt;
     entry.view.visibility = action.visibility;
-    _bookmarks.emplace(id, std::move(entry));
-    return CreateBookmarkResult{.id = BookmarkId{id}};
+    _bookmarks.emplace(bookmarkId, std::move(entry));
+    return CreateBookmarkResult{.id = BookmarkId{bookmarkId}};
 }
 
 BookmarkView MemoryBookmarkStore::execute(const EditBookmark& action) {
@@ -188,23 +194,23 @@ ListBookmarksResult MemoryBookmarkStore::execute(const ListBookmarks& action) {
             (action.archiveFilter == ArchiveFilter::ArchivedOnly && view.archiveState != ArchiveState::Archived)) {
             return false;
         }
-        return !((action.readFilter == ReadFilter::UnreadOnly && view.readState != ReadState::Unread) ||
-                 (action.readFilter == ReadFilter::ReadOnly && view.readState != ReadState::Read));
+        return (action.readFilter != ReadFilter::UnreadOnly || view.readState == ReadState::Unread) &&
+               (action.readFilter != ReadFilter::ReadOnly || view.readState == ReadState::Read);
     };
     auto& bookmarks = _bookmarks;
-    auto it = action.cursor.hasValue() ? std::make_reverse_iterator(bookmarks.lower_bound(*action.cursor))
-                                       : bookmarks.rbegin();
+    auto row = action.cursor.hasValue() ? std::make_reverse_iterator(bookmarks.lower_bound(*action.cursor))
+                                        : bookmarks.rbegin();
     std::vector<const BookmarkView*> page;
     bool hasMore = false;
-    for (; it != bookmarks.rend(); ++it) {
-        if (!matches(it->second.view)) {
+    for (; row != bookmarks.rend(); ++row) {
+        if (!matches(row->second.view)) {
             continue;
         }
         if (page.size() == kPageSize) {
             hasMore = true;
             break;
         }
-        page.push_back(&it->second.view);
+        page.push_back(&row->second.view);
     }
 
     ListBookmarksResult result;
@@ -212,8 +218,8 @@ ListBookmarksResult MemoryBookmarkStore::execute(const ListBookmarks& action) {
         if (!action.tag.empty() && std::ranges::find(view->tags, action.tag) == view->tags.end()) {
             continue;
         }
-        if (!action.searchText.empty() && view->title.find(action.searchText) == std::string::npos &&
-            view->url.find(action.searchText) == std::string::npos) {
+        if (!action.searchText.empty() && !view->title.contains(action.searchText) &&
+            !view->url.contains(action.searchText)) {
             continue;
         }
         result.bookmarks.push_back(toSummary(*view));
@@ -236,8 +242,8 @@ GetChangesSinceResult MemoryBookmarkStore::execute(const GetChangesSince& action
     // last one delivered there, in (updatedAt, id) order: BookmarkModel's
     // cursor contract, so a client cannot tell the two models apart.
     std::vector<const Entry*> changed;
-    for (const auto& [id, entry] : _bookmarks) {
-        if (entry.updatedAtMs > sinceMs || (entry.updatedAtMs == sinceMs && id > sinceLastId)) {
+    for (const auto& [bookmarkId, entry] : _bookmarks) {
+        if (entry.updatedAtMs > sinceMs || (entry.updatedAtMs == sinceMs && bookmarkId > sinceLastId)) {
             changed.push_back(&entry);
         }
     }
@@ -247,9 +253,9 @@ GetChangesSinceResult MemoryBookmarkStore::execute(const GetChangesSince& action
 
     GetChangesSinceResult result;
     result.asOf.timestampMs = fromEpochMs(asOf);
-    for (auto it = changed.rbegin(); it != changed.rend(); ++it) {
-        if ((*it)->updatedAtMs == asOf) {
-            result.asOf.lastId = *(*it)->view.id;
+    for (const Entry* entry : std::views::reverse(changed)) {
+        if (entry->updatedAtMs == asOf) {
+            result.asOf.lastId = *entry->view.id;
             break;
         }
     }

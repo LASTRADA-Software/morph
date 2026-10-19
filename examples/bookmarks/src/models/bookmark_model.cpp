@@ -342,6 +342,7 @@ static void applyTagSet(::Lightweight::DataMapper& mapper, std::uint64_t bookmar
 
 namespace {
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): the process's storage choice, set once by the server at startup.
 std::atomic<Storage> gStorage{Storage::Sql};
 
 }  // namespace

@@ -59,8 +59,8 @@ namespace bookmarks::detail {
     }
     tagsByBookmarkId.reserve(ids.size());
     for (const auto& row : junctionRows) {
-        if (const auto it = tagNameById.find(row.tag.Value()); it != tagNameById.end()) {
-            tagsByBookmarkId[row.bookmark.Value()].push_back(it->second);
+        if (const auto found = tagNameById.find(row.tag.Value()); found != tagNameById.end()) {
+            tagsByBookmarkId[row.bookmark.Value()].push_back(found->second);
         }
     }
     return tagsByBookmarkId;
