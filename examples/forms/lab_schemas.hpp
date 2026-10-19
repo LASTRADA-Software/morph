@@ -40,11 +40,11 @@ namespace lab {
     out += morph::forms::schemaJson<ShippingAddress>();
     out += ",\"EditSample\":";
     out += morph::forms::schemaJson<EditSample>();
-    out += ",\"DeleteSample\":";
+    out += ",\"DeleteLabSample\":";
     out += morph::forms::schemaJson<DeleteSample>();
     out += ",\"CreateSample\":";
     out += morph::forms::schemaJson<CreateSample>();
-    out += ",\"RegisterSample\":";
+    out += ",\"RegisterLabSample\":";
     out += morph::forms::schemaJson<RegisterSample>();
     out += "}";
     return out;
