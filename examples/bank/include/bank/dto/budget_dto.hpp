@@ -2,8 +2,11 @@
 #pragma once
 
 #include <cstdint>
+#include <morph/core/records.hpp>
 #include <string>
 #include <vector>
+
+#include "bank/dto/transaction_dto.hpp"
 
 /// @file
 /// Wire DTOs for the Budget model: per-category monthly limits plus simple
@@ -65,3 +68,9 @@ struct SpendingReport {
 };
 
 }  // namespace bank::dto
+
+// Every list is filtered to the signed-in customer's own rows, so a row's key never reaches another customer.
+BRIDGE_REGISTER_RECORD(bank::dto::BudgetInfo, "Bank_Budget", ::morph::record::privateKeys)
+// A spending report sums the ledger, so whatever adds a transaction changes every report.
+BRIDGE_REGISTER_RECORD(bank::dto::SpendingReport, "Bank_SpendingReport", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<bank::dto::TxnInfo>)

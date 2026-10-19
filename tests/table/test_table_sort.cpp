@@ -53,7 +53,8 @@ struct Sorted {
             }
         }
         std::vector<std::uint32_t> rows(snapshot->rowCount());
-        std::ranges::iota(rows, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(rows.begin(), rows.end(), 0U);
         return sortRows(std::move(rows), RowOrder{std::move(resolved)});
     }
 };
@@ -235,7 +236,8 @@ TEST_CASE("table: a stop request ends a merge sort early, and a later run finish
     auto keys = KeyColumn::forColumn(source->columns()[0], services, snapshot->rowCount());
     buildKeys(*snapshot, 0, source->columns()[0], services, 0, snapshot->rowCount(), keys);
     std::vector<std::uint32_t> rows(snapshot->rowCount());
-    std::ranges::iota(rows, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(rows.begin(), rows.end(), 0U);
     ChunkedMergeSort sort{rows, RowOrder{{{.keys = &keys, .dir = kAsc}}}};
 
     ::core::async::StopSource stopSource;  // NOLINT(misc-const-correctness): request_stop() is non-const
@@ -261,7 +263,8 @@ TEST_CASE("table: a past deadline yields between chunks", "[table][sort]") {
     auto keys = KeyColumn::forColumn(source->columns()[0], services, snapshot->rowCount());
     buildKeys(*snapshot, 0, source->columns()[0], services, 0, snapshot->rowCount(), keys);
     std::vector<std::uint32_t> rows(snapshot->rowCount());
-    std::ranges::iota(rows, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(rows.begin(), rows.end(), 0U);
     ChunkedMergeSort sort{rows, RowOrder{{{.keys = &keys, .dir = kAsc}}}};
     std::size_t steps = 0;
     while (!sort.run(std::chrono::steady_clock::now(), ::core::async::StopToken{})) {
@@ -323,7 +326,8 @@ TEST_CASE("table: a merge pass of narrow runs looks at the clock", "[table][sort
     auto keys = KeyColumn::forColumn(source->columns()[0], services, kRows);
     buildKeys(*snapshot, 0, source->columns()[0], services, 0, kRows, keys);
     std::vector<std::uint32_t> order(kRows);
-    std::ranges::iota(order, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(order.begin(), order.end(), 0U);
     ChunkedMergeSort sort{std::move(order), RowOrder{{{.keys = &keys, .dir = kAsc}}}};
     std::size_t largestStep = 0;
     bool done = false;
@@ -402,7 +406,8 @@ TEST_CASE("table: a merge sort is done only once a run returned true", "[table][
     auto keys = KeyColumn::forColumn(source->columns()[0], services, cells.size());
     buildKeys(*source->snapshot(), 0, source->columns()[0], services, 0, cells.size(), keys);
     Rows rows(cells.size());
-    std::ranges::iota(rows, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(rows.begin(), rows.end(), 0U);
     RowOrder const order{{{.keys = &keys, .dir = kAsc}}};
     CHECK_FALSE(order.empty());
     CHECK(RowOrder{}.empty());

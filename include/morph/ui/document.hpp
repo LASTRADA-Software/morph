@@ -44,6 +44,36 @@ struct ModelInfo {
     bool keyed = false;
 };
 
+/// @brief One effect an action declares, as the catalog states it.
+struct ActionEffect {
+    /// @brief What the effect is: `updates`, `changes`, `changesInstance` or `none`.
+    std::string kind;
+    /// @brief The wire name of the record the effect names; absent for `changesInstance` and `none`.
+    std::optional<std::string> record;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One effect.
+    /// @param rhs The other.
+    /// @return True when kind and record match.
+    friend bool operator==(ActionEffect const& lhs, ActionEffect const& rhs) = default;
+};
+
+/// @brief A record an action's result holds, as the catalog states it.
+struct ActionRecordInfo {
+    /// @brief The record's wire name.
+    std::string record;
+    /// @brief The record's key field; absent for a keyless record.
+    std::optional<std::string> keyField;
+    /// @brief The JSON paths at which the result holds the record; `""` is the result itself.
+    std::vector<std::string> paths;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One entry.
+    /// @param rhs The other.
+    /// @return True when record, key field and paths match.
+    friend bool operator==(ActionRecordInfo const& lhs, ActionRecordInfo const& rhs) = default;
+};
+
 /// @brief What the catalog says about an action.
 struct ActionInfo {
     /// @brief The registered type id of the model the action belongs to.
@@ -59,13 +89,19 @@ struct ActionInfo {
     ///        `optimistic` of a query of the action may name as its `at`. Empty when the catalog does not say, or the
     ///        result is not a record.
     std::optional<std::vector<std::string>> listFields;
+    /// @brief What the action declares it changes. Absent when it declared nothing, which makes it a read; present
+    ///        and empty is not produced by the registry.
+    std::optional<std::vector<ActionEffect>> effects;
+    /// @brief The records the action's result holds, with the paths to each. Empty when it holds none or the
+    ///        catalog does not say.
+    std::vector<ActionRecordInfo> records;
 };
 
 /// @brief The facts load-time validation needs from the application's catalog. Local mode answers them from the
 ///        model registry in-process, the server at registration, a remote client from the UI service's catalog.
 ///
 /// A lookup left empty skips the rules that need it: `model` the unknown-model and keyed-instance rules; `action`
-/// the unknown-action, wrong-model, `refreshOn`, optimistic and offline rules.
+/// the unknown-action, wrong-model, optimistic and offline rules.
 struct Catalog {
     /// @brief Looks up a model type by its registered type id.
     std::function<std::optional<ModelInfo>(std::string_view typeId)> model;
@@ -175,8 +211,6 @@ struct QueryDecl {
     std::int64_t refreshEvery = 0;
     /// @brief Milliseconds a cached value counts as fresh.
     std::int64_t staleTime = 0;
-    /// @brief Action ids of the same model type whose success refetches the query.
-    std::vector<std::string> refreshOn;
 };
 
 /// @brief What a mutation run does while another is in flight.
@@ -187,15 +221,15 @@ enum class Concurrency : std::uint8_t {
     Parallel,   ///< Every run is sent; replies apply as they arrive.
 };
 
-/// @brief A `patch` or `optimistic` row replacement.
-struct PatchDecl {
-    /// @brief The query whose cached list it patches.
+/// @brief An `optimistic` write: the row a mutation run predicts before its reply.
+struct OptimisticDecl {
+    /// @brief The query whose cached list it writes.
     std::string query;
     /// @brief The member of the query's record value that holds the list; empty when the value is the list itself.
     std::string at;
-    /// @brief The row key to replace.
+    /// @brief The row key to write, read against the run's body bound as `body`.
     ExprPtr key;
-    /// @brief The new row.
+    /// @brief The predicted row, read against the run's body bound as `body`.
     ExprPtr with;
 };
 
@@ -275,12 +309,8 @@ struct MutationDecl {
     Concurrency concurrency = Concurrency::Exclusive;
     /// @brief The queue key of `serial` runs.
     ExprPtr serialKey;
-    /// @brief Queries refetched after a success.
-    std::vector<std::string> invalidates;
-    /// @brief The row a reply replaces, without refetching.
-    std::optional<PatchDecl> patch;
     /// @brief The row a run predicts before its reply.
-    std::optional<PatchDecl> optimistic;
+    std::optional<OptimisticDecl> optimistic;
     /// @brief Commands run after a success.
     Commands onSuccess;
     /// @brief Commands run after a failure.
@@ -454,6 +484,34 @@ struct CustomizePoint {
     Value defaultValue;
 };
 
+/// @brief What a load-time warning is about. A warning never refuses a document.
+enum class LoadWarningKind : std::uint8_t {
+    WatchFeedback,  ///< A watch of a query runs a mutation that changes data, on any change of it.
+    Uncovered,      ///< A mutation whose action declares nothing, and after which nothing refreshes.
+};
+
+/// @brief A finding of load-time validation that does not refuse the document.
+struct LoadWarning {
+    /// @brief What it is about.
+    LoadWarningKind kind = LoadWarningKind::Uncovered;
+    /// @brief The JSON Pointer of the declaration it names.
+    std::string path;
+    /// @brief The finding, in one sentence.
+    std::string text;
+
+    /// @brief The warning as one line of text.
+    /// @param document The id of the document it was found in; empty leaves it out.
+    /// @return `document <id> at <path>: <text>`, leaving out the parts that are empty.
+    [[nodiscard]] std::string message(std::string_view document) const {
+        std::string out;
+        if (!document.empty()) {
+            out += "document " + std::string{document} + " ";
+        }
+        out += "at " + (path.empty() ? std::string{"/"} : path) + ": " + text;
+        return out;
+    }
+};
+
 /// @brief A loaded and validated UI document: a screen, or the app document (id `app`, spec 6 §5).
 struct Document {
     /// @brief The vocabulary, `ui/1`.
@@ -484,6 +542,9 @@ struct Document {
     std::map<std::string, CustomizePoint, std::less<>> customize;
     /// @brief The view; `nullptr` for the app document.
     DocNodePtr view;
+    /// @brief What load-time validation found that does not refuse the document, in the order found. Empty when
+    ///        the catalog answers no actions.
+    std::vector<LoadWarning> warnings;
 };
 
 namespace detail {
@@ -1203,6 +1264,20 @@ private:
         return decl;
     }
 
+    /// @brief Refuses @p key of @p fields: a refresh key, which a document does not declare.
+    /// @param fields The declaration's fields.
+    /// @param path   The declaration's JSON Pointer.
+    /// @param key    The refresh key: `invalidates`, `patch` or `refreshOn`.
+    static void refuseRefreshKey(Json::object_t const& fields, std::string const& path, std::string_view key) {
+        if (member(fields, key) != nullptr) {
+            refuse(pointerAppend(path, key),
+                   std::format("a document does not declare `{}`: an action's effects say what it changes, and every "
+                               "query holding a changed record refreshes; a refresh no action declares is a `refetch` "
+                               "command",
+                               key));
+        }
+    }
+
     [[nodiscard]] static QueryDecl query(std::string const& name, Json const& json, std::string const& path) {
         checkName(name, path);
         auto const& fields = objectOf(json, path, "a query is an object");
@@ -1223,28 +1298,31 @@ private:
         decl.debounce = integer(fields, "debounce", path);
         decl.refreshEvery = integer(fields, "refreshEvery", path);
         decl.staleTime = integer(fields, "staleTime", path);
-        if (Json const* const refreshOn = member(fields, "refreshOn")) {
-            decl.refreshOn = nameList(*refreshOn, pointerAppend(path, "refreshOn"));
-        }
+        refuseRefreshKey(fields, path, "refreshOn");
         return decl;
     }
 
-    [[nodiscard]] static PatchDecl patch(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, R"(a patch is {"query": q, "at"?: m, "key": e, "with": e})");
+    /// @brief Parses an `optimistic` write: `{"query": q, "at"?: m, "key": e, "with": e}`.
+    /// @param json The write's JSON.
+    /// @param path Its JSON Pointer.
+    /// @return The write.
+    [[nodiscard]] static OptimisticDecl optimistic(Json const& json, std::string const& path) {
+        static constexpr char const* shape = R"(an optimistic write is {"query": q, "at"?: m, "key": e, "with": e})";
+        auto const& fields = objectOf(json, path, shape);
         refuseMustUnderstand(fields, path);
         Json const* const key = member(fields, "key");
         Json const* const with = member(fields, "with");
         if (key == nullptr || with == nullptr) {
-            refuse(path, R"(a patch is {"query": q, "at"?: m, "key": e, "with": e})");
+            refuse(path, shape);
         }
         std::string listMember = text(fields, "at", path, false);
         if (member(fields, "at") != nullptr && listMember.empty()) {
             refuse(pointerAppend(path, "at"), "`at` names the member of the query's record that holds the list");
         }
-        return PatchDecl{.query = text(fields, "query", path, true),
-                         .at = std::move(listMember),
-                         .key = expr(*key, pointerAppend(path, "key")),
-                         .with = expr(*with, pointerAppend(path, "with"))};
+        return OptimisticDecl{.query = text(fields, "query", path, true),
+                              .at = std::move(listMember),
+                              .key = expr(*key, pointerAppend(path, "key")),
+                              .with = expr(*with, pointerAppend(path, "with"))};
     }
 
     [[nodiscard]] MutationDecl mutation(std::string const& name, Json const& json, std::string const& path) {
@@ -1270,14 +1348,10 @@ private:
         if (decl.serialKey && decl.concurrency != Concurrency::Serial) {
             refuse(pointerAppend(path, "serialKey"), "`serialKey` applies to `serial` concurrency only");
         }
-        if (Json const* const invalidates = member(fields, "invalidates")) {
-            decl.invalidates = nameList(*invalidates, pointerAppend(path, "invalidates"));
-        }
-        if (Json const* const value = member(fields, "patch")) {
-            decl.patch = patch(*value, pointerAppend(path, "patch"));
-        }
+        refuseRefreshKey(fields, path, "invalidates");
+        refuseRefreshKey(fields, path, "patch");
         if (Json const* const value = member(fields, "optimistic")) {
-            decl.optimistic = patch(*value, pointerAppend(path, "optimistic"));
+            decl.optimistic = optimistic(*value, pointerAppend(path, "optimistic"));
         }
         if (Json const* const commands = member(fields, "onSuccess")) {
             decl.onSuccess = commandList(*commands, pointerAppend(path, "onSuccess"));
@@ -1891,6 +1965,8 @@ struct NameEntry {
     ExprPtr derivedFrom;
     /// @brief The query of a `Query` entry.
     QueryDecl const* query = nullptr;
+    /// @brief The mutation of a `Mutation` entry.
+    MutationDecl const* mutation = nullptr;
     /// @brief The element of an `Element` entry.
     DocNode const* element = nullptr;
     /// @brief 0 before its type is derived, 1 while it is, 2 after.
@@ -2079,7 +2155,12 @@ public:
         }
         checkCustomizePoints();
         checkWatchGraph();
+        checkEffects();
     }
+
+    /// @brief What validation found that does not refuse the document.
+    /// @return The warnings, in the order found; the validator keeps none.
+    [[nodiscard]] std::vector<LoadWarning> takeWarnings() noexcept { return std::move(_warnings); }
 
     /// @brief Finds a name in a scope chain.
     /// @param scope The innermost scope.
@@ -2207,12 +2288,15 @@ private:
             entry.query = &query;
             add(scope, query.name, std::move(entry));
             _queries.emplace(query.name, &query);
+            _queryScopes.emplace_back(&query, &scope);
         }
         for (MutationDecl const& mutation : decl.mutations) {
             NameEntry entry;
             entry.category = NameCategory::Mutation;
             entry.path = mutation.path;
+            entry.mutation = &mutation;
             add(scope, mutation.name, std::move(entry));
+            _mutations.emplace_back(&mutation, &scope);
             collectTransfers(mutation.onSuccess, scope);
             collectTransfers(mutation.onError, scope);
         }
@@ -2394,14 +2478,7 @@ private:
             static_cast<void>(type);
         }
         for (QueryDecl const& query : decl.queries) {
-            checkModelAction(context, query.model, query.action, query.path);
-            if (query.body) {
-                checkExpr(*query.body, context);
-            }
-            if (query.when) {
-                checkCondition(*query.when, context, "`when`");
-            }
-            checkRefreshOn(query, *lookup(context.scope, query.model)->model);
+            checkQuery(query, context);
         }
         for (MutationDecl const& mutation : decl.mutations) {
             checkMutation(mutation, context);
@@ -2423,17 +2500,19 @@ private:
         }
     }
 
-    void checkRefreshOn(QueryDecl const& query, ModelDecl const& model) {
-        if (!_options->catalog.action) {
-            return;
+    void checkQuery(QueryDecl const& query, CheckContext const& context) {
+        auto const action = checkModelAction(context, query.model, query.action, query.path);
+        // An evaluation runs no handler, so only a call can change anything.
+        if (action && action->effects && !query.evaluate) {
+            refuse(query.path, std::format("a query reads, so its action declares no effects; `{}` declares {}, "
+                                           "so it runs as a mutation",
+                                           query.action, describeEffects(*action->effects)));
         }
-        for (std::size_t index = 0; index < query.refreshOn.size(); ++index) {
-            std::string const& action = query.refreshOn.at(index);
-            auto const info = _options->catalog.action(action);
-            if (!info || info->modelType != model.type) {
-                refuse(pointerAppend(pointerAppend(query.path, "refreshOn"), index),
-                       "`refreshOn` names actions of the query's model type; `" + action + "` is not one");
-            }
+        if (query.body) {
+            checkExpr(*query.body, context);
+        }
+        if (query.when) {
+            checkCondition(*query.when, context, "`when`");
         }
     }
 
@@ -2447,32 +2526,19 @@ private:
             keyContext.bindings.emplace_back("body", Type::any());
             checkExpr(*mutation.serialKey, keyContext);
         }
-        for (std::size_t index = 0; index < mutation.invalidates.size(); ++index) {
-            if (!_queries.contains(mutation.invalidates.at(index))) {
-                refuse(pointerAppend(pointerAppend(mutation.path, "invalidates"), index),
-                       "`" + mutation.invalidates.at(index) + "` is not a query of this document");
-            }
-        }
-        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the key of the patch, then the name its reply is bound to.
-        auto patch = [&](PatchDecl const& decl, std::string_view key, std::string_view bound) {
-            std::string const path = pointerAppend(mutation.path, key);
+        if (mutation.optimistic) {
+            OptimisticDecl const& decl = *mutation.optimistic;
+            std::string const path = pointerAppend(mutation.path, "optimistic");
             auto const target = _queries.find(decl.query);
             if (target == _queries.end()) {
                 refuse(pointerAppend(path, "query"), "`" + decl.query + "` is not a query of this document");
             }
             CheckContext bodyContext = context;
-            bodyContext.bindings.emplace_back(std::string{bound}, Type::any());
+            bodyContext.bindings.emplace_back("body", Type::any());
             checkExpr(*decl.key, bodyContext);
             checkExpr(*decl.with, bodyContext);
-            checkPatchAt(decl, *target->second, path);
-            return target->second;
-        };
-        if (mutation.patch) {
-            static_cast<void>(patch(*mutation.patch, "patch", "result"));
-        }
-        if (mutation.optimistic) {
-            QueryDecl const* const query = patch(*mutation.optimistic, "optimistic", "body");
-            checkOptimistic(*mutation.optimistic, *query);
+            checkPatchAt(decl.query, decl.at, *target->second, path);
+            checkOptimistic(decl, *target->second);
         }
         if (mutation.offlineQueue && action) {
             if (action->credential || !action->secretFields.empty()) {
@@ -2486,7 +2552,9 @@ private:
 
     // Only a catalog that knows the result is a record can say a patch misses its list; otherwise the interpreter
     // reports the miss when the patch runs.
-    void checkPatchAt(PatchDecl const& decl, QueryDecl const& query, std::string const& path) {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the query's name, then the member holding the list.
+    void checkPatchAt(std::string const& queryName, std::string const& listMember, QueryDecl const& query,
+                      std::string const& path) {
         if (!_options->catalog.action) {
             return;
         }
@@ -2494,18 +2562,18 @@ private:
         if (!info || !info->listFields) {
             return;
         }
-        if (decl.at.empty()) {
+        if (listMember.empty()) {
             refuse(path, std::format("`{}` answers a record, so a patch of `{}` names the member holding its list "
                                      "with `at`",
-                                     query.action, decl.query));
+                                     query.action, queryName));
         }
-        if (std::ranges::find(*info->listFields, decl.at) == info->listFields->end()) {
+        if (std::ranges::find(*info->listFields, listMember) == info->listFields->end()) {
             refuse(pointerAppend(path, "at"),
-                   std::format("the result of `{}` has no list member `{}`", query.action, decl.at));
+                   std::format("the result of `{}` has no list member `{}`", query.action, listMember));
         }
     }
 
-    void checkOptimistic(PatchDecl const& decl, QueryDecl const& query) {
+    void checkOptimistic(OptimisticDecl const& decl, QueryDecl const& query) {
         if (!_options->catalog.action || decl.with->kind != ExprKind::Object) {
             return;
         }
@@ -2945,6 +3013,144 @@ private:
         }
     }
 
+    // The effect checks below read only what the catalog says about each action. They warn only where the
+    // effects certainly cover, or certainly miss, what the document declares, because a warning a document cannot
+    // act on would teach its author to ignore the rest.
+
+    /// The effects as a phrase, such as "`changes T_Row`, `none`".
+    [[nodiscard]] static std::string describeEffects(std::vector<ActionEffect> const& effects) {
+        std::string out;
+        for (ActionEffect const& effect : effects) {
+            out += (out.empty() ? "`" : ", `") + effect.kind + (effect.record ? " " + *effect.record : "") + "`";
+        }
+        return out;
+    }
+
+    /// Whether an action's effects change anything; `none` alone does not.
+    [[nodiscard]] static bool changesData(ActionInfo const& info) {
+        return info.effects &&
+               std::ranges::any_of(*info.effects, [](ActionEffect const& effect) { return effect.kind != "none"; });
+    }
+
+    void warn(LoadWarningKind kind, std::string path, std::string text) {
+        _warnings.push_back(LoadWarning{.kind = kind, .path = std::move(path), .text = std::move(text)});
+    }
+
+    void checkEffects() {
+        if (!_options->catalog.action) {
+            return;
+        }
+        for (auto const& entry : _mutations) {
+            checkMutationEffects(*entry.first);
+        }
+        for (auto const& [watch, scope] : _watches) {
+            checkWatchFeedback(*watch, scope);
+        }
+    }
+
+    void checkMutationEffects(MutationDecl const& mutation) {
+        auto const action = _options->catalog.action(mutation.action);
+        if (!action) {
+            return;
+        }
+        if (!action->effects && !refetches(mutation.onSuccess)) {
+            warn(LoadWarningKind::Uncovered, mutation.path,
+                 std::format("nothing refreshes after `{}` succeeds: `{}` declares no effects, and no `refetch` "
+                             "follows it; declare what it changes, or `effects::none` when it changes nothing",
+                             mutation.name, mutation.action));
+        }
+    }
+
+    /// Whether a command list refetches a query, which is a refresh the document declares itself.
+    [[nodiscard]] static bool refetches(Commands const& commands) {
+        return std::ranges::any_of(commands, [](Command const& cmd) {
+            return cmd.kind == CommandKind::Refetch || refetches(cmd.commands) || refetches(cmd.alternative);
+        });
+    }
+
+    // Another client's change refetches the watched query, the watch runs the mutation, and its change reaches the
+    // other client, which may do the same. Only `"source": "user"` keeps a refetch from running the watch.
+    void checkWatchFeedback(WatchDecl const& watch, ScopeInfo* scope) {
+        if (watch.source == WatchSource::User) {
+            return;
+        }
+        std::vector<std::string> locals;
+        std::set<NameEntry const*> seenLets;
+        auto const query = readQuery(*watch.on, scope, locals, seenLets);
+        if (!query) {
+            return;
+        }
+        if (auto const mutation = runsWriter(watch.body, scope)) {
+            warn(LoadWarningKind::WatchFeedback, watch.path,
+                 std::format("the watch reads the query `{}` and runs `{}`, which changes data: another client's "
+                             "change refetches the query and runs it again; give the watch \"source\": \"user\"",
+                             *query, *mutation));
+        }
+    }
+
+    /// The first query whose value an expression reads, directly or through a `let`.
+    [[nodiscard]] static std::optional<std::string> readQuery(Expr const& expr, ScopeInfo* scope,
+                                                              std::vector<std::string>& locals,
+                                                              std::set<NameEntry const*>& seenLets) {
+        if (expr.kind == ExprKind::Query) {
+            return expr.name;
+        }
+        if (expr.kind == ExprKind::Ref && std::ranges::find(locals, expr.name) == locals.end()) {
+            NameEntry const* const entry = lookup(scope, expr.name);
+            if (entry != nullptr && entry->category == NameCategory::Query) {
+                return expr.name;
+            }
+            if (entry != nullptr && entry->category == NameCategory::Let && seenLets.insert(entry).second) {
+                std::vector<std::string> inner;
+                if (auto found = readQuery(*entry->derivedFrom, entry->scope, inner, seenLets)) {
+                    return found;
+                }
+            }
+        }
+        bool const binds = expr.kind == ExprKind::Map || expr.kind == ExprKind::Filter;
+        for (std::size_t index = 0; index < expr.args.size(); ++index) {
+            if (binds && index == 1) {
+                locals.push_back(expr.name);
+            }
+            auto found = readQuery(*expr.args.at(index), scope, locals, seenLets);
+            if (binds && index == 1) {
+                locals.pop_back();
+            }
+            if (found) {
+                return found;
+            }
+        }
+        for (auto const& [name, field] : expr.fields) {
+            static_cast<void>(name);
+            if (auto found = readQuery(*field, scope, locals, seenLets)) {
+                return found;
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// The first mutation a command list runs whose action changes data.
+    [[nodiscard]] std::optional<std::string> runsWriter(Commands const& commands, ScopeInfo* scope) const {
+        for (Command const& cmd : commands) {
+            bool const runs =
+                cmd.kind == CommandKind::Run || cmd.kind == CommandKind::Upload || cmd.kind == CommandKind::SignIn;
+            NameEntry const* const entry = runs ? lookup(scope, cmd.target) : nullptr;
+            if (entry != nullptr && entry->mutation != nullptr) {
+                auto const action = _options->catalog.action(entry->mutation->action);
+                if (action && changesData(*action)) {
+                    return cmd.target;
+                }
+            }
+            if (auto found = runsWriter(cmd.commands, scope)) {
+                return found;
+            }
+            if (auto found = runsWriter(cmd.alternative, scope)) {
+                return found;
+            }
+        }
+        return std::nullopt;
+    }
+
     Document const* _doc;
     LoadOptions const* _options;
     std::deque<ScopeInfo> _scopes;
@@ -2953,6 +3159,9 @@ private:
     std::map<std::string, QueryDecl const*, std::less<>> _queries;
     std::map<std::string, DocNode const*, std::less<>> _elements;
     std::vector<std::pair<WatchDecl const*, ScopeInfo*>> _watches;
+    std::vector<std::pair<MutationDecl const*, ScopeInfo*>> _mutations;
+    std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
+    std::vector<LoadWarning> _warnings;
     std::vector<std::string> _deriving;
     // NOLINTEND(misc-no-recursion)
 };
@@ -3083,11 +3292,13 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
 ///
 /// A document is refused when it does not parse, when a reference does not resolve, when a type does not check,
 /// when the `let` or `watch` graph has a cycle, when an expression exceeds 256 nodes, when a node kind, command or
-/// function is not in `ui/1`, when a must-understand key is unknown, or when a rule of spec 5 or spec 6 fails; the
-/// list is in `docs/spec/ui/document.md`. The rules that need catalog facts run when @p options supplies them.
+/// function is not in the vocabulary, when a document declares `invalidates`, `patch` or `refreshOn`, when a
+/// must-understand key is unknown, or when a rule of spec 5 or spec 6 fails; the list is in
+/// `docs/spec/ui/document.md`. The rules that need catalog facts run when @p options supplies them.
 /// @param json    The document's JSON.
 /// @param options The catalog facts.
-/// @return The document, or the first refusal, naming the document id, the JSON Pointer and the reason.
+/// @return The document, with what validation found that does not refuse it in `Document::warnings`, or the first
+///         refusal, naming the document id, the JSON Pointer and the reason.
 [[nodiscard]] inline std::expected<Document, Refusal> loadDocument(Json const& json, LoadOptions const& options = {}) {
     std::string documentId;
     if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
@@ -3100,7 +3311,9 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
     }
     try {
         Document doc = detail::DocumentParser{}.parse(json);
-        detail::DocumentValidator{doc, options}.run();
+        detail::DocumentValidator validator{doc, options};
+        validator.run();
+        doc.warnings = validator.takeWarnings();
         return doc;
     } catch (detail::DocumentRefused const& refused) {
         Refusal refusal = refused.refusal();

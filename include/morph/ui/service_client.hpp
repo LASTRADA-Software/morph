@@ -665,6 +665,41 @@ evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exe
     };
 }
 
+/// @brief A watcher over the server (spec 8 §7): each `watch` or `unwatch` is one request of that kind through
+///        @p exchange, carrying the session @p currentSession returns when it is sent. What `SessionOptions::watcher`
+///        takes.
+///
+/// The session is read at each send, not fixed when the watcher is built, because a `watch` must carry whoever
+/// is signed in now: the exchange does not stamp it, and the server refuses an unsigned one.
+/// @param exchange       The transport.
+/// @param currentSession The session to stamp on each request, read when it is sent.
+/// @param cbExec         The executor the completion is delivered on: the interpreter runtime's owner. Borrowed.
+/// @return The watcher: the kind and the `WatchBody` JSON in; the reply body out, or the transport's or the
+///         server's reason as the failure.
+[[nodiscard]] inline std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&)>
+watcherOver(Exchange exchange, std::function<::morph::session::Context()> currentSession,
+            ::morph::exec::IExecutor* cbExec) {
+    return [exchange = std::move(exchange), currentSession = std::move(currentSession), cbExec](
+               std::string const& kind, std::string const& bodyJson) {
+        auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
+        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
+        ::morph::wire::Envelope request;
+        request.kind = kind;
+        request.session = currentSession ? currentSession() : ::morph::session::Context{};
+        request.body = bodyJson;
+        exchange(std::move(request), [settle](ExchangeReply reply) {
+            if (!reply) {
+                settle->reject(std::make_exception_ptr(std::runtime_error{reply.error()}));
+            } else if (reply->kind != "ok") {
+                settle->reject(std::make_exception_ptr(std::runtime_error{reply->message}));
+            } else {
+                settle->resolve(std::move(reply->body));
+            }
+        });
+        return std::move(completion);
+    };
+}
+
 /// @brief A file a download brought back.
 struct DownloadedFile {
     /// @brief Its bytes.

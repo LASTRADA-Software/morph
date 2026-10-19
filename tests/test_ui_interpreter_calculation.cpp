@@ -28,8 +28,7 @@ constexpr char const* kCalc = R"({
                              "body": { "obj": { "resultId": { "row": "id" }, "inputs": { "ref": "draft" } } } } },
       "mutations": { "save": { "model": "sample", "action": "Lims_CaptureConcentration", "concurrency": "serial",
                                "serialKey": { "row": "id" },
-                               "body": { "obj": { "resultId": { "row": "id" }, "inputs": { "ref": "draft" } } },
-                               "patch": { "query": "results", "key": { "ref": "result.id" }, "with": { "ref": "result" } } } } },
+                               "body": { "obj": { "resultId": { "row": "id" }, "inputs": { "ref": "draft" } } } } } },
     "columns": [
       { "label": "Mass", "cell": { "kind": "textInput", "id": "mass", "testId": "mass", "commitOn": "change",
                                    "value": { "ref": "draft.mass" },

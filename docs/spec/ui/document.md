@@ -5,7 +5,7 @@ Design spec for the UI document's C++ model and its load-time validation
 (`include/morph/ui/value.hpp`). A server defines a screen as a JSON document (spec 5,
 `docs/superpowers/specs/2026-10-07-ui-document-design.md`); `ui::loadDocument` parses it into a
 `ui::Document` and refuses it, with the JSON Pointer and the reason, when it breaks a rule of
-`ui/1`. The interpreter mounts only a document that loaded; the server runs the same function when
+its vocabulary, `ui/1`. The interpreter mounts only a document that loaded; the server runs the same function when
 a screen is registered, so a refused document is a server defect found in the server's own tests.
 
 Read this before changing what a document may say. The expression language inside it is
@@ -23,6 +23,7 @@ Read this before changing what a document may say. The expression language insid
 - [Load-time rules](#load-time-rules)
 - [The catalog](#the-catalog)
 - [Refusals](#refusals)
+- [Warnings](#warnings)
 - [Design decisions](#design-decisions)
 - [Out of scope](#out-of-scope)
 
@@ -56,7 +57,7 @@ declare the app-only customization kinds.
 
 | Member | JSON key | Notes |
 |---|---|---|
-| `vocab` | `vocab` | Must be `ui/1` |
+| `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `params` | `params` | Name to type, in declaration order |
@@ -68,10 +69,17 @@ declare the app-only customization kinds.
 | `components` | `components` | Name to `Component` |
 | `customize` | `customize` | Name to `CustomizePoint` |
 | `view` | `view` | The root `DocNode`; required on a screen |
+| `warnings` | — | What validation found that does not refuse the document ([Warnings](#warnings)) |
 
-A key a client does not know is ignored, so additions within `ui/1` are compatible; a key whose
+A key a client does not know is ignored, so additions within a vocabulary are compatible; a key whose
 name begins with `!` is must-understand, and an unknown one refuses the document wherever it
 appears (spec 5 §12).
+
+**No refresh keys.** A document declares no `invalidates` or `patch` on a mutation and no `refreshOn` on a query. An
+action declares what it changes in its effects, and every query holding a changed record refreshes, on every client,
+so a document that restated it per screen could only drift from the action. A document that declares one is refused
+rather than having it ignored: the author meant a refresh the client would silently not do. `optimistic`,
+`refreshEvery` and the `refetch` command stay; `refetch` is how a document refetches for a reason no action declares.
 
 ## Declarations
 
@@ -82,9 +90,9 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 | Model alias | `"alias": {"type": "T", "instance": "private" \| "shared" \| e \| {"from": alias}}` | `ModelDecl`, `InstanceMode` `Default`, `Private`, `Shared`, `Keyed` (a key expression) or `Borrowed`; `"shared"` on a model the catalog does not mark stateless is refused |
 | State | `"name": {"type": "T"?, "init": e?}` | `StateDecl`; without a type, the type is the init's |
 | Derived | `"name": e` under `let` | `LetDecl` |
-| Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshOn", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |
-| Mutation | `{"model", "action", "body", "concurrency", "serialKey", "invalidates", "patch", "optimistic", "onSuccess", "onError", "offline"}` | `MutationDecl`, `Concurrency`, `PatchDecl` |
-| Patch | `{"query": q, "at": member, "key": e, "with": e}` under `patch` and `optimistic`; `at` is optional and not empty | `PatchDecl` |
+| Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |
+| Mutation | `{"model", "action", "body", "concurrency", "serialKey", "optimistic", "onSuccess", "onError", "offline"}` | `MutationDecl`, `Concurrency` |
+| Optimistic write | `{"query": q, "at": member, "key": e, "with": e}` under `optimistic`, read against the run's body bound as `body`; `at` is optional and not empty | `OptimisticDecl` |
 | Watch | `{"on": e, "source": "any" \| "user", "do": commands}` under `watch` | `WatchDecl`, `WatchSource` |
 | Check | `{"id", "assert": e, "message": e, "targets": [ids], "blocking": bool}` under `checks` | `CheckDecl` |
 
@@ -177,8 +185,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   of the `upload` commands in it. All share one namespace per scope; a name declared twice is
   refused, and `event`, `app`, `boundary`, `props`, `result` and `body` are reserved.
 - **Resolution.** A name resolves in the innermost scope first, then outward. Bound names come
-  before declarations: a comprehension's variable, a `seq` step's reply, an `each` element, `result`
-  in a `patch`, `body` in an `optimistic`, `props` in a fallback. `event` is valid inside a command
+  before declarations: a comprehension's variable, a `seq` step's reply, an `each` element, `body`
+  in an `optimistic`, `props` in a fallback. `event` is valid inside a command
   list, `boundary.error` and `retry` inside a boundary's `error`, `row` inside a row scope and any
   scope nested in one, `cancelClose` inside `onClose`. `app.name` reads the app document and is not
   checked against it.
@@ -192,8 +200,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 `loadDocument` returns the first refusal; each rule has a case in
 `tests/ui/corpus/documents.json`.
 
-- **Vocabulary.** `vocab` is `ui/1`; node kinds, commands, expression forms and functions are those
-  of `ui/1`; no unknown `!` key.
+- **Vocabulary.** `vocab` is `ui/1`; node kinds, commands, expression forms and functions are those of `ui/1`;
+  no unknown `!` key. A mutation declares no `invalidates` or `patch` and a query no `refreshOn`; the refusal
+  points at the key and says that effects replace it.
 - **Shape.** Each key has the shape its kind gives it; required keys are present; names match
   `[A-Za-z_][A-Za-z0-9_]*`; closed choices (`showErrors`, `concurrency`, `source`, `offline`,
   `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`) take one of their values; chords are
@@ -211,7 +220,7 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   `slider`) or `app.name`; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
   `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`); `focus` an element;
   `resetPrefs` a point or `all`; a download to preview a state. A check's targets are elements;
-  `invalidates`, `patch` and `optimistic` name queries of the document.
+  `optimistic` names a query of the document.
 - **Models.** Queries, mutations and model-backed nodes name a model alias in scope. An alias in a
   row scope names its `instance`; only a screen's own aliases borrow (`{"from": alias}`).
 - **Components and points.** A custom node names a declared component and only its props and
@@ -228,16 +237,34 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 `ui::Catalog` holds two lookups the caller supplies: `model(typeId)` → `ModelInfo{stateless,
 keyed}` and `action(actionId)` → `ActionInfo{modelType, calculatedFields, secretFields,
-credential, listFields}`. In local mode the caller answers them in-process from the model registry; on the
+credential, listFields, effects, records}`. In local mode the caller answers them in-process from the model registry; on the
 server, registration answers them from the same registry; a remote client answers them from the UI
 service's `ui-catalog` reply. With them, a document is also refused when a model type or action is
 unknown, an `instance` expression names a model that is not keyed, an action belongs to another
-model type, `refreshOn` names an action of another model type, an `optimistic` `with` writes a field
+model type, an `optimistic` `with` writes a field
 the server calculates, or a mutation that sends a credential or returns a secret is queued offline.
 `listFields`, when present, says the query's action answers a record and names the record's members
-that hold a list; a `patch` or `optimistic` of such a query is then refused without an `at` (it could
+that hold a list; an `optimistic` write to such a query is then refused without an `at` (it could
 never find a list) or with an `at` that is not one of them. When it is absent, the catalog does not
-know the result's shape, and a patch that finds no list is reported by the interpreter when it runs.
+know the result's shape, and a write that finds no list is reported by the interpreter when it runs.
+`effects` and `records` are what the core registries hold for the action: `effects` is the list of
+`{kind, record?}` the action declared, `kind` one of `updates`, `changes`, `changesInstance` and `none`, `record` the
+record's wire name for the first two; it is absent when the action declared nothing, which makes the action a read.
+A record derived (`derivedFrom`) from one the action `updates` or `changes`, directly or through others, is listed as
+`changes` too, once. The derivation itself is never sent: a client knows only that the derived record changes, which
+lets the caller's own reply mark entries holding it, in process as well as remotely.
+`records` lists the records the action's result holds as `{record, keyField?, paths}`, empty when it holds none. They
+are read from the registries where `CatalogFacts::action` records the action, so an invalid effects and records
+configuration (`EffectsRegistrationError`) fails at that call, at startup. They are what a client's watch is derived
+from, and the loader reads them for one refusal and three warnings:
+
+- **A query must read.** A query whose action declares effects, `none` included, is refused: a fetch then never
+  produces a change, so two clients cannot refetch each other through their queries. An `evaluate` query is exempt,
+  because an evaluation runs no handler.
+- **The warnings** are in [Warnings](#warnings).
+
+An action the catalog does not answer is refused before either is asked, so effects registered for an action id that
+no action registers are never seen by a document: the catalog describes registered actions only.
 A lookup left empty skips its rules; the document is otherwise checked in full. `stateless` decides
 an alias's default instance, which is the interpreter's. A third lookup, `schema(actionId)`, answers
 an action's schema JSON; it is not a load-time rule but what the interpreter builds a `form` node's
@@ -251,6 +278,20 @@ view document whose `v-query` is the action (a `collection` node's), and `wizard
 `message()` prints `document <id> at <path>: <reason>`. A refusal from inside an expression points
 at the expression node. Text that is not JSON (`loadDocumentText`) is refused at the root, and so is text nested deeper than 64
 objects and arrays (`kMaxJsonDepth`), which is checked before the JSON parser runs.
+
+## Warnings
+
+`Document::warnings` holds the `LoadWarning{kind, path, text}` findings that do not refuse the document, in the order
+found; `message(documentId)` prints them as a refusal is printed. They need the catalog's `action` lookup, and a
+document loaded without it has none.
+
+| Kind | When |
+|---|---|
+| `Uncovered` | A mutation whose action declares nothing, not even `none`, and that has no `refetch` anywhere in its `onSuccess`. After it succeeds nothing on any screen updates. `effects::none` silences it for an action that changes nothing, such as one that opens or attaches. |
+| `WatchFeedback` | A `watch` declaration whose `source` is `any` (the default), whose `on` reads a query's value (`{"query": q}` or a `ref` to it, directly or through a `let`), and whose `do` runs (`run`, `upload`, `signIn`, at any depth) a mutation whose action declares an effect other than `none`. Another client's change refetches the query, the watch runs the mutation, and its change reaches the other client. `"source": "user"` silences it. |
+
+`UiRegistry::addScreen`, `UiRegistry::addFile` for the app document, and `author::ScreenRegistry::add` log each warning at `warn`
+(`morph::log`) when they register a document; the document registers as it would without them.
 
 ## Design decisions
 

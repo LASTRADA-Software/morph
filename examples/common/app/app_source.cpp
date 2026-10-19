@@ -126,6 +126,13 @@ std::vector<std::string> clientVocabularies() {
     return {std::string{ui::kVocabulary}, std::string{ui::kExprVocabulary}};
 }
 
+ui::HelloRequest clientHello() {
+    ui::HelloRequest hello;
+    hello.vocabularies = clientVocabularies();
+    hello.events = true;
+    return hello;
+}
+
 // ── ClientSource ────────────────────────────────────────────────────────────
 
 ui::Dispatcher& ClientSource::dispatcher() {
@@ -284,6 +291,25 @@ void ClientSource::open(ui::AppContext& context,
         return;
     }
     exec::IExecutor& owner = context.executor();
+    _serverEvents = transport->serverEvents;
+    // The source owns the backend's connect hook and its event handler; both reach the owner before anything else
+    // sees them, and nothing after `close`.
+    transport->backend->setEventHandler(
+        [this, alive](wire::EventBody const& event) {
+            if (*alive) {
+                for (auto const& listener : _eventListeners) {
+                    listener(event);
+                }
+            }
+        },
+        &owner);
+    transport->backend->setConnectHandler([this, alive, &owner] {
+        owner.post([this, alive] {
+            if (*alive) {
+                connected();
+            }
+        });
+    });
     _bridge = std::make_unique<bridge::Bridge>(std::move(transport->backend), owner);
     _bridge->setDefaultSession(_session);
     // A reply already queued when the source closes still reaches the exchange's continuation; from then on it sends
@@ -341,9 +367,7 @@ void ClientSource::open(ui::AppContext& context,
 
 void ClientSource::reload(std::shared_ptr<bool> const& alive,
                           std::function<void(std::expected<void, ui::ConnectError>)> done) {
-    ui::HelloRequest hello;
-    hello.vocabularies = clientVocabularies();
-    ui::UiClient const client{_exchange, std::move(hello), _store};
+    ui::UiClient const client{_exchange, clientHello(), _store};
     client.open(_session, [this, alive,
                            done = std::move(done)](std::expected<ui::LoadedBundle, ui::ConnectError> opened) mutable {
         if (!*alive) {
@@ -368,9 +392,7 @@ void ClientSource::poll(std::function<void(std::vector<std::string> changed)> ch
         return;
     }
     _polling = true;
-    ui::HelloRequest hello;
-    hello.vocabularies = clientVocabularies();
-    ui::UiClient const client{_exchange, std::move(hello), _store};
+    ui::UiClient const client{_exchange, clientHello(), _store};
     client.poll(_session, _loaded->hello.digest,
                 [this, alive = _alive, changed = std::move(changed)](
                     std::expected<std::optional<ui::LoadedBundle>, ui::ConnectError> polled) mutable {
@@ -410,6 +432,48 @@ void ClientSource::signIn(std::string principal, std::string token, std::functio
 
 void ClientSource::signOut(std::function<void(bool)> done) { signIn(signedOutPrincipal(), {}, std::move(done)); }
 
+void ClientSource::connected() {
+    // The first connect's `ui-hello` is the one `open` filed, and its answer loads the first bundle; every later
+    // connect is a new connection, which negotiates events again. Only the handshake: the documents did not change
+    // because the connection dropped.
+    if (_loaded && _exchange) {
+        wire::Envelope hello;
+        hello.kind = std::string{ui::kHelloKind};
+        hello.session = _session;
+        hello.body = ui::detail::writeMessage(clientHello());
+        _exchange(std::move(hello), [](ui::ExchangeReply const&) {});
+    }
+    // The listeners re-watch and refetch. Posted, not run here: a transport posts the bridge's reconnect handler to
+    // this same owner right after the connect hook, so it runs first, clears the old connection's model ids and starts
+    // rebinding, and a refetch then waits for its new binding. The `ui-hello` above still goes out before any watch.
+    if (_bridge == nullptr) {
+        return;
+    }
+    _bridge->owner().post([this, alive = std::weak_ptr<bool>{_alive}] {
+        if (auto const live = alive.lock(); !live || !*live) {
+            return;
+        }
+        std::vector<std::function<void()>> const listeners = _connectListeners;
+        for (auto const& listener : listeners) {
+            listener();
+        }
+    });
+}
+
+void ClientSource::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }
+
+void ClientSource::onEvent(std::function<void(wire::EventBody const&)> listener) {
+    _eventListeners.push_back(std::move(listener));
+}
+
+ui::Watcher ClientSource::watcher() {
+    if (!_serverEvents || !_exchange || _bridge == nullptr) {
+        return {};
+    }
+    // The session is read at each send, so a watch after a sign-in carries the new principal.
+    return ui::watcherOver(_exchange, [this] { return _session; }, &_bridge->owner());
+}
+
 void ClientSource::switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) {
     done(std::unexpected("this client does not switch backends; the switch to `" + backend.name +
                          "` is the hosting layer's"));
@@ -448,7 +512,7 @@ std::expected<ClientSource::Transport, ui::ConnectError> RemoteAppSource::connec
                                                 .message = "cannot connect to " + _url + ": " + made.error()});
     }
     ui::Exchange exchange = ui::exchangeOver(*made->requests, context.executor());
-    return Transport{.backend = std::move(made->backend), .exchange = std::move(exchange)};
+    return Transport{.backend = std::move(made->backend), .exchange = std::move(exchange), .serverEvents = true};
 }
 
 // ── LocalAppSource ──────────────────────────────────────────────────────────

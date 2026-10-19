@@ -2,6 +2,7 @@
 #pragma once
 
 #include <glaze/glaze.hpp>
+#include <morph/core/records.hpp>
 #include <morph/forms/choice.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/datetime.hpp>
@@ -360,3 +361,6 @@ struct glz::meta<lims::ResultQualifier> {
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(Measured, NotMeasured, BelowLOD, AboveUDL);
 };
+
+// Results are lab records, shown to every operator who opens the sample.
+BRIDGE_REGISTER_RECORD(lims::ResultView, "Lims_Result")

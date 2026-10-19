@@ -46,6 +46,9 @@ and react to backend changes.
 - [`PayloadCompleteness` — enforcing the action-evolution policy](#payloadcompleteness--enforcing-the-action-evolution-policy)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
+- [Writing to a connection](#writing-to-a-connection)
+- [Watches](#watches)
+- [Fan-out](#fan-out)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -181,11 +184,12 @@ clears either. The reconnect handler differs on purpose: it re-binds the
 bridge's handlers, which is owner work, so the backend posts it to the executor
 it was installed with.
 
-`QtWebSocketBackend` is currently the only backend that overrides either:
-its `connected`/`disconnected` `QWebSocket` signal slots invoke
-`_connectHandler`/`_disconnectHandler` (if installed) at the same points
-they already invoke `_reconnectHandler`/schedule a reconnect — see that
-section below.
+`QtWebSocketBackend` overrides both: its `connected`/`disconnected`
+`QWebSocket` signal slots invoke `_connectHandler`/`_disconnectHandler` (if
+installed) at the same points they already invoke `_reconnectHandler`/schedule
+a reconnect — see that section below. `morph::net::SocketBackend` overrides
+`setConnectHandler`, run on its I/O loop after each connect (see
+[Server-initiated events](#server-initiated-events-over-the-socket-transport)).
 
 ## Session propagation to control envelopes
 
@@ -624,27 +628,37 @@ external reference is dropped.
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 | `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. The range's `capabilities` lists `"cancel"`. See [wire.md](wire.md#protocol-version-negotiation). |
 | `cancel` | `cancelCallId`, `session` | `ok` (the cancel's own `callId`), always | Stamps the verified principal, then requests stop on the run of the `execute` filed under `cancelCallId` **on the same connection**, if the cancel's verified principal is the execute's and the cancel passes the execute's own `authorize` and `authorizeInstance`. Anything else — unknown, finished, another connection's, another principal's, refused, unscoped — is the same `ok` and changes nothing. See [wire.md](wire.md#cancelling-a-call). |
+| `watch` | `body` = `WatchBody`, `session` | `ok` with `body` = `WatchReply`, or `err` | Stamps the verified principal, then adds the admitted topics to the connection's watch set, or makes the set exactly them with `replace: true`. Topics not admitted are listed in the reply, not refused with an `err`. `err` for `cid == 0`, a closed connection, or a body `wire::readWatchBody` refuses. See [Watches](#watches). |
+| `unwatch` | `body` = `WatchBody`, `session` | `ok` with an empty `WatchReply`, or `err` | Stamps the verified principal, then removes the listed topics from the connection's watch set. `err` as for `watch`. |
 | `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
 **Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
 action on the model's strand. Admission, in order:
 
+0. **Verify and compare, before anything can refuse.** The server calls
+   `_authorizer->authenticate(env.session)` once, on entry, and compares the
+   result (empty when it returns `nullopt`) with the connection's principal
+   baseline ([security.md](../security.md#a-connections-principal-baseline)).
+   An execute under another principal, or under none, therefore drops the
+   connection's watches even when a later step refuses it, and before its own
+   fan-out when none does. The verified value is kept for step 3; `authorize`
+   still sees the session as the client sent it.
 1. **In-flight cap.** With `LimitPolicy::maxInFlightExecutes` set and the
    in-flight count at it → `err "server busy"`. The count is server-strand
    state, so the check and the increment in step 7 cannot be separated by
    another admission: the cap is exact.
 2. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
    Denied → `err "unauthorized"` (with the request's `callId`), no dispatch.
-3. **Authenticate / make the principal authoritative.** After `authorize`
-   succeeds, the server calls `_authorizer->authenticate(env.session)`. If it
-   returns a value, the server **overwrites** `env.session.principal` with that
+3. **Make the principal authoritative.** After `authorize` succeeds, the
+   server uses the `authenticate` result from step 0. If it returned a value,
+   the server **overwrites** `env.session.principal` with that
    verified principal *before* building the `ScopedContext`. So model code that
    reads `session::current()->principal` on the remote path sees the identity the
    authorizer extracted from a valid token, not the client's asserted claim
    (`Context::principal` is untrusted wire input on its own). If `authenticate`
    returns `nullopt` — a non-verifying authorizer, including the default
-   `AllowAllAuthorizer`, or a token that passed `authorize` but expired in the
-   window before `authenticate` — the server **clears** `env.session.principal`
+   `AllowAllAuthorizer`, or a token that had already expired when it was
+   verified — the server **clears** `env.session.principal`
    to the empty string. The client's unverified claim is therefore never
    presented to the model as authoritative: the worst case is an empty
    principal, never an attacker-chosen one (see security.md). This is the only
@@ -886,6 +900,33 @@ ships; it answers `ui-hello`, `ui-catalog` and `ui-fetch`.
   empty one, never the client's claim.
 - **Authorising is the service's.** `handle(request, authorizer)` is given the
   server's `IAuthorizer`; core makes no decision about a kind it does not know.
+- **Connection facts.** What the server calls is the three-parameter
+  `handle(request, authorizer, facts)`, where `facts` is the `ConnectionFacts`
+  of the connection the envelope arrived on. It is how core learns what a
+  service negotiated without parsing that service's bodies: today the one fact
+  is `events`, which the UI service sets when a `ui-hello` offers events and it
+  accepts ([ui/service.md](../ui/service.md#the-kinds)), and which core reads
+  at fan-out through `eventsNegotiated(cid)`.
+  - The three-parameter `handle` is a non-pure virtual whose default forwards to
+    the two-parameter one, which stays pure. A service that learns nothing
+    about connections overrides only the two-parameter one, and so adds
+    `using IEnvelopeService::handle;`: GCC's `-Woverloaded-virtual`, which the
+    strict build enables at level 2, flags a derived class that overrides some
+    overloads of a virtual and hides the rest. Clang does not, so only the GCC
+    build catches its omission. A service that overrides both needs no `using`.
+  - The facts sit beside the connection scopes in a `cid → ConnectionFacts` map
+    only the server strand touches, are created on the first envelope a
+    service handles for an open connection, and are dropped by
+    `closeConnection(cid)`. A reconnect is a new connection and starts from
+    `events = false`.
+  - A message with no open connection behind it — `handle(msg, reply)`,
+    `handleInline(msg)`, or a `cid` never opened or already closed — is handed
+    throwaway facts, reset to `events = false` before each such message and
+    kept by nothing, so a fact can only be recorded where the connection that
+    negotiated it can be found again.
+  - `eventsNegotiated(cid) const` is server-strand only (a debug build
+    asserts it): it is read where fan-out runs, on the strand, and the map
+    has no lock. It is `false` for `0`, an unknown `cid` or a closed one.
 - **Synchronous, on the server strand.** `handle` returns the encoded reply and
   must not block. A throw becomes an `err` reply carrying its message, through
   the same catch every other kind uses.
@@ -924,7 +965,7 @@ limit:
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
+| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is not sent as a reply, via a shared once-flag; if it succeeds, its changes still reach the watching connections, the caller included ([Fan-out](#fan-out)) — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
 | `maxLiveModels` | `0` (unbounded) | Checked on the server strand before `register` constructs a new instance, and again after the construction and before the insert (the construction is host code that may itself register through `handleInline`); over the cap → `err "too many models"`. Exact: nothing else inserts between the check and the insert. A shared `register`/`attach` that finds its key already live takes a reference and is not counted against the cap. |
 | `maxInFlightExecutes` | `0` (unbounded) | The in-flight count, server-strand state, incremented when an `execute` is admitted and decremented (posted back to the strand) when its reply is sent — success, exception, or timeout, whichever resolves the call first; at the cap → `err "server busy"`, no dispatch. Exact, for the same reason. |
 
@@ -982,8 +1023,9 @@ nothing for a caller that never uses it.
 - `closeConnection(cid)` posts, to the server strand, the erasure of every model
   still recorded in `cid`'s scope (its directory record and the per-instance
   connection entry) exactly as the `deregister` path does, then drops the scope
-  itself. Passing `0`, an unknown `cid`, or a `cid` already closed is a no-op —
-  idempotent by construction.
+  itself, and the connection's writer with it (see
+  [Writing to a connection](#writing-to-a-connection)). Passing `0`, an unknown
+  `cid`, or a `cid` already closed is a no-op — idempotent by construction.
 - **`closeConnection` does not consult `IAuthorizer`.** It is server-side
   housekeeping triggered by the transport observing its own connection close,
   not a caller-attributed action — synthesising a `deregister` envelope
@@ -1007,6 +1049,268 @@ nothing for a caller that never uses it.
   wedges the server permanently at `err "too many models"`.
 - `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
   the process itself) — it is unaffected by connection scopes.
+
+### Writing to a connection
+
+A reply goes back through the `reply` functor its own request carried. What the
+server sends unasked — an `event` envelope (see [wire.md](wire.md)) — needs a
+way to reach a connection with no request in hand, so a transport hands the
+server one per connection.
+
+- `ConnectionWriter{write, backlog}` is that handle. `write(std::string)`
+  queues one encoded envelope on the transport's own thread, as a reply is
+  queued; `backlog()` reads how many bytes of encoded envelopes, replies and
+  events alike, the transport has accepted for the connection and not yet
+  written. Both run on the server strand and must not block.
+- `setConnectionWriter(cid, writer)` posts to the server strand and keeps the
+  writer only while `cid`'s scope is open: a writer for `0`, an unknown `cid`
+  or a closed one is dropped, so a transport racing its own disconnect cannot
+  leave a writer nothing removes. It replaces any writer `cid` already had,
+  keeping a `resync` the connection is owed — the held-back events were the
+  connection's, not the old writer's; an
+  empty `write` removes it. `closeConnection(cid)` drops it. The writer lives
+  next to the connection scopes, in a `cid → {writer, owesResync, queued
+  changes}` map that only the strand touches ([Coalescing](#coalescing)).
+- `post(cid, envelope)` is callable from any thread. On the calling thread, an
+  envelope larger than `wire::kMaxEnvelopeBytes` is dropped, logged at `warn`
+  and counted as `Metric::eventOversize` — the peer would refuse to decode it.
+  Otherwise it is posted to the strand, where it is written, or dropped if the
+  connection has no writer. Envelopes one thread posts to one connection are
+  written in that order.
+- **Events, not replies, give way to a slow reader.** The server cannot see a
+  transport's outbox; it sees only `backlog()`. When `backlog()` exceeds
+  `kEventBacklogHigh` (1 MiB) at a `post`, the envelope is dropped and the
+  connection is marked as owed a `resync`. Every later `post` to it is dropped
+  too, even once the backlog has fallen, until the transport calls
+  `connectionDrained(cid)`; the server then sends one
+  `makeEvent("resync", "{}")` — "everything you watch may have changed" — and
+  clears the mark. So the `resync` is the next event the connection receives
+  after the first one it missed, and no event it receives is older than one it
+  missed. A drain with nothing owed sends nothing.
+- `connectionDrained(cid)` is what a transport calls when the backlog falls
+  below `kEventBacklogLow` (256 KiB). It is callable from any thread — the
+  transport's loop or socket thread in practice — and only posts to the strand.
+  The drain, not a later write, sends the `resync`, so a connection that only
+  listens still receives it. The gap between the two bounds keeps a reader
+  hovering near one of them from flipping between held back and drained on
+  every frame.
+- The backlog is counted by the transport, because only it can see what it
+  still holds; replies count toward it, and are never held back. A peer that
+  stops reading altogether is the transport's to close, by its send timeout.
+- A `write` or a `backlog()` read that throws is caught on the strand and
+  logged at `warn`, and the envelope is not written; the server keeps serving
+  and the connection keeps its writer until the transport closes it. Its
+  watches are dropped at once ([Watches](#watches)).
+
+### Watches
+
+A connection tells the server which topics its client shows, so that what a
+write changes is sent only where it can be shown. The `watch` and `unwatch`
+kinds are core kinds: `RemoteServer` handles them on its strand, with the
+connection's `cid`, because the watch table belongs to the connection and the
+execute path reads it. The UI layer sends them; nothing on the server outside
+`RemoteServer` handles them.
+
+- **Topics.** A record type, by its wire name; and a keyed shared instance, by
+  `(modelType, primary)`. An instance topic is stored by key and never resolved
+  to an instance id: the watch is sent before the fetch that may create the
+  instance, so the instance may not exist yet. One that never comes to exist
+  simply never matches.
+- **The table.** `detail::WatchTable` (`core/detail/watch_table.hpp`) holds
+  each connection's record and instance topics. Each watch keeps a
+  `detail::Watch{context, principal}`: the session of the `watch` envelope that
+  created it and the principal verified from it, because a connection has no
+  principal of its own. Watching a topic again keeps the newer one.
+  `watchersOf(record)` and `watchersOf(modelType, primary)` answer the
+  connections watching a topic, ascending; `watchOf(cid, record)` and
+  `watchOf(cid, modelType, primary)` the watch itself; `dropSession(cid,
+  principal, token)` drops every watch `cid` holds under one session;
+  `topicCount(cid)` how many topics `cid` watches. `RemoteServer::watchTable()` exposes it read-only, on the strand.
+- **Admission.** Each topic of a `watch` is admitted or refused on its own,
+  on the principal `stampVerifiedPrincipal` verified for the envelope; the
+  `ok` reply's `WatchReply` lists the refused ones, and the admitted ones are
+  stored. A topic listed twice in one body is judged, and listed, once.
+  - A record type is admitted when the verified principal may run at least one
+    action whose result holds it: for each action id
+    `effects::actionsHolding(record)` returns, and each model type
+    `ActionDispatcher::modelsOf(actionId)` registers it under,
+    `authorize(session, modelType, actionId)`. Which actions hold a record
+    comes from the process effects registry; which model types an action
+    belongs to comes from this server's dispatcher. A name no record has is
+    refused.
+  - An instance topic is admitted when three things hold: its model type is
+    registered with this server (`ModelRegistryFactory::contains`); the
+    principal may run at least one of that model's actions
+    (`authorize(session, modelType, actionId)` over
+    `ActionDispatcher::actionsOf(modelType)`); and
+    `authorizeInstance(session, modelType, {}, 0, "")` admits it. The last
+    carries no instance id, because the instance may not exist, and no owner,
+    because a shared instance has none
+    ([shared_instances.md](shared_instances.md#watching-a-keyed-instance)).
+    The first two matter because `authorizeInstance` allows everything by
+    default.
+  - **The cache.** The `authorize` answer for a record type, and for a model
+    type's actions, is cached in the table per verified principal **and
+    token**: two tokens of one principal, such as a scoped agent token and a
+    full one, may carry different claims. Each `(principal, token)` counts the
+    topics watched with it, and its answers are forgotten when the count
+    returns to zero. A caller with no verified principal is judged afresh each
+    time, since an authorizer that does not authenticate may still tell such
+    callers apart by their token. A name no record has, and a model type not
+    registered, are refused without caching, so a peer cannot grow the cache
+    with names it makes up.
+- **The cap.** One connection watches at most `wire::kMaxWatchTopics` (4096)
+  topics, records and instances together. A topic the connection does not
+  already watch is refused, and listed in the reply, while it is at the cap; an
+  `unwatch` makes room again. Every topic one `watch` admits shares one copy of
+  its session.
+- **`replace`.** A `watch` with `replace: true` makes the connection's watch
+  set exactly its admitted topics. A client sends its whole set this way after a
+  reconnect, which supersedes any watch changes replayed ahead of it.
+- **Before `ui-hello`.** A `watch` on a connection that has not negotiated
+  events is stored all the same; events are posted to it only once it has.
+- **Unscoped is refused.** `cid == 0` has no connection whose watch set a
+  message could change, so both kinds answer `err` there. A connection already
+  closed answers `err "connection closed"`, so nothing is stored that no close
+  would remove.
+- **What drops watches.** `closeConnection(cid)` drops all of `cid`'s watches,
+  as does a failed `write` or `backlog()` read on its writer: a connection that
+  cannot be written to is sent no events, and its client sends the whole set
+  again when it reconnects.
+  So does an envelope under another principal: `stampVerifiedPrincipal(env,
+  cid)` compares each stamped principal with the connection's baseline and
+  drops the watches on a difference
+  ([security.md](../security.md#a-connections-principal-baseline)). And so
+  does fan-out, for a watch that no longer passes the rule that admitted it
+  ([Fan-out](#fan-out)).
+- <a id="resync-for-dropped-watches"></a>**Resync for dropped watches.** When
+  the server drops watches on its own, the client is not otherwise told, and
+  would stop receiving those topics. So a principal change that drops any
+  watch, and a fan-out whose re-authorisation drops any, send the connection
+  one `resync` event (`RemoteServer::sendResync`): one per envelope or per
+  fan-out, however many watches went. It is sent only to a connection that
+  negotiated events, and through `post`'s hold-back, so a connection already
+  held back behind its backlog gets the one `resync` its drain owes. A
+  fan-out first sends what the connection had queued
+  ([Coalescing](#coalescing)), so its `resync` comes after those changes. The
+  client answers every `resync` by marking its watched entries stale and
+  sending its whole watch set again with `replace: true`; a topic still
+  refused comes back in the `WatchReply`. An `unwatch` and a `replace` are the
+  client's own and owe nothing; a close and a write failure leave no
+  connection to tell.
+
+### Fan-out
+
+After an `execute` succeeds, the server tells every connection that watches
+what it changed. Every executing message takes this path: the `execute` kind,
+offline replays (which arrive as executes), and anything else that dispatches
+through `dispatchExecute`.
+
+- **The model strand derives.** `finishRemote`, on success only and before the
+  reply, calls `effects::deriveChanges(actionType, result, ranOn)`. `ranOn` is
+  the instance the action ran on: its model type, its id, and, for a keyed
+  shared instance, the primary of the directory key it held when the execute
+  was admitted (`RemoteRun::sharedKey`; empty for a private instance). Changes
+  that are not empty are posted to the server strand as
+  `fanOut(changes, caller, callerPrincipal)`, where `caller` is the execute's
+  connection (`RemoteRun::cid`) and `callerPrincipal` its verified principal. The reply is written exactly as without fan-out. A failed
+  execute derives nothing. A derivation that throws is logged; the reply and
+  the action gate's release still follow.
+- **The server strand finds the recipients.** A record topic goes to every
+  connection `watchersOf(record)` names, and a keyed shared instance's topic to
+  every connection `watchersOf(modelType, primary)` names, **the caller
+  included**. An instance whose change carries no primary is looked up in the
+  directory on the strand: the directory is consulted at fan-out when a change
+  carries no primary, so an instance an `assign` keyed while its execute ran
+  is matched by the key it holds now. The caller may never see its own reply: an execute the
+  `executeTimeout` answered first but that succeeded, a reply the client
+  discarded, a replay whose reply went to the offline worker. A private
+  instance's topic goes to every connection whose scope holds the instance
+  (`scopesHolding`), whether or not it is the caller, and needs no watch. A connection that has
+  not negotiated events (`eventsNegotiated(cid)`) is sent nothing.
+- **One event per recipient.** Each recipient gets one `changes` event whose
+  `ChangesBody` holds only the topics it is sent: its watched records, with the
+  keys derived, and its instance topics as `InstanceTopic{modelType, primary,
+  instance}`. Before it is encoded, the body passes through
+  `RemoteServer::reauthorise`, the one place a recipient's topics are
+  narrowed. A body left with no topic is not sent. What is left is queued
+  on the connection and sent merged with the connection's other changes
+  ([Coalescing](#coalescing)), written as `post` writes, held back behind a
+  full backlog. A merged event that would exceed `wire::kMaxEnvelopeBytes` is
+  never dropped: see *Size* under [Coalescing](#coalescing).
+- **Re-authorised at send time, by the rule that admitted it.** For each
+  watched topic in a recipient's body:
+  1. the watch's stored session must still `authenticate` as the principal it
+     was admitted for. An expired token verifies as no principal, so every
+     watch the connection holds under that session is dropped. A watch
+     admitted with no verified principal, under an authorizer that never
+     authenticates, passes. `authenticate` is asked once per session per
+     fan-out;
+  2. the topic's admission rule runs again on that session: `mayWatchRecord`
+     for a record, `mayWatchInstance` for an instance, through the same cache
+     per principal and token ([Watches](#watches)). A refusal drops that
+     watch. The action that wrote the change is not consulted, so a principal
+     that may list a record but not write it still receives its changes.
+
+  A dropped watch's topic leaves the body, and the connection is sent one
+  `resync` after its event, however many watches the fan-out dropped
+  (`sendResync`; see [Resync for dropped watches](#resync-for-dropped-watches)).
+  A private instance's topic has no watch and is kept. A verified principal's
+  cached `authorize` answer stands while the session it was cached for keeps
+  watching, so a policy change reaches an existing watch when its stored token
+  stops verifying or the topic is watched again; the `authenticate` and
+  `authorizeInstance` checks are asked afresh.
+- **Private keys.** A record registered with `morph::record::privateKeys`
+  reaches a recipient without its `keys` (a whole-type change) unless the
+  recipient is the calling connection or its watch's principal is the
+  caller's verified principal. Two connections with no verified principal are
+  not the same principal for this purpose. See
+  [security.md](../security.md#what-an-event-reveals).
+- <a id="coalescing"></a>**Coalescing.** Each connection's writer entry
+  holds a `detail::ChangeCoalescer`, the changes queued for its next
+  `changes` event. Re-authorisation happens at fan-out, before a body is
+  queued; the queue only merges what each fan-out already allowed.
+  - *Merging.* Records are merged per type, each key text once, in arrival
+    order. A whole-type record (keys absent) absorbs that type's keys, queued
+    before or after it, so a type a recipient was sent without keys
+    (`privateKeys`) is never given keys by a merge. A record whose merged keys
+    would exceed `effects::kMaxChangeKeys` (4096) becomes whole-type: the
+    client's reader refuses a longer list, and a whole-type change
+    over-notifies but never misses. Instance topics are deduplicated on
+    `{modelType, primary, instance}`.
+  - *When the queue is sent.* The first change queued opens a window of
+    `ServerConfig::coalesceWindow` (50 ms by default) on the server's strand
+    timer — the `TimeoutScheduler` drain deadlines use, created by the first
+    that needs it. Its callback holds the server weakly and posts the flush
+    to the strand, where the task holds the server; each window is numbered,
+    so a late close cannot send a later window's queue. The queue is sent at
+    once, without waiting for the window, when `keyCount()` reaches
+    `detail::kCoalesceKeyLimit` (256: one per key, one per whole-type record,
+    one per instance topic), and before a `resync` a fan-out owes the
+    connection. A window of zero sends each fan-out at once.
+  - *Size.* The key count is bounded and the keys' size is not, so a merged
+    event can exceed `wire::kMaxEnvelopeBytes`. It is then sent with every
+    record as a whole-type change, which names what changed in a few bytes per
+    record type; one that still does not fit is sent as a `resync`. A watcher
+    is over-notified, never missed.
+  - *What is not queued.* Nothing is queued for a connection with no writer,
+    or one held back behind its backlog: its drain sends a `resync`, which
+    covers every change since. A closed connection, and one whose writer is
+    removed, drops its queue with its writer, and its window's close then
+    finds nothing to send. A principal change (the baseline in
+    [Watches](#watches)) discards the queue without sending it, since it was
+    authorised for the previous principal, and the connection is sent one
+    `resync` if it held any watch or had anything queued.
+  - *Volume.* A window opens only when the previous one has closed, so window
+    closes send a connection at most 20 events a second at 50 ms. A queue
+    sent at the key limit can come sooner, so the full bound is 20 events a
+    second plus one per 256 keys (or topics) the connection is sent.
+    A burst of one hundred writes to one type reaches each watching
+    connection as one event, so one refetch per showing query.
+- **The registries are read at construction.** Every `RemoteServer`
+  constructor reads the record and effects registries once, so a process whose
+  declarations are invalid fails with `EffectsRegistrationError` when the server
+  is built, not at its first successful execute.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
@@ -1140,6 +1444,27 @@ destruction — unlike a real socket there is no single unambiguous "this
 connection is gone" moment to hook here — so a caller that wants the scope
 reclaimed calls `server.closeConnection(cid)` explicitly (or lets the server
 itself be destroyed).
+
+**Events.** The scoped constructor also makes the backend its connection's event
+receiver: it hands the server a `ConnectionWriter` for the `ConnectionId`, and
+`setEventHandler(handler, exec)` posts each `event` envelope the server writes
+to `exec`, in the order the server posted them. The writer's `backlog` always
+reads `0`: an in-process hand-off queues nothing, so `RemoteServer::post` never
+holds an event back from it and never owes it a `resync`. The writer replaces
+any writer the connection already had, so a second backend on the same scope
+takes the events over. It shares its handler state with the backend rather than
+pointing at it, so the server can keep posting after the backend is destroyed:
+the destructor clears the handler and later envelopes are dropped. The
+unscoped constructor has no connection, so it receives no events and
+`setEventHandler` on it stores nothing.
+
+One conformance case, `channelConformance` in `tests/push_conformance.hpp`, runs
+on this backend, `SocketBackend` and `QtWebSocketBackend` (`[push][channel]`).
+Each suite hands it a factory for a server, a connected backend and the
+connection's id. It checks that a posted event reaches the handler, that an
+event carrying the `callId` of a call in flight reaches the handler and leaves
+that call to its real reply, and that 50 events on one connection arrive in
+the order they were posted.
 
 ## `QtWebSocketBackend` — client-side WebSocket transport
 
@@ -1383,6 +1708,73 @@ client socket was destroyed before the reply is ready, the `QPointer` is null an
 the reply is silently dropped. A malformed frame produces an `err` reply from the
 `RemoteServer` and does not disconnect the client or affect other clients.
 
+**Server-initiated events.** `QtWebSocketServer` carries events the way the
+`net` transport does (see
+[Server-initiated events over the socket transport](#server-initiated-events-over-the-socket-transport)
+and [Writing to a connection](#writing-to-a-connection)):
+
+- **One writer per connection,** handed to `RemoteServer::setConnectionWriter`
+  in `onNewConnection`, right after `openConnection()`.
+  `QWebSocketServer::newConnection` fires only once the upgrade is complete,
+  so no frame the writer queues can precede the handshake response.
+  `closeConnection(cid)`, on disconnect or `close()`, drops it. `write` counts
+  the envelope and queues it to the Qt thread through
+  `QMetaObject::invokeMethod`, as a reply is queued; it throws only when there
+  is no `QCoreApplication`. Neither callable keeps the socket or the server
+  alive: both are held by `QPointer`, and a frame that arrives after either is
+  gone is dropped and its count released.
+- **The backlog counts encoded envelopes.** Each connection has an atomic
+  count of the bytes of encoded envelopes handed to it — replies, rejection
+  replies and events alike — and not yet written. The size is added on the
+  handing thread before the frame is queued, so a `backlog()` read on the
+  strand already covers a frame still on its way to the socket. Once
+  `sendTextMessage` has taken the frame, `detail::OutboundLedger` records,
+  next to the envelope size it counted, where in the socket's running count of
+  written bytes the frame's last byte falls: the bytes written so far plus
+  every byte the socket stack still holds, the frame's own included. The
+  position is measured, not computed from a frame layout, so bytes the socket
+  queued for itself (the handshake response, a Pong) are covered, and each
+  position is taken afresh, so no error accumulates. `QWebSocket::bytesWritten`
+  advances the count and releases, by its envelope size, every frame it
+  completes; when the stack holds nothing, every frame is released.
+  - **Over TLS** `QWebSocket::bytesWritten` reports encrypted bytes sent, and
+    `QWebSocket::bytesToWrite()` only the plaintext not yet encrypted. Qt
+    encrypts eagerly into the TLS socket's own buffer, so that plaintext count
+    reaches zero while megabytes of ciphertext are still unsent; the bytes held
+    therefore also count that buffer, `QSslSocket::encryptedBytesToWrite()`.
+    `QWebSocket` does not expose its `QSslSocket`: a `SecureMode`
+    `QWebSocketServer` accepts through a `QSslServer` it owns, which parents
+    each accepted socket, so the server finds it among its descendants by the
+    connection's two endpoints. A connection whose TLS socket is not found is
+    logged at `warn`, and its backlog then counts only plaintext not yet
+    encrypted, so a slow reader on it is not held back.
+  - Plaintext waiting to be encrypted is counted one-for-one, not with its
+    record overhead, so over TLS a frame can be released before its last byte
+    is sent by at most the overhead on the plaintext still unencrypted when it
+    was handed over. On a plain socket the position is exact.
+  - A connection that goes away releases whatever it still held.
+- **The drain call.** A release that takes the backlog from at least
+  `kEventBacklogLow` to below it calls `RemoteServer::connectionDrained(cid)`
+  on the Qt thread, judged from the value its own subtraction replaced; a
+  socket no longer connected is not reported.
+- **A peer that stops reading** is aborted by `sendTimeout`: a per-connection
+  one-shot timer armed for the oldest unwritten frame aborts the socket — an
+  abort, since a close frame would queue behind what the peer is not reading —
+  once that frame is older than `sendTimeout`, logging at `warn`. The
+  disconnect that follows reclaims the connection's scope as any other does.
+
+`tests/qt/test_qt_websocket.cpp` pins it (`[push][channel]`): an event posted
+to a connection reaches the client's handler; an event carrying a pending
+call's own `callId` reaches the handler and leaves the call to its real reply;
+the connect handler fires on the first connect and on a reconnect, ahead of
+the reconnect handler; a 2 MiB event holds the next one back, and the drain
+after it is written sends one `resync`, after which events flow again; a peer
+that completes the upgrade and then stops reading, on `ws://` and on
+`wss://`, has the event after a 7 MiB one held back and receives a `resync` in
+its place once it reads again; such a peer is aborted no sooner than a 200 ms
+`sendTimeout`, on both; and the ledger releases a frame once the count reaches
+its position while later frames are still held.
+
 **Multi-client / concurrency.** One server serves many clients; each client
 registers its own model instances on the shared `RemoteServer`, so per-client
 model state is isolated. Because `handle()` posts to the pool, replies for
@@ -1429,6 +1821,7 @@ reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
 | `messagesPerSecond` | `0` (unbounded) | A per-connection token bucket (capacity = `messagesPerSecond`, refilled continuously). A frame that finds an empty bucket is refused — it never reaches `RemoteServer` — and answered with an `err "rate limited"` addressed to that frame's own `callId`. Not queued, and the connection is not closed. |
 | `handshakeTimeout` | `0` (disabled) | A one-shot timer per connection; if no frame arrives before it fires, the socket is closed. Cancelled on the first frame. Because `QWebSocketServer::newConnection()` only fires after the WS (and TLS, in `SecureMode`) opening handshake completes, this in practice bounds time-to-first-frame after that point, not the handshake itself. |
 | `idleTimeout` | `0` (disabled) | A shared ~1-second housekeeping sweep closes any connection whose last frame is older than `idleTimeout`; the actual close can lag the configured value by up to the sweep interval. |
+| `sendTimeout` | `30000` ms, as `morph::net` | A per-connection one-shot timer aborts a connection whose oldest frame handed to the socket is still unwritten after `sendTimeout` (see "Server-initiated events" above). `0` disables it. |
 | `bindAddress` | `QHostAddress::LocalHost` | The address `listen()` binds to (see "Flow" above). |
 | `allowPlaintextExposure` | `false` | Deliberate opt-out of the exposure guard: set `true` only to knowingly serve plaintext on a non-loopback `bindAddress` (see "Flow" above). |
 
@@ -1519,8 +1912,8 @@ itself.
 
 | Component | Cross-thread surface | Everything else |
 |---|---|---|
-| `SocketBackend` | `execute`, `bindModel`, `promoteModel`, `deregisterModel`, `cancelPending` post; `waitForConnected` posts a waiter and blocks the caller; the synchronous control verbs post their frame and wait on a future for the reply; `setSession`, `setReconnectHandler` post | socket, both pending tables, call-id counter, session, reconnect handler, reconnect delay and backoff timer, connect waiters: loop only |
-| `SocketServer` | `listen()`, `close()` run on the loop and wait; `port()` is atomic; a `RemoteServer` reply is posted from the replying thread | listener, connections, writers: loop only |
+| `SocketBackend` | `execute`, `bindModel`, `promoteModel`, `deregisterModel`, `cancelPending` post; `waitForConnected` posts a waiter and blocks the caller; the synchronous control verbs post their frame and wait on a future for the reply; `setSession`, `setReconnectHandler`, `setConnectHandler`, `setEventHandler` post | socket, both pending tables, call-id counter, session, reconnect, connect and event handlers, reconnect delay and backoff timer, connect waiters: loop only |
+| `SocketServer` | `listen()`, `close()` run on the loop and wait; `port()` is atomic; a `RemoteServer` reply is posted from the replying thread, an event from the server strand, each counted on the connection's atomic backlog first | listener, connections, writers: loop only |
 
 The flows are `core::async::Task`s spawned on the loop. `SocketBackend` runs
 one attempt flow per connection attempt — dial through `core::net::connect`
@@ -1531,6 +1924,63 @@ backoff before the next attempt. Each connection has one writer flow that
 drains its queued frames one 64 KiB chunk at a time; a loop timer armed around
 each chunk's write (`sendTimeout`) closes the socket if the write makes no
 progress, which ends the connection like any other disconnect.
+
+### Server-initiated events over the socket transport
+
+The server side counts each connection's backlog; the client side routes
+`event` envelopes and reports each connect. See
+[Writing to a connection](#writing-to-a-connection) for what `RemoteServer`
+does with both.
+
+- **One writer per connection.** `SocketServer` opens the connection's scope
+  when it accepts it, and hands `RemoteServer` a `ConnectionWriter` for it only
+  once the handshake's `101` response is queued. A frame queued earlier would
+  reach the peer ahead of the `101` and break the handshake; until then the
+  connection has no writer, so what the server posts to it is dropped. `write` encodes the envelope as a frame on the server strand and posts it
+  to the loop, as a reply's frame is posted from the replying thread; it
+  throws only when the loop is gone. Neither callable keeps the connection
+  alive: they hold a weak reference to it, and the server drops them when the
+  connection's scope closes.
+- **The backlog counts encoded envelopes.** `LoopConnection::pending` is an
+  atomic count of the bytes of encoded envelopes handed to the connection —
+  replies and events alike — and not yet written. The size is added on the
+  handing thread, before the frame is posted, so a `backlog()` read on the
+  strand already covers a frame still on its way to the loop. The same size is
+  subtracted on the loop when the writer has written the frame's last chunk,
+  or when the frame is dropped: a connection closed with frames queued, or one
+  that is closed by the time the frame arrives. Framed byte counts are never
+  used, so the add and the subtract are always the same number and the count
+  cannot drift. The counter is held by `shared_ptr`, so a thread off the loop
+  keeps the counter without keeping the connection, whose socket must be
+  released on the loop. Frames the transport sends for itself (the handshake
+  response, Pong, the Close echo) are not counted.
+- **The drain call.** When a written frame takes the backlog from at least
+  `kEventBacklogLow` to below it, the loop calls
+  `RemoteServer::connectionDrained(cid)`, judging the crossing from the value
+  its own subtraction replaced. A connection that is closed or closing is not
+  reported. Frames handed over meanwhile on other threads can lift the count
+  again and produce a second report; the server's drain handling sends nothing
+  when no `resync` is owed, so that is harmless.
+- **A peer that stops reading** is closed by `sendTimeout`, as before: the
+  backlog bounds only what the server sends unasked.
+- **Events are routed before reply matching.** `SocketBackend` hands every
+  decoded envelope to `routeEvent` before it looks in either pending table, so
+  an `event` is never taken for a reply, whatever its `callId`. The handler
+  installed by `setEventHandler` is stored on the loop and posted to its
+  executor once per event, in arrival order; with none installed, events are
+  dropped.
+- **The connect handler** is stored on the loop and run there after every
+  connect, the first included: after the requests held while the socket was
+  down have been sent, and before the reconnect handler is posted. One that
+  throws is logged, and the connection carries on.
+
+`tests/net/test_push_net.cpp` pins it: an event posted to a connection reaches
+the client's handler; an event carrying a pending call's own `callId` reaches
+the handler and leaves the call to its real reply; the connect handler fires on
+the first connect and on a reconnect, ahead of the reconnect handler; 100
+replies written return the backlog to zero with one drain report; and a reader
+that stalls behind 8 MiB of replies gets no event posted meanwhile, then one
+`resync` once it has read them.
 
 `morph::net` keeps its own WebSocket framing (`detail/ws_frame.hpp`) and
 handshake text (`detail/ws_handshake.hpp`); only the socket underneath is
@@ -1965,12 +2415,18 @@ server: each call is a loop task, so the loop serialises them.
 | `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer, default `ServerConfig`. |
 | `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. Default `ServerConfig`. |
 | `RemoteServer(workerPool, config, dispatcher, registry)` | Allow-all authorizer, `config` fixed for the server's life. Throws `std::invalid_argument` if `config.minProtocolVersion > config.maxProtocolVersion`. Calls `config.healthHandler` once before returning. |
-| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. |
+| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. Every constructor reads the record and effects registries and throws `EffectsRegistrationError` if they are invalid. |
 | `handle(msg, reply)` | Async: decodes on the calling thread, posts to the server strand, calls `reply` once from a pool thread. Unscoped (`cid == 0`). Callable from any thread; calls from one thread are handled in call order — see [Per-model execute ordering](#per-model-execute-ordering). |
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
-| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope, its writer, its `ConnectionFacts` and its watches. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `setConnectionWriter(cid, writer)` | Posts: keeps `writer` (`ConnectionWriter{write, backlog}`) for `cid` while its scope is open; replaces an earlier one, keeping an owed `resync`; an empty `write` removes it. `0`, unknown or closed `cid`: dropped. |
+| `post(cid, envelope)` | Any thread. Above `wire::kMaxEnvelopeBytes`: dropped and counted (`Metric::eventOversize`). On the strand: written through `cid`'s writer, or held back — dropped, with one `resync` owed — while `backlog()` exceeds `kEventBacklogHigh` or a `resync` is still owed. No writer: dropped. |
+| `connectionDrained(cid)` | Any thread; posts. Sends the owed `resync` event, if any, and lets events flow again. What a transport calls when the backlog falls below `kEventBacklogLow`. |
+| `watchTable() const` | Server strand only (debug-asserted). The `detail::WatchTable` of every open connection's watches, read-only. See [Watches](#watches). |
+| `fanOut(changes, caller, callerPrincipal)` | Server strand only (debug-asserted). Sends each connection that watches a topic of `changes`, or whose scope holds a private instance in it, one `changes` event with the topics it is sent; `caller` included, connections without negotiated events skipped. Each watch is re-authorised first, and a `privateKeys` record loses its keys for principals other than `callerPrincipal`. A successful `execute` posts it. See [Fan-out](#fan-out). |
+| `eventsNegotiated(cid) const` | Server strand only (debug-asserted). Whether `cid` negotiated events: the `ConnectionFacts::events` a service set for it. `false` for `0`, an unknown `cid` or a closed one. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
 | `health(replyExec)` | `[[nodiscard]] Completion<HealthStatus> health(IExecutor& replyExec)` — readiness/liveModels/inFlight, answered on the server strand; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). See [observability.md](observability.md). |
@@ -1987,6 +2443,7 @@ server: each call is a loop task, so the loop serialises them.
 | `minProtocolVersion`, `maxProtocolVersion` | Inclusive `hello` range; default `{kProtocolVersion, kProtocolVersion}`. |
 | `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
 | `services` | `std::vector<std::shared_ptr<IEnvelopeService>>`: extensions consulted, in order, for a kind the server does not answer itself; a null entry throws `std::invalid_argument`. See [Envelope services](#envelope-services). |
+| `coalesceWindow` | `std::chrono::milliseconds`, default `50 ms`: how long a connection's changes are merged before one `changes` event is sent; zero sends each fan-out at once; negative throws `std::invalid_argument`. See [Coalescing](#coalescing). |
 
 ### `SimulatedRemoteBackend`
 
@@ -2031,6 +2488,7 @@ server: each call is a loop task, so the loop serialises them.
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 | `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
 | `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
+| `setEventHandler(handler, exec)` | Stores the handler under a mutex (callable from any thread). `onTextMessage` hands every decoded envelope to `routeEvent` before any reply matching, so an `event` never settles a call, whatever its `callId`; each is posted to `exec` in arrival order. `nullptr` clears; with none installed, events are dropped. |
 
 ### `QtWebSocketServerConfig` (namespace `morph::qt`)
 
@@ -2041,6 +2499,7 @@ server: each call is a loop task, so the loop serialises them.
 | `messagesPerSecond` | `std::size_t` | `0` (unbounded) |
 | `handshakeTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
 | `idleTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
+| `sendTimeout` | `std::chrono::milliseconds` | `30000` |
 | `bindAddress` | `QHostAddress` | `QHostAddress::LocalHost` |
 | `allowPlaintextExposure` | `bool` | `false` |
 

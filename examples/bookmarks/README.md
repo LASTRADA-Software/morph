@@ -55,6 +55,11 @@ only meaningful against the server.
   - **CreateBookmark, EditBookmark, ImportBookmarks, RenameTag and MergeTags** are `form` nodes.
   - **The list** is a table with multiple selection. Archiving the selection is one `BulkEdit`.
 
+Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS` in
+`include/bookmarks/models/`), and the rows it changes are records registered beside their types
+(`Bookmarks_Bookmark`, `Bookmarks_BookmarkDetail`, `Bookmarks_Tag`). A reply refreshes every query holding a changed
+record, so the screens declare no refreshes. `bookmarks_bundle_loads_without_warnings` keeps it so.
+
 In process, `screens::prepareLocal()` installs a development token issuer, which a server installs at start-up.
 `morph_examples_client --app bookmarks` runs it (`--db`, default `bookmarks.db`).
 ## Reference implementations

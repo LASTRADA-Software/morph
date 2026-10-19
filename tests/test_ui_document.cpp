@@ -170,7 +170,6 @@ TEST_CASE("ui document: the model holds what the document declares", "[ui][docum
     auto const& results = doc.scope.queries.at(0);
     CHECK(results.name == "results");
     CHECK(results.staleTime == 1000);
-    CHECK(results.refreshOn == std::vector<std::string>{"Lims_CaptureConcentration"});
     CHECK_FALSE(results.evaluate);
     CHECK(doc.scope.queries.at(2).evaluate);
 
@@ -179,7 +178,6 @@ TEST_CASE("ui document: the model holds what the document declares", "[ui][docum
     CHECK(capture.concurrency == Concurrency::Serial);
     CHECK(capture.serialKey != nullptr);
     CHECK(capture.offlineQueue);
-    CHECK(capture.patch.has_value());
     CHECK(capture.optimistic.has_value());
     CHECK(capture.onSuccess.size() == 1);
     CHECK(capture.onSuccess.front().kind == CommandKind::Set);

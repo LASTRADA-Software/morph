@@ -2,9 +2,11 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
+#include "bookmarks/dto/bookmark_dto.hpp"
 #include "bookmarks/dto/tag_dto.hpp"
 
 namespace bookmarks {
@@ -26,8 +28,15 @@ public:
 }  // namespace bookmarks
 
 BRIDGE_REGISTER_MODEL(bookmarks::TagModel, "TagModel")
+// Renaming or merging a tag cascades to every bookmark carrying it, so the bookmarks change too.
 BRIDGE_REGISTER_ACTION(bookmarks::TagModel, bookmarks::RenameTag, "RenameTag")
+BRIDGE_REGISTER_EFFECTS(bookmarks::RenameTag, ::morph::effects::changes<bookmarks::TagSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>)
 // MergeTags is outbox-managed (this task) -- Loggable::No so the framework
 // auto-append never double-logs alongside the model's own outbox write.
 BRIDGE_REGISTER_ACTION(bookmarks::TagModel, bookmarks::MergeTags, "MergeTags", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(bookmarks::MergeTags, ::morph::effects::changes<bookmarks::TagSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>)
 BRIDGE_REGISTER_ACTION(bookmarks::TagModel, bookmarks::ListTags, "ListTags", ::morph::model::Loggable::No)

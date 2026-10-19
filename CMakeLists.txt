@@ -453,8 +453,13 @@ target_sources(morph
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
+        include/morph/core/records.hpp
+        include/morph/core/effects.hpp
+        include/morph/core/change_types.hpp
+        include/morph/core/changes.hpp
         include/morph/core/backend.hpp
         include/morph/core/envelope_transport.hpp
+        include/morph/core/connection_writer.hpp
         include/morph/core/remote.hpp
         include/morph/core/bridge.hpp
         include/morph/core/wire.hpp
@@ -510,6 +515,7 @@ target_sources(morph
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/explorer.hpp
+        include/morph/ui/agent.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
@@ -601,6 +607,9 @@ target_sources(morph
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
+        include/morph/core/detail/result_walker.hpp
+        include/morph/core/detail/watch_table.hpp
+        include/morph/core/detail/change_coalescer.hpp
         include/morph/forms/detail/session_common.hpp
         include/morph/forms/detail/schema_name.hpp
         include/morph/forms/engine/detail/text.hpp
@@ -1041,6 +1050,7 @@ if(MORPH_BUILD_QT)
             include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
+            include/morph/qt/detail/outbound_ledger.hpp
     )
 
     # Compiled implementation (QObject subclass needs MOC via a .cpp file)
@@ -1154,6 +1164,10 @@ if(MORPH_BUILD_EXAMPLES)
     if(MORPH_BUILD_QT_QUICK OR MORPH_BUILD_TUI)
         add_subdirectory(examples/client)
     endif()
+elseif(TARGET ladder_bank_server)
+    # The bank server serves bank's screens, so it needs them without the generic examples; their tests, which use
+    # the generic app, are built only with them.
+    add_subdirectory(examples/bank/screens)
 endif()
 
 # ── Documentation ───────────────────────────────────────────────────────────

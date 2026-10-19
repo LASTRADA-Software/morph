@@ -309,8 +309,34 @@ inline Catalog corpusCatalog() {
         if (action == "Auth_Login") {
             info.credential = true;
         }
+        // A result row, keyed by `id`: the capture's reply updates it in every list holding it.
+        ActionRecordInfo const resultsAtTop{.record = "Lims_Result", .keyField = "id", .paths = {""}};
         if (action == "Lims_ListResults") {
             info.calculatedFields = {"concentration"};
+            info.records = {resultsAtTop};
+        }
+        // Server push (spec 8): `T_Row` is keyed by `code`, not `id`, so a patch must use the catalog's key field.
+        ActionRecordInfo const rowsAtTop{.record = "T_Row", .keyField = "code", .paths = {""}};
+        if (action == "Push_ListRows" || action == "Push_Rows") {
+            info.records = {rowsAtTop};
+        }
+        if (action == "Push_Header") {
+            info.records = {ActionRecordInfo{.record = "T_Row", .keyField = "code", .paths = {"header.rows"}}};
+        }
+        if (action == "Push_EditRow") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "updates", .record = "T_Row"}};
+            info.records = {rowsAtTop};
+        }
+        if (action == "Lims_CaptureConcentration") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "updates", .record = "T_Row"},
+                                                     ActionEffect{.kind = "updates", .record = "Lims_Result"}};
+            info.records = {rowsAtTop, resultsAtTop};
+        }
+        if (action == "Push_RenameAll" || action == "Lims_DeleteSample") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
+        }
+        if (action == "Push_Reset") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changesInstance", .record = std::nullopt}};
         }
         return info;
     };
@@ -363,7 +389,21 @@ struct Harness {
     /// @param mode Whether the session's screens record what the inspector reads.
     explicit Harness(ui::DevelopmentTools mode = ui::DevelopmentTools::On) : tools{mode} {}
 
+    /// @brief One watch request the session sent: its kind, its body, and how many calls the dispatcher had then.
+    struct WatchSent {
+        std::string kind;
+        std::string body;
+        std::size_t callsBefore = 0;
+    };
+
+    /// @brief A harness whose session sends its watch changes to `watches`, each answered at once.
+    /// @param recordWatches Always true; selects this constructor.
+    explicit Harness(bool recordWatches) : tools{ui::DevelopmentTools::On}, recording{recordWatches} {}
+
     ui::DevelopmentTools tools;
+    bool recording = false;
+    /// @brief The watch requests sent, oldest first; only with `recordWatches`.
+    std::vector<WatchSent> watches;
     morph::testing::StepExecutor owner;
     reactive::Runtime runtime{owner};
     reactive::testing::ManualScheduler scheduler;
@@ -380,7 +420,8 @@ struct Harness {
                                                         return "error";
                                                     }
                                                 },
-                                                .developmentTools = tools}};
+                                                .developmentTools = tools,
+                                                .watcher = recordingWatcher()}};
     ScriptedDispatcher dispatcher{owner};
     RecordingHost host;
     ui::testing::RecordingBackend backend;
@@ -407,6 +448,20 @@ struct Harness {
 
     /// @brief Runs everything posted to the owner.
     void settle() { owner.runAll(); }
+
+    /// @brief The watcher of a recording harness; empty otherwise.
+    /// @return It.
+    ui::Watcher recordingWatcher() {
+        if (!recording) {
+            return {};
+        }
+        return [this](std::string const& kind, std::string const& body) {
+            watches.push_back(WatchSent{.kind = kind, .body = body, .callsBefore = dispatcher.calls.size()});
+            auto [completion, promise] = async::Completion<std::string>::makeSettleable(&owner);
+            promise.resolve(std::string{"{}"});
+            return std::move(completion);
+        };
+    }
 
     /// @brief Advances the clock, then settles.
     /// @param delta How far.

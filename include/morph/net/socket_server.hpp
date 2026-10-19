@@ -19,6 +19,7 @@
 #include <morph/core/profiler.hpp>
 #include <morph/core/remote.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -289,14 +290,71 @@ private:
             if (server == nullptr) {
                 return;
             }
-            auto client =
-                std::make_shared<Client>(Client{.conn = std::make_shared<::morph::net::detail::LoopConnection>(
-                                                    loop.loop(), std::move(socket), cfg.sendTimeout),
-                                                .cid = server->openConnection(),
-                                                .done = false});
+            auto const cid = server->openConnection();
+            auto conn = std::make_shared<::morph::net::detail::LoopConnection>(loop.loop(), std::move(socket),
+                                                                               cfg.sendTimeout);
+            // Weak: the connection belongs to this core, and is told nothing
+            // once `~SocketServer` has cut the core's tie to the server.
+            conn->onDrained = [weak = weak_from_this(), cid] {
+                if (auto const self = weak.lock(); self && self->server != nullptr) {
+                    self->server->connectionDrained(cid);
+                }
+            };
+            auto client = std::make_shared<Client>(Client{.conn = std::move(conn), .cid = cid, .done = false});
             clients.push_back(client);
             MORPH_PLOT("SocketServer::connections", clients.size());
             loop.loop().spawn(clientFlow(shared_from_this(), client));
+        }
+
+        /// The writer `RemoteServer::post` reaches @p client through, and its
+        /// backlog read. Neither keeps the connection: the server may hold
+        /// them until it learns the connection is gone.
+        [[nodiscard]] ::morph::backend::ConnectionWriter writerFor(std::shared_ptr<Client> const& client) const {
+            std::weak_ptr<Client> const weak = client;
+            auto const counter = client->conn->pending;
+            return {.write =
+                        [loopHandle = loop.weak(), weak, counter](std::string const& envelope) {
+                            if (!sendEnvelope(loopHandle, weak, counter, envelope)) {
+                                throw std::runtime_error("the connection's I/O loop is gone");
+                            }
+                        },
+                    .backlog = [counter] { return counter->load(); }};
+        }
+
+        /// Counts @p envelope against the connection's backlog, then posts
+        /// its frame to the loop, to be queued on the connection if it is
+        /// still open. Callable from any thread: replies arrive on the
+        /// server's pool, events on its strand. Encoded on the calling thread,
+        /// so the loop only queues it.
+        /// @return `false` if the loop is gone, the frame dropped and its
+        ///         count released.
+        static bool sendEnvelope(::morph::exec::IoLoop::Weak const& loopHandle, std::weak_ptr<Client> const& weak,
+                                 std::shared_ptr<std::atomic<std::size_t>> const& counter,
+                                 std::string const& envelope) {
+            MORPH_ZONE("SocketServer::encodeReply");
+            std::string frame =
+                ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText, envelope, /*mask=*/false);
+            std::size_t const counted = envelope.size();
+            // Before the post, so a backlog read on the server strand already
+            // covers a frame still on its way to the loop.
+            counter->fetch_add(counted);
+            bool const posted = loopHandle.post([weak, counter, counted, frame = std::move(frame)]() mutable {
+                MORPH_ZONE("SocketServer::queueReply");
+                auto const target = weak.lock();
+                if (!target) {
+                    counter->fetch_sub(counted);
+                    return;
+                }
+                ::morph::exec::detail::noteOwner("SocketServer::reply", target->conn->loop,
+                                                 ::morph::exec::runningOn(target->conn->loop));
+                // A finished client's connection is closed or closing, so this
+                // drops the frame and releases its count.
+                static_cast<void>(::morph::net::detail::enqueueFrame(target->conn, std::move(frame), counted));
+            });
+            if (!posted) {
+                counter->fetch_sub(counted);
+            }
+            return posted;
         }
 
         /// Drops a listener that can no longer accept, so `port()` reads `0`
@@ -360,6 +418,12 @@ private:
                     static_cast<void>(::morph::net::detail::enqueueFrame(
                         connection, ::morph::net::detail::buildServerHandshakeResponse(request.key)));
                     leftover = std::move(header->leftover);
+                    // Only now: a frame the server posted earlier would be
+                    // queued ahead of the 101 and break the handshake. Until
+                    // here the server has no writer, and drops what it posts.
+                    if (self->server != nullptr) {
+                        self->server->setConnectionWriter(client->cid, self->writerFor(client));
+                    }
                 } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
                     // A malformed Upgrade request: the connection ends below.
                 }
@@ -432,26 +496,14 @@ private:
 
         /// Hands one request to the server. Its reply comes back on whichever
         /// thread produces it — the server's pool, usually — and is posted
-        /// here, to be queued on this connection if it is still open.
+        /// here, to be queued on this connection if it is still open. It
+        /// counts against the connection's backlog like an event.
         void dispatch(std::shared_ptr<Client> const& client, std::string const& payload) const {
             std::weak_ptr<Client> const weak = client;
             server->handle(
                 payload,
-                [loopHandle = loop.weak(), weak](const std::string& reply) {
-                    MORPH_ZONE("SocketServer::encodeReply");
-                    // Encoded on the replying thread, so the loop only queues it.
-                    std::string frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
-                                                                            reply, /*mask=*/false);
-                    static_cast<void>(loopHandle.post([weak, frame = std::move(frame)]() mutable {
-                        MORPH_ZONE("SocketServer::queueReply");
-                        auto const target = weak.lock();
-                        if (!target || target->done) {
-                            return;
-                        }
-                        ::morph::exec::detail::noteOwner("SocketServer::reply", target->conn->loop,
-                                                         ::morph::exec::runningOn(target->conn->loop));
-                        static_cast<void>(::morph::net::detail::enqueueFrame(target->conn, std::move(frame)));
-                    }));
+                [loopHandle = loop.weak(), weak, counter = client->conn->pending](const std::string& reply) {
+                    static_cast<void>(sendEnvelope(loopHandle, weak, counter, reply));
                 },
                 client->cid);
         }

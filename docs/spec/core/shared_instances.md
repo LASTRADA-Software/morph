@@ -13,6 +13,7 @@
 - [Wire protocol changes](#wire-protocol-changes)
 - [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule)
 - [Ownership and authorization](#ownership-and-authorization)
+- [Watching a keyed instance](#watching-a-keyed-instance)
 - [Lifetime and the A7 connection-scope change](#lifetime-and-the-a7-connection-scope-change)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -436,6 +437,26 @@ authorizer silently defeat the feature:
 An application that needs per-instance ownership on a shared model must enforce
 it inside the model, from `Context::principal`, which is the same advice
 `security.md` already gives for security-critical checks.
+
+## Watching a keyed instance
+
+A client watches a keyed shared instance it reads, so that a write to it can be
+announced to every connection that shows it. The `watch` topic is
+`(modelType, primary)`, the key the alias binds with, and `RemoteServer` stores
+it by that key without looking it up in the directory: the watch is sent before
+the fetch that may create the instance, so the instance may not exist yet. It
+matches whichever instance holds that directory key, from the moment the
+instance is keyed, by construction or by `assign`. A key no instance comes to
+hold never matches.
+
+Admission requires the model type to be registered, the principal to be
+allowed at least one of the model's actions by `authorize`, and
+`authorizeInstance(session, modelType, {}, 0, "")` to admit it: no instance
+id, because there may be none, and an empty owner, because a shared instance is
+ownerless. Ownership therefore protects nothing here; what protects the topic
+is the authorizer's rule for the model type's actions, as it is for an execute
+on a shared instance. A private instance needs no watch, since the server knows its
+owner. See [backend.md, "Watches"](backend.md#watches).
 
 ## Lifetime and the A7 connection-scope change
 

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <morph/core/model_key.hpp>
+#include <morph/core/records.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/util/rational.hpp>
@@ -209,3 +210,5 @@ struct DefineAnalysisResult {
 };
 
 }  // namespace lims
+
+BRIDGE_REGISTER_RECORD(lims::AnalysisVersionView, "Lims_AnalysisVersion")

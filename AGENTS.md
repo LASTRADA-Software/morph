@@ -137,6 +137,12 @@ So, before claiming something works:
 State results as measured or as inferred, and never round the second up to the
 first.
 
+## Adding or changing an action
+
+An action that changes data declares what it changes (`BRIDGE_REGISTER_EFFECTS`, beside its
+`BRIDGE_REGISTER_ACTION`), and screens never say what to refresh. Work through the checklist in
+[`docs/KEEPING-SCREENS-CURRENT.md`](docs/KEEPING-SCREENS-CURRENT.md) for every new or changed action.
+
 ## Design specs (`docs/spec/`)
 
 One file per public type or subsystem. There is **no size limit** on spec

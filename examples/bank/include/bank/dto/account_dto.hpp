@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <morph/core/records.hpp>
 #include <string>
 #include <vector>
 
@@ -65,3 +66,6 @@ struct CloseAccount {
 };
 
 }  // namespace bank::dto
+
+// Every list is filtered to the signed-in customer's own rows, so a row's key never reaches another customer.
+BRIDGE_REGISTER_RECORD(bank::dto::AccountInfo, "Bank_Account", ::morph::record::privateKeys)

@@ -24,6 +24,7 @@
 
 #include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
+#include "detail/result_walker.hpp"
 #include "model.hpp"
 #include "payload_schema.hpp"
 #include "profiler.hpp"
@@ -1250,6 +1251,44 @@ public:
         }
     }
 
+    /// @brief The model type-ids @p actionId is registered under.
+    ///
+    /// An action id names one action, but the pair registered is
+    /// `(model, action)`, so a server that knows only the action id, as a
+    /// record watch's admission does, asks here which model types to
+    /// authorize it against.
+    ///
+    /// @param actionId Action type-id.
+    /// @return The model type-ids, sorted; empty for an unregistered action.
+    [[nodiscard]] std::vector<std::string> modelsOf(std::string_view actionId) const {
+        std::vector<std::string> models;
+        for (const auto& [key, entry] : _actions) {
+            if (key.second == actionId) {
+                models.push_back(key.first);
+            }
+        }
+        std::ranges::sort(models);
+        return models;
+    }
+
+    /// @brief The action type-ids registered under @p modelId.
+    ///
+    /// What a server authorizes an instance watch against: a principal may
+    /// watch an instance of a model only when it may run one of its actions.
+    ///
+    /// @param modelId Model type-id.
+    /// @return The action type-ids, sorted; empty for a model with none.
+    [[nodiscard]] std::vector<std::string> actionsOf(std::string_view modelId) const {
+        std::vector<std::string> actions;
+        for (const auto& [key, entry] : _actions) {
+            if (key.first == modelId) {
+                actions.push_back(key.second);
+            }
+        }
+        std::ranges::sort(actions);
+        return actions;
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 
@@ -1403,6 +1442,14 @@ public:
         return holder;
     }
 
+    /// @brief Whether a model type is registered under @p modelId.
+    /// @param modelId Model type-id.
+    /// @return True when `create(modelId)` would find a factory.
+    [[nodiscard]] bool contains(std::string_view modelId) const {
+        detail::noteRegistryRead(this == &defaultRegistry());
+        return _factories.contains(std::string{modelId});
+    }
+
     /// @brief Returns the process-level singleton registry.
     static ModelRegistryFactory& instance() { return defaultRegistry(); }
 
@@ -1495,6 +1542,42 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     return true;
 }
 
+/// @brief Static-init helper for every action registration: records where the
+///        action's result holds which reflected aggregates.
+///
+/// Walks `ActionTraits<Action>::Result`, the unwrapped type, so a `Task<R>`
+/// handler contributes `R`. Idempotent per action type: a registration repeated
+/// in another translation unit does not walk again. A different action type
+/// under an id already taken keeps the first type's slots and lists the id in
+/// `actionResultConflicts()`.
+/// @tparam Action The action type; `ActionTraits<Action>` must be visible.
+/// @param actionId The action's registered type-id.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Action>
+inline bool registerActionResultOnce(std::string_view actionId) noexcept {
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerActionResultOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    std::type_index const action{typeid(Action)};
+    auto& entries = mutableActionResultSlots();
+    if (auto const existing = entries.find(actionId); existing != entries.end()) {
+        if (existing->second.action != action) {
+            auto& conflicts = mutableActionResultConflicts();
+            if (std::ranges::find(conflicts, actionId) == conflicts.end()) {
+                conflicts.emplace_back(actionId);
+            }
+        }
+        return true;
+    }
+    entries.emplace(
+        std::string{actionId},
+        ActionResult{.action = action, .resultSlots = walkResult<typename ActionTraits<Action>::Result>()});
+    return true;
+}
+
 /// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`'s generic-execute registration.
 ///
 /// Forward declaration only; the definition is in `bridge.hpp` (after `ActionExecuteRegistry`
@@ -1580,11 +1663,15 @@ void actionSourceRegistrationRequired() {}
 /// build still forces the linker to resolve them, pulling in implementations
 /// (a database driver, a native UI framework, an OS-specific API) the client
 /// target may have no link path for at all, and will never call regardless.
-/// The third registrar (`registerActionExecutorOnce`, `bridge.hpp`) routes
+/// The executor registrar (`registerActionExecutorOnce`, `bridge.hpp`) routes
 /// through `Bridge::executeVia` -> `IBackend::execute` (fully abstract) and
 /// needs only the action's JSON codecs plus `Model::execute`'s *declaration*
 /// (for `ActionTraits::Result`, via `decltype`) — never its definition — so
 /// it is unaffected and always emitted.
+///
+/// The result-slot registrar (`registerActionResultOnce`) references no model
+/// code, but it is suppressed too: it records facts only a process that hosts
+/// models serves, and a pure client takes them from the server's catalog.
 ///
 /// Defined on the `morph` target's INTERFACE via the `MORPH_CLIENT_ONLY`
 /// CMake option, never per translation unit: two TUs disagreeing on whether a
@@ -1612,6 +1699,7 @@ void actionSourceRegistrationRequired() {}
 #ifdef MORPH_CLIENT_ONLY
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 #define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
+#define MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)
 #define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)
 #define MORPH_DETAIL_DEFINE_SOURCE_LOCAL(...)
 #else
@@ -1629,6 +1717,11 @@ void actionSourceRegistrationRequired() {}
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
+    }
+#define MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)                                                            \
+    namespace {                                                                                          \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_result_reg_, __COUNTER__) =              \
+        morph::model::detail::registerActionResultOnce<A>(morph::model::ActionTraits<A>::typeId());      \
     }
 #define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)      \
     extern template void __VA_ARGS__;                       \
@@ -1891,12 +1984,17 @@ void actionSourceRegistrationRequired() {}
     };
 // clang-format on
 
-/// @brief The two registrar blocks `BRIDGE_DETAIL_ACTION_TRAITS_BODY` appends
+/// @brief The registrar blocks `BRIDGE_DETAIL_ACTION_TRAITS_BODY` appends
 ///        after `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY`'s trait
 ///        specialisation, factored out so `BRIDGE_REGISTER_ACTION_SOURCE` can
-///        emit exactly the same two registrars from a `.cpp`, without
+///        emit exactly the same registrars from a `.cpp`, without
 ///        repeating the trait specialisation `BRIDGE_DECLARE_ACTION` already
 ///        placed in the header.
+///
+/// There are three: the dispatcher's runner (`registerActionOnce`), the
+/// result's slots (`registerActionResultOnce`), both suppressed under
+/// `MORPH_CLIENT_ONLY`, and the generic executor
+/// (`registerActionExecutorOnce`), always emitted.
 ///
 /// Reads `morph::model::ActionTraits<A>::typeId()` rather than taking a
 /// `NAME` parameter, so a `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
@@ -1909,6 +2007,7 @@ void actionSourceRegistrationRequired() {}
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)                                                            \
     MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, morph::model::ActionTraits<A>::typeId())                    \
+    MORPH_DETAIL_REGISTER_RESULT_LOCAL(A)                                                                \
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(),   \
@@ -1916,12 +2015,12 @@ void actionSourceRegistrationRequired() {}
     }
 // clang-format on
 
-/// @brief Shared body for `ActionTraits<A>`'s specialisation plus its two
+/// @brief Shared body for `ActionTraits<A>`'s specialisation plus its
 ///        registrars -- everything `BRIDGE_REGISTER_ACTION_4` and
 ///        `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5` expand to alike, parameterised
 ///        only on how `Result` is spelled. Composes
 ///        `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY` (the type) with
-///        `BRIDGE_DETAIL_ACTION_REGISTRARS` (the two registrars) -- the same
+///        `BRIDGE_DETAIL_ACTION_REGISTRARS` (the registrars) -- the same
 ///        two pieces `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
 ///        emit separately, in a header and a `.cpp` respectively.
 ///

@@ -116,7 +116,7 @@ ui::Screen accountsScreen() {
         auto const history =
             screen.query<dto::History>("history", transactions, {{&dto::History::accountId, chosen.selected()}},
                                        {.when = ui::engaged(chosen.selected())});
-        auto const close = screen.mutation<dto::CloseAccount>("close", account, {.invalidates = {accounts}});
+        auto const close = screen.mutation<dto::CloseAccount>("close", account);
         auto const cards = screen.component(
             "AccountCards",
             {.host = "AccountCards",
@@ -150,8 +150,7 @@ ui::Screen accountsScreen() {
              ui::form<dto::OpenAccount>(customer, {.submit = "explicit",
                                                    .fields = {{&dto::OpenAccount::owner, {.omit = true}},
                                                               {&dto::OpenAccount::overdraftMinor,
-                                                               {.label = std::string{"Overdraft (cents)"}}}},
-                                                   .onSuccess = {ui::refetch(accounts)}})
+                                                               {.label = std::string{"Overdraft (cents)"}}}}})
                  .id(ui::element("openForm"))
                  .testId("openForm"),
              ui::select({.options = accountOptions(rows), .label = "History of"}).id(chosen).testId("historyAccount"),
@@ -191,7 +190,6 @@ ui::Screen moveScreen() {
              .fallback =
                  ui::text({.text = ui::format("From {0} to {1}", {ui::prop("from.label"), ui::prop("to.label")})})
                      .testId("transferFlowFallback")});
-        auto const moved = ui::Commands{ui::refetch(accounts)};
         auto const hidden = ui::FieldSettings{.hidden = true};
         return page(
             kMove,
@@ -204,8 +202,7 @@ ui::Screen moveScreen() {
                                      .submit = "explicit",
                                      .fields = {{&dto::Deposit::accountId, hidden},
                                                 {&dto::Deposit::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                                                {&dto::Deposit::description, {.blankAs = std::string{"empty"}}}},
-                                     .onSuccess = moved})
+                                                {&dto::Deposit::description, {.blankAs = std::string{"empty"}}}}})
                  .id(ui::element("depositForm"))
                  .testId("depositForm"),
              ui::form<dto::Withdraw>(
@@ -213,8 +210,7 @@ ui::Screen moveScreen() {
                                 .submit = "explicit",
                                 .fields = {{&dto::Withdraw::accountId, hidden},
                                            {&dto::Withdraw::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                                           {&dto::Withdraw::description, {.blankAs = std::string{"empty"}}}},
-                                .onSuccess = moved})
+                                           {&dto::Withdraw::description, {.blankAs = std::string{"empty"}}}}})
                  .id(ui::element("withdrawForm"))
                  .testId("withdrawForm"),
              ui::select({.options = accountOptions(rows), .label = "Transfer to"}).id(target).testId("target"),
@@ -229,8 +225,7 @@ ui::Screen moveScreen() {
                   .fields = {{&dto::Transfer::fromAccountId, hidden},
                              {&dto::Transfer::toAccountId, hidden},
                              {&dto::Transfer::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                             {&dto::Transfer::description, {.blankAs = std::string{"empty"}}}},
-                  .onSuccess = moved})
+                             {&dto::Transfer::description, {.blankAs = std::string{"empty"}}}}})
                  .id(ui::element("transferForm"))
                  .testId("transferForm"),
              ui::text({.text = accounts.error()}).testId("error")});
@@ -243,9 +238,9 @@ ui::Screen cardsScreen() {
         screen.title("Cards");
         auto const cardModel = screen.model<CardModel>("card", {.instance = ui::Instance::Private});
         auto const cards = screen.query<dto::ListCards>("cards", cardModel);
-        auto const freeze = screen.mutation<dto::FreezeCard>("freeze", cardModel, {.invalidates = {cards}});
-        auto const unfreeze = screen.mutation<dto::UnfreezeCard>("unfreeze", cardModel, {.invalidates = {cards}});
-        auto const cancel = screen.mutation<dto::CancelCard>("cancel", cardModel, {.invalidates = {cards}});
+        auto const freeze = screen.mutation<dto::FreezeCard>("freeze", cardModel);
+        auto const unfreeze = screen.mutation<dto::UnfreezeCard>("unfreeze", cardModel);
+        auto const cancel = screen.mutation<dto::CancelCard>("cancel", cardModel);
         auto const action = [](auto const& mutation, auto member, std::string const& label) {
             return ui::button({.label = label, .onClick = ui::run(mutation, {{member, ui::row("id")}})});
         };
@@ -266,8 +261,7 @@ ui::Screen cardsScreen() {
                  .testId("cards"),
              ui::form<dto::IssueCard>(cardModel, {.submit = "explicit",
                                                   .fields = {{&dto::IssueCard::dailyLimitMinor,
-                                                              {.label = std::string{"Daily limit (cents)"}}}},
-                                                  .onSuccess = {ui::refetch(cards)}})
+                                                              {.label = std::string{"Daily limit (cents)"}}}}})
                  .id(ui::element("issueForm"))
                  .testId("issueForm"),
              ui::text({.text = ui::coalesce({cards.error(), freeze.error(), unfreeze.error(), cancel.error()})})
@@ -281,7 +275,7 @@ ui::Screen payeesScreen() {
         screen.title("Payees");
         auto const payeeModel = screen.model<PayeeModel>("payee", {.instance = ui::Instance::Private});
         auto const payees = screen.query<dto::ListPayees>("payees", payeeModel);
-        auto const remove = screen.mutation<dto::RemovePayee>("remove", payeeModel, {.invalidates = {payees}});
+        auto const remove = screen.mutation<dto::RemovePayee>("remove", payeeModel);
         return page(
             kPayees,
             {ui::table(payees.value().at(&dto::PayeeList::payees),
@@ -296,9 +290,7 @@ ui::Screen payeesScreen() {
                                           .onClick = ui::run(remove, {{&dto::RemovePayee::id, ui::row("id")}})})}}})
                  .a11y("Payees")
                  .testId("payees"),
-             ui::form<dto::AddPayee>(payeeModel, {.submit = "explicit", .onSuccess = {ui::refetch(payees)}})
-                 .id(ui::element("addForm"))
-                 .testId("addForm"),
+             ui::form<dto::AddPayee>(payeeModel, {.submit = "explicit"}).id(ui::element("addForm")).testId("addForm"),
              ui::text({.text = ui::coalesce({payees.error(), remove.error()})}).testId("error")});
     });
 }
@@ -349,14 +341,12 @@ ui::Screen loansScreen() {
                  .testId("loans"),
              ui::form<dto::ApplyLoan>(loanModel, {.submit = "explicit",
                                                   .fields = {{&dto::ApplyLoan::principalMinor,
-                                                              {.label = std::string{"Principal (cents)"}}}},
-                                                  .onSuccess = {ui::refetch(loans)}})
+                                                              {.label = std::string{"Principal (cents)"}}}}})
                  .id(ui::element("applyForm"))
                  .testId("applyForm"),
              ui::form<dto::RepayLoan>(
                  loanModel, {.submit = "explicit",
-                             .fields = {{&dto::RepayLoan::amountMinor, {.label = std::string{"Amount (cents)"}}}},
-                             .onSuccess = {ui::refetch(loans)}})
+                             .fields = {{&dto::RepayLoan::amountMinor, {.label = std::string{"Amount (cents)"}}}}})
                  .id(ui::element("repayForm"))
                  .testId("repayForm"),
              ui::select({.options = options, .label = "Schedule of"}).id(chosen).testId("scheduleLoan"),

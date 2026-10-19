@@ -34,6 +34,17 @@ application. Be explicit about the boundary:
   `wire::kMaxEnvelopeBytes` (8 MiB) before parsing, bounding a single message's
   allocation and parse cost (see [wire.md](core/wire.md)). This is a coarse
   per-message backstop only — not a rate limit, timeout, or inner-`body` bound.
+- A bound on what a slow reader costs in server-sent events. `RemoteServer::post`
+  holds events back from a connection whose transport reports more than
+  `kEventBacklogHigh` (1 MiB) written to it and not yet sent, and owes it a
+  single `resync` event instead, sent when the transport reports the backlog
+  below `kEventBacklogLow` (256 KiB). However many events a peer fails to read,
+  the server queues none of them for it; what the transport already holds is
+  the transport's to bound. Replies are never held back, and a peer that stops
+  reading altogether is closed by its transport's send timeout. An event larger
+  than `wire::kMaxEnvelopeBytes` is dropped unsent. The writer and the backlog
+  read are transport code inside the trust boundary, like `closeConnection` (see
+  [backend.md](core/backend.md), "Writing to a connection").
 - A negotiated protocol-version handshake (`wire::kind == "hello"`), opt-in and
   exchanged before any `execute`, so an incompatible peer is refused with a
   clear diagnostic instead of failing per-request later (see
@@ -293,8 +304,9 @@ auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz);
   policy admits. An invalid/absent/expired token → `false` → the server replies
   `err "unauthorized"`.
 - `authenticate(ctx)` returns the verified `principal`. `RemoteServer`
-  (`dispatchExecute`) calls it after `authorize` succeeds and **overwrites**
-  `env.session.principal` with the verified value before building the
+  (`dispatchExecute`) calls it once, on entry, before any admission check, and
+  once `authorize` has succeeded **overwrites** `env.session.principal` with
+  the verified value before building the
   `ScopedContext`. So a model reading `session::current()->principal` sees the
   authenticated identity, not the client's claim.
 
@@ -304,13 +316,13 @@ returns `nullopt` — the authorizer cannot vouch for the caller —
 dispatch rather than leaving the client-supplied claim in place. Two cases
 depend on this:
 
-- **TOCTOU (time-of-check/time-of-use).** `authorize` and `authenticate` each
-  verify the token independently against a fresh clock reading. A token can pass
-  `authorize` and then expire in the window before `authenticate` runs, so
-  `authenticate` returns `nullopt`. Without the clear, the request would have
-  been dispatched carrying the *client's* asserted principal as if it were
-  authoritative. With the clear, the worst case is an empty principal — never
-  the attacker's chosen value.
+- **TOCTOU (time-of-check/time-of-use).** `authenticate` and `authorize` each
+  verify the token independently against a fresh clock reading. A token
+  `authenticate` refuses can still pass a lenient `authorize`, so
+  `authenticate` returns `nullopt` for a call that is admitted. Without the
+  clear, the request would be dispatched carrying the *client's* asserted
+  principal as if it were authoritative. With the clear, the worst case is an
+  empty principal — never the attacker's chosen value.
 - **Authorize-only / allow-all authorizers.** An authorizer that admits calls
   but never authenticates (a custom authorize-only policy, or the default
   `AllowAllAuthorizer` whose `authenticate` inherits the `nullopt` default) now
@@ -358,6 +370,91 @@ input:
 Both signature and payload segments are decoded through this path, so a mutated
 trailing character in either segment fails verification (`Malformed`, or
 `BadSignature` if it survives decoding but changes the MAC).
+
+### A connection's principal baseline
+
+A connection has no principal of its own: the server verifies one on every
+envelope. A watch, though, outlives the envelope that created it, and keeps
+delivering events on the connection. So the server holds, per open connection,
+a **baseline**: the verified principal of the first envelope stamped on it
+after `openConnection`.
+
+`stampVerifiedPrincipal(env, cid)` is where every kind that authorises stamps
+its principal — `register`, `attach`, `assign`, `instances`, `schemas`,
+`deregister`, `cancel`, `watch`, `unwatch`, and every service kind. After
+stamping, it compares the stamped principal with `cid`'s baseline. An
+`execute` makes the same comparison on entry to `dispatchExecute`, before the
+in-flight cap or `authorize` can refuse it, so a client that keeps sending
+executes after a sign-out loses its watches even though every one is refused.
+It reuses that one `authenticate` result for its stamp.
+
+- **The first stamp sets the baseline**, whatever it is — an empty principal
+  included, from a token `authenticate` refuses or an authorizer that never
+  authenticates.
+- **A different principal drops every watch the connection holds**, and becomes
+  the baseline. An envelope whose token fails `authenticate` is stamped with no
+  principal, so after an authenticated baseline it counts as different. This
+  covers signing in as someone else on the same connection, and a client that
+  keeps its watches across a sign-out: neither goes on receiving events admitted
+  for the previous principal. A connection that held any watch is sent one
+  `resync` event; the client answers every `resync` by marking its watched
+  entries stale and sending its whole watch set again with `replace: true`,
+  which is admitted afresh for the new principal, and a refused topic comes
+  back in the `WatchReply`.
+- **A new token for the same principal keeps the watches.** The comparison is
+  on the verified principal, not on the token, so a refreshed token does not
+  drop and re-admit the connection's whole watch set.
+- **`hello` is not stamped**, so it neither sets nor changes the baseline.
+- **`cid == 0` has no baseline**, and neither does a connection not open;
+  `closeConnection` forgets the baseline with the rest of the connection's
+  state.
+
+The baseline lives on the server strand beside the connection's other state,
+and is read and written only there.
+
+### Fan-out re-authorises each watch
+
+A watch is admitted once, but delivers for as long as it lasts, and a token
+expires or a policy changes in the meantime. So `RemoteServer::fanOut`
+re-authorises every recipient watch at send time, by the rule that admitted it,
+on the session stored with it:
+
+- **Its token must still authenticate** as the principal the watch was admitted
+  for. An expired token verifies as no principal, so the check fails, and every
+  watch the connection holds under that session is dropped. A watch admitted
+  with no verified principal, under an authorizer that never authenticates, was
+  not admitted on authentication and passes.
+- **Then the admission rule runs again.** For a record type: the principal may
+  run some action whose result holds it. For an instance topic: the model type
+  is registered, the principal may run one of its actions, and
+  `authorizeInstance(ctx, modelType, {}, 0, "")` admits it. A failure drops
+  that watch. The action that wrote the change is not checked: a role that may
+  list results but not capture them still receives the change.
+
+A dropped watch's topic leaves the event, and an event with no topic left is
+not sent. The connection is then sent one `resync`, however many watches the
+fan-out dropped, and the client answers it by sending its whole watch set again
+with `replace: true`, under its current token; a topic still refused comes back
+in the `WatchReply`. The "may run some action" answers come from the watch
+table's cache per verified principal and token, so for an authenticated
+principal a policy change reaches an existing watch when its stored token stops
+verifying or the topic is watched again; `authenticate` and
+`authorizeInstance` are asked each time. A private
+instance's topic has no watch: it goes only to the connections whose scope
+holds the instance.
+
+### What an event reveals
+
+An event carries no values, only which topics changed and, for a record, the
+keys of the rows that did. Those keys are ids of rows the recipient could list
+through some action returning that record, but not necessarily the same rows:
+a model may filter rows per principal. A record registered with
+`morph::record::privateKeys` therefore reaches every recipient other than the
+caller's own principal as a whole-type change, without keys, and every entry
+holding it refetches through the read path, where row filtering and
+`secretFields` are enforced. The keys are kept for the calling connection and
+for watches whose verified principal is the caller's; two connections with no
+verified principal do not count as the same principal.
 
 ### Role-based policy
 
@@ -599,8 +696,13 @@ because it needs no Qt gets none of it.
   bounds connection count (`maxConnections`), per-frame size (`maxMessageBytes`,
   defaulting to the wire-layer `kMaxEnvelopeBytes` cap), per-connection message rate
   (`messagesPerSecond`, token bucket), and handshake/idle time
-  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled, so an
-  unconfigured server behaves exactly as before. See
+  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled.
+- **A peer that stops reading is closed.** `QtWebSocketServerConfig::sendTimeout`
+  (default 30 s, as `morph::net`'s) aborts a connection whose oldest frame
+  handed to the socket is still unwritten after it, so a stalled reader cannot
+  hold replies and events on the server indefinitely. Each connection's
+  backlog — encoded envelopes handed to the socket and not yet written — is
+  what `RemoteServer::post` reads to hold events back from a slow reader. See
   [backend.md](core/backend.md#qtwebsocketserver--server-side-websocket-transport).
 
 ### The Qt-free reference transport (`morph::net`)
@@ -716,9 +818,9 @@ responsibility:
   `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
   (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
   `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out
-  **on the Qt transport**. Both default to unbounded/off, so **installing
-  neither changes anything** — a deployer exposing `RemoteServer` publicly
-  should configure both. On `morph::net` only the `LimitPolicy` half exists:
+  **on the Qt transport**. Both default to unbounded/off — save the Qt
+  transport's `sendTimeout` (30 s), which closes a peer that stops reading — so
+  a deployer exposing `RemoteServer` publicly should configure both. On `morph::net` only the `LimitPolicy` half exists:
   `SocketServerConfig` has no connection, size, rate or timeout limits at all
   (above). See
   [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
@@ -810,7 +912,8 @@ contrast the "Transport security" section above describes.
 strand result and `TimeoutError` surfacing through `SimulatedRemoteBackend`);
 `tests/qt/test_qt_websocket.cpp` covers `QtWebSocketServerConfig`
 (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
-`handshakeTimeout`/`idleTimeout`) and their composition with `LimitPolicy`.
+`handshakeTimeout`/`idleTimeout`, `sendTimeout`) and their composition with
+`LimitPolicy`.
 
 `examples/vetted_hmac/test_libsodium_adapter.cpp` and
 `test_openssl_adapter.cpp` (built only with `MORPH_BUILD_HMAC_EXAMPLES=ON` and

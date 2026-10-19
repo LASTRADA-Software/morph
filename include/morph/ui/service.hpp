@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/logger.hpp"
 #include "../core/remote.hpp"
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
@@ -197,11 +198,6 @@ private:
             if (top) {
                 _top.push_back(ref);
             }
-            // The actions a query refreshes on are its model type's, named by the document like any other: the
-            // client's load-time validation needs their facts.
-            for (std::string const& action : query.refreshOn) {
-                _all.insert(ActionRef{.modelType = ref.modelType, .action = action});
-            }
             _all.insert(std::move(ref));
         }
         for (MutationDecl const& mutation : scope.mutations) {
@@ -324,6 +320,7 @@ public:
         if (!loaded->view) {
             return refuse(entry.id, "the app document is added with addFile");
         }
+        logWarnings(*loaded);
         detail::DocumentActions const named{*loaded};
         Screen screen{.served = ServedScreen{.entry = std::move(entry),
                                              .hash = contentHash(text),
@@ -503,10 +500,19 @@ private:
         if (loaded->id != kAppFile) {
             return refuse(file.id, "the app document's id is `app`");
         }
+        logWarnings(*loaded);
         detail::DocumentActions const named{*loaded};
         _appActions = named.actions();
         _appModelTypes = named.modelTypes();
         return {};
+    }
+
+    /// @brief Logs what load-time validation found in @p document that does not refuse it.
+    /// @param document The loaded document.
+    static void logWarnings(Document const& document) {
+        for (LoadWarning const& warning : document.warnings) {
+            morph::log::logWarn(warning.message(document.id));
+        }
     }
 
     /// @brief A refusal of the registration of @p document.
@@ -711,14 +717,30 @@ public:
                (kind == kFileKind && _files != nullptr);
     }
 
-    /// @brief Answers one request.
+    /// @brief Answers one request with no connection behind it: a `ui-hello` offer of events is accepted in the
+    ///        reply, and recorded nowhere.
     /// @param request    The envelope, its principal verified.
     /// @param authorizer The server's authoriser.
     /// @return The encoded reply.
     [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
                                      ::morph::session::IAuthorizer const& authorizer) override {
+        ::morph::backend::ConnectionFacts facts;
+        return handle(request, authorizer, facts);
+    }
+
+    /// @brief Answers one request; a `ui-hello` that offers events and is answered `ok` sets `facts.events`.
+    ///
+    /// A hello that does not offer them leaves the facts as they are, so a later hello on the same connection, such
+    /// as a development reload's poll, does not withdraw what the first negotiated.
+    /// @param request    The envelope, its principal verified.
+    /// @param authorizer The server's authoriser.
+    /// @param facts      The facts of the connection the request arrived on.
+    /// @return The encoded reply.
+    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& authorizer,
+                                     ::morph::backend::ConnectionFacts& facts) override {
         if (request.kind == kHelloKind) {
-            return hello(request, authorizer);
+            return hello(request, authorizer, facts);
         }
         if (request.kind == kCatalogKind) {
             return catalog(request, authorizer);
@@ -753,7 +775,8 @@ private:
     }
 
     [[nodiscard]] std::string hello(::morph::wire::Envelope const& request,
-                                    ::morph::session::IAuthorizer const& authorizer) const {
+                                    ::morph::session::IAuthorizer const& authorizer,
+                                    ::morph::backend::ConnectionFacts& facts) const {
         if (!gate(authorizer, request, kHelloAction)) {
             return err(request, "unauthorized");
         }
@@ -770,10 +793,14 @@ private:
         if (!missing.empty()) {
             return err(request, "missing vocabulary: " + missing);
         }
+        if (client->events) {
+            facts.events = true;
+        }
         return ok(request, detail::writeMessage(HelloReply{.application = _bundle->application.id,
                                                            .version = _bundle->application.version,
                                                            .vocabularies = _bundle->vocabularies,
-                                                           .digest = _bundle->digest}));
+                                                           .digest = _bundle->digest,
+                                                           .events = client->events}));
     }
 
     /// @brief Evaluates the action body @p request carries (spec 5 §7): decoded, reconciled and recomputed, never

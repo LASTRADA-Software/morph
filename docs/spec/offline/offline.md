@@ -930,7 +930,13 @@ more.
    only to handlers on the same `Bridge` (one client process), so a result
    another client produced does not reach this client's subscribers — it is
    observed on this client's next read. See the README's "Instance
-   subscriptions are best-effort and in-process".
+   subscriptions are best-effort and in-process". A `ui::Session` with a
+   `watcher` is the exception at the UI layer: the server tells it which
+   records changed, and it re-reads them itself (`docs/spec/ui/interpreter.md`,
+   the query cache). A replayed write's effects reach that cache the same way,
+   as an event, because the server does not leave the caller out of its
+   fan-out. Events missed while disconnected are not replayed: on reconnect the
+   session re-sends its watch set and marks every entry stale, which covers them.
 
 None of these is a defect to fix; they are the shape of a queue that stores
 opaque payloads and replays them through an ordinary action path. A host needing

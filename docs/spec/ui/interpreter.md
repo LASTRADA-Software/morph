@@ -34,7 +34,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `BridgeDispatcher` | The application's `Dispatcher`: `bind` makes a `bridge::RawHandler` (`bindByType`, and `attach` for a key), `execute` is `executeRaw`. An `evaluate` query goes through the `Evaluator` it was built with (`ui::evaluatorOver`, the UI service's `ui-evaluate`); without one it is refused with a `std::runtime_error`. It has no offline queue of its own: `queueOffline` is ignored unless a `QueueingDispatcher` wraps it. A shared binding without a key is left unattached, which the bridge refuses at the first call. |
 | `QueueingDispatcher` | The client's offline queue (`include/morph/ui/queueing_dispatcher.hpp`), around any `Dispatcher`. A call made with `queueOffline` that fails with `backend::DisconnectedError` is held, and the caller's completion stays pending, so the mutation stays `pending` and its elements `stale`. While anything is held, a later queued call joins the queue unsent, so the server sees calls in the order they were made. `replay()` re-sends the held calls oldest first, one at a time, and settles each caller with its replay: a refusal runs the mutation's `onError`, and a call still unreachable stops the replay and stays held with every call behind it. A call without `queueOffline`, and an evaluation, are never held. `held()` and `setOnHeld` report the count. When to replay is the host's: it calls `replay()` once its transport reconnects. |
 | `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
-| `Session` | What screens of one client session share: the query cache, `refreshOn` bookkeeping, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
+| `Session` | What screens of one client session share: the query cache, the mounted queries, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
 | `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, a mutation run, or an upload or download in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
 
@@ -42,7 +42,9 @@ Read this before changing what a mounted document does. What a document may say 
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
-`backendChanged`; everything else is `error`).
+`backendChanged`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
+(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source).
+
 
 ## The app root scope
 
@@ -106,7 +108,7 @@ unbound or the body is `null`; otherwise `(model type, instance token, action, c
 canonical body is the body's JSON with record fields in name order.
 
 - **Cache entries** (`Session`) hold the shown value, `hasValue`, the error text and kind, `pending`, a
-  generation, `fetchedAt` and `stale`. A fetch takes a new generation; a reply of an older one is
+  generation, `fetchedAt`, `stale` and `refetchAfter`. A fetch takes a new generation; a reply of an older one is
   dropped. One entry serves every query with its key, so two screens on one key send one request.
 - **Latest wins.** A key change moves the query to another entry. The previous key's value is shown
   until the new entry has a value; a failure for the new key clears it. A failed refetch of the same key
@@ -117,12 +119,56 @@ canonical body is the body's JSON with record fields in name order.
   first key and a change to idle move at once.
 - **`refreshEvery`** refetches on the scheduler's period and skips a tick while a request is in flight
   or a debounce waits.
-- **`refreshOn`** is the session's bookkeeping: a mutation that succeeds, or a submit of a form, a
-  collection or a wizard that succeeds, refetches every mounted query of the same model type whose
-  `refreshOn` names its action, in every screen of the session. A collection's own list query and a
-  form's choice options are reads, not submits, and refetch nothing.
-- **Invalidation** (`invalidates`, `refreshOn`, `refetch`, a backend switch) marks the entry stale and
+- **Every reply applies its action's effects** (spec 8 §9). `Session::actionSucceeded`, which every
+  success goes through (mutations, and the submits of forms, collections and wizards; a collection's own list
+  query and a form's choice options are reads, not submits), takes the reply
+  and the instance token of the alias the call went through. Each entry knows the records its action
+  returns, with each record's key field and paths, from the catalog's `ActionInfo::records`; an
+  `evaluate` entry holds none.
+    - `updates R` merges the reply's rows of `R` into every entry holding `R`. Rows are matched by
+      the record's key field, at each path the catalog gives (`header.rows` follows members; a list
+      on the way is looked through). There is no fetch. An entry whose fetch is in flight is also
+      marked, because that fetch may have read before the write and would settle over the patch.
+    - `changes R` marks every entry holding `R` stale, and `changesInstance` every entry read through
+      the same instance token. A marked entry refetches through a mounted query that uses it.
+    - A `latest` run whose reply is discarded applies its effects as marks only: its `updates` act as
+      `changes`, because its values are older than the reply already applied.
+    - One reply's effects are applied in one reactive batch.
+- **Server events** reach the cache through `Session::deliverEvent`, which the source wires to its
+  backend's `setEventHandler`. Each event is applied in one reactive batch, and other clients' changes
+  only mark, so each receiver refetches through its own authorised read.
+    - A `changes` event's record change with keys marks each entry holding the record whose value has
+      a row with one of the keys (by the key field, at the record's paths). An entry still waiting
+      for its first value is marked too, because it may come to hold the key. A record change without
+      keys, or on a keyless record, marks every entry holding the record.
+    - An instance change marks every entry read through that instance: for a primary key, the keyed
+      shared alias with that key (`shared:<key>`); without one, the connection's private instances of
+      that model type.
+    - A `resync` marks every entry but an `evaluate` one. Another topic, or a payload that cannot be
+      read, is ignored.
+    - A marked entry that no query uses is only marked, and fetches when a query mounts on it.
+- **Watching what the cache holds** (spec 8 §7). The session counts, per topic, the entries that hold
+  it: a record name for every record an entry's action returns, and `(model type, primary key)` for an
+  entry read through a keyed shared alias whose action returns no record. A private instance needs no
+  watch, because the server knows its owner. A count that leaves zero queues a `watch`, and one that
+  returns to zero (the entry evicted, or the cache cleared) queues an `unwatch`.
+    - **Watch before fetch.** `fetch` sends the queued changes first, on the same connection, so the
+      server holds the watch before the read. A change committed before the read is in its value, and
+      one committed after arrives as an event, which a mark during the fetch keeps.
+    - The changes queued before one fetch go out as at most one `watch` and one `unwatch`. A screen
+      whose queries hold different records sends one small `watch` per fetch.
+    - Without a `watcher` the session still counts, so `Session::watchSet()` answers, and sends nothing.
+    - **`Session::reconnected()`**, and every `resync`, sends the whole set with `replace: true`, which
+      supersedes anything queued, then marks every entry but an `evaluate` one stale. A mounted entry
+      refetches, and an entry whose fetch is in flight fetches once more when it settles: that fetch
+      may have been filed before the connection came back.
+- **Invalidation** (`refetch`, a backend switch) marks the entry stale and
   refetches it.
+- **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is
+  in flight, it also sets `refetchAfter`. That fetch may have read before the change, so when it settles
+  the entry keeps its new value, stays stale, and fetches once more through a mounted query that uses it.
+  A success never clears a mark that arrived during the fetch. An entry no query uses when its fetch
+  settles stays stale, and fetches when a query mounts on it.
 - **Eviction.** An entry no mounted query uses is dropped `keepUnused` after its last user left. Without
   a scheduler, entries are kept.
 - **Secrets.** An action's `secretFields` are removed from what its entry keeps.
@@ -139,20 +185,18 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   value with every waiting layer over it, in run order. A success folds the run's layer into the
   confirmed value; a failure removes it before `onError` runs. Overlapping runs therefore end at the last
   confirmed value whatever order they settle in.
-- **A success** (applied) sets `result`, clears the error, applies `patch` to the confirmed value,
-  refetches `invalidates`, tells the session for `refreshOn`, runs `onSuccess` — all in one batch — and
-  then removes the action's secret fields from `result`.
+- **A success** (applied) sets `result`, clears the error, applies the action's effects through the
+  session, runs `onSuccess` — all in one batch — and then removes the action's secret fields from `result`.
 - **A failure** (applied) sets the error and its kind and runs `onError`; a `denied` kind calls
   `permissionsStale`.
-- **`patch` and `optimistic`** replace the row of the query's list whose `id` field equals `key`; a
+- **`optimistic`** replaces the row of the query's list whose `id` field equals `key`; a
   record `with` is merged over a record row (its fields replace the row's), anything else replaces it.
   The list is the query's value itself, or, with `at`, the member of that record value `at` names; the
   rest of the record is kept. A key no row has changes nothing and is not a fault: the row is not
-  loaded. A patch whose query has a value but finds no list there — the value is not a list and there
+  loaded. A write whose query has a value but finds no list there — the value is not a list and there
   is no `at`, or the value has no list at `at` — changes nothing and is reported once through
-  `diagnostics()` at the mutation's `/patch` or `/optimistic` path, since it can never apply. An
-  `optimistic` write is checked when the run starts, a `patch` when its reply arrives; before the query
-  has a value there is nothing to miss.
+  `diagnostics()` at the mutation's `/optimistic` path, since it can never apply. It is checked when the
+  run starts; before the query has a value there is nothing to miss.
 
 ## Relations
 
@@ -307,8 +351,8 @@ stops when its scope is gone.
 
 | Decision | Why |
 |---|---|
-| Queries and mutations built on `Signal`, `Computed`, `Effect` and `Scheduler`, not on `reactive::Query` and `Mutation` | `patch` and `optimistic` write into a query's value and two screens share one value; `reactive::Query` keeps its value privately. The rules are the same. |
-| The cache entry is the single source of a query's value | One request in flight, one value and one error per key, across screens, is what spec 5 §5 asks for, and `patch` then reaches every screen showing the row. |
+| Queries and mutations built on `Signal`, `Computed`, `Effect` and `Scheduler`, not on `reactive::Query` and `Mutation` | `optimistic` and an `updates` reply write into a query's value and two screens share one value; `reactive::Query` keeps its value privately. The rules are the same. |
+| The cache entry is the single source of a query's value | One request in flight, one value and one error per key, across screens, is what spec 5 §5 asks for, and an `updates` reply then reaches every screen showing the row. |
 | Optimistic writes as layers | Rolling back by restoring a saved value is wrong when runs overlap; recomputing from the confirmed value and the remaining layers is right in every order. |
 | `source: "user"` from the newest write | A watch cannot see who wrote a value; the session can see whether the write that preceded the flush came from a user event. |
 | Scoped content behind a one-row `forEach` | The view tree builds a dialog's content once, as a fixed node; a row view is the one place it builds content each time it mounts. |

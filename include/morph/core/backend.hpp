@@ -11,6 +11,7 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -31,6 +32,7 @@
 #include "profiler.hpp"
 #include "registry.hpp"
 #include "strand.hpp"
+#include "wire.hpp"
 
 namespace morph::backend {
 
@@ -504,6 +506,28 @@ struct IBackend {
         (void)exec;
     }
 
+    /// @brief Installs a callback invoked for each server-initiated event the
+    ///        backend receives.
+    ///
+    /// A transport backend decodes an `event` envelope, routes it here before
+    /// reply matching, and posts the handler to @p exec, so the handler is an
+    /// ordinary task on the installer's owner. Events on one connection are
+    /// delivered in the order they arrived.
+    ///
+    /// Default implementation: store-and-ignore. A backend with no server
+    /// channel never invokes it.
+    /// @param handler Callable posted to @p exec once per event. Pass
+    ///                `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): the base discards it; overrides take it by value and move it in.
+    virtual void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                                 ::morph::exec::IExecutor* exec) {
+        (void)handler;
+        (void)exec;
+    }
+
     /// @brief Installs a callback invoked on every successful connect, including the first.
     ///
     /// `setReconnectHandler` deliberately skips the first connect (there is
@@ -874,6 +898,16 @@ public:
     }
 
     /// @brief Queues the installation on the wrapped backend.
+    /// @param handler Callable posted to @p exec once per event; `nullptr` clears.
+    /// @param exec    Executor the handler is posted to.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override {
+        post([handler = std::move(handler), exec](detail::IBackend& inner) mutable {
+            inner.setEventHandler(std::move(handler), exec);
+        });
+    }
+
+    /// @brief Queues the installation on the wrapped backend.
     /// @param handler Callable invoked after every successful connect; `nullptr` clears.
     void setConnectHandler(const std::function<void()>& handler) override {
         post([handler](detail::IBackend& inner) { inner.setConnectHandler(handler); });
@@ -1085,6 +1119,39 @@ public:
                 }
             }
         });
+    }
+
+    /// @brief Installs the event handler `deliverEvent` posts to.
+    /// @param handler Callable posted to @p exec once per delivered event; `nullptr` clears.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must outlive the installation.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override {
+        std::scoped_lock const lock{_eventMutex};
+        _eventHandler =
+            handler ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(handler)) : nullptr;
+        _eventExec = exec;
+    }
+
+    /// @brief Test seam: delivers @p event as if a server had sent it.
+    ///
+    /// A local backend has no server and produces no events itself; this lets
+    /// a test drive the client's event path without one. Thread-safe. The
+    /// handler is posted to the executor given to `setEventHandler`; with no
+    /// handler installed the event is dropped.
+    /// @param event The event to deliver.
+    void deliverEvent(::morph::wire::EventBody event) {
+        std::shared_ptr<std::function<void(::morph::wire::EventBody)>> handler;
+        ::morph::exec::IExecutor* exec = nullptr;
+        {
+            std::scoped_lock const lock{_eventMutex};
+            handler = _eventHandler;
+            exec = _eventExec;
+        }
+        if (!handler || exec == nullptr) {
+            return;
+        }
+        exec->post(
+            [handler = std::move(handler), event = std::move(event)]() mutable { (*handler)(std::move(event)); });
     }
 
     LocalBackend(const LocalBackend&) = delete;
@@ -1749,6 +1816,10 @@ private:
     // The Task runs `cancelPending` and the destructor stop. Weak, so a
     // finished run is not kept. Owner-only.
     std::vector<std::weak_ptr<LocalRun>> _taskRuns;
+    // The event handler and its executor. `deliverEvent` may be called from any thread, so both sit behind a mutex.
+    std::mutex _eventMutex;
+    std::shared_ptr<std::function<void(::morph::wire::EventBody)>> _eventHandler;
+    ::morph::exec::IExecutor* _eventExec = nullptr;
     std::size_t _taskRunsCompactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A
     // shared_ptr (not a plain atomic member) so strand tasks hold their own

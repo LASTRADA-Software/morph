@@ -105,11 +105,7 @@
          },
          "debounce": 250,
          "refreshEvery": 30000,
-         "staleTime": 5000,
-         "refreshOn": [
-            "Lims_CaptureConcentration",
-            "Lims_LoadSample"
-         ]
+         "staleTime": 5000
       },
       "header": {
          "model": "working",
@@ -141,18 +137,6 @@
          "concurrency": "serial",
          "serialKey": {
             "ref": "picked"
-         },
-         "invalidates": [
-            "header"
-         ],
-         "patch": {
-            "query": "results",
-            "key": {
-               "ref": "result.id"
-            },
-            "with": {
-               "ref": "result"
-            }
          },
          "optimistic": {
             "query": "results",

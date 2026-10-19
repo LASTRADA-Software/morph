@@ -36,7 +36,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 
 | Kind | Request `body` | `ok` reply `body` |
 |---|---|---|
-| `ui-hello` | `HelloRequest`: `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `HelloReply`: `{application, version, vocabularies, digest}` |
+| `ui-hello` | `HelloRequest`: `{vocabularies, qt, components, hostComponents, hostCommands, hostValues, events?}` | `HelloReply`: `{application, version, vocabularies, digest, events?}` |
 | `ui-catalog` | empty | `CatalogReply`: `{entries, permitted, models?, actions?, views?, wizards?}` |
 | `ui-fetch` | `FetchRequest`: `{hash}` | the file's exact bytes |
 | `ui-evaluate` | the action's JSON body; `modelType` and `actionType` name it | `EvaluateReply`: `{body, errors, ready}` |
@@ -46,6 +46,24 @@ Every request carries the envelope's `session`; the server stamps the verified p
 service sees it. `ui-hello` refuses a client that does not speak every vocabulary the bundle needs with
 `err "missing vocabulary: <v>[, <v>…]"`; the bundle always needs `expr/1` and `ui/1`, and whatever the
 registry adds (`requireVocabulary`). `hello` and `kProtocolVersion` are unchanged.
+
+**Negotiating events.** `ui-hello` is where a connection negotiates server-sent `event` envelopes, since the generic
+client already opens with it, on the same connection as its executes. `HelloRequest::events: true` offers them;
+the service accepts every offer on a hello it answers `ok`, says so with `HelloReply::events: true`, and records it
+by setting `ConnectionFacts::events` on the connection the hello arrived on
+([core/backend.md, "Envelope services"](../core/backend.md#envelope-services)). Core reads that flag; it never parses
+a `ui-*` body. Both keys are additive and default to `false`, so a client that never offers sees the protocol it
+saw before, and an old client reading a new reply ignores the key.
+
+- A hello that does not offer events leaves the connection's flag as it is, so a later hello on the same connection,
+  such as a development reload's poll, does not withdraw what the first negotiated. The flag goes with the
+  connection; a reconnect is a new connection and negotiates again.
+- A refused hello (`unauthorized`, `missing vocabulary`, a body it cannot read) negotiates nothing.
+- A hello handled with no connection behind it is still answered `events: true` when it offers them, and the
+  acceptance is recorded nowhere: there is no connection to send events on.
+- `UiService` therefore overrides both `handle` overloads; the two-parameter one answers with throwaway facts.
+- The generic client (`examples/common/app`'s `clientHello()`) offers events on every `ui-hello` it sends. `UiClient`
+  sends the `HelloRequest` it was given, unchanged.
 
 ## Content addressing
 
@@ -109,7 +127,8 @@ For each registered entry, in registration order:
 - `models` and `actions` carry the `ui::Catalog` facts (`ModelInfo`, `ActionInfo`) the registry's catalog gave,
   for the documents the principal may fetch: the app document, and every listed screen that is available or
   public. They are absent when the registry had no lookup, which leaves the client's lookup empty and skips its
-  rules, as on the server. `CatalogReply::facts()` turns them into the lookups `loadDocument` takes.
+  rules, as on the server. `ActionInfo` carries each action's `effects` and `records` as optional keys: a reply
+  without `effects` reads as no declared effects (a read), one without `records` as none. `CatalogReply::facts()` turns them into the lookups `loadDocument` takes.
 - `views` and `wizards` carry the forms documents a `collection` or `wizard` node builds from, keyed by
   the action the node names, for the same documents. The registry takes them from its catalog's `view`
   and `wizard` lookups, for every action a document names. The author builders put them there
@@ -248,6 +267,13 @@ the action's body with its computed fields filled and its field errors, without 
   `BridgeDispatcher` takes it as its `Evaluator`. The query's value is `evaluationValue` of the reply: the body's
   members, with the field errors under `errors` and the verdict under `ready`, so `errors.<field>` attaches each
   error to its element. An action field named `errors` or `ready` is shadowed by them.
+
+`watcherOver(exchange, currentSession, cbExec)` is the client's route for the cache's `watch` and
+`unwatch` (spec 8 §7), which `RemoteServer` handles itself rather than `UiService`. Each request goes
+through the exchange with the session `currentSession` returns when it is sent: the exchange does not
+stamp one, and the server refuses an unsigned `watch`. An `ok` resolves with its body (the topics the
+server refused); a transport failure or an `err` rejects with its reason. A remote source builds it
+beside its evaluator and hands it to the shell as `SessionOptions::watcher`.
 
 ## Files
 

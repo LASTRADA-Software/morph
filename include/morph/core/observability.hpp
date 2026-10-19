@@ -33,6 +33,9 @@ enum class Metric : std::uint8_t {
     /// @brief Counter: an `IOfflineQueue::enqueue()` call rejected because the
     ///        queue was at its configured `maxDepth()`.
     queueOverflow,
+    /// @brief Counter: an envelope handed to `RemoteServer::post` dropped
+    ///        because it exceeds `wire::kMaxEnvelopeBytes`.
+    eventOversize,
 };
 
 /// @brief One metric observation delivered to the installed `MetricSink`.

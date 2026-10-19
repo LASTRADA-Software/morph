@@ -815,7 +815,7 @@ A screen can open another and receive an answer:
   document polls it with `refreshEvery` and `when: state is running`, and shows `progress` and
   `steps`. A `watch` on `state` runs the follow-up when it becomes `done` or `failed`.
 - Pushing progress needs a server-initiated message the wire does not have; it is not part of
-  `ui/1`. A later vocabulary version may add a `ui-event` kind negotiated by `ui-hello`.
+  `ui/1`. Server push is the core `event` kind; a `ui-hello` negotiates it per connection.
 
 ## 19. Settings and messages
 

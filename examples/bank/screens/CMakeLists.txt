@@ -26,8 +26,9 @@ if(AF_COVERAGE)
     apply_coverage(bank_screens)
 endif()
 
-# The screen harness lives in the ladder's testkit, so the screen tests are built with the ladder.
-if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit)
+# The screen harness lives in the ladder's testkit, and the tests open screens through the generic app, so they are
+# built with both.
+if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit AND TARGET morph::examples_common)
     include(Catch)
     add_executable(bank_screen_tests tests/test_bank_screens.cpp
         "${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp")

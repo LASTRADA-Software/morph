@@ -18,6 +18,7 @@
 #include <morph/core/envelope_transport.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -366,6 +367,22 @@ public:
     ///                drops. Pass `nullptr` to clear.
     void setDisconnectHandler(const std::function<void()>& handler) override;
 
+    /// @brief Installs the handler each server-initiated event is posted to.
+    ///        See `IBackend::setEventHandler`.
+    ///
+    /// An `event` envelope is recognised by its kind before any reply
+    /// matching, so whatever its `callId`, it never settles a call. Events are
+    /// posted to @p exec in the order they arrived. Callable from any thread:
+    /// the handler is held under a mutex, and an event already being delivered
+    /// keeps the handler it was read with.
+    /// @param handler Callable posted to @p exec once per event. Pass
+    ///                `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override;
+
     /// @brief Installs the session stamped onto every control envelope this
     ///        backend subsequently builds (`register`, `registerShared`,
     ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
@@ -476,6 +493,11 @@ private:
     ::morph::exec::IExecutor* _reconnectExec{nullptr};
     std::function<void()> _connectHandler;
     std::function<void()> _disconnectHandler;
+    /// Guards `_eventHandler` and `_eventExec`, which `setEventHandler` may
+    /// write from any thread while the socket's thread reads them.
+    std::mutex _eventMutex;
+    std::shared_ptr<std::function<void(::morph::wire::EventBody)>> _eventHandler;
+    ::morph::exec::IExecutor* _eventExec{nullptr};
     ::morph::session::Context _session;
     /// Set by `negotiateProtocolVersion`: re-send `"hello"` on each connect.
     bool _negotiate{false};

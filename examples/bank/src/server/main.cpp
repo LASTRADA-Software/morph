@@ -11,8 +11,20 @@
 /// Usage:
 /// @code
 /// BANK_DB="DRIVER=SQLite3;Database=bank.db;Timeout=5000" BANK_PORT=0 \
-///     ladder_bank_server
+///     ladder_bank_server [--mcp-stdio]
 /// @endcode
+///
+/// The server also serves bank's screens through a `morph::ui::UiService`, as the
+/// other rung servers do, so the generic client can open it with `--server`.
+///
+/// @par `--mcp-stdio`
+/// Serves an agent over MCP's stdio transport beside the WebSocket clients: a
+/// `morph::ui::McpAdapter` on a connection of its own, its tool calls running as
+/// ordinary executes, so every GUI watching what they change is told. Stdout then
+/// carries only JSON-RPC, so the status lines go to stderr. The agent's identity
+/// is `MORPH_MCP_PRINCIPAL`, which this demo authorizer vouches for, and
+/// `MORPH_MCP_TOKEN`, carried as its token for an authorizer that verifies one.
+/// When stdin ends the server stops.
 ///
 /// @par Why this `main()` owns the server rather than `bank::app::App`
 /// Every ladder rung puts its `RemoteServer` in an `App` and lets `main()` name
@@ -49,9 +61,11 @@
 /// the client, which is also the path a real user takes.
 
 #include <QCoreApplication>
+#include <QMetaObject>
 #include <QTimer>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -64,11 +78,17 @@
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
+#include <morph/ui/agent.hpp>
+#include <morph/ui/service.hpp>
 #include <optional>
+#include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "bank/db/database.hpp"
+#include "bank_screens.hpp"
 
 // Every model bank_lib hosts — see this file's "Why every model header is
 // included" note. Sorted, so a missing one is visible by reading.
@@ -178,11 +198,18 @@ constexpr std::size_t kMaxLiveModels = 256;
 int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
-    for (int i = 1; i < argc; ++i) {
-        std::cerr << "bank-server: unknown argument '" << argv[i] << "' (usage: BANK_DB=... BANK_PORT=... "
-                  << "ladder_bank_server)\n";
+    bool mcpStdio = false;
+    for (std::string_view const argument : std::span{argv, static_cast<std::size_t>(argc)}.subspan(1)) {
+        if (argument == "--mcp-stdio") {
+            mcpStdio = true;
+            continue;
+        }
+        std::cerr << "bank-server: unknown argument '" << argument << "' (usage: BANK_DB=... BANK_PORT=... "
+                  << "ladder_bank_server [--mcp-stdio])\n";
         return 2;
     }
+    // With --mcp-stdio, stdout is the agent's JSON-RPC channel and nothing else may be written to it.
+    std::ostream& status = mcpStdio ? std::cerr : std::cout;
 
     const char* connectionString = std::getenv("BANK_DB");
     try {
@@ -208,9 +235,16 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
+        auto bundle = bank::screens::bundle();
+        if (!bundle) {
+            std::cerr << "bank-server: the screens do not build: " << bundle.error().message() << '\n';
+            ::morph::journal::setActionLog(nullptr);
+            return 1;
+        }
         ::morph::exec::ThreadPoolExecutor pool{4};
         ::morph::backend::ServerConfig serverConfig;
         serverConfig.limits.maxLiveModels = kMaxLiveModels;
+        serverConfig.services.push_back(std::make_shared<::morph::ui::UiService>(*bundle));
         auto server = std::make_shared<::morph::backend::RemoteServer>(pool, std::make_shared<BankDemoAuthorizer>(),
                                                                        std::move(serverConfig));
 
@@ -223,7 +257,33 @@ int main(int argc, char** argv) {
         // The one line scripts/scenario/run_scenarios.py parses to learn the
         // port (its `PORT_LINE`); `std::endl` because that tool reads this
         // pipe line by line and a buffered announcement would hang it.
-        std::cout << "bank-server: listening on ws://127.0.0.1:" << wsServer.port() << std::endl;
+        status << "bank-server: listening on ws://127.0.0.1:" << wsServer.port()
+               << std::endl;  // NOLINT(performance-avoid-endl)
+
+        // The agent's own thread: it owns the adapter and reads stdin, and stops the server once stdin ends.
+        std::thread mcp;
+        if (mcpStdio) {
+            ::morph::session::Context session;
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): nothing in this process sets the environment.
+            if (char const* const principal = std::getenv("MORPH_MCP_PRINCIPAL")) {
+                session.principal = principal;
+            }
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): nothing in this process sets the environment.
+            if (char const* const token = std::getenv("MORPH_MCP_TOKEN")) {
+                session.token = token;
+            }
+            mcp = std::thread{[server, session] {
+                {
+                    ::morph::exec::MainThreadExecutor owner;
+                    ::morph::ui::McpAdapter adapter{
+                        server,
+                        ::morph::ui::McpOptions{.session = session, .serverName = "bank", .callbacks = &owner}};
+                    ::morph::ui::serveStdio(adapter, owner, std::cin, std::cout);
+                }
+                QMetaObject::invokeMethod(
+                    QCoreApplication::instance(), [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
+            }};
+        }
 
         std::signal(SIGINT, onStopSignal);
         std::signal(SIGTERM, onStopSignal);
@@ -243,12 +303,21 @@ int main(int argc, char** argv) {
         // does (bookmarks' metadata-fetch worker) needs a second step here and
         // bank does not.
         static_cast<void>(wsServer.closeGracefully(std::chrono::seconds{2}));
+        if (mcp.joinable()) {
+            if (gStopRequested != 0) {
+                // Stopped by a signal while the agent's stdin is still open: its read cannot be interrupted, so the
+                // process ends here rather than wait for an input that may never come.
+                ::morph::journal::setActionLog(nullptr);
+                std::_Exit(exitCode);
+            }
+            mcp.join();
+        }
     }
 
     // Matches the clear-on-shutdown discipline every rung App follows: nothing
     // should observe a live log belonging to a process that has stopped.
     ::morph::journal::setActionLog(nullptr);
 
-    std::cout << "bank-server: stopped\n";
+    status << "bank-server: stopped\n";
     return exitCode;
 }

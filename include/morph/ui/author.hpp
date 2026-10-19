@@ -22,6 +22,9 @@
 #include <utility>
 #include <vector>
 
+#include "../core/changes.hpp"
+#include "../core/effects.hpp"
+#include "../core/logger.hpp"
 #include "../core/model_key.hpp"
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
@@ -113,6 +116,61 @@ template <typename Result>
     }
 }
 
+/// @brief The catalog's form of an action's declared effects.
+/// @param actionId The action's id.
+/// @return Its effects, or `std::nullopt` when it declared none: the action reads.
+/// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid.
+[[nodiscard]] inline std::optional<std::vector<ActionEffect>> effectsInfo(std::string_view actionId) {
+    auto const declared = ::morph::effects::effectsOf(actionId);
+    if (!declared) {
+        return std::nullopt;
+    }
+    std::vector<ActionEffect> out;
+    out.reserve(declared->size());
+    for (auto const& effect : *declared) {
+        std::string_view kind = "none";
+        if (effect.kind == ::morph::effects::Kind::Updates) {
+            kind = "updates";
+        } else if (effect.kind == ::morph::effects::Kind::Changes) {
+            kind = "changes";
+        } else if (effect.kind == ::morph::effects::Kind::ChangesInstance) {
+            kind = "changesInstance";
+        }
+        out.push_back(
+            ActionEffect{.kind = std::string{kind},
+                         .record = effect.record.empty() ? std::nullopt : std::optional<std::string>{effect.record}});
+    }
+    // A record derived from a changed one changes as a whole too. The server expands derivations before an event
+    // leaves; stating them here as well lets the caller's own reply mark entries holding the derived record, which
+    // matters in process, where no event comes back.
+    ::morph::effects::Changes derived;
+    for (auto const& effect : *declared) {
+        if (!effect.record.empty() &&
+            (effect.kind == ::morph::effects::Kind::Updates || effect.kind == ::morph::effects::Kind::Changes)) {
+            ::morph::effects::detail::addDerivedChanges(::morph::effects::detail::resolved(), effect.record, derived);
+        }
+    }
+    for (auto const& change : derived.records) {
+        ActionEffect added{.kind = "changes", .record = change.record};
+        if (std::ranges::find(out, added) == out.end()) {
+            out.push_back(std::move(added));
+        }
+    }
+    return out;
+}
+
+/// @brief The catalog's form of the records an action's result holds.
+/// @param actionId The action's id.
+/// @return One entry per record; empty when the result holds none.
+/// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid.
+[[nodiscard]] inline std::vector<ActionRecordInfo> recordsInfo(std::string_view actionId) {
+    std::vector<ActionRecordInfo> out;
+    for (auto const& held : ::morph::effects::recordsOf(actionId)) {
+        out.push_back(ActionRecordInfo{.record = held.record, .keyField = held.keyField, .paths = held.paths});
+    }
+    return out;
+}
+
 }  // namespace detail
 
 /// @brief The catalog facts the builders gathered from the model and action types a screen names.
@@ -151,19 +209,24 @@ struct CatalogFacts {
     /// @brief Records an action as one of a model type's.
     /// @tparam Model  The model type that runs it.
     /// @tparam Action The action type; `::morph::model::ActionTraits<Action>` names its id.
+    /// @throws morph::model::EffectsRegistrationError when the registered records and effects are invalid: the
+    ///         action's effects and records are read from the process registry here, so a misconfigured registry
+    ///         fails at the start, not on a client's first watch.
     template <typename Model, typename Action>
         requires Runs<Model, Action>
     void action() {
         model<Model>();
-        actions.emplace(std::string{::morph::model::ActionTraits<Action>::typeId()},
-                        ActionInfo{
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .calculatedFields = ActionFacts<Action>::calculatedFields(),
-                            .secretFields = ActionFacts<Action>::secretFields(),
-                            .credential = ActionFacts<Action>::credential,
-                            .listFields = detail::listFields<::morph::model::HandlerResultT<
-                                decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
-                        });
+        auto const actionId = std::string{::morph::model::ActionTraits<Action>::typeId()};
+        actions.emplace(actionId, ActionInfo{
+                                      .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                      .calculatedFields = ActionFacts<Action>::calculatedFields(),
+                                      .secretFields = ActionFacts<Action>::secretFields(),
+                                      .credential = ActionFacts<Action>::credential,
+                                      .listFields = detail::listFields<::morph::model::HandlerResultT<
+                                          decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
+                                      .effects = detail::effectsInfo(actionId),
+                                      .records = detail::recordsInfo(actionId),
+                                  });
     }
 
     /// @brief The facts as a `ui::Catalog`.
@@ -1158,7 +1221,7 @@ struct Self {};
 /// @brief The dialog or drawer a command list runs in.
 inline constexpr Self self{};
 
-/// @brief A query of a scope, without its action type: what `invalidates`, `refetch`, `prefetch` and `patch` name.
+/// @brief A query of a scope, without its action type: what `refetch`, `prefetch` and `optimistic` name.
 class QueryRef {
 public:
     /// @brief A query by name.
@@ -1357,31 +1420,6 @@ private:
     std::vector<BodyField<Action>> _fields;
 };
 
-/// @brief Actions of one model type, for `refreshOn`. Made by `ModelHandle::actions`, which checks that the model
-///        runs each one.
-class ActionList {
-public:
-    /// @brief An empty list.
-    ActionList() = default;
-
-    /// @brief A list.
-    /// @param ids   The action ids.
-    /// @param facts The facts of the actions and their model.
-    ActionList(std::vector<std::string> ids, CatalogFacts facts) : _ids{std::move(ids)}, _facts{std::move(facts)} {}
-
-    /// @brief The action ids.
-    /// @return The ids, in order.
-    [[nodiscard]] std::vector<std::string> const& ids() const noexcept { return _ids; }
-
-    /// @brief The facts of the actions and their model.
-    /// @return The facts.
-    [[nodiscard]] CatalogFacts const& facts() const noexcept { return _facts; }
-
-private:
-    std::vector<std::string> _ids;
-    CatalogFacts _facts;
-};
-
 /// @brief A model alias of a scope.
 /// @tparam Model The model type.
 template <typename Model>
@@ -1394,18 +1432,6 @@ public:
     /// @brief The alias.
     /// @return The alias.
     [[nodiscard]] std::string const& alias() const noexcept { return _alias; }
-
-    /// @brief Actions of this model type, for a query's `refreshOn`: an action the model does not run is a compile
-    ///        error.
-    /// @tparam Actions The actions.
-    /// @return The list.
-    template <typename... Actions>
-        requires(Runs<Model, Actions> && ...)
-    [[nodiscard]] ActionList actions() const {
-        CatalogFacts facts;
-        (facts.template action<Model, Actions>(), ...);
-        return ActionList{{std::string{::morph::model::ActionTraits<Actions>::typeId()}...}, std::move(facts)};
-    }
 
 private:
     std::string _alias;
@@ -1487,8 +1513,6 @@ struct QueryOptions {
     std::chrono::milliseconds refreshEvery{0};
     /// @brief How long a cached value counts as fresh.
     std::chrono::milliseconds staleTime{0};
-    /// @brief Actions of the query's model type whose success refetches it.
-    ActionList refreshOn;
 };
 
 /// @brief What a mutation run does while another is in flight.
@@ -1499,16 +1523,15 @@ enum class Mode : std::uint8_t {
     Parallel,   ///< Every run is sent; replies apply as they arrive.
 };
 
-/// @brief A `patch` or `optimistic` row replacement.
-struct Patch {
-    /// @brief The query whose cached list it patches.
+/// @brief An `optimistic` write: the row a mutation run predicts before its reply.
+struct Optimistic {
+    /// @brief The query whose cached list it writes.
     std::optional<QueryRef> query;
     /// @brief The member of the query's record value that holds the list; empty when the value is the list itself.
     std::string at;
-    /// @brief The row key, read against the reply bound as `result` (patch) or the body bound as `body`
-    ///        (optimistic).
+    /// @brief The row key, read against the run's body bound as `body`.
     AnyHandle key;
-    /// @brief The new row.
+    /// @brief The predicted row, read against the run's body bound as `body`.
     AnyHandle with;
 };
 
@@ -1576,12 +1599,8 @@ struct MutationOptions {
     Mode concurrency = Mode::Exclusive;
     /// @brief The queue key of `serial` runs.
     AnyHandle serialKey;
-    /// @brief Queries refetched after a success, in one batch with the result.
-    std::vector<QueryRef> invalidates;
-    /// @brief The row a reply replaces without a refetch.
-    std::optional<Patch> patch;
     /// @brief The row a run predicts before its reply.
-    std::optional<Patch> optimistic;
+    std::optional<Optimistic> optimistic;
     /// @brief Commands run after a success.
     Commands onSuccess;
     /// @brief Commands run after a failure.
@@ -1933,7 +1952,7 @@ public:
     /// @param name    The query's name.
     /// @param model   The alias it goes through.
     /// @param body    The body, which is the query's key.
-    /// @param options The gate, timing and `refreshOn`.
+    /// @param options The gate and timing.
     /// @return The query's handle.
     template <typename Action, typename Model>
         requires Runs<Model, Action>
@@ -1950,7 +1969,7 @@ public:
     /// @param name    The query's name.
     /// @param model   The alias it goes through.
     /// @param body    The body, which is the query's key.
-    /// @param options The gate, timing and `refreshOn`.
+    /// @param options The gate and timing.
     /// @return The query's handle. Its value is the action body as the server reconciled it, computed fields
     ///         filled, with `errors` and `ready` beside the fields.
     template <typename Action, typename Model>
@@ -1966,7 +1985,7 @@ public:
     /// @tparam Model  The model type of the alias; it must run the action.
     /// @param name    The mutation's name.
     /// @param model   The alias it goes through.
-    /// @param options Its body, concurrency, invalidation, patches and command lists.
+    /// @param options Its body, concurrency, optimistic write and command lists.
     /// @return The mutation's handle.
     template <typename Action, typename Model>
         requires Runs<Model, Action>
@@ -1978,8 +1997,8 @@ public:
         if (!options.body.empty()) {
             detail::put(decl, "body", options.body.json());
         }
-        writeMutation(decl, options.concurrency, options.serialKey, options.invalidates, options.patch,
-                      options.optimistic, options.onSuccess, options.onError, options.offlineQueue);
+        writeMutation(decl, options.concurrency, options.serialKey, options.optimistic, options.onSuccess,
+                      options.onError, options.offlineQueue);
         detail::put(_mutations, name, std::move(decl));
         _facts.action<Model, Action>();
         return MutationHandle<Action>{name};
@@ -2090,17 +2109,11 @@ private:
         duration("debounce", options.debounce);
         duration("refreshEvery", options.refreshEvery);
         duration("staleTime", options.staleTime);
-        if (!options.refreshOn.ids().empty()) {
-            detail::put(decl, "refreshOn",
-                        Json::array_t(options.refreshOn.ids().begin(), options.refreshOn.ids().end()));
-            _facts.merge(options.refreshOn.facts());
-        }
         detail::put(_queries, name, std::move(decl));
         _facts.action<Model, Action>();
     }
     static void writeMutation(Json& decl, Mode concurrency, AnyHandle const& serialKey,
-                              std::vector<QueryRef> const& invalidates, std::optional<Patch> const& patch,
-                              std::optional<Patch> const& optimistic, Commands const& onSuccess,
+                              std::optional<Optimistic> const& optimistic, Commands const& onSuccess,
                               Commands const& onError, bool offlineQueue) {
         static constexpr std::array<char const*, 4> kModes = {"exclusive", "serial", "latest", "parallel"};
         if (concurrency != Mode::Exclusive) {
@@ -2109,32 +2122,19 @@ private:
         if (serialKey.present()) {
             detail::put(decl, "serialKey", serialKey.json());
         }
-        if (!invalidates.empty()) {
-            Json::array_t names;
-            names.reserve(invalidates.size());
-            for (QueryRef const& query : invalidates) {
-                names.emplace_back(query.name());
-            }
-            detail::put(decl, "invalidates", std::move(names));
-        }
-        auto row = [&decl](char const* key, std::optional<Patch> const& replacement) {
-            if (!replacement) {
-                return;
-            }
-            if (!replacement->query) {
-                throw AuthoringError{std::string{"a `"} + key + "` names the query whose row it replaces"};
+        if (optimistic) {
+            if (!optimistic->query) {
+                throw AuthoringError{"an `optimistic` write names the query whose row it writes"};
             }
             Json part = Json::object_t{};
-            detail::put(part, "query", replacement->query->name());
-            if (!replacement->at.empty()) {
-                detail::put(part, "at", replacement->at);
+            detail::put(part, "query", optimistic->query->name());
+            if (!optimistic->at.empty()) {
+                detail::put(part, "at", optimistic->at);
             }
-            detail::put(part, "key", replacement->key.json());
-            detail::put(part, "with", replacement->with.json());
-            detail::put(decl, key, std::move(part));
-        };
-        row("patch", patch);
-        row("optimistic", optimistic);
+            detail::put(part, "key", optimistic->key.json());
+            detail::put(part, "with", optimistic->with.json());
+            detail::put(decl, "optimistic", std::move(part));
+        }
         if (!onSuccess.empty()) {
             detail::put(decl, "onSuccess", onSuccess.json());
         }
@@ -4186,6 +4186,9 @@ public:
         }
         if (auto refusal = checkAccessibility(*loaded)) {
             return std::unexpected(std::move(*refusal));
+        }
+        for (LoadWarning const& warning : loaded->warnings) {
+            morph::log::logWarn(warning.message(loaded->id));
         }
         _facts = std::move(facts);
         _screens.push_back(std::make_unique<RegisteredScreen>(

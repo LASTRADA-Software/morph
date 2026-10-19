@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <morph/core/records.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
 #include <string_view>
@@ -249,3 +250,8 @@ struct glz::meta<bookmarks::ArchiveFilter> {
     using enum bookmarks::ArchiveFilter;
     static constexpr auto value = glz::enumerate(Any, ActiveOnly, ArchivedOnly);
 };
+
+// A bookmark is one row shown two ways: a list's summary and the edit drawer's full view. Every list is filtered to
+// its owner's rows, so neither row's key reaches another user.
+BRIDGE_REGISTER_RECORD(bookmarks::BookmarkSummary, "Bookmarks_Bookmark", ::morph::record::privateKeys)
+BRIDGE_REGISTER_RECORD(bookmarks::BookmarkView, "Bookmarks_BookmarkDetail", ::morph::record::privateKeys)

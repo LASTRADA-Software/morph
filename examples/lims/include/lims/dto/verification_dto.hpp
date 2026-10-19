@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/records.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
 #include <string_view>
@@ -235,3 +236,5 @@ struct glz::meta<lims::AuditOutcome> {
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(Succeeded, Refused);
 };
+
+BRIDGE_REGISTER_RECORD(lims::VerificationView, "Lims_Verification")

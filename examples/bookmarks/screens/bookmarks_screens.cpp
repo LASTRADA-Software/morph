@@ -103,12 +103,9 @@ ui::Screen bookmarksScreen() {
             {});
         auto const detail =
             screen.query<GetBookmark>("detail", marks, {{&GetBookmark::id, editing}}, {.when = ui::engaged(editing)});
-        auto const archive = screen.mutation<BulkEdit>("archive", marks, {.invalidates = {bookmarks, tags}});
-        auto const remove = screen.mutation<DeleteBookmark>("remove", marks,
-                                                            {.body = {{&DeleteBookmark::id, editing}},
-                                                             .invalidates = {bookmarks, tags},
-                                                             .onSuccess = {ui::close(edit)}});
-        auto const refreshed = ui::Commands{ui::refetch(bookmarks), ui::refetch(tags)};
+        auto const archive = screen.mutation<BulkEdit>("archive", marks);
+        auto const remove = screen.mutation<DeleteBookmark>(
+            "remove", marks, {.body = {{&DeleteBookmark::id, editing}}, .onSuccess = {ui::close(edit)}});
         auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
         auto const knownTags =
             ui::map(tags.value().at(&ListTagsResult::tags), "t", [](ui::Handle<ui::Any> const& entry) {
@@ -171,8 +168,7 @@ ui::Screen bookmarksScreen() {
                        .role = std::string{"error"}})
                  .testId("error"),
              ui::drawer(create,
-                        {ui::form<CreateBookmark>(
-                             marks, {.onSuccess = {ui::close(create), ui::refetch(bookmarks), ui::refetch(tags)}})
+                        {ui::form<CreateBookmark>(marks, {.onSuccess = {ui::close(create)}})
                              .id(ui::element("createForm"))
                              .testId("createForm")},
                         {.title = "New bookmark", .side = std::string{"end"}})
@@ -180,9 +176,7 @@ ui::Screen bookmarksScreen() {
              ui::drawer(
                  edit,
                  {ui::form<EditBookmark>(marks,
-                                         {.prefill = detail.value(),
-                                          .key = editing,
-                                          .onSuccess = {ui::close(edit), ui::refetch(bookmarks), ui::refetch(tags)}})
+                                         {.prefill = detail.value(), .key = editing, .onSuccess = {ui::close(edit)}})
                       .id(ui::element("editForm"))
                       .testId("editForm"),
                   ui::text({.text = "Every field is saved as shown: a field left empty is cleared.",
@@ -205,7 +199,6 @@ ui::Screen tagsScreen() {
         auto const tags = screen.query<ListTags>("tags", tagModel, {});
         // A single-selection table's selection is a list of at most one key.
         auto const picked = ui::element("tagList");
-        auto const refreshed = ui::Commands{ui::refetch(tags)};
         return ui::row(
             {ui::panel(
                  {ui::table(
@@ -226,8 +219,7 @@ ui::Screen tagsScreen() {
                                        .role = std::string{"muted"}}),
                              ui::form<RenameTag>(
                                  tagModel, {.prefill = ui::obj({{"id", ui::call("first", {picked.selection()})}}),
-                                            .fields = {{&RenameTag::id, {.hidden = true}}},
-                                            .onSuccess = refreshed})
+                                            .fields = {{&RenameTag::id, {.hidden = true}}}})
                                  .id(ui::element("renameForm"))
                                  .testId("renameForm")},
                             {.title = "Rename the selected tag", .padding = 5}),
@@ -237,8 +229,7 @@ ui::Screen tagsScreen() {
                                  .role = std::string{"muted"}}),
                        ui::form<MergeTags>(
                            tagModel, {.prefill = ui::obj({{"sourceId", ui::call("first", {picked.selection()})}}),
-                                      .fields = {{&MergeTags::sourceId, {.hidden = true}}},
-                                      .onSuccess = refreshed})
+                                      .fields = {{&MergeTags::sourceId, {.hidden = true}}}})
                            .id(ui::element("mergeForm"))
                            .testId("mergeForm")},
                       {.title = "Merge the selected tag", .padding = 5})},

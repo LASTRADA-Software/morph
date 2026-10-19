@@ -4,12 +4,14 @@
 #include <cstdint>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
 #include "bookmarks/dto/bookmark_dto.hpp"
 #include "bookmarks/dto/bulk_dto.hpp"
 #include "bookmarks/dto/import_export_dto.hpp"
+#include "bookmarks/dto/tag_dto.hpp"
 
 /// @file
 /// `BookmarkModel` — every action this rung's one entity-owning model
@@ -105,11 +107,27 @@ private:
 }  // namespace bookmarks
 
 BRIDGE_REGISTER_MODEL(bookmarks::BookmarkModel, "BookmarkModel")
+// A bookmark's tags are counted by the tag list, so whatever adds, removes or retags a bookmark changes the tags too.
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::CreateBookmark, "CreateBookmark")
+BRIDGE_REGISTER_EFFECTS(bookmarks::CreateBookmark, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
+// The reply is the edited bookmark's full view; its summary in a list differs in shape, so the lists refetch.
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::EditBookmark, "EditBookmark")
+BRIDGE_REGISTER_EFFECTS(bookmarks::EditBookmark, ::morph::effects::updates<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ArchiveBookmark, "ArchiveBookmark")
+BRIDGE_REGISTER_EFFECTS(bookmarks::ArchiveBookmark, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::UnarchiveBookmark, "UnarchiveBookmark")
+BRIDGE_REGISTER_EFFECTS(bookmarks::UnarchiveBookmark, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::DeleteBookmark, "DeleteBookmark")
+BRIDGE_REGISTER_EFFECTS(bookmarks::DeleteBookmark, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::GetBookmark, "GetBookmark")
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ListBookmarks, "ListBookmarks",
                        ::morph::model::Loggable::No)
@@ -119,7 +137,17 @@ BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::GetChangesSince, "Ge
 // framework's own auto-append never double-logs alongside the model's own
 // outbox write.
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::BulkEdit, "BulkEdit", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(bookmarks::BulkEdit, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
+// The metadata worker fills in a fetched title, which every list showing the bookmark then shows.
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::RecordMetadata, "RecordMetadata")
+BRIDGE_REGISTER_EFFECTS(bookmarks::RecordMetadata, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::BookmarkView>)
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ImportBookmarks, "ImportBookmarks")
+BRIDGE_REGISTER_EFFECTS(bookmarks::ImportBookmarks, ::morph::effects::changes<bookmarks::BookmarkSummary>,
+                        ::morph::effects::changes<bookmarks::TagSummary>)
+// Export reads, but a screen runs it as a mutation, on a button, rather than fetching the file on every visit.
 BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ExportBookmarks, "ExportBookmarks",
                        ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(bookmarks::ExportBookmarks, ::morph::effects::none)

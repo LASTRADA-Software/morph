@@ -10,6 +10,7 @@
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -488,6 +489,14 @@ void QtWebSocketBackend::setConnectHandler(const std::function<void()>& handler)
 
 void QtWebSocketBackend::setDisconnectHandler(const std::function<void()>& handler) { _disconnectHandler = handler; }
 
+void QtWebSocketBackend::setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                                         ::morph::exec::IExecutor* exec) {
+    std::scoped_lock const lock{_eventMutex};
+    _eventHandler =
+        handler ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(handler)) : nullptr;
+    _eventExec = exec;
+}
+
 void QtWebSocketBackend::setSession(::morph::session::Context session) { _session = std::move(session); }
 
 void QtWebSocketBackend::scheduleReconnect() {
@@ -597,6 +606,23 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
         // the caller, a permanent hang is not.
         cancelPending(std::make_exception_ptr(
             std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
+        return;
+    }
+    // Before any reply matching: an event names no request, whatever its callId.
+    if (::morph::backend::detail::routeEvent(env, [this](::morph::wire::EventBody event) {
+            std::shared_ptr<std::function<void(::morph::wire::EventBody)>> handler;
+            ::morph::exec::IExecutor* exec = nullptr;
+            {
+                std::scoped_lock const lock{_eventMutex};
+                handler = _eventHandler;
+                exec = _eventExec;
+            }
+            if (handler && exec != nullptr) {
+                exec->post([handler = std::move(handler), event = std::move(event)]() mutable {
+                    (*handler)(std::move(event));
+                });
+            }
+        })) {
         return;
     }
     routeReply(env);

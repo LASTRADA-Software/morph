@@ -91,11 +91,8 @@ ui::Screen lifecycleScreen() {
         auto const start = transition(StartWork{}, "start");
         auto const submit = transition(SubmitForVerification{}, "submit");
         auto const publish = transition(PublishSample{}, "publish");
-        // The sample as it is now: fetched once the screen attached it, and again after every transition.
-        auto const current = screen.query<GetSample>(
-            "current", sample, {},
-            {.when = opened,
-             .refreshOn = sample.actions<ReceiveSample, StartWork, SubmitForVerification, PublishSample>()});
+        // The sample as it is now: fetched once the screen attached it; every transition's reply updates it.
+        auto const current = screen.query<GetSample>("current", sample, {}, {.when = opened});
         auto const view = current.value();
 
         screen.title(ui::format("Sample {0}", {sampleId}));
@@ -145,10 +142,7 @@ ui::Screen resultsScreen() {
         auto const open = screen.mutation<OpenSample>(
             "open", sample, {.body = {{&OpenSample::sampleId, sampleId}}, .onSuccess = {ui::set(opened, true)}});
         auto const verify = screen.mutation<VerifyResult>("verify", sample, {.concurrency = ui::Mode::Serial});
-        // A capture is not in `refreshOn`: a row's capture patches its own row, and the form refetches the list
-        // itself, since it may add a row.
-        auto const results = screen.query<ListResults>("results", sample, {},
-                                                       {.when = opened, .refreshOn = sample.actions<VerifyResult>()});
+        auto const results = screen.query<ListResults>("results", sample, {}, {.when = opened});
         auto const conflicts = screen.query<ListConflicts>("conflicts", sample, {}, {.when = opened});
         auto const analyses = screen.query<ListAnalyses>("analyses", catalog);
         // The capture's reported concentration while it is typed: the server evaluates the form's fields as the
@@ -176,7 +170,6 @@ ui::Screen resultsScreen() {
              ui::form<CaptureConcentration>(sample,
                                             {
                                                 .fields = {{&CaptureConcentration::reportedValue, {.omit = true}}},
-                                                .onSuccess = {ui::refetch(results)},
                                             })
                  .id(capture)
                  .testId("capture"),
@@ -187,20 +180,8 @@ ui::Screen resultsScreen() {
              ui::table(
                  results.value().at(&ListResultsResult::results), {.key = ui::row(&ResultView::id)},
                  [&](ui::DeclScope& row) {
-                     // Write-through: a re-capture replaces the row's result with a new one under a new id, so the
-                     // patch is keyed on the row it was typed into, not on the reply.
                      auto const recapture =
-                         row.mutation<CaptureConcentration>("recapture", sample,
-                                                            {
-                                                                .concurrency = ui::Mode::Serial,
-                                                                .patch =
-                                                                    ui::Patch{
-                                                                        .query = results,
-                                                                        .at = "results",
-                                                                        .key = ui::row(&ResultView::id),
-                                                                        .with = ui::ref("result"),
-                                                                    },
-                                                            });
+                         row.mutation<CaptureConcentration>("recapture", sample, {.concurrency = ui::Mode::Serial});
                      // At the places typed: the model refuses a reading finer than its version declares, and
                      // padding the text would claim precision nobody measured.
                      auto const recaptureBody = ui::run(
@@ -275,26 +256,18 @@ ui::Screen sampleScreen() {
         auto const showNitrate = screen.state("showNitrate", false);
         auto const project = ui::element("project");
 
-        auto const header = screen.query<GetHeader>(
-            "header", sample, {},
-            {.when = ready, .refreshOn = sample.actions<HeaderSection, SelectProject, SaveSample>()});
-        auto const series = screen.query<GetDilutionSeries>(
-            "series", sample, {}, {.when = ready, .refreshOn = sample.actions<SamplingSection>()});
-        auto const measure = screen.query<GetMeasurements>(
-            "measure", sample, {},
-            {.when = ready,
-             .refreshOn = sample.actions<TurbiditySection, NitrateSection, ClearOptionalMeasurement>()});
+        auto const header = screen.query<GetHeader>("header", sample, {}, {.when = ready});
+        auto const series = screen.query<GetDilutionSeries>("series", sample, {}, {.when = ready});
+        auto const measure = screen.query<GetMeasurements>("measure", sample, {}, {.when = ready});
         auto const projects = screen.query<ListProjects>("projects", sample);
 
-        // Loading or creating fills the working copy the queries read, so either one refetches them. A section form's
-        // submit is not a mutation, so `refreshOn` does not see it: each form refetches what it changed itself.
-        auto const load = screen.mutation<LoadSample>("load", sample,
-                                                      {.body = {{&LoadSample::id, sampleId}},
-                                                       .invalidates = {header, series, measure},
-                                                       .onSuccess = {ui::set(ready, true), ui::set(unsaved, false)}});
-        auto const make = screen.mutation<NewSample>(
-            "make", sample,
-            {.invalidates = {header, series, measure}, .onSuccess = {ui::set(ready, true), ui::set(unsaved, false)}});
+        // Every action here, the section forms' submits included, edits the working copy the queries read, and says
+        // so (`changesInstance`), so the queries refetch after each one.
+        auto const load = screen.mutation<LoadSample>(
+            "load", sample,
+            {.body = {{&LoadSample::id, sampleId}}, .onSuccess = {ui::set(ready, true), ui::set(unsaved, false)}});
+        auto const make =
+            screen.mutation<NewSample>("make", sample, {.onSuccess = {ui::set(ready, true), ui::set(unsaved, false)}});
         auto const clear =
             screen.mutation<ClearOptionalMeasurement>("clear", sample, {.onSuccess = {ui::set(unsaved, true)}});
         auto const pick = screen.mutation<SelectProject>("pick", sample,
@@ -384,25 +357,24 @@ ui::Screen sampleScreen() {
                                                  {.label = ui::t("lims.receivedOn", "Received"),
                                                   .widget = std::string{"epochDays"}}},
                                                 {&HeaderSection::remarks, {.blankAs = std::string{"empty"}}}},
-                                     .onSuccess = {ui::set(unsaved, true), ui::refetch(header)}})
+                                     .onSuccess = {ui::set(unsaved, true)}})
                             .id(ui::element("headerForm"))
                             .testId("headerForm")},
                        {.title = ui::t("lims.header", "Header"), .padding = 2}),
-             ui::panel(
-                 {ui::form<SamplingSection>(sample, {.onSuccess = {ui::set(unsaved, true), ui::refetch(series)}})
-                      .id(ui::element("samplingForm"))
-                      .testId("samplingForm"),
-                  ui::form<TurbiditySection>(sample, {.onSuccess = {ui::set(unsaved, true), ui::refetch(measure)}})
-                      .id(ui::element("turbidityForm"))
-                      .testId("turbidityForm")
-                      .visible(turbidityShown),
-                  ui::form<NitrateSection>(sample, {.onSuccess = {ui::set(unsaved, true), ui::refetch(measure)}})
-                      .id(ui::element("nitrateForm"))
-                      .testId("nitrateForm")
-                      .visible(nitrateShown),
-                  optionalToggle(kTurbidity, "turbidity", showTurbidity),
-                  optionalToggle(kNitrate, "nitrate", showNitrate)},
-                 {.title = ui::t("lims.measurements", "Measurements"), .padding = 2}),
+             ui::panel({ui::form<SamplingSection>(sample, {.onSuccess = {ui::set(unsaved, true)}})
+                            .id(ui::element("samplingForm"))
+                            .testId("samplingForm"),
+                        ui::form<TurbiditySection>(sample, {.onSuccess = {ui::set(unsaved, true)}})
+                            .id(ui::element("turbidityForm"))
+                            .testId("turbidityForm")
+                            .visible(turbidityShown),
+                        ui::form<NitrateSection>(sample, {.onSuccess = {ui::set(unsaved, true)}})
+                            .id(ui::element("nitrateForm"))
+                            .testId("nitrateForm")
+                            .visible(nitrateShown),
+                        optionalToggle(kTurbidity, "turbidity", showTurbidity),
+                        optionalToggle(kNitrate, "nitrate", showNitrate)},
+                       {.title = ui::t("lims.measurements", "Measurements"), .padding = 2}),
              ui::panel(
                  {ui::custom(seriesGrid, {.props = {{"rows", rowsOf}}}).a11y("Dilution series").testId("seriesGrid"),
                   ui::custom(recoveryCurve, {.props = {{"rows", rowsOf}}})

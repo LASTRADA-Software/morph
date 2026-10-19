@@ -27,6 +27,7 @@
 #include "../core/backend.hpp"
 #include "../core/bridge.hpp"
 #include "../core/completion.hpp"
+#include "../core/wire.hpp"
 #include "../forms/engine/collection.hpp"
 #include "../forms/engine/collection_view.hpp"
 #include "../forms/engine/field_model.hpp"
@@ -367,6 +368,10 @@ public:
 // Session
 // ---------------------------------------------------------------------------------------------------------------
 
+/// @brief Sends a `watch` or `unwatch` request for a session's cache (spec 8 §7): the kind, and the `WatchBody` as
+///        JSON. `ui::watcherOver` builds one over a remote source's exchange.
+using Watcher = std::function<async::Completion<std::string>(std::string const& kind, std::string const& bodyJson)>;
+
 /// @brief What a `Session` is built with.
 struct SessionOptions {
     /// @brief Timers for `debounce`, `refreshEvery` and the cache's eviction. Without one, `debounce` fetches at once,
@@ -384,6 +389,9 @@ struct SessionOptions {
     std::function<std::string(std::exception_ptr const&)> classify;
     /// @brief Development mode: whether this session's screens record what the inspector reads. Off by default.
     DevelopmentTools developmentTools = DevelopmentTools::Off;
+    /// @brief Sends the cache's watch changes to the server. Empty: the session still counts what its cache holds,
+    ///        and sends nothing, which is right for a local source, whose replies carry every change it sees.
+    Watcher watcher;
 };
 
 namespace detail {
@@ -558,6 +566,116 @@ enum class PatchMiss : std::uint8_t {
     return value;
 }
 
+/// @brief The members of a catalog record path: `"header.rows"` is `header`, then `rows`; `""` is none.
+/// @param path The path.
+/// @return Its members in order.
+[[nodiscard]] inline std::vector<std::string> pathMembers(std::string_view path) {
+    std::vector<std::string> members;
+    for (auto const part : std::views::split(path, '.')) {
+        if (!part.empty()) {
+            members.emplace_back(part.begin(), part.end());
+        }
+    }
+    return members;
+}
+
+/// @brief The rows of a keyed record that a value holds at a path.
+///
+/// A list on the way is looked through, as the result walker looks through a `std::vector`. At the path's end a
+/// record with the key field is a row, and a record without it is a map whose values are the rows.
+/// @param value    The value.
+/// @param path     The members still to follow.
+/// @param keyField The record's key field.
+/// @param out      Where the rows go.
+// NOLINTNEXTLINE(misc-no-recursion): one level per path member or nested list.
+inline void keyedRowsAt(Value const& value, std::span<std::string const> path, std::string_view keyField,
+                        std::vector<Value const*>& out) {
+    if (ValueList const* const items = value.asList()) {
+        for (Value const& item : *items) {
+            keyedRowsAt(item, path, keyField, out);
+        }
+        return;
+    }
+    ValueRecord const* const record = value.asRecord();
+    if (record == nullptr) {
+        return;
+    }
+    if (!path.empty()) {
+        if (auto const found = record->find(path.front()); found != record->end()) {
+            keyedRowsAt(found->second, path.subspan(1), keyField, out);
+        }
+        return;
+    }
+    if (record->contains(keyField)) {
+        out.push_back(&value);
+        return;
+    }
+    for (auto const& [name, item] : *record) {
+        static_cast<void>(name);
+        if (ValueRecord const* const row = item.asRecord(); row != nullptr && row->contains(keyField)) {
+            out.push_back(&item);
+        }
+    }
+}
+
+/// @brief New rows by the canonical text of their key.
+using RowsByKey = std::map<std::string, Value const*, std::less<>>;
+
+/// @brief Merges new rows over the rows with the same key that a value holds at a path.
+/// @param value    The value.
+/// @param path     The members still to follow.
+/// @param keyField The record's key field.
+/// @param rows     The new rows.
+/// @return The new value, or nothing when no row matched.
+// NOLINTNEXTLINE(misc-no-recursion): one level per path member or nested list.
+[[nodiscard]] inline std::optional<Value> patchKeyedRows(Value const& value, std::span<std::string const> path,
+                                                         std::string_view keyField, RowsByKey const& rows) {
+    if (ValueList const* const items = value.asList()) {
+        ValueList out = *items;
+        bool changed = false;
+        for (Value& item : out) {
+            if (auto patched = patchKeyedRows(item, path, keyField, rows)) {
+                item = std::move(*patched);
+                changed = true;
+            }
+        }
+        return changed ? std::optional<Value>{Value{std::move(out)}} : std::nullopt;
+    }
+    ValueRecord const* const record = value.asRecord();
+    if (record == nullptr) {
+        return std::nullopt;
+    }
+    if (!path.empty()) {
+        auto const found = record->find(path.front());
+        if (found == record->end()) {
+            return std::nullopt;
+        }
+        auto patched = patchKeyedRows(found->second, path.subspan(1), keyField, rows);
+        if (!patched) {
+            return std::nullopt;
+        }
+        ValueRecord out = *record;
+        out.insert_or_assign(path.front(), std::move(*patched));
+        return Value{std::move(out)};
+    }
+    if (auto const key = record->find(keyField); key != record->end()) {
+        auto const row = rows.find(canonicalJson(key->second));
+        return row == rows.end() ? std::nullopt : std::optional<Value>{mergeRow(value, *row->second)};
+    }
+    ValueRecord out = *record;
+    bool changed = false;
+    for (auto& [name, item] : out) {
+        static_cast<void>(name);
+        if (ValueRecord const* const row = item.asRecord(); row != nullptr && row->contains(keyField)) {
+            if (auto patched = patchKeyedRows(item, {}, keyField, rows)) {
+                item = std::move(*patched);
+                changed = true;
+            }
+        }
+    }
+    return changed ? std::optional<Value>{Value{std::move(out)}} : std::nullopt;
+}
+
 /// @brief One optimistic write still waiting for its reply.
 struct OptimisticLayer {
     /// @brief The run that made it.
@@ -605,14 +723,79 @@ struct CacheEntry {
     std::uint64_t generation = 0;
     /// @brief When the last reply was applied.
     std::optional<std::chrono::milliseconds> fetchedAt;
-    /// @brief Marked stale by an invalidation, `refreshOn` or a backend switch.
+    /// @brief Marked stale by a `refetch`, a backend switch or a change.
     bool stale = false;
+    /// @brief Marked stale while a fetch was in flight: that fetch may have read before the change, so when it
+    ///        settles the entry stays stale and fetches once more.
+    bool refetchAfter = false;
     /// @brief The mounted queries using it.
     int users = 0;
     /// @brief The eviction timer, while no query uses it.
     reactive::TimerHandle evict;
     /// @brief The fields never cached.
     std::vector<std::string> secretFields;
+    /// @brief The alias's instance token the entry was read through.
+    std::string instanceToken;
+    /// @brief The records the entry's action returns, with the key field and paths of each; empty for an
+    ///        `evaluate` entry, which holds none.
+    std::vector<ActionRecordInfo> records;
+
+    /// @brief The catalog entry of a record the entry holds.
+    /// @param record The record's wire name.
+    /// @return It, or `nullptr` when the entry does not hold the record.
+    [[nodiscard]] ActionRecordInfo const* holding(std::string_view record) const {
+        auto const found = std::ranges::find(records, record, &ActionRecordInfo::record);
+        return found == records.end() ? nullptr : &*found;
+    }
+};
+
+/// @brief The rows of a keyed record a value holds, at each of the record's paths.
+/// @param value    The value.
+/// @param paths    The record's paths.
+/// @param keyField The record's key field.
+/// @return The rows.
+[[nodiscard]] inline std::vector<Value const*> keyedRowsOf(Value const& value, std::vector<std::string> const& paths,
+                                                           std::string_view keyField) {
+    std::vector<Value const*> rows;
+    for (std::string const& path : paths) {
+        std::vector<std::string> const members = pathMembers(path);
+        keyedRowsAt(value, members, keyField, rows);
+    }
+    return rows;
+}
+
+/// @brief Merges new rows into a value at each of the record's paths.
+/// @param value    The value.
+/// @param paths    The record's paths.
+/// @param keyField The record's key field.
+/// @param rows     The new rows by key.
+/// @return The new value, or nothing when no row matched.
+[[nodiscard]] inline std::optional<Value> patchHeldRows(Value const& value, std::vector<std::string> const& paths,
+                                                        std::string_view keyField, RowsByKey const& rows) {
+    std::optional<Value> patched;
+    for (std::string const& path : paths) {
+        std::vector<std::string> const members = pathMembers(path);
+        auto next = patched ? patchKeyedRows(*patched, members, keyField, rows)
+                            : patchKeyedRows(value, members, keyField, rows);
+        if (next) {
+            patched = std::move(next);
+        }
+    }
+    return patched;
+}
+
+/// @brief The entries one change marks stale, each once, in the order they were found.
+struct Marks {
+    /// @brief The entries.
+    std::vector<CacheEntry*> entries;
+
+    /// @brief Adds an entry, unless it is already there.
+    /// @param entry The entry.
+    void add(CacheEntry& entry) {
+        if (std::ranges::find(entries, &entry) == entries.end()) {
+            entries.push_back(&entry);
+        }
+    }
 };
 
 class QueryRuntime;
@@ -620,6 +803,12 @@ class RtScope;
 class ScreenCore;
 
 }  // namespace detail
+
+/// @brief How a mutation's reply was used.
+enum class ReplyUse : std::uint8_t {
+    Applied,    ///< The reply is the latest: its values may patch the cache.
+    Discarded,  ///< A newer run's reply was applied first, so its values are older and only mark.
+};
 
 /// @brief What running a host command (`host/1`) did.
 struct HostCommandResult {
@@ -643,7 +832,7 @@ struct HostCommands {
     std::function<HostCommandResult(std::string const& name, Value const& args)> run;
 };
 
-/// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, `refreshOn` bookkeeping, the
+/// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
 /// It belongs to the runtime's owner, outlives every screen mounted on it, and is cleared by `signOut` and on a
@@ -777,6 +966,7 @@ public:
                 static_cast<void>(key);
                 ++entry->generation;
                 entry->evict.cancel();
+                countTopics(*entry, -1);
             }
             _entries.clear();
             for (detail::QueryRuntime* const query : _mounted) {
@@ -874,11 +1064,16 @@ public:
             entry->action = action;
             entry->body = text;
             entry->evaluate = evaluate;
+            entry->instanceToken = token;
             if (_options.catalog.action) {
                 if (auto const info = _options.catalog.action(action)) {
                     entry->secretFields = info->secretFields;
+                    if (!evaluate) {
+                        entry->records = info->records;
+                    }
                 }
             }
+            countTopics(*entry, +1);
             found = _entries.emplace(std::move(key), std::move(entry)).first;
         }
         ++found->second->users;
@@ -896,7 +1091,9 @@ public:
         entry->evict = _options.scheduler->after(_options.keepUnused, [this, weak] {
             auto const held = weak.lock();
             if (held && held->users == 0) {
+                countTopics(*held, -1);
                 _entries.erase(held->key);
+                flushWatches();
             }
         });
     }
@@ -905,6 +1102,9 @@ public:
     /// @param entry   The entry.
     /// @param channel The channel to send it through; `nullptr` fails the request at once.
     void fetch(std::shared_ptr<detail::CacheEntry> const& entry, std::shared_ptr<ModelChannel> const& channel) {
+        // The watch goes out before the read, on the same connection, so a change committed after the read is
+        // seen as an event.
+        flushWatches();
         std::uint64_t const generation = ++entry->generation;
         if (channel == nullptr) {
             settleFailure(*entry, "the model alias has no instance", "error");
@@ -971,7 +1171,7 @@ public:
             std::chrono::steady_clock::now().time_since_epoch());
     }
 
-    /// @brief Registers a mounted query, for `refreshOn` and invalidation.
+    /// @brief Registers a mounted query, which a reconnect and a backend switch refetch.
     /// @param query The query.
     void attachQuery(detail::QueryRuntime& query) { _mounted.push_back(&query); }
 
@@ -979,11 +1179,60 @@ public:
     /// @param query The query.
     void forgetQuery(detail::QueryRuntime& query) { std::erase(_mounted, &query); }
 
-    /// @brief A mutation of @p typeId running @p actionId succeeded: refetch every mounted query of that model type
-    ///        whose `refreshOn` names it (spec 5 §5).
-    /// @param typeId   The model type.
-    /// @param actionId The action.
-    void actionSucceeded(std::string const& typeId, std::string const& actionId);
+    /// @brief A call of @p actionId on a model of @p typeId succeeded: applies the action's effects to the cache
+    ///        (spec 8 §9).
+    ///
+    /// `updates R` merges the reply's rows of `R` into each entry holding `R`, matched by the record's key field at
+    /// the entry's paths, with no fetch; an entry whose fetch is in flight also fetches once more, since that fetch
+    /// may have read before the write. `changes R` marks each entry holding `R` stale. `changesInstance` marks each
+    /// entry read through the same instance. A marked entry refetches through a mounted query that uses it. A
+    /// discarded reply only marks: its `updates` act as `changes`.
+    /// @param typeId        The model type.
+    /// @param actionId      The action.
+    /// @param reply         The reply's value.
+    /// @param use           Whether the reply was applied or discarded.
+    /// @param instanceToken The instance token of the alias the call went through.
+    void actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
+                         std::string const& instanceToken);
+
+    /// @brief The connection to the server was made again (spec 8 §7, "Reconnect"): sends the whole watch set with
+    ///        `replace: true`, then marks every entry but an `evaluate` one stale. A mounted entry refetches, and one
+    ///        whose fetch is in flight fetches once more when that fetch settles, so a change missed while the
+    ///        connection was down is read again.
+    void reconnected();
+
+    /// @brief The topics the cache holds now: every record an entry holds, and the keyed shared instance of every
+    ///        entry whose action holds no record. What `reconnected` sends.
+    /// @return The topics, records and instances each in name order; `replace` is false.
+    [[nodiscard]] wire::WatchBody watchSet() const;
+
+    /// @brief Applies a server event to the cache (spec 8 §9).
+    ///
+    /// A `changes` event marks the entries it names stale, and a `resync` sends the whole watch set again, as
+    /// `reconnected` does, and marks every entry but an `evaluate` one;
+    /// each marked entry refetches through a mounted query that uses it, and one no query uses refetches when a
+    /// query mounts on it. An event of another topic, or a payload that cannot be read, is ignored.
+    /// @param event The event.
+    void deliverEvent(wire::EventBody const& event);
+
+    /// @brief Applies a `changes` event's payload to the cache, in one reactive batch.
+    ///
+    /// A record change with keys marks each entry holding the record whose value has a row with one of the keys,
+    /// and an entry holding it keyless; a record change without keys marks every entry holding the record. An
+    /// instance change marks every entry read through that instance: the keyed shared one its primary key names,
+    /// or, with no primary key, the connection's own private ones of that model type.
+    /// @param changes The payload.
+    void applyChanges(wire::ChangesBody const& changes);
+
+    /// @brief Marks an entry stale. While its fetch is in flight, the entry also refetches once that fetch settles,
+    ///        because the fetch may have read before the change.
+    /// @param entry The entry.
+    static void markStale(detail::CacheEntry& entry) {
+        entry.stale = true;
+        if (entry.pending.peek()) {
+            entry.refetchAfter = true;
+        }
+    }
 
 private:
     void settleReply(detail::CacheEntry& entry, std::string const& reply) {
@@ -1000,9 +1249,69 @@ private:
             entry.errorKind.set({});
             entry.pending.set(false);
             entry.fetchedAt = now();
-            entry.stale = false;
+            entry.stale = entry.refetchAfter;
+            if (entry.refetchAfter) {
+                entry.refetchAfter = false;
+                refetchMounted(entry);
+            }
         });
     }
+
+    /// @brief Refetches an entry through the mounted queries that use it; one fetch even when several do.
+    /// @param entry The entry.
+    void refetchMounted(detail::CacheEntry const& entry);
+
+    /// @brief Applies a reply's effects to the cache, for `actionSucceeded`.
+    /// @param typeId        The model type.
+    /// @param actionId      The action.
+    /// @param reply         The reply's value.
+    /// @param use           Whether the reply was applied or discarded.
+    /// @param instanceToken The instance token of the alias the call went through.
+    void applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply, ReplyUse use,
+                           std::string const& instanceToken);
+
+    /// @brief Counts an entry's topics in or out, queueing a `watch` for a count that leaves zero and an `unwatch`
+    ///        for one that returns to it.
+    /// @param entry The entry.
+    /// @param delta `+1` when the entry is made, `-1` when it is dropped.
+    void countTopics(detail::CacheEntry const& entry, int delta);
+
+    /// @brief Sends the queued watch changes, at most one `watch` and one `unwatch`; drops them when there is no
+    ///        watcher.
+    void flushWatches();
+
+    /// @brief Sends one watch request, ignoring its reply: a refused topic simply sends no events.
+    /// @param kind The kind, `watch` or `unwatch`.
+    /// @param body The body.
+    void sendWatch(std::string_view kind, wire::WatchBody const& body) const;
+
+    /// @brief Marks every entry but an `evaluate` one stale and refetches the mounted ones, in one batch.
+    void markAllStale();
+
+    /// @brief Marks each entry of @p marks stale and refetches it through a mounted query that uses it.
+    /// @param marks The entries.
+    void markAndRefetch(detail::Marks const& marks);
+
+    /// @brief Applies one `updates` or `changes` effect of a reply: patches the entries holding the record, or marks
+    ///        them.
+    /// @param effect The effect.
+    /// @param record The record it names.
+    /// @param info   The action's catalog entry, for the records its reply holds.
+    /// @param reply  The reply's value.
+    /// @param use    Whether the reply was applied or discarded.
+    /// @param marks  Where entries to mark go.
+    void applyRecordEffect(ActionEffect const& effect, std::string const& record, ActionInfo const& info,
+                           Value const& reply, ReplyUse use, detail::Marks& marks);
+
+    /// @brief Finds the entries a `changes` event's record change names.
+    /// @param change The change.
+    /// @param marks  Where they go.
+    void markRecordChange(effects::RecordChange const& change, detail::Marks& marks);
+
+    /// @brief Finds the entries a `changes` event's instance change names.
+    /// @param instance The instance.
+    /// @param marks    Where they go.
+    void markInstanceChange(wire::InstanceTopic const& instance, detail::Marks& marks);
 
     void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
         _runtime->batch([&] {
@@ -1018,6 +1327,12 @@ private:
     reactive::Runtime* _runtime;
     SessionOptions _options;
     reactive::Signal<std::set<std::string, std::less<>>> _permitted;
+    std::map<std::string, int, std::less<>> _recordRefs;
+    std::map<std::pair<std::string, std::string>, int> _instanceRefs;
+    std::set<std::string, std::less<>> _watchRecords;
+    std::set<std::string, std::less<>> _unwatchRecords;
+    std::set<std::pair<std::string, std::string>> _watchInstances;
+    std::set<std::pair<std::string, std::string>> _unwatchInstances;
     reactive::Signal<std::shared_ptr<FormatContext const>> _format;
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
@@ -1638,7 +1953,7 @@ private:
 /// @brief One run of a mutation, as a command sees it: whether it succeeded, and the reply.
 using RunDone = std::function<void(bool succeeded, Value const& reply)>;
 
-/// @brief A mutation at run time (spec 5 §5): concurrency, patch, optimistic writes, invalidation.
+/// @brief A mutation at run time (spec 5 §5): concurrency, optimistic writes and the reply's effects.
 class MutationRuntime {
 public:
     /// @brief A mutation of @p scope.
@@ -2514,7 +2829,7 @@ inline void Session::backendChanged(std::string const& backend) {
         _env.set(std::move(env));
         for (auto const& [key, entry] : _entries) {
             static_cast<void>(key);
-            entry->stale = true;
+            markStale(*entry);
         }
         std::vector<detail::QueryRuntime*> const mounted = _mounted;
         for (detail::QueryRuntime* const query : mounted) {
@@ -2523,14 +2838,261 @@ inline void Session::backendChanged(std::string const& backend) {
     });
 }
 
-inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId) {
+inline void Session::refetchMounted(detail::CacheEntry const& entry) {
     std::vector<detail::QueryRuntime*> const mounted = _mounted;
     for (detail::QueryRuntime* const query : mounted) {
-        auto const& names = query->decl().refreshOn;
-        if (query->typeId() == typeId && std::ranges::find(names, actionId) != names.end()) {
-            query->invalidate();
+        if (_runtime->untracked([query] { return query->entry(); }).get() == &entry) {
+            query->refetchCurrent();
         }
     }
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a model type and an action id, as every caller names them.
+inline void Session::applyReplyEffects(std::string const& typeId, std::string const& actionId, Value const& reply,
+                                       ReplyUse use, std::string const& instanceToken) {
+    if (!_options.catalog.action) {
+        return;
+    }
+    std::optional<ActionInfo> const info = _options.catalog.action(actionId);
+    if (!info || !info->effects) {
+        return;
+    }
+    detail::Marks marks;
+    for (ActionEffect const& effect : *info->effects) {
+        if (effect.kind == "changesInstance") {
+            for (auto const& [key, entry] : _entries) {
+                static_cast<void>(key);
+                if (!entry->evaluate && entry->typeId == typeId && entry->instanceToken == instanceToken) {
+                    marks.add(*entry);
+                }
+            }
+        } else if (effect.record && (effect.kind == "updates" || effect.kind == "changes")) {
+            applyRecordEffect(effect, *effect.record, *info, reply, use, marks);
+        }
+    }
+    markAndRefetch(marks);
+}
+
+inline void Session::applyRecordEffect(ActionEffect const& effect, std::string const& record, ActionInfo const& info,
+                                       Value const& reply, ReplyUse use, detail::Marks& marks) {
+    // The reply's rows of the record, by key; none when the reply does not hold it keyed, or must only mark.
+    auto const own = std::ranges::find(info.records, record, &ActionRecordInfo::record);
+    std::optional<std::string> const ownKey =
+        effect.kind == "updates" && use == ReplyUse::Applied && own != info.records.end() ? own->keyField
+                                                                                          : std::nullopt;
+    detail::RowsByKey rows;
+    if (ownKey) {
+        for (Value const* const row : detail::keyedRowsOf(reply, own->paths, *ownKey)) {
+            rows.insert_or_assign(detail::canonicalJson(*row->field(*ownKey)), row);
+        }
+    }
+    for (auto const& [key, entry] : _entries) {
+        static_cast<void>(key);
+        ActionRecordInfo const* const held = entry->holding(record);
+        if (held == nullptr) {
+            continue;
+        }
+        if (!ownKey || !held->keyField) {
+            marks.add(*entry);
+            continue;
+        }
+        if (auto patched = detail::patchHeldRows(entry->confirmed, held->paths, *held->keyField, rows)) {
+            confirm(*entry, *patched);
+        }
+        // A fetch in flight may have read before the write, and would settle over the patch.
+        if (entry->pending.peek()) {
+            markStale(*entry);
+        }
+    }
+}
+
+inline void Session::markAndRefetch(detail::Marks const& marks) {
+    for (detail::CacheEntry* const entry : marks.entries) {
+        markStale(*entry);
+    }
+    for (detail::CacheEntry const* const entry : marks.entries) {
+        refetchMounted(*entry);
+    }
+}
+
+inline void Session::countTopics(detail::CacheEntry const& entry, int delta) {
+    if (entry.evaluate) {
+        return;
+    }
+    // One topic: its count, and the queues a change of the count from or to zero goes to.
+    auto const count = [delta](auto& refs, auto const& topic, auto& watches, auto& unwatches) {
+        int& refsOf = refs[topic];
+        refsOf += delta;
+        if (delta > 0 && refsOf == 1 && unwatches.erase(topic) == 0) {
+            watches.insert(topic);
+        } else if (refsOf <= 0) {
+            refs.erase(topic);
+            if (watches.erase(topic) == 0) {
+                unwatches.insert(topic);
+            }
+        }
+    };
+    if (!entry.records.empty()) {
+        for (ActionRecordInfo const& record : entry.records) {
+            count(_recordRefs, record.record, _watchRecords, _unwatchRecords);
+        }
+        return;
+    }
+    constexpr std::string_view kShared = "shared:";
+    if (entry.instanceToken.starts_with(kShared)) {
+        count(_instanceRefs, std::pair{entry.typeId, entry.instanceToken.substr(kShared.size())}, _watchInstances,
+              _unwatchInstances);
+    }
+}
+
+inline void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) const {
+    auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
+    completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+}
+
+inline void Session::flushWatches() {
+    if (!_options.watcher) {
+        _watchRecords.clear();
+        _unwatchRecords.clear();
+        _watchInstances.clear();
+        _unwatchInstances.clear();
+        return;
+    }
+    auto const take = [](auto& records, auto& instances) {
+        wire::WatchBody body;
+        body.records.assign(records.begin(), records.end());
+        for (auto const& [modelType, primary] : instances) {
+            body.instances.push_back(wire::InstanceTopic{.modelType = modelType, .primary = primary, .instance = 0});
+        }
+        records.clear();
+        instances.clear();
+        return body;
+    };
+    if (!_watchRecords.empty() || !_watchInstances.empty()) {
+        sendWatch(wire::kWatchKind, take(_watchRecords, _watchInstances));
+    }
+    if (!_unwatchRecords.empty() || !_unwatchInstances.empty()) {
+        sendWatch(wire::kUnwatchKind, take(_unwatchRecords, _unwatchInstances));
+    }
+}
+
+inline wire::WatchBody Session::watchSet() const {
+    wire::WatchBody body;
+    for (auto const& [record, refs] : _recordRefs) {
+        static_cast<void>(refs);
+        body.records.push_back(record);
+    }
+    for (auto const& [topic, refs] : _instanceRefs) {
+        static_cast<void>(refs);
+        body.instances.push_back(
+            wire::InstanceTopic{.modelType = topic.first, .primary = topic.second, .instance = 0});
+    }
+    return body;
+}
+
+inline void Session::markAllStale() {
+    _runtime->batch([this] {
+        detail::Marks marks;
+        for (auto const& [key, entry] : _entries) {
+            static_cast<void>(key);
+            if (!entry->evaluate) {
+                marks.add(*entry);
+            }
+        }
+        markAndRefetch(marks);
+    });
+}
+
+inline void Session::reconnected() {
+    // The whole set replaces what the server holds, so the queued changes are superseded.
+    _watchRecords.clear();
+    _unwatchRecords.clear();
+    _watchInstances.clear();
+    _unwatchInstances.clear();
+    if (_options.watcher) {
+        wire::WatchBody body = watchSet();
+        body.replace = true;
+        sendWatch(wire::kWatchKind, body);
+    }
+    markAllStale();
+}
+
+inline void Session::deliverEvent(wire::EventBody const& event) {
+    if (event.topic == wire::kResyncTopic) {
+        reconnected();
+        return;
+    }
+    if (event.topic != wire::kChangesTopic) {
+        return;
+    }
+    if (auto changes = wire::readChangesBody(event.payload.str)) {
+        applyChanges(*changes);
+    }
+}
+
+inline void Session::applyChanges(wire::ChangesBody const& changes) {
+    _runtime->batch([&] {
+        detail::Marks marks;
+        for (effects::RecordChange const& change : changes.records) {
+            markRecordChange(change, marks);
+        }
+        for (wire::InstanceTopic const& instance : changes.instances) {
+            markInstanceChange(instance, marks);
+        }
+        markAndRefetch(marks);
+    });
+}
+
+inline void Session::markRecordChange(effects::RecordChange const& change, detail::Marks& marks) {
+    // The keys' canonical text, so a key the server wrote is compared with the rows' own.
+    std::set<std::string, std::less<>> keys;
+    for (glz::raw_json const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+        auto json = parseJson(key.str);
+        auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+        if (value) {
+            keys.insert(detail::canonicalJson(*value));
+        }
+    }
+    for (auto const& [name, entry] : _entries) {
+        static_cast<void>(name);
+        ActionRecordInfo const* const held = entry->holding(change.record);
+        if (held == nullptr) {
+            continue;
+        }
+        // An entry still waiting for its first value may come to hold a key; keyless rows cannot be told apart.
+        if (!change.keys || !held->keyField || !entry->hasValue.peek()) {
+            marks.add(*entry);
+            continue;
+        }
+        std::string const& keyField = *held->keyField;
+        bool const holdsKey = std::ranges::any_of(
+            detail::keyedRowsOf(entry->confirmed, held->paths, keyField),
+            [&](Value const* row) { return keys.contains(detail::canonicalJson(*row->field(keyField))); });
+        if (holdsKey) {
+            marks.add(*entry);
+        }
+    }
+}
+
+inline void Session::markInstanceChange(wire::InstanceTopic const& instance, detail::Marks& marks) {
+    std::string const shared = "shared:" + instance.primary;
+    for (auto const& [name, entry] : _entries) {
+        static_cast<void>(name);
+        if (entry->evaluate || entry->typeId != instance.modelType) {
+            continue;
+        }
+        // Without a primary key, the instance is one of the connection's own private ones.
+        bool const same =
+            instance.primary.empty() ? !entry->instanceToken.starts_with("shared") : entry->instanceToken == shared;
+        if (same) {
+            marks.add(*entry);
+        }
+    }
+}
+
+inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply,
+                                     ReplyUse use, std::string const& instanceToken) {
+    _runtime->batch([&] { applyReplyEffects(typeId, actionId, reply, use, instanceToken); });
 }
 
 inline void Session::detachQuery(detail::QueryRuntime& query) { query.detach(); }
@@ -3106,40 +3668,16 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                 }
             }
             delivered = withoutFields(*reply, secret);
+            std::string const token =
+                _alias == nullptr ? std::string{} : core.runtime().untracked([&] { return _alias->token->get(); });
             if (!applied) {
+                session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Discarded, token);
                 return;
             }
             _result.set(*reply);
             _error.set(Value{});
             _errorKind.set(Value{});
-            if (_decl->patch) {
-                Bindings bindings = *run->bindings;
-                bindings.push_back(Binding{.name = "result", .read = [value = *reply] { return value; }});
-                NameRef const* const target = _scope->find(_decl->patch->query);
-                if (target != nullptr && target->category == NameCategory::Query) {
-                    auto entry = core.runtime().untracked([&] { return target->query->entry(); });
-                    Value const key =
-                        core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->key); });
-                    Value const with =
-                        core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->with); });
-                    if (entry) {
-                        auto patched = patchRows(entry->confirmed, _decl->patch->at, key, with);
-                        if (patched) {
-                            session.confirm(*entry, *patched);
-                        } else if (patched.error() == PatchMiss::NoList && entry->hasValue.peek()) {
-                            core.report(pointerAppend(_decl->path, "patch"),
-                                        patchMissReason(_decl->patch->query, _decl->patch->at));
-                        }
-                    }
-                }
-            }
-            for (std::string const& name : _decl->invalidates) {
-                NameRef const* const target = _scope->find(name);
-                if (target != nullptr && target->category == NameCategory::Query) {
-                    target->query->invalidate();
-                }
-            }
-            session.actionSucceeded(_typeId, _decl->action);
+            session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Applied, token);
             core.runList(_decl->onSuccess, commandCtx(*run->bindings), {});
             if (!secret.empty()) {
                 _result.set(delivered);
@@ -5365,17 +5903,21 @@ inline forms::Submitter ScreenCore::aliasCalls(ModelAlias* alias) {
 }
 
 // The calls of a form, collection or wizard: a success other than of @p read, the collection's own query, tells the
-// session, which refetches the queries whose `refreshOn` names the action, as a mutation's success does.
+// session, which applies the action's effects, as a mutation's success does.
 inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string read) {
     return [this, alias, call = aliasCalls(alias), read = std::move(read)](
                std::string_view actionId, std::string body) -> async::Completion<std::string> {
         async::Completion<std::string> completion = call(actionId, std::move(body));
         if (actionId != read) {
-            completion.then([this, alive = std::weak_ptr<bool>{_alive}, typeId = alias->decl->type,
-                             action = std::string{actionId}](std::string const&) {
-                if (!alive.expired()) {
-                    session.actionSucceeded(typeId, action);
+            completion.then([this, alive = std::weak_ptr<bool>{_alive}, alias, typeId = alias->decl->type,
+                             action = std::string{actionId}](std::string const& reply) {
+                if (alive.expired()) {
+                    return;
                 }
+                auto json = parseJson(reply);
+                auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+                std::string const token = runtime().untracked([&] { return alias->token->get(); });
+                session.actionSucceeded(typeId, action, value ? *value : Value{}, ReplyUse::Applied, token);
             });
         }
         return completion;

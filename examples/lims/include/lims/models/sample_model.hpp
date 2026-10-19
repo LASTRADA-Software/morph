@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -473,46 +474,83 @@ private:
 }  // namespace lims
 
 BRIDGE_REGISTER_MODEL(lims::SampleModel, "SampleModel")
+// No screen lists clients: a registered client is only named by the sample registered for it next.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::RegisterClient, "RegisterClient")
+BRIDGE_REGISTER_EFFECTS(lims::RegisterClient, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::RegisterSample, "RegisterSample")
+BRIDGE_REGISTER_EFFECTS(lims::RegisterSample, ::morph::effects::changes<lims::SampleView>)
+// Opening attaches this instance to a sample; it changes nothing stored.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::OpenSample, "OpenSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::OpenSample, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetSample, "GetSample", ::morph::model::Loggable::No)
+// A transition answers the sample as it now is.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ReceiveSample, "ReceiveSample")
+BRIDGE_REGISTER_EFFECTS(lims::ReceiveSample, ::morph::effects::updates<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::StartWork, "StartWork")
+BRIDGE_REGISTER_EFFECTS(lims::StartWork, ::morph::effects::updates<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SubmitForVerification, "SubmitForVerification")
+BRIDGE_REGISTER_EFFECTS(lims::SubmitForVerification, ::morph::effects::updates<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ReturnForRework, "ReturnForRework")
+BRIDGE_REGISTER_EFFECTS(lims::ReturnForRework, ::morph::effects::updates<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::PublishSample, "PublishSample")
+BRIDGE_REGISTER_EFFECTS(lims::PublishSample, ::morph::effects::updates<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::RejectSample, "RejectSample")
+BRIDGE_REGISTER_EFFECTS(lims::RejectSample, ::morph::effects::updates<lims::SampleView>)
+// A capture replaces the version's previous result with a new row under a new id, and moves the sample's
+// version, so both are changed rather than updated.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::CaptureConcentration, "CaptureConcentration")
+BRIDGE_REGISTER_EFFECTS(lims::CaptureConcentration, ::morph::effects::changes<lims::ResultView>,
+                        ::morph::effects::changes<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResults, "ListResults", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResultQualifiers",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListDilutionModes, "ListDilutionModes", ::morph::model::Loggable::No)
+// An offline replay applies its capture, or records why it could not.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::QueuedCapture, "QueuedCapture")
+BRIDGE_REGISTER_EFFECTS(lims::QueuedCapture, ::morph::effects::changes<lims::ResultView>,
+                        ::morph::effects::changes<lims::SampleView>, ::morph::effects::changes<lims::ConflictView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", ::morph::model::Loggable::No)
+// Applying a conflict anyway applies its capture.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ResolveConflict, "ResolveConflict")
+BRIDGE_REGISTER_EFFECTS(lims::ResolveConflict, ::morph::effects::changes<lims::ConflictView>,
+                        ::morph::effects::changes<lims::ResultView>, ::morph::effects::changes<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GrantRole, "GrantRole")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
+BRIDGE_REGISTER_EFFECTS(lims::VerifyResult, ::morph::effects::changes<lims::VerificationView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
 
 // The registration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
+// The sample-entry actions edit this instance's working copy, which the entry screen's queries read.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::NewSample, "NewSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::NewSample, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::LoadSample, "LoadSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::LoadSample, ::morph::effects::changesInstance)
+// Saving stores the working copy as the sample.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SaveSample, "SaveSample")
+BRIDGE_REGISTER_EFFECTS(lims::SaveSample, ::morph::effects::changesInstance,
+                        ::morph::effects::changes<lims::SampleView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::DeleteSample, "DeleteSample")
+BRIDGE_REGISTER_EFFECTS(lims::DeleteSample, ::morph::effects::changesInstance,
+                        ::morph::effects::changes<lims::SampleView>, ::morph::effects::changes<lims::ResultView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::HeaderSection, "HeaderSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::HeaderSection, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SamplingSection, "SamplingSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::SamplingSection, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::TurbiditySection, "TurbiditySection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::TurbiditySection, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::NitrateSection, "NitrateSection", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::NitrateSection, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ClearOptionalMeasurement, "ClearOptionalMeasurement",
                        ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::ClearOptionalMeasurement, ::morph::effects::changesInstance)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetHeader, "GetHeader", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetMeasurements, "GetMeasurements", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetDilutionSeries, "GetDilutionSeries", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListProjects, "ListProjects", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SelectProject, "SelectProject", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_EFFECTS(lims::SelectProject, ::morph::effects::changesInstance)
 // NOLINTEND(misc-const-correctness)
 
 // `OpenSample` is the action that names a sample, so it defines the model's

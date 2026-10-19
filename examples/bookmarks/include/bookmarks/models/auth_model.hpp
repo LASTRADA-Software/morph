@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
@@ -39,3 +40,5 @@ BRIDGE_REGISTER_MODEL(bookmarks::AuthModel, "Bookmarks_AuthModel")
 // its result carries a live bearer token — neither belongs in a durable,
 // replayable action log.
 BRIDGE_REGISTER_ACTION(bookmarks::AuthModel, bookmarks::Login, "Login", ::morph::model::Loggable::No)
+// Signing in changes no row a screen shows: the screen that runs it signs the session in, which reloads the catalog.
+BRIDGE_REGISTER_EFFECTS(bookmarks::Login, ::morph::effects::none)

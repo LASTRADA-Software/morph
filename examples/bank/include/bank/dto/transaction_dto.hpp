@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <morph/core/records.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -83,3 +84,6 @@ struct HistoryPage {
 };
 
 }  // namespace bank::dto
+
+// Every list is filtered to the signed-in customer's own rows, so a row's key never reaches another customer.
+BRIDGE_REGISTER_RECORD(bank::dto::TxnInfo, "Bank_Transaction", ::morph::record::privateKeys)

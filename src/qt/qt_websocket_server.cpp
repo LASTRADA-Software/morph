@@ -9,10 +9,13 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <morph/core/connection_writer.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/profiler.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -81,6 +84,7 @@ void QtWebSocketServer::close() {
             state.handshakeTimer->stop();
             state.handshakeTimer->deleteLater();
         }
+        forgetConnection(state);
         socket->abort();
         socket->deleteLater();
     }
@@ -184,6 +188,7 @@ void QtWebSocketServer::onNewConnection() {
     }
     connect(socket, &QWebSocket::textMessageReceived, this, &QtWebSocketServer::onTextMessage);
     connect(socket, &QWebSocket::disconnected, this, &QtWebSocketServer::onDisconnected);
+    connect(socket, &QWebSocket::bytesWritten, this, &QtWebSocketServer::onBytesWritten);
 
     ClientState state;
     state.socket = socket;
@@ -214,9 +219,197 @@ void QtWebSocketServer::onNewConnection() {
         state.handshakeTimer = timer;
     }
 
-    _clients.emplace(socket, state);
+#ifndef QT_NO_SSL
+    if (_wsServer.secureMode() == QWebSocketServer::SecureMode) {
+        state.tls = findTlsSocket(socket);
+        if (state.tls.isNull()) {
+            ::morph::log::logWarn(
+                "[QtWebSocketServer] connection {}: TLS socket not found; its backlog counts "
+                "only plaintext not yet encrypted, so a slow reader is not held back",
+                state.cid);
+        }
+    }
+#endif
+    if (_cfg.sendTimeout.count() > 0) {
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — QObject parent owns this
+        auto* timer = new QTimer(this);
+        timer->setSingleShot(true);
+        connect(timer, &QTimer::timeout, this, [this, socket] { onSendTimer(socket); });
+        state.sendTimer = timer;
+    }
+
+    auto const cid = state.cid;
+    auto const backlog = state.backlog;
+    _clients.emplace(socket, std::move(state));
+
+    // QWebSocketServer hands over a socket whose upgrade is already complete,
+    // so a frame written from here on cannot precede the handshake response.
+    QPointer<QtWebSocketServer> const self{this};
+    QPointer<QWebSocket> const weakSocket{socket};
+    _server.setConnectionWriter(
+        cid, ::morph::backend::ConnectionWriter{
+                 .write =
+                     [self, weakSocket, backlog](std::string envelope) {
+                         // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): Qt owns the queued callable.
+                         if (!queueEnvelope(self, weakSocket, backlog, std::move(envelope))) {
+                             throw std::runtime_error("no Qt application to write the connection from");
+                         }
+                     },
+                 .backlog = [backlog] { return backlog->load(); }});
     MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
 }
+
+bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server, QPointer<QWebSocket> const& socket,
+                                      std::shared_ptr<std::atomic<std::size_t>> const& backlog, std::string envelope) {
+    auto* app = QCoreApplication::instance();
+    if (app == nullptr) {
+        return false;
+    }
+    std::size_t const counted = envelope.size();
+    // Before the queueing, so a backlog read on the server strand already
+    // covers a frame still on its way to the Qt thread.
+    backlog->fetch_add(counted);
+    // Qt owns the queued callable and deletes it once it ran or was dropped.
+    bool const queued = QMetaObject::invokeMethod(
+        app,
+        [server, socket, backlog, counted, envelope = std::move(envelope)]() {
+            MORPH_ZONE("QtWebSocketServer::sendReply");
+            if (server && socket) {
+                auto iter = server->_clients.find(socket.data());
+                if (iter != server->_clients.end()) {
+                    server->writeCounted(socket.data(), iter->second, envelope);
+                    return;
+                }
+            }
+            backlog->fetch_sub(counted);
+        },
+        Qt::QueuedConnection);
+    if (!queued) {
+        backlog->fetch_sub(counted);
+    }
+    return queued;
+}
+
+void QtWebSocketServer::writeNow(QWebSocket* socket, ClientState& state, std::string const& envelope) {
+    state.backlog->fetch_add(envelope.size());
+    writeCounted(socket, state, envelope);
+}
+
+void QtWebSocketServer::writeCounted(QWebSocket* socket, ClientState& state, std::string const& envelope) {
+    if (socket->sendTextMessage(QString::fromStdString(envelope)) <= 0) {
+        // Not connected any more: nothing reached the socket.
+        releaseBacklog(state, envelope.size());
+        return;
+    }
+    bool const wasIdle = !state.unwritten.oldest().has_value();
+    state.unwritten.push(pendingBytes(state), envelope.size(), std::chrono::steady_clock::now());
+    if (wasIdle) {
+        armSendTimer(state);
+    }
+}
+
+void QtWebSocketServer::releaseBacklog(ClientState const& state, std::size_t bytes) {
+    if (bytes == 0) {
+        return;
+    }
+    // Judged from the value this subtraction replaced, so of several releases
+    // that pass the bound together exactly one reports it. A second report,
+    // after other threads lift the count again, is harmless: the server sends
+    // nothing when no resync is owed.
+    std::size_t const before = state.backlog->fetch_sub(bytes);
+    bool const crossed =
+        before >= ::morph::backend::kEventBacklogLow && before - bytes < ::morph::backend::kEventBacklogLow;
+    if (crossed && state.socket != nullptr && state.socket->state() == QAbstractSocket::ConnectedState) {
+        _server.connectionDrained(state.cid);
+    }
+}
+
+void QtWebSocketServer::onBytesWritten(qint64 bytes) {
+    auto* socket = qobject_cast<QWebSocket*>(sender());
+    if (socket == nullptr) {
+        return;
+    }
+    auto iter = _clients.find(socket);
+    if (iter == _clients.end()) {
+        return;
+    }
+    ClientState& state = iter->second;
+    std::size_t const released = state.unwritten.written(bytes, pendingBytes(state));
+    if (released != 0) {
+        releaseBacklog(state, released);
+        armSendTimer(state);
+    }
+}
+
+void QtWebSocketServer::armSendTimer(ClientState& state) const {
+    if (state.sendTimer == nullptr) {
+        return;
+    }
+    auto const oldest = state.unwritten.oldest();
+    if (!oldest) {
+        state.sendTimer->stop();
+        return;
+    }
+    auto const due = *oldest + _cfg.sendTimeout;
+    auto const remaining = std::chrono::ceil<std::chrono::milliseconds>(due - std::chrono::steady_clock::now());
+    state.sendTimer->start(std::max(std::chrono::milliseconds{0}, remaining));
+}
+
+void QtWebSocketServer::onSendTimer(QWebSocket* socket) {
+    auto iter = _clients.find(socket);
+    if (iter == _clients.end()) {
+        return;
+    }
+    ClientState& state = iter->second;
+    auto const oldest = state.unwritten.oldest();
+    if (!oldest) {
+        return;
+    }
+    if (std::chrono::steady_clock::now() - *oldest < _cfg.sendTimeout) {
+        armSendTimer(state);
+        return;
+    }
+    ::morph::log::logWarn("[QtWebSocketServer] connection {} closed: send timeout, {} bytes unwritten after {} ms",
+                          state.cid, state.backlog->load(), _cfg.sendTimeout.count());
+    // An abort, not a close: a close frame would queue behind what the peer
+    // is not reading. It may disconnect synchronously, erasing `state`.
+    socket->abort();
+}
+
+void QtWebSocketServer::forgetConnection(ClientState& state) {
+    if (state.sendTimer != nullptr) {
+        state.sendTimer->stop();
+        state.sendTimer->deleteLater();
+        state.sendTimer = nullptr;
+    }
+    state.backlog->fetch_sub(state.unwritten.clear());
+}
+
+qint64 QtWebSocketServer::pendingBytes(ClientState const& state) {
+    qint64 pending = state.socket->bytesToWrite();
+#ifndef QT_NO_SSL
+    if (!state.tls.isNull()) {
+        pending += state.tls->encryptedBytesToWrite();
+    }
+#endif
+    return pending;
+}
+
+#ifndef QT_NO_SSL
+QSslSocket* QtWebSocketServer::findTlsSocket(QWebSocket const* socket) const {
+    // `QWebSocket` does not expose the socket it wraps. A `SecureMode`
+    // `QWebSocketServer` accepts through a `QSslServer` it owns, which parents
+    // each socket it accepts, so the socket is among the server's
+    // descendants; the connection's two endpoints pick it out.
+    for (auto* candidate : _wsServer.findChildren<QSslSocket*>()) {
+        if (candidate->peerPort() == socket->peerPort() && candidate->peerAddress() == socket->peerAddress() &&
+            candidate->localPort() == socket->localPort() && candidate->localAddress() == socket->localAddress()) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+#endif
 
 bool QtWebSocketServer::consumeToken(ClientState& state) const {
     if (_cfg.messagesPerSecond == 0) {
@@ -268,8 +461,8 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     };
 
     if (std::cmp_greater(utf8.size(), _cfg.maxMessageBytes)) {
-        socket->sendTextMessage(QString::fromStdString(
-            ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", peekedCallId()))));
+        writeNow(socket, state,
+                 ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", peekedCallId())));
         return;
     }
 
@@ -283,24 +476,20 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         // the same reply-without-full-decode pattern the maxMessageBytes
         // branch above uses. The connection stays open: rate limiting throttles
         // a client, it does not evict one.
-        socket->sendTextMessage(
-            QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
+        writeNow(socket, state, ::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId())));
         return;
     }
 
+    // A reply counts toward the connection's backlog like an event, and is
+    // never held back.
+    QPointer<QtWebSocketServer> const self{this};
     QPointer<QWebSocket> const weakSocket{socket};
     _server.handle(
         message.toStdString(),
-        [weakSocket](const std::string& reply) {
-            QMetaObject::invokeMethod(
-                QCoreApplication::instance(),
-                [weakSocket, reply]() {
-                    MORPH_ZONE("QtWebSocketServer::sendReply");
-                    if (weakSocket) {
-                        weakSocket->sendTextMessage(QString::fromStdString(reply));
-                    }
-                },
-                Qt::QueuedConnection);
+        [self, weakSocket, backlog = state.backlog](const std::string& reply) {
+            // queueEnvelope's queued callable is owned by Qt, which the analyzer cannot see; it reports the leak here.
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+            static_cast<void>(queueEnvelope(self, weakSocket, backlog, reply));
         },
         state.cid);
 }
@@ -325,6 +514,7 @@ void QtWebSocketServer::onDisconnected() {
             iter->second.handshakeTimer->stop();
             iter->second.handshakeTimer->deleteLater();
         }
+        forgetConnection(iter->second);
         _clients.erase(iter);
         MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
         socket->deleteLater();

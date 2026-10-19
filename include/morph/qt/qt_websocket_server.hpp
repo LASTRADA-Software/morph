@@ -3,16 +3,25 @@
 #pragma once
 #include <QHostAddress>
 #include <QObject>
+#include <QPointer>
+#ifndef QT_NO_SSL
+#include <QSslSocket>
+#endif
 #ifndef QT_NO_SSL
 #include <QSslConfiguration>
 #endif
 #include <QTimer>
 #include <QWebSocket>
 #include <QWebSocketServer>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <memory>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/qt/detail/outbound_ledger.hpp>
 #include <optional>
+#include <string>
 #include <unordered_map>
 
 namespace morph::qt {
@@ -66,6 +75,16 @@ struct QtWebSocketServerConfig {
     /// actual close can lag the configured value by up to that sweep interval.
     std::chrono::milliseconds idleTimeout{0};
 
+    /// @brief Time a frame handed to a connection may stay unwritten before
+    ///        the connection is closed. `0` = disabled.
+    ///
+    /// A peer that stops reading leaves the oldest frame queued on its socket;
+    /// once that frame is older than this, the socket is aborted, so the
+    /// connection is retired — its models reclaimed, its events no longer
+    /// written — instead of holding frames it will never read. The same bound,
+    /// with the same default, as `morph::net::SocketServerConfig::sendTimeout`.
+    std::chrono::milliseconds sendTimeout{30000};
+
     /// @brief Address `listen()` binds to. Default `QHostAddress::LocalHost`.
     QHostAddress bindAddress = QHostAddress::LocalHost;
 
@@ -91,14 +110,26 @@ struct QtWebSocketServerConfig {
 ///
 /// @par Resource limits
 /// Pass a `QtWebSocketServerConfig` to bound connection count, per-frame size,
-/// per-connection message rate, and handshake/idle time. All fields default to
-/// unbounded, except `maxMessageBytes`, which defaults to the wire-layer cap.
+/// per-connection message rate, handshake/idle time, and how long a frame may
+/// stay unwritten. All fields default to unbounded, except `maxMessageBytes`,
+/// which defaults to the wire-layer cap, and `sendTimeout`, which defaults to
+/// 30 s.
 ///
 /// @par Bind address & plaintext-exposure guard
 /// `listen()` refuses — returns `false` and logs at `morph::log::LogLevel::error`
 /// — when `cfg.bindAddress` is not loopback, no TLS configuration was passed to
 /// the constructor, and `cfg.allowPlaintextExposure` is `false`. See
 /// `QtWebSocketServerConfig` and security.md's "Transport security" section.
+///
+/// @par Server-initiated events
+/// Each connection is handed to `RemoteServer::setConnectionWriter` as it is
+/// accepted, so `RemoteServer::post` reaches it. Every frame the server writes
+/// to a connection, replies and events alike, counts toward that connection's
+/// backlog by the size of its encoded envelope until the socket has written
+/// it; when the backlog falls below `backend::kEventBacklogLow`, the server is
+/// told through `RemoteServer::connectionDrained`. A connection whose oldest
+/// unwritten frame is older than `QtWebSocketServerConfig::sendTimeout` is
+/// aborted.
 ///
 /// @par Usage
 /// Call `listen()` to start accepting connections, and `port()` to discover the
@@ -194,6 +225,13 @@ public:
     /// @brief Qt slot called when a client disconnects.
     Q_SLOT void onDisconnected();
 
+    /// @brief Qt slot called when a client's socket has written @p bytes.
+    ///
+    /// Releases from the connection's backlog every frame those bytes
+    /// complete, and re-arms its send timeout for the oldest frame left.
+    /// @param bytes Bytes the socket just wrote.
+    Q_SLOT void onBytesWritten(qint64 bytes);
+
 private:
     /// @brief Per-connection state tracked between accept and disconnect.
     struct ClientState {
@@ -217,7 +255,97 @@ private:
         ///        client at accept time, so its disconnect can reclaim every model
         ///        it registered (see `RemoteServer::closeConnection`).
         ::morph::backend::ConnectionId cid = 0;
+
+        /// @brief Bytes of encoded envelopes handed to this connection and not
+        ///        yet written: the backlog `RemoteServer` reads.
+        ///
+        /// Added to on whichever thread hands over a frame, before the frame is
+        /// queued to the Qt thread, so the count covers frames still on their
+        /// way to the socket. Held by `shared_ptr` so the writer, kept on the
+        /// server strand, can read it without reaching this state.
+        std::shared_ptr<std::atomic<std::size_t>> backlog = std::make_shared<std::atomic<std::size_t>>(0);
+
+        /// @brief Frames on the socket and not yet written, released as
+        ///        `QWebSocket::bytesWritten` reports them out.
+        detail::OutboundLedger unwritten;
+
+#ifndef QT_NO_SSL
+        /// @brief The TLS socket under `socket`, on a `SecureMode` server.
+        ///
+        /// `QWebSocket` reports encrypted bytes written but holds back only
+        /// the plaintext it has not yet encrypted; what is encrypted and still
+        /// unsent is on this socket, so a frame's position must count it.
+        QPointer<QSslSocket> tls;
+#endif
+
+        /// @brief One-shot timer enforcing `sendTimeout` on the oldest
+        ///        unwritten frame; `nullptr` if `sendTimeout == 0`.
+        QTimer* sendTimer = nullptr;
     };
+
+    /// @brief Counts @p envelope against the connection's backlog, then
+    ///        queues it to the Qt thread to be written to @p socket.
+    ///
+    /// Callable from any thread: replies arrive on the server's pool, events
+    /// on its strand. Dropped, its count released, if the server or the
+    /// socket is gone by the time it reaches the Qt thread.
+    /// @param server   This server, held weakly.
+    /// @param socket   The connection's socket, held weakly.
+    /// @param backlog  The connection's backlog counter.
+    /// @param envelope The encoded envelope.
+    /// @return `false` if there is no Qt application to queue to; the
+    ///         envelope is dropped and its count released.
+    static bool queueEnvelope(QPointer<QtWebSocketServer> const& server, QPointer<QWebSocket> const& socket,
+                              std::shared_ptr<std::atomic<std::size_t>> const& backlog, std::string envelope);
+
+    /// @brief Writes @p envelope, already counted, to @p socket and tracks it
+    ///        until the socket has written it. On the Qt thread.
+    /// @param socket   A tracked socket.
+    /// @param state    @p socket's state.
+    /// @param envelope The encoded envelope.
+    void writeCounted(QWebSocket* socket, ClientState& state, std::string const& envelope);
+
+    /// @brief Counts @p envelope against @p socket's backlog and writes it.
+    ///        On the Qt thread.
+    /// @param socket   A tracked socket.
+    /// @param state    @p socket's state.
+    /// @param envelope The encoded envelope.
+    void writeNow(QWebSocket* socket, ClientState& state, std::string const& envelope);
+
+    /// @brief Takes @p bytes off @p state's backlog, and tells the server if
+    ///        that takes it below `backend::kEventBacklogLow`.
+    /// @param state The connection.
+    /// @param bytes What a frame added when it was handed over.
+    void releaseBacklog(ClientState const& state, std::size_t bytes);
+
+    /// @brief Arms @p state's send timer for its oldest unwritten frame, or
+    ///        stops it when none is left.
+    /// @param state The connection.
+    void armSendTimer(ClientState& state) const;
+
+    /// @brief Aborts @p socket if its oldest unwritten frame has outlived
+    ///        `sendTimeout`; otherwise re-arms the timer.
+    /// @param socket The connection's socket.
+    void onSendTimer(QWebSocket* socket);
+
+    /// @brief Bytes @p state's socket stack still holds unsent: the
+    ///        `QWebSocket`'s own, plus, over TLS, the ciphertext not yet sent.
+    /// @param state The connection.
+    /// @return The bytes held.
+    static qint64 pendingBytes(ClientState const& state);
+
+#ifndef QT_NO_SSL
+    /// @brief Finds the `QSslSocket` a `SecureMode` server accepted
+    ///        @p socket over.
+    /// @param socket The upgraded connection.
+    /// @return The TLS socket, or null when there is none or it cannot be found.
+    [[nodiscard]] QSslSocket* findTlsSocket(QWebSocket const* socket) const;
+#endif
+
+    /// @brief Releases every frame @p state still holds and drops its timers.
+    ///        Called when the connection goes away.
+    /// @param state The connection.
+    static void forgetConnection(ClientState& state);
 
     /// @brief Refills @p state's token bucket for elapsed time, then consumes one
     ///        token if available.

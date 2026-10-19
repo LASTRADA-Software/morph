@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
@@ -39,6 +40,7 @@ using bank::dto::OpenAccount;
 
 BRIDGE_REGISTER_MODEL(CustomerModel, "CustomerModel")
 BRIDGE_REGISTER_ACTION(CustomerModel, OpenAccount, "OpenAccount")
+BRIDGE_REGISTER_EFFECTS(bank::dto::OpenAccount, ::morph::effects::changes<bank::dto::AccountInfo>)
 BRIDGE_REGISTER_ACTION(CustomerModel, ListAccounts, "ListAccounts", ::morph::model::Loggable::No)
 
 // Keyed by owner. An empty `owner` means "the session principal", which is not

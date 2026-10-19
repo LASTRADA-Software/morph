@@ -530,9 +530,10 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
 - **`Completion<T>` is a leaf callback primitive**, not a composable future: one
   handler per outcome, no `T→U` chaining, no `co_await`, no cancellation.
 - **Instance subscriptions are best-effort and in-process.** `subscribe<R>`
-  fans out to handlers on the same `Bridge`; there is no server-initiated push,
-  so two separate clients sharing an instance do not see each other's results
-  until they ask again. No replay, no durability, no coalescing.
+  fans out to handlers on the same `Bridge`, with no replay and no durability.
+  Across clients, screens stay current through declared effects, which tell
+  every watching connection what changed but not the new values
+  ([`docs/KEEPING-SCREENS-CURRENT.md`](docs/KEEPING-SCREENS-CURRENT.md)).
 - **Exact numbers are fixed-width.** `Rational` is an `int64` pair; `+`/`-`/`*`
   *saturate* at `±INT64_MAX/1` and log at `error` rather than returning an error
   value, so an out-of-envelope result is clamped and inexact rather than exact —
@@ -561,7 +562,10 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
 
 - [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) — the step-by-step
   tutorial: build one small app end to end and understand why each piece
-  exists. Read this before the two below.
+  exists. Read this before the others below.
+- [`docs/KEEPING-SCREENS-CURRENT.md`](docs/KEEPING-SCREENS-CURRENT.md) — how
+  screens refresh after an action, on every client and for AI agents: records,
+  effects, the checklist for a new action, and every error with its fix.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — namespace map, layer diagram,
   wire protocol, deployment topologies, and design rationale.
 - [`docs/spec/`](docs/spec) — the authoritative per-type/subsystem design specs.

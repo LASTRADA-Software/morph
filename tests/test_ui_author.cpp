@@ -444,12 +444,9 @@ ui::Screen declarationsScreen() {
         auto anything = screen.state<ui::Any>("anything", ui::AnyHandle{1});
         auto total = screen.let("total", picked + 1);
 
-        auto results = screen.query<ListResults>("results", sample, {{&ListResults::sampleId, sampleId}},
-                                                 {.when = ui::engaged(sampleId),
-                                                  .debounce = 250ms,
-                                                  .refreshEvery = 30s,
-                                                  .staleTime = 5s,
-                                                  .refreshOn = sample.actions<CaptureConcentration, LoadSample>()});
+        auto results = screen.query<ListResults>(
+            "results", sample, {{&ListResults::sampleId, sampleId}},
+            {.when = ui::engaged(sampleId), .debounce = 250ms, .refreshEvery = 30s, .staleTime = 5s});
         auto header = screen.query<GetHeader>("header", working);
         auto preview = screen.evaluate<EvaluateResult>("preview", working, {{&EvaluateResult::resultId, picked}});
         // An evaluation's value is the action body, its computed fields filled, so the handle reads the action.
@@ -461,11 +458,9 @@ ui::Screen declarationsScreen() {
             {.body = {{&CaptureConcentration::resultId, picked}},
              .concurrency = ui::Mode::Serial,
              .serialKey = picked,
-             .invalidates = {header},
-             .patch = ui::Patch{.query = results, .key = ui::ref("result.id"), .with = ui::ref("result")},
-             .optimistic = ui::Patch{.query = results,
-                                     .key = ui::ref("body.resultId"),
-                                     .with = ui::obj({{"inputs", ui::ref("body.inputs")}})},
+             .optimistic = ui::Optimistic{.query = results,
+                                          .key = ui::ref("body.resultId"),
+                                          .with = ui::obj({{"inputs", ui::ref("body.inputs")}})},
              .onSuccess = {ui::set(unsaved, true)},
              .onError = ui::notify(ui::t("lims.captureFailed", "Capture failed"), ui::Role::Error),
              .offlineQueue = true}));
@@ -832,13 +827,13 @@ TEST_CASE("a builder error refuses the screen at its root", "[ui][author][regist
     REQUIRE(setComputed.has_value());
     CHECK(setComputed->reason == "`set` names a state, an element or a declared value");
 
-    auto const patchWithoutQuery = refusalOf(ui::screen("author.patch", [](ui::Scope& screen) {
+    auto const optimisticWithoutQuery = refusalOf(ui::screen("author.optimistic", [](ui::Scope& screen) {
         auto sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});
-        static_cast<void>(screen.mutation<LoadSample>("load", sample, {.patch = ui::Patch{}}));
+        static_cast<void>(screen.mutation<LoadSample>("load", sample, {.optimistic = ui::Optimistic{}}));
         return ui::spacer();
     }));
-    REQUIRE(patchWithoutQuery.has_value());
-    CHECK(patchWithoutQuery->reason == "a `patch` names the query whose row it replaces");
+    REQUIRE(optimisticWithoutQuery.has_value());
+    CHECK(optimisticWithoutQuery->reason == "an `optimistic` write names the query whose row it writes");
 
     auto const thrown = refusalOf(ui::screen("author.thrown", [](ui::Scope&) -> ui::Node { throw 42; }));
     REQUIRE(thrown.has_value());
@@ -868,26 +863,27 @@ TEST_CASE("registration runs the load-time validation with the builders' catalog
             auto results = screen.query<ListResults>("results", sample);
             static_cast<void>(screen.mutation<CaptureConcentration>(
                 "capture", sample,
-                {.optimistic = ui::Patch{
+                {.optimistic = ui::Optimistic{
                      .query = results, .key = ui::ref("body.resultId"), .with = ui::obj({{"concentration", 1}})}}));
             return ui::spacer();
         }));
         REQUIRE(refusal.has_value());
         CHECK(refusal->path == "/mutations/capture/optimistic/with/obj/concentration");
     }
-    SECTION("a patch of a query whose action answers a record, without `at`") {
+    SECTION("an optimistic write to a query whose action answers a record, without `at`") {
         auto const refusal = refusalOf(ui::screen("author.patchAt", [](ui::Scope& screen) {
             auto const sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});
             auto samples = screen.query<ListSamples>("samples", sample);
             static_cast<void>(screen.mutation<CaptureConcentration>(
                 "capture", sample,
                 {
-                    .patch = ui::Patch{.query = samples, .key = ui::ref("result.id"), .with = ui::ref("result")},
+                    .optimistic =
+                        ui::Optimistic{.query = samples, .key = ui::ref("body.resultId"), .with = ui::ref("body")},
                 }));
             return ui::spacer();
         }));
         REQUIRE(refusal.has_value());
-        CHECK(refusal->path == "/mutations/capture/patch");
+        CHECK(refusal->path == "/mutations/capture/optimistic");
     }
     SECTION("an `at` that is not one of the result's lists") {
         auto const refusal = refusalOf(ui::screen("author.patchAt", [](ui::Scope& screen) {
@@ -895,18 +891,18 @@ TEST_CASE("registration runs the load-time validation with the builders' catalog
             auto samples = screen.query<ListSamples>("samples", sample);
             static_cast<void>(screen.mutation<CaptureConcentration>("capture", sample,
                                                                     {
-                                                                        .patch =
-                                                                            ui::Patch{
+                                                                        .optimistic =
+                                                                            ui::Optimistic{
                                                                                 .query = samples,
                                                                                 .at = "total",
-                                                                                .key = ui::ref("result.id"),
-                                                                                .with = ui::ref("result"),
+                                                                                .key = ui::ref("body.resultId"),
+                                                                                .with = ui::ref("body"),
                                                                             },
                                                                     }));
             return ui::spacer();
         }));
         REQUIRE(refusal.has_value());
-        CHECK(refusal->path == "/mutations/capture/patch/at");
+        CHECK(refusal->path == "/mutations/capture/optimistic/at");
     }
     SECTION("a credential-bearing mutation queued offline") {
         auto const refusal = refusalOf(ui::screen("author.offline", [](ui::Scope& screen) {
@@ -957,7 +953,7 @@ TEST_CASE("the registry keeps one screen per id and answers the catalog", "[ui][
     CHECK_FALSE(catalog.action("Unknown").has_value());
 }
 
-TEST_CASE("a patch names the list inside a record result with `at`, and the catalog knows the lists",
+TEST_CASE("an optimistic write names the list inside a record result with `at`, and the catalog knows the lists",
           "[ui][author][registration]") {
     ui::Screen const screen{
         "author.patchAt", [](ui::Scope& scope) {
@@ -965,12 +961,12 @@ TEST_CASE("a patch names the list inside a record result with `at`, and the cata
             auto samples = scope.query<ListSamples>("samples", sample);
             static_cast<void>(scope.mutation<CaptureConcentration>("capture", sample,
                                                                    {
-                                                                       .patch =
-                                                                           ui::Patch{
+                                                                       .optimistic =
+                                                                           ui::Optimistic{
                                                                                .query = samples,
                                                                                .at = "samples",
-                                                                               .key = ui::ref("result.id"),
-                                                                               .with = ui::ref("result"),
+                                                                               .key = ui::ref("body.resultId"),
+                                                                               .with = ui::ref("body"),
                                                                            },
                                                                    }));
             return ui::spacer();
@@ -981,7 +977,7 @@ TEST_CASE("a patch names the list inside a record result with `at`, and the cata
         FAIL(added.error().message());
     }
     CHECK(registry.find("author.patchAt")
-              ->text.contains(R"("patch":{"query":"samples","at":"samples","key":{"ref":"result.id"})"));
+              ->text.contains(R"("optimistic":{"query":"samples","at":"samples","key":{"ref":"body.resultId"})"));
 
     morph::ui::Catalog const catalog = registry.catalog();
     CHECK(catalog.action("Lims_ListSamples")->listFields == std::vector<std::string>{"samples"});

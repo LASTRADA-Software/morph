@@ -16,8 +16,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <testkit/bundle_warnings.hpp>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
+#include <vector>
 
 #include "lims/auth/lims_authorizer.hpp"
 #include "lims/dto/analysis_dto.hpp"
@@ -58,6 +60,19 @@ TEST_CASE("lims screens: every screen validates, and the bundle builds", "[lims-
     auto const bundle = lims::screens::bundle();
     INFO((bundle ? std::string{} : bundle.error().message()));
     REQUIRE(bundle.has_value());
+}
+
+// Every document loads against the catalog the server serves with no refusal and no warning: each mutation's action
+// declares its effects, or `none`.
+TEST_CASE("lims_bundle_loads_without_warnings", "[lims-screens]") {
+    auto const bundle = lims::screens::bundle();
+    INFO((bundle ? std::string{} : bundle.error().message()));
+    REQUIRE(bundle.has_value());
+    std::vector<std::string> const findings = morph::examples::testing::bundleLoadFindings(**bundle);
+    for (std::string const& finding : findings) {
+        UNSCOPED_INFO(finding);
+    }
+    CHECK(findings.empty());
 }
 
 // Mutations: show the sample before opening it (the header is empty); enable every transition whatever the state
@@ -249,8 +264,9 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
     CHECK(harness.problems().empty());
 }
 
-// Mutation: drop the row capture's `patch` (the row keeps 12.500, since a row capture refetches nothing).
-TEST_CASE("lims screens: a row's write-through capture patches its row in place", "[lims-screens]") {
+// Mutation: drop `changes<ResultView>` from `CaptureConcentration`'s effects (the row keeps 12.500, since nothing else
+// refetches the list after a row's capture).
+TEST_CASE("lims screens: a row's re-capture shows its new value through the capture's effects", "[lims-screens]") {
     DbFixture fixture;
     std::int64_t sampleId = 0;
     {
@@ -286,8 +302,8 @@ TEST_CASE("lims screens: a row's write-through capture patches its row in place"
     auto const entry = harness.find("TextInput", "recapture");
     REQUIRE(entry);
     harness.backend().submit(*entry, "13.000");
-    bool const patched = shows("13.000");
-    if (!patched) {
+    bool const recaptured = shows("13.000");
+    if (!recaptured) {
         for (int const widget : harness.backend().all("Text")) {
             UNSCOPED_INFO("text: " << harness.backend().prop(widget, "text"));
         }
@@ -295,6 +311,6 @@ TEST_CASE("lims screens: a row's write-through capture patches its row in place"
     for (std::string const& problem : harness.problems()) {
         UNSCOPED_INFO(problem);
     }
-    CHECK(patched);
+    CHECK(recaptured);
     CHECK(harness.problems().empty());
 }

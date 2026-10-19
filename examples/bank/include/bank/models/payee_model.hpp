@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
@@ -37,5 +38,7 @@ using bank::dto::RemovePayee;
 
 BRIDGE_REGISTER_MODEL(PayeeModel, "PayeeModel")
 BRIDGE_REGISTER_ACTION(PayeeModel, AddPayee, "AddPayee")
+BRIDGE_REGISTER_EFFECTS(bank::dto::AddPayee, ::morph::effects::changes<bank::dto::PayeeInfo>)
 BRIDGE_REGISTER_ACTION(PayeeModel, RemovePayee, "RemovePayee")
+BRIDGE_REGISTER_EFFECTS(bank::dto::RemovePayee, ::morph::effects::changes<bank::dto::PayeeInfo>)
 BRIDGE_REGISTER_ACTION(PayeeModel, ListPayees, "ListPayees", ::morph::model::Loggable::No)

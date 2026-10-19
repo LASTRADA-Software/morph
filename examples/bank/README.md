@@ -214,6 +214,23 @@ an audit trail to `bank_actions.jsonl` in its working directory, the same
 `morph::journal::FileActionLog` the CLI installs — the models' read-only actions
 carry `Loggable::No`, so what lands there is the mutating half of the surface.
 
+It also serves bank's screens through a `UiService`, so the generic client can open it with `--server`.
+
+#### An agent over MCP (`--mcp-stdio`)
+
+With `--mcp-stdio` the server also serves an agent, such as Claude Code, over MCP's stdio transport, beside its
+WebSocket clients. Each bank action the agent's principal may run is a tool, with the action's schema, and
+`evaluate` is a dry run. A tool call is an ordinary execute on the agent's own connection, so every open GUI that
+shows what it changes updates. Stdout then carries only JSON-RPC, so the status lines go to stderr. The agent's
+identity is `MORPH_MCP_PRINCIPAL`, which bank's demo authorizer vouches for (`MORPH_MCP_TOKEN` is carried as its
+token, for an authorizer that verifies one). The server stops when its stdin ends.
+
+```sh
+claude mcp add bank -e MORPH_MCP_PRINCIPAL=alice \
+    -e BANK_DB="DRIVER=SQLite3;Database=$PWD/bank.db" -e BANK_PORT=0 \
+    -- ./build/examples/bank/ladder_bank_server --mcp-stdio
+```
+
 #### Scenarios
 
 `scripts/scenario/scenarios/bank/` holds 22 scenario files that drive this
@@ -324,6 +341,12 @@ C++ builders:
   transfer's two accounts.
 - **`bank.cards`**, **`bank.payees`** and **`bank.loans`**: lists with their actions and forms. A loan's schedule is
   the model's `LoanScheduleRequest`, shown through the `LoanSchedule` component.
+
+Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS`), identically in both model
+sets (`include/bank/models/` and `memory/include/bank/models/`); the records are registered beside their DTOs
+(`Bank_Account`, `Bank_Transaction`, `Bank_SpendingReport` derived from transactions, and one per other list). A
+reply refreshes every query holding a changed record, so the screens declare no refreshes.
+`bank_bundle_loads_without_warnings` keeps it so.
 
 Each signed-in screen has the sidebar, which also signs out. `AccountCards`, `TransferFlow` and `LoanSchedule` are
 host components; their built-in fallbacks are what a client without them shows. Amounts are entered in cents: bank's

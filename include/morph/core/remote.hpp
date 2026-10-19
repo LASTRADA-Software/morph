@@ -4,16 +4,20 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <latch>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -26,9 +30,14 @@
 #include "../core/backend.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
+#include "changes.hpp"
 #include "completion.hpp"
+#include "connection_writer.hpp"
+#include "detail/change_coalescer.hpp"
 #include "detail/owner_probe.hpp"
 #include "detail/reply_router.hpp"
+#include "detail/watch_table.hpp"
+#include "effects.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
 #include "owner_strand.hpp"
@@ -47,6 +56,9 @@ struct LimitPolicy {
     /// @brief Max wall-clock time a single `execute` may take before the server
     ///        sends an `err "timeout"` reply and discards the eventual strand
     ///        result. `0` = no timeout (today's behavior).
+    ///
+    /// A handler that succeeds after the timeout answered still tells the
+    /// connections watching what it changed, the caller included, by event.
     ///
     /// An ordinary handler is never interrupted — it keeps running to
     /// completion on its strand, so this bounds the *caller's wait*, not the
@@ -176,14 +188,6 @@ private:
 
 }  // namespace detail
 
-/// @brief Opaque id a transport uses to scope model registrations to one
-///        connection so `RemoteServer::closeConnection` can reclaim them.
-///
-/// `0` is reserved and means *unscoped* — the meaning today's two-argument
-/// `RemoteServer::handle()`/`handleInline()` calls always have. Non-zero
-/// values are minted by `RemoteServer::openConnection()`.
-using ConnectionId = std::uint64_t;
-
 /// @brief Snapshot of a `RemoteServer`'s current health.
 struct HealthStatus {
     /// @brief `true` if the server currently accepts and dispatches new work.
@@ -201,6 +205,19 @@ struct HealthStatus {
 /// model types or context keys the host app doesn't want journaled).
 using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
                                                                                 std::string_view contextKey)>;
+
+/// @brief What a `RemoteServer` knows about one connection that a service, not
+///        core, decides: handed to `IEnvelopeService::handle` with each envelope.
+///
+/// A service sets a fact while answering an envelope it serves, and core reads
+/// it later without parsing that service's bodies. The facts live as long as
+/// the connection; a message handled without a connection (`cid` 0) is handed
+/// fresh facts that are dropped after its reply.
+struct ConnectionFacts {
+    /// @brief Whether the connection negotiated server-sent events: its
+    ///        `ui-hello` offered them and the UI service accepted.
+    bool events = false;
+};
 
 /// @brief Envelope kinds a `RemoteServer` answers through an extension, such as
 ///        the UI service's `ui-*` kinds.
@@ -238,6 +255,28 @@ public:
     ///         `request.callId`.
     [[nodiscard]] virtual std::string handle(const ::morph::wire::Envelope& request,
                                              const ::morph::session::IAuthorizer& authorizer) = 0;
+
+    /// @brief Answers one envelope of a kind `serves` accepted, with the facts
+    ///        of the connection it arrived on.
+    ///
+    /// What the server calls. A service that learns something about the
+    /// connection, as the UI service learns that `ui-hello` negotiated events,
+    /// overrides this one and records it in @p facts; the default forwards to
+    /// the two-parameter `handle` and leaves @p facts alone. A service
+    /// overriding only one of the two adds `using IEnvelopeService::handle;`,
+    /// so the other is not hidden. Same thread and error rules as the
+    /// two-parameter `handle`.
+    /// @param request    The decoded envelope.
+    /// @param authorizer The server's authoriser.
+    /// @param facts      The connection's facts, which the service may set;
+    ///                   fresh ones for a message handled without a connection.
+    /// @return The encoded reply envelope (`wire::encode`), addressed to
+    ///         `request.callId`.
+    [[nodiscard]] virtual std::string handle(const ::morph::wire::Envelope& request,
+                                             const ::morph::session::IAuthorizer& authorizer, ConnectionFacts& facts) {
+        static_cast<void>(facts);
+        return handle(request, authorizer);
+    }
 };
 
 /// @brief Everything about a `RemoteServer` that is configured rather than
@@ -288,6 +327,15 @@ struct ServerConfig {
     ///        answered `err "unknown envelope kind: <kind>"`. A null entry is
     ///        refused by the constructor.
     std::vector<std::shared_ptr<IEnvelopeService>> services;
+
+    /// @brief How long a connection's changes are merged before they are sent
+    ///        as one `changes` event.
+    ///
+    /// The window opens at the first change queued for the connection, and its
+    /// queue is sent when the window closes, or at once when 256 keys are
+    /// queued. Zero sends each fan-out's event at once, unmerged. Negative is
+    /// refused by the constructor.
+    std::chrono::milliseconds coalesceWindow{50};
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -332,6 +380,9 @@ public:
     ///                   singleton. Borrowed: it must outlive this server.
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     explicit RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                           ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
                               ::morph::model::detail::defaultDispatcher(),
@@ -350,6 +401,9 @@ public:
     ///                   singleton. Borrowed: it must outlive this server.
     /// @param registry   Model factory registry; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                  std::shared_ptr<::morph::session::IAuthorizer> authorizer,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
@@ -371,6 +425,9 @@ public:
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultDispatcher(),
@@ -396,6 +453,9 @@ public:
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.
+    /// @throws morph::model::EffectsRegistrationError if the process's record
+    ///         and effects declarations are invalid: the server reads them
+    ///         here, so such a server is never constructed.
     RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
                  std::shared_ptr<::morph::session::IAuthorizer> authorizer, ServerConfig config,
                  ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
@@ -411,6 +471,10 @@ public:
           _executeTimeouts{_config.limits.executeTimeout.count() > 0
                                ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
                                : nullptr} {
+        // The first read of the record and effects registries: an invalid
+        // declaration fails the server's construction rather than its first
+        // successful execute, whose changes are derived from them.
+        static_cast<void>(::morph::effects::detail::resolved());
         if (_config.healthHandler) {
             _config.healthHandler(HealthStatus{.ready = true, .liveModels = 0, .inFlight = 0});
         }
@@ -577,6 +641,177 @@ public:
         _strand.postTask([self = shared_from_this(), cid] { self->closeConnectionHere(cid); });
     }
 
+    /// @brief Hands the server the transport's writer for connection @p cid,
+    ///        through which `post` reaches it.
+    ///
+    /// Replaces any writer @p cid already has, keeping a `resync` the
+    /// connection is owed. Kept only while the connection
+    /// is open: a writer for `0`, for an unknown `cid` or for one already
+    /// closed is dropped, and `closeConnection(cid)` drops it. A writer whose
+    /// `write` is empty removes the connection's writer.
+    ///
+    /// Callable from any thread; runs on the server strand, after an
+    /// `openConnection()` and before any `post` the same thread makes next.
+    /// @param cid    Connection, as returned by `openConnection()`.
+    /// @param writer The connection's writer and its backlog read.
+    void setConnectionWriter(ConnectionId cid, ConnectionWriter writer) {
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid, writer = std::move(writer)]() mutable {
+            self->noteOwner("RemoteServer::setConnectionWriter");
+            if (!self->_connectionScopes.contains(cid)) {
+                return;
+            }
+            if (!writer.write) {
+                self->discardChanges(cid);
+                self->_writers.erase(cid);
+                return;
+            }
+            // A resync already owed stays owed: the events it stands for were
+            // held back from the connection, not from the writer it had then.
+            self->_writers[cid].writer = std::move(writer);
+        });
+    }
+
+    /// @brief Writes @p envelope to connection @p cid, unless its reader has
+    ///        fallen behind.
+    ///
+    /// On the server strand, while the connection's `backlog()` exceeds
+    /// `kEventBacklogHigh`, the envelope is dropped and the connection is owed
+    /// one `resync` event, which `connectionDrained(cid)` sends. Until then
+    /// every later envelope is dropped too, so the `resync` is the next thing
+    /// the connection is sent after the hold-back began. Replies do not pass
+    /// through here and are never held back.
+    ///
+    /// Dropped as well: an envelope larger than `wire::kMaxEnvelopeBytes`
+    /// (counted as `Metric::eventOversize`), and one for a connection with no
+    /// writer — `0`, unknown, or closed. A `write` or `backlog` that throws
+    /// is caught on the strand, and the envelope is not written.
+    ///
+    /// Callable from any thread. Envelopes one thread posts to one connection
+    /// are written in that order.
+    /// @param cid      Connection to write to.
+    /// @param envelope The encoded envelope (via `wire::encode`).
+    void post(ConnectionId cid, std::string envelope) {
+        if (oversized(cid, envelope)) {
+            return;
+        }
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid, envelope = std::move(envelope)]() mutable {
+            self->postHere(cid, std::move(envelope));
+        });
+    }
+
+    /// @brief Tells the server that connection @p cid's backlog has fallen
+    ///        below `kEventBacklogLow`.
+    ///
+    /// What a transport calls when it has written enough of what it holds. If
+    /// `post` held an event back since the last drain, the connection is sent
+    /// one `resync` event (`wire::makeEvent(wire::kResyncTopic, "{}")`), meaning
+    /// everything it watches may have changed, and events flow again.
+    /// Otherwise nothing is sent. The drain, not a later write, sends it, so a
+    /// connection that only listens still receives it.
+    ///
+    /// Callable from any thread, the transport's included; it only posts to
+    /// the server strand.
+    /// @param cid Connection whose backlog drained.
+    void connectionDrained(ConnectionId cid) {
+        if (cid == 0) {
+            return;
+        }
+        _strand.postTask([self = shared_from_this(), cid] { self->connectionDrainedHere(cid); });
+    }
+
+    /// @brief Whether connection @p cid negotiated server-sent events.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. The answer is what the UI service recorded when the
+    /// connection's `ui-hello` offered events, and stays until the connection
+    /// closes; a reconnect is a new connection and negotiates again.
+    /// @param cid Connection, as returned by `openConnection()`.
+    /// @return `true` once the connection negotiated events; `false` for `0`,
+    ///         an unknown connection or a closed one.
+    [[nodiscard]] bool eventsNegotiated(ConnectionId cid) const {
+        assert(_strand.runningHere() && "RemoteServer::eventsNegotiated runs on the server strand");
+        auto const found = _facts.find(cid);
+        return found != _facts.end() && found->second.events;
+    }
+
+    /// @brief The topics each open connection watches.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. Filled by the `watch` and `unwatch` kinds, and emptied for
+    /// a connection when it closes or a write to it fails.
+    /// @return The watch table, valid for the server's life.
+    [[nodiscard]] detail::WatchTable const& watchTable() const {
+        assert(_strand.runningHere() && "RemoteServer::watchTable runs on the server strand");
+        return _watches;
+    }
+
+    /// @brief Tells every connection watching what @p changes names that it
+    ///        changed, as one `changes` event per connection.
+    ///
+    /// Server strand only: call it from a task on `strand()`; a debug build
+    /// asserts that. A successful `execute` posts its changes here.
+    ///
+    /// A record topic, and the instance topic of a keyed shared instance, go
+    /// to every connection watching them, @p caller included: the caller
+    /// may never see its own reply (it timed out, the client discarded it, or
+    /// it went to an offline replay). An instance is matched by the directory
+    /// key it holds now, so one an `assign` keyed while its execute ran
+    /// reaches that key's watchers. A private instance's topic goes to every
+    /// connection whose scope holds that instance, which needs no watch, and
+    /// to no other. A connection that has not negotiated events is sent
+    /// nothing.
+    ///
+    /// Each recipient's watches are then re-authorised by the rule that
+    /// admitted them (`reauthorise`): a topic whose watch fails is dropped
+    /// from the table and from the event, and a connection that lost any
+    /// watch is sent one `resync` (`sendResync`), after whatever it had queued. A
+    /// record registered with `morph::record::privateKeys` reaches a principal
+    /// other than @p callerPrincipal without its keys.
+    ///
+    /// What is left is queued on the connection (`detail::ChangeCoalescer`),
+    /// not sent: the queue is merged for `ServerConfig::coalesceWindow` from
+    /// its first change, or until `detail::kCoalesceKeyLimit` keys are queued,
+    /// and then sent as one `changes` event through `post`'s backlog hold-back
+    /// and size cap. Nothing is queued for a connection with no writer, or one
+    /// held back behind its backlog, which its drain's `resync` covers.
+    /// @param changes         What one execute changed, from `effects::deriveChanges`.
+    /// @param caller          Connection the execute arrived on; `0` for unscoped.
+    /// @param callerPrincipal The execute's verified principal; empty when none was.
+    void fanOut(::morph::effects::Changes changes, ConnectionId caller, std::string_view callerPrincipal) {
+        assert(_strand.runningHere() && "RemoteServer::fanOut runs on the server strand");
+        noteOwner("RemoteServer::fanOut");
+        std::map<ConnectionId, ::morph::wire::ChangesBody> bodies;
+        for (auto const& change : changes.records) {
+            for (ConnectionId const cid : _watches.watchersOf(change.record)) {
+                if (eventsNegotiated(cid)) {
+                    bodies[cid].records.push_back(change);
+                }
+            }
+        }
+        for (auto& change : changes.instances) {
+            addInstanceTopic(std::move(change), bodies);
+        }
+        Authentications authentications;
+        for (auto& [cid, body] : bodies) {
+            bool const dropped = reauthorise(cid, body, caller, callerPrincipal, authentications);
+            if (!body.records.empty() || !body.instances.empty()) {
+                queueChanges(cid, body);
+            }
+            if (dropped) {
+                // What was queued before the drop goes first, so the resync is
+                // the last word on everything the connection watched.
+                flushChanges(cid);
+                sendResync(cid);
+            }
+        }
+    }
+
     /// @brief The server strand, as an executor.
     ///
     /// What `runningOn(server.strand())` asks about: true inside every task the
@@ -679,6 +914,19 @@ private:
         std::string error;
     };
 
+    /// One connection's writer, and whether `post` has held an event back
+    /// from it since the last drain.
+    struct ConnectionOutbox {
+        ConnectionWriter writer;
+        bool owesResync{false};
+        // The changes merged for the connection's next `changes` event.
+        detail::ChangeCoalescer queued;
+        // The armed coalescing window, `0` when none is: the timer's handle,
+        // and the number the flush it posts must match to send the queue.
+        ::morph::async::detail::TimeoutScheduler::Handle windowTimer{0};
+        std::uint64_t window{0};
+    };
+
     /// @brief Rejects a configuration whose protocol range is empty.
     /// @param config The configuration to check.
     /// @return @p config, unchanged.
@@ -686,6 +934,9 @@ private:
     static ServerConfig validated(ServerConfig config) {
         if (config.minProtocolVersion > config.maxProtocolVersion) {
             throw std::invalid_argument("ServerConfig: minProtocolVersion must not exceed maxProtocolVersion");
+        }
+        if (config.coalesceWindow.count() < 0) {
+            throw std::invalid_argument("ServerConfig: coalesceWindow must not be negative");
         }
         if (std::ranges::find(config.services, nullptr) != config.services.end()) {
             throw std::invalid_argument("ServerConfig: services must not hold a null entry");
@@ -748,6 +999,11 @@ private:
     void closeConnectionHere(ConnectionId cid) {
         MORPH_ZONE("RemoteServer::closeConnection");
         noteOwner("RemoteServer::closeConnection");
+        discardChanges(cid);
+        _writers.erase(cid);
+        _facts.erase(cid);
+        _watches.dropConnection(cid);
+        _principalBaselines.erase(cid);
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -763,6 +1019,556 @@ private:
         _connectionScopes.erase(scopeIter);
     }
 
+    /// @brief The facts a service records for connection @p cid. On the server
+    ///        strand.
+    ///
+    /// Fresh facts for `0`, an unknown `cid` or one already closed, so what a
+    /// service sets there outlives no reply: a fact is kept only where the
+    /// connection that negotiated it can be found again.
+    /// @param cid Connection the envelope arrived on.
+    /// @return The connection's facts, or throwaway ones.
+    [[nodiscard]] ConnectionFacts& factsOf(ConnectionId cid) {
+        if (cid == 0 || !_connectionScopes.contains(cid)) {
+            _throwawayFacts = ConnectionFacts{};
+            return _throwawayFacts;
+        }
+        return _facts[cid];
+    }
+
+    /// @brief Whether @p envelope exceeds `wire::kMaxEnvelopeBytes`; such an
+    ///        envelope is counted as `Metric::eventOversize`, logged, and not sent.
+    /// @param cid      Connection it was meant for.
+    /// @param envelope The encoded envelope.
+    /// @return `true` when it must be dropped.
+    static bool oversized(ConnectionId cid, std::string const& envelope) {
+        if (envelope.size() <= ::morph::wire::kMaxEnvelopeBytes) {
+            return false;
+        }
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::eventOversize, 1.0);
+        ::morph::log::logWarn("[post] envelope for connection {} dropped: {} bytes exceeds {}", cid, envelope.size(),
+                              ::morph::wire::kMaxEnvelopeBytes);
+        return true;
+    }
+
+    /// @brief The connections whose scope holds @p mid. On the server strand.
+    ///
+    /// A private instance is held by the connection that registered it; every
+    /// holder is named, so routing does not depend on which connection ran
+    /// the action.
+    /// @param mid Instance.
+    /// @return The connections, ascending.
+    [[nodiscard]] std::vector<ConnectionId> scopesHolding(::morph::exec::detail::ModelId mid) const {
+        std::vector<ConnectionId> holders;
+        for (auto const& [cid, scope] : _connectionScopes) {
+            if (scope.contains(mid)) {
+                holders.push_back(cid);
+            }
+        }
+        return holders;
+    }
+
+    /// One fan-out's `authenticate` answers, by (stored principal, token):
+    /// whether the token still verifies as the principal it was admitted for.
+    using Authentications = std::map<std::pair<std::string, std::string>, bool>;
+
+    /// @brief Whether @p watch's session still authenticates as the principal
+    ///        it was admitted for. On the server strand.
+    ///
+    /// An expired or revoked token verifies as no principal, which differs
+    /// from a non-empty stored one. A watch admitted with no verified
+    /// principal, as under an authorizer that never authenticates, was not
+    /// admitted on authentication and still passes. Asked once per session
+    /// per fan-out.
+    /// @param watch What the watch was admitted on.
+    /// @param asked This fan-out's answers so far; extended in place.
+    /// @return True when the session still verifies as `watch.principal`.
+    [[nodiscard]] bool stillAuthenticated(detail::Watch const& watch, Authentications& asked) const {
+        auto [found, fresh] = asked.try_emplace({watch.principal, watch.context.token}, false);
+        if (fresh) {
+            found->second = verifiedPrincipal(watch.context) == watch.principal;
+        }
+        return found->second;
+    }
+
+    /// @brief Adds one changed instance's topic to the body of every connection
+    ///        it reaches, for `fanOut`. On the server strand.
+    ///
+    /// An instance is matched by the directory key it holds now; a private one
+    /// reaches the scopes that hold it.
+    /// @param change The changed instance.
+    /// @param bodies Each recipient's share of the fan-out; extended in place.
+    void addInstanceTopic(::morph::effects::InstanceChange change,
+                          std::map<ConnectionId, ::morph::wire::ChangesBody>& bodies) {
+        ::morph::exec::detail::ModelId const mid{change.instance};
+        if (change.primary.empty()) {
+            // Keyed after admission: the topic is the key it holds now.
+            if (auto const* inst = _instances.find(mid); inst != nullptr && inst->sharedKey) {
+                change.primary = inst->sharedKey->second;
+            }
+        }
+        auto const recipients =
+            change.primary.empty() ? scopesHolding(mid) : _watches.watchersOf(change.modelType, change.primary);
+        ::morph::wire::InstanceTopic const topic{.modelType = std::move(change.modelType),
+                                                 .primary = std::move(change.primary),
+                                                 .instance = change.instance};
+        for (ConnectionId const cid : recipients) {
+            if (eventsNegotiated(cid)) {
+                bodies[cid].instances.push_back(topic);
+            }
+        }
+    }
+
+    /// @brief Narrows @p body to the topics connection @p cid may still be
+    ///        sent, re-authorising each watch by the rule that admitted it.
+    ///        On the server strand.
+    ///
+    /// For each watched topic, in order: the watch's stored session must
+    /// still authenticate (`stillAuthenticated`), or every watch @p cid holds
+    /// under that session is dropped; then the topic's admission rule is run
+    /// again on that session, `mayWatchRecord` or `mayWatchInstance`, with
+    /// the answers they cache per principal and token, or that one watch is
+    /// dropped. A dropped watch's topic leaves @p body. Which action wrote
+    /// the change is not checked: a principal that may list a record but not
+    /// write it still receives its changes. The caller owes the connection a
+    /// `resync` when this drops anything; the client answers it by sending
+    /// its whole watch set again, which is admitted afresh.
+    ///
+    /// A private instance's topic has no watch: it is sent to the scope that
+    /// holds the instance, and kept.
+    ///
+    /// A record registered with `morph::record::privateKeys` loses its keys
+    /// unless @p cid is @p caller or its watch's principal is
+    /// @p callerPrincipal, which must be a verified one: keys name rows the
+    /// writer's principal may see, and a principal that filters rows
+    /// differently must not learn them. Without keys, the recipient refetches
+    /// every entry holding the record.
+    /// @param cid             Recipient.
+    /// @param body            The topics `fanOut` chose for it; narrowed in place.
+    /// @param caller          Connection the execute arrived on; `0` for unscoped.
+    /// @param callerPrincipal The execute's verified principal; empty when none was.
+    /// @param asked           This fan-out's `authenticate` answers; extended in place.
+    /// @return True when any of @p cid's watches was dropped.
+    [[nodiscard]] bool reauthorise(ConnectionId cid, ::morph::wire::ChangesBody& body, ConnectionId caller,
+                                   std::string_view callerPrincipal, Authentications& asked) {
+        bool dropped = false;
+        // Copied out before a drop: dropping frees the `Watch` it came from.
+        auto const authenticated = [&](detail::Watch const& watch) {
+            if (stillAuthenticated(watch, asked)) {
+                return true;
+            }
+            std::string const principal = watch.principal;
+            std::string const token = watch.context.token;
+            _watches.dropSession(cid, principal, token);
+            dropped = true;
+            return false;
+        };
+        std::vector<::morph::effects::RecordChange> records;
+        records.reserve(body.records.size());
+        for (auto& change : body.records) {
+            auto const* watch = _watches.watchOf(cid, change.record);
+            if (watch == nullptr || !authenticated(*watch)) {
+                continue;
+            }
+            if (!mayWatchRecord(watch->context, change.record)) {
+                _watches.remove(cid, ::morph::wire::WatchBody{.records = {change.record}, .instances = {}});
+                dropped = true;
+                continue;
+            }
+            bool const writer = cid == caller || (!callerPrincipal.empty() && watch->principal == callerPrincipal);
+            hidePrivateKeys(change, writer);
+            records.push_back(std::move(change));
+        }
+        body.records = std::move(records);
+        std::vector<::morph::wire::InstanceTopic> instances;
+        instances.reserve(body.instances.size());
+        for (auto& topic : body.instances) {
+            if (!topic.primary.empty()) {
+                auto const* watch = _watches.watchOf(cid, topic.modelType, topic.primary);
+                if (watch == nullptr || !authenticated(*watch)) {
+                    continue;
+                }
+                if (!mayWatchInstance(watch->context, topic.modelType)) {
+                    _watches.remove(cid, ::morph::wire::WatchBody{
+                                             .records = {},
+                                             .instances = {{.modelType = topic.modelType, .primary = topic.primary}}});
+                    dropped = true;
+                    continue;
+                }
+            }
+            instances.push_back(std::move(topic));
+        }
+        body.instances = std::move(instances);
+        return dropped;
+    }
+
+    /// @brief Drops @p change's keys when its record is registered with
+    ///        `morph::record::privateKeys` and the recipient is not the writer.
+    /// @param change The change for one recipient; narrowed in place.
+    /// @param writer True when the recipient is the execute's own connection, or
+    ///        watches as the execute's verified principal.
+    static void hidePrivateKeys(::morph::effects::RecordChange& change, bool writer) {
+        if (writer) {
+            return;
+        }
+        auto const* info = ::morph::effects::recordNamed(change.record);
+        if (info != nullptr && info->privateKeys) {
+            change.keys.reset();
+        }
+    }
+
+    /// @brief Sends @p cid one `resync` event, owed because the server dropped
+    ///        some of its watches on its own. On the server strand.
+    ///
+    /// The client answers a `resync` by marking what it watches stale and
+    /// sending its whole watch set again with `replace: true`; a topic still
+    /// refused comes back in the `WatchReply`. Without it, a client whose
+    /// watch was dropped would stop receiving that topic's changes and never
+    /// know. Sent only to a connection that negotiated events, and through
+    /// `postHere`, so a connection held back behind its backlog gets the one
+    /// `resync` its drain already owes it. An `unwatch`, a `replace`, a close
+    /// and a write failure drop watches without one: the first two are the
+    /// client's own, and the last two leave no connection to tell.
+    /// @param cid Connection whose watches were dropped.
+    void sendResync(ConnectionId cid) {
+        if (eventsNegotiated(cid)) {
+            postHere(cid, ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}")));
+        }
+    }
+
+    /// @brief Queues @p body for connection @p cid's next `changes` event. On
+    ///        the server strand.
+    ///
+    /// Sent at once when the queue reaches `detail::kCoalesceKeyLimit` or the
+    /// window is zero; otherwise the first change queued opens the window,
+    /// whose close posts `closeWindow` back to the strand. Dropped for a
+    /// connection with no writer, and for one owed a `resync`, which tells it
+    /// more than the changes would.
+    /// @param cid  Recipient connection.
+    /// @param body Its re-authorised share of one fan-out.
+    void queueChanges(ConnectionId cid, ::morph::wire::ChangesBody const& body) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || found->second.owesResync) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        outbox.queued.add(body);
+        if (_config.coalesceWindow.count() == 0 || outbox.queued.keyCount() >= detail::kCoalesceKeyLimit) {
+            flushChanges(cid);
+            return;
+        }
+        if (outbox.window != 0) {
+            return;
+        }
+        if (!_strandTimer) {
+            _strandTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        }
+        std::uint64_t const window = ++_nextWindow;
+        outbox.window = window;
+        // Weak, as a drain deadline is: the timer does not keep alive a server
+        // nothing else refers to, whose connections are gone with it. The
+        // strand task it posts holds the server, as every strand task does.
+        outbox.windowTimer = _strandTimer->schedule(_config.coalesceWindow, [weak = weak_from_this(), cid, window] {
+            if (auto self = weak.lock()) {
+                self->_strand.postTask([self, cid, window] { self->closeWindow(cid, window); });
+            }
+        });
+    }
+
+    /// @brief Sends connection @p cid's queue when its window @p window
+    ///        closes. On the server strand.
+    ///
+    /// Nothing is sent when the queue was sent since (by the key limit or a
+    /// `resync`) and a later window is open, or when the connection closed.
+    /// @param cid    Connection whose window closed.
+    /// @param window The number its `queueChanges` gave the window.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a connection, then its window's number; swapped, nothing matches and nothing is sent.
+    void closeWindow(ConnectionId cid, std::uint64_t window) {
+        noteOwner("RemoteServer::closeWindow");
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || found->second.window != window) {
+            return;
+        }
+        found->second.window = 0;
+        found->second.windowTimer = 0;
+        flushChanges(cid);
+    }
+
+    /// @brief Drops what connection @p cid has queued and closes its window,
+    ///        sending nothing. On the server strand.
+    /// @param cid Connection whose queue is discarded.
+    /// @return `true` when something was queued.
+    bool discardChanges(ConnectionId cid) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return false;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.windowTimer != 0) {
+            _strandTimer->cancel(outbox.windowTimer);
+        }
+        outbox.window = 0;
+        outbox.windowTimer = 0;
+        bool const queued = !outbox.queued.empty();
+        (void)outbox.queued.take();
+        return queued;
+    }
+
+    /// @brief Sends what connection @p cid has queued as one `changes` event
+    ///        through `postHere`, and closes its window. On the server strand.
+    /// @param cid Connection whose queue is sent.
+    void flushChanges(ConnectionId cid) {
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.windowTimer != 0) {
+            _strandTimer->cancel(outbox.windowTimer);
+        }
+        outbox.window = 0;
+        outbox.windowTimer = 0;
+        if (outbox.queued.empty()) {
+            return;
+        }
+        ::morph::wire::ChangesBody body = outbox.queued.take();
+        std::string envelope = changesEnvelope(body);
+        // The key count is bounded, the keys' size is not: past the envelope cap, the same records go as whole-type
+        // changes, which name what changed in a few bytes each. A watcher must never miss a change, so what still
+        // does not fit is a `resync`.
+        if (envelope.size() > ::morph::wire::kMaxEnvelopeBytes) {
+            for (::morph::effects::RecordChange& change : body.records) {
+                change.keys.reset();
+            }
+            envelope = changesEnvelope(body);
+        }
+        if (oversized(cid, envelope)) {
+            envelope = ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}"));
+        }
+        postHere(cid, std::move(envelope));
+    }
+
+    /// @brief The encoded `changes` event carrying @p body.
+    /// @param body The changes.
+    /// @return The envelope.
+    [[nodiscard]] static std::string changesEnvelope(::morph::wire::ChangesBody const& body) {
+        std::string payload;
+        (void)glz::write_json(body, payload);
+        return ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kChangesTopic, std::move(payload)));
+    }
+
+    /// @brief Body of `post`. On the server strand.
+    /// @param cid      Connection to write to.
+    /// @param envelope The encoded envelope, within the size cap.
+    void postHere(ConnectionId cid, std::string envelope) {
+        noteOwner("RemoteServer::post");
+        auto found = _writers.find(cid);
+        if (found == _writers.end()) {
+            return;
+        }
+        ConnectionOutbox& outbox = found->second;
+        if (outbox.owesResync) {
+            return;
+        }
+        std::size_t backlog = 0;
+        try {
+            backlog = outbox.writer.backlog ? outbox.writer.backlog() : 0;
+        } catch (const std::exception& exc) {
+            writeFailed(cid, exc.what());
+            return;
+        } catch (...) {
+            writeFailed(cid, "unknown exception");
+            return;
+        }
+        if (backlog > kEventBacklogHigh) {
+            outbox.owesResync = true;
+            return;
+        }
+        writeTo(cid, outbox, std::move(envelope));
+    }
+
+    /// @brief Body of `connectionDrained`. On the server strand.
+    /// @param cid Connection whose backlog drained.
+    void connectionDrainedHere(ConnectionId cid) {
+        noteOwner("RemoteServer::connectionDrained");
+        auto found = _writers.find(cid);
+        if (found == _writers.end() || !found->second.owesResync) {
+            return;
+        }
+        found->second.owesResync = false;
+        writeTo(cid, found->second,
+                ::morph::wire::encode(::morph::wire::makeEvent(::morph::wire::kResyncTopic, "{}")));
+    }
+
+    /// @brief Hands @p envelope to @p outbox's writer, catching what it
+    ///        throws. On the server strand.
+    /// @param cid      Connection the writer belongs to.
+    /// @param outbox   The connection's writer state.
+    /// @param envelope The encoded envelope.
+    void writeTo(ConnectionId cid, ConnectionOutbox& outbox, std::string envelope) {
+        try {
+            outbox.writer.write(std::move(envelope));
+        } catch (const std::exception& exc) {
+            writeFailed(cid, exc.what());
+        } catch (...) {
+            writeFailed(cid, "unknown exception");
+        }
+    }
+
+    /// @brief What a failed write to connection @p cid, or a failed read of
+    ///        its backlog, does. On the server strand.
+    ///
+    /// The connection keeps its writer: the transport reports the connection
+    /// gone through `closeConnection`, which drops it. Its watches go now: a
+    /// connection that cannot be written to is sent no events, and the client
+    /// sends its whole watch set again when it reconnects.
+    /// @param cid    Connection whose `write` or `backlog` threw.
+    /// @param reason The exception's message.
+    void writeFailed(ConnectionId cid, std::string_view reason) {
+        noteOwner("RemoteServer::writeFailed");
+        ::morph::log::logWarn("[post] write to connection {} failed: {}", cid, reason);
+        _watches.dropConnection(cid);
+    }
+
+    /// @brief Answers a `watch` or `unwatch` envelope. On the server strand,
+    ///        after @p env's principal is stamped.
+    ///
+    /// Refused with an `err`: `cid == 0`, since an unscoped message has no
+    /// connection whose watch set it could change; a connection already
+    /// closed; and a body `readWatchBody` refuses. Otherwise `ok` with a
+    /// `WatchReply` listing the topics not admitted, which `unwatch` never
+    /// has. A topic listed twice in one body is judged, and reported, once.
+    /// Topics past `wire::kMaxWatchTopics` on the connection are refused.
+    /// @param env   The envelope, its principal the verified one.
+    /// @param reply Reply sink, invoked once.
+    /// @param cid   Connection the envelope arrived on.
+    void handleWatch(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
+                     ConnectionId cid) {
+        noteOwner("RemoteServer::watch");
+        if (cid == 0) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(env.kind + " needs a connection", env.callId)));
+            return;
+        }
+        if (!_connectionScopes.contains(cid)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+            return;
+        }
+        auto body = ::morph::wire::readWatchBody(env.body);
+        if (!body) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(body.error(), env.callId)));
+            return;
+        }
+        ::morph::wire::WatchReply refused;
+        if (env.kind == ::morph::wire::kUnwatchKind) {
+            _watches.remove(cid, *body);
+        } else {
+            ::morph::wire::WatchBody admitted{.records = {}, .instances = {}, .replace = body->replace};
+            std::set<std::string_view> seenRecords;
+            for (auto const& record : body->records) {
+                if (seenRecords.insert(record).second) {
+                    (mayWatchRecord(env.session, record) ? admitted.records : refused.refusedRecords)
+                        .push_back(record);
+                }
+            }
+            std::set<std::pair<std::string_view, std::string_view>> seenInstances;
+            for (auto const& topic : body->instances) {
+                if (seenInstances.emplace(topic.modelType, topic.primary).second) {
+                    (mayWatchInstance(env.session, topic.modelType) ? admitted.instances : refused.refusedInstances)
+                        .push_back(topic);
+                }
+            }
+            auto overCap =
+                _watches.add(cid, admitted, detail::Watch{.context = env.session, .principal = env.session.principal});
+            std::ranges::move(overCap.refusedRecords, std::back_inserter(refused.refusedRecords));
+            std::ranges::move(overCap.refusedInstances, std::back_inserter(refused.refusedInstances));
+        }
+        std::string json;
+        (void)glz::write_json(refused, json);
+        reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(json))));
+    }
+
+    /// @brief Answers an admission question through the watch table's cache.
+    ///        On the server strand.
+    ///
+    /// Cached per verified principal and token, since two tokens of one
+    /// principal may carry different claims. A caller with no verified
+    /// principal is judged afresh each time: an authorizer that does not
+    /// authenticate may still tell such callers apart by their token.
+    /// @tparam Judge Callable `() -> bool`, the uncached answer.
+    /// @param session The `watch` envelope's session, its principal the verified one.
+    /// @param kind    What @p name names.
+    /// @param name    A registered record's wire name or model type name.
+    /// @param judge   Decides when no answer is cached.
+    /// @return The answer.
+    template <class Judge>
+    [[nodiscard]] bool cachedAdmission(const ::morph::session::Context& session, detail::AdmissionTopic kind,
+                                       std::string_view name, Judge judge) {
+        bool const cacheable = !session.principal.empty();
+        if (cacheable) {
+            if (auto const cached = _watches.admission(session, kind, name)) {
+                return *cached;
+            }
+        }
+        bool const admitted = judge();
+        if (cacheable) {
+            _watches.noteAdmission(session, kind, name, admitted);
+        }
+        return admitted;
+    }
+
+    /// @brief Whether @p session's principal may watch record type @p record:
+    ///        whether it may run at least one action whose result holds it.
+    ///        On the server strand.
+    ///
+    /// Each holding action is authorized as `authorize(session, modelType,
+    /// actionId)` against every model type it is registered under in this
+    /// server's dispatcher; which actions hold the record comes from the
+    /// process effects registry. A name no record has is refused without
+    /// caching, so a peer cannot grow the cache with names it makes up.
+    /// @param session The `watch` envelope's session, its principal the verified one.
+    /// @param record  The record's wire name.
+    /// @return True when the record may be watched.
+    /// @throws morph::model::EffectsRegistrationError when the registered
+    ///         records and effects are invalid.
+    [[nodiscard]] bool mayWatchRecord(const ::morph::session::Context& session, std::string_view record) {
+        if (::morph::effects::recordNamed(record) == nullptr) {
+            return false;
+        }
+        return cachedAdmission(session, detail::AdmissionTopic::record, record, [&] {
+            for (auto const& actionId : ::morph::effects::actionsHolding(record)) {
+                for (auto const& modelType : _dispatcher.modelsOf(actionId)) {
+                    if (_authorizer->authorize(session, modelType, actionId)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+    }
+
+    /// @brief Whether @p session's principal may watch keyed instances of
+    ///        @p modelType. On the server strand.
+    ///
+    /// Three conditions: the model type is registered here (refused without
+    /// caching otherwise); the principal may run at least one of its actions,
+    /// `authorize(session, modelType, actionId)`, cached as for a record; and
+    /// `authorizeInstance(session, modelType, {}, 0, "")` admits it. The last
+    /// carries no instance id, because the instance may not exist yet, and no
+    /// owner, because a shared instance has none.
+    /// @param session   The `watch` envelope's session, its principal the verified one.
+    /// @param modelType The topic's model type.
+    /// @return True when the instance topic may be watched.
+    [[nodiscard]] bool mayWatchInstance(const ::morph::session::Context& session, std::string_view modelType) {
+        if (!_registry.contains(modelType)) {
+            return false;
+        }
+        bool const mayRun = cachedAdmission(session, detail::AdmissionTopic::modelType, modelType, [&] {
+            return std::ranges::any_of(_dispatcher.actionsOf(modelType), [&](std::string const& actionId) {
+                return _authorizer->authorize(session, modelType, actionId);
+            });
+        });
+        return mayRun && _authorizer->authorizeInstance(session, modelType, {}, 0, {});
+    }
+
     /// @brief Registers a drain waiter, or answers it at once. On the server strand.
     /// @param deadline Longest time to wait for the in-flight count to reach zero.
     /// @param promise  Settled `true` at zero, `false` at the deadline.
@@ -776,13 +1582,13 @@ private:
             return;
         }
         std::uint64_t const waiterId = ++_nextDrainWaiter;
-        if (!_drainTimer) {
-            _drainTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        if (!_strandTimer) {
+            _strandTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
         }
         // Weak: a pending deadline does not keep a server alive that nothing
         // else refers to. The expiry is posted back, since the waiters are
         // strand state and the timer fires on its I/O loop.
-        auto const handle = _drainTimer->schedule(deadline, [weak = weak_from_this(), waiterId] {
+        auto const handle = _strandTimer->schedule(deadline, [weak = weak_from_this(), waiterId] {
             if (auto self = weak.lock()) {
                 self->_strand.postTask([self, waiterId] { self->expireDrainWaiter(waiterId); });
             }
@@ -817,7 +1623,7 @@ private:
         auto waiters = std::move(_drainWaiters);
         _drainWaiters.clear();
         for (auto& waiter : waiters) {
-            _drainTimer->cancel(waiter.timer);
+            _strandTimer->cancel(waiter.timer);
             waiter.promise->resolve(true);
         }
     }
@@ -913,15 +1719,59 @@ private:
     /// `authenticate()` returns `nullopt` the authorizer cannot vouch for the
     /// caller, so the client-asserted principal is cleared rather than passed
     /// through unverified — every envelope kind this is called for (register,
-    /// attach, assign, instances, schemas, deregister, execute) makes an authorization or
-    /// ownership decision that must key on the verified identity, never the
-    /// client's raw claim. See docs/spec/security.md.
+    /// attach, assign, instances, schemas, deregister, cancel, watch, unwatch,
+    /// a service's kind) makes an authorization or ownership decision that
+    /// must key on the verified identity, never the client's raw claim.
+    /// `execute` does the same in `dispatchExecute`, split in two around its
+    /// `authorize`. `hello`, which a client sends with no session, is not
+    /// stamped. See docs/spec/security.md.
+    ///
+    /// It then compares the stamped principal with @p cid's baseline
+    /// (`compareWithBaseline`).
     /// @param env Envelope whose `session.principal` is stamped or cleared in place.
-    void stampVerifiedPrincipal(::morph::wire::Envelope& env) {
-        if (auto verified = _authorizer->authenticate(env.session)) {
-            env.session.principal = std::move(*verified);
-        } else {
-            env.session.principal.clear();
+    /// @param cid Connection @p env arrived on; `0` for unscoped.
+    void stampVerifiedPrincipal(::morph::wire::Envelope& env, ConnectionId cid) {
+        env.session.principal = verifiedPrincipal(env.session);
+        compareWithBaseline(env.session.principal, cid);
+    }
+
+    /// @brief The principal `_authorizer` verifies from @p session, or empty
+    ///        when it cannot vouch for one.
+    /// @param session An envelope's session, its principal the client's claim.
+    /// @return The verified principal, or an empty string.
+    [[nodiscard]] std::string verifiedPrincipal(const ::morph::session::Context& session) const {
+        auto verified = _authorizer->authenticate(session);
+        return verified ? std::move(*verified) : std::string{};
+    }
+
+    /// @brief Compares @p principal with @p cid's baseline, dropping the
+    ///        connection's watches when they differ. On the server strand.
+    ///
+    /// The baseline is the principal of the first envelope verified on the
+    /// connection. A different one, including the empty principal of a token
+    /// `authenticate` refuses, drops every watch @p cid holds and becomes the
+    /// baseline: a watch was admitted for one principal, and must not keep
+    /// delivering to another who now speaks on the same connection. A new
+    /// token for the same principal keeps them. The changes queued for the
+    /// connection are discarded, never sent: they were authorised for the
+    /// previous principal. A connection that held any watch, or had changes
+    /// queued, is sent one `resync` (`sendResync`), which covers them.
+    /// `cid == 0` and a connection not open have no baseline.
+    /// @param principal The envelope's verified principal, or empty.
+    /// @param cid       Connection the envelope arrived on; `0` for unscoped.
+    void compareWithBaseline(const std::string& principal, ConnectionId cid) {
+        if (cid == 0 || !_connectionScopes.contains(cid)) {
+            return;
+        }
+        auto const [baseline, first] = _principalBaselines.try_emplace(cid, principal);
+        if (!first && baseline->second != principal) {
+            bool const watched = _watches.topicCount(cid) != 0;
+            bool const queued = discardChanges(cid);
+            _watches.dropConnection(cid);
+            baseline->second = principal;
+            if (watched || queued) {
+                sendResync(cid);
+            }
         }
     }
 
@@ -1269,7 +2119,7 @@ private:
                 // (including allow-all) clears it, so the register decision
                 // below — and the owner recorded from it — never key on the
                 // client's unverified claim.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Bound *who may create* an instance. The default hook allows
                 // all, so an unconfigured server registers any known type; a
                 // deployer opts into gating registration by overriding
@@ -1322,7 +2172,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("attach requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1339,7 +2189,7 @@ private:
                 // constructs a model, but it still changes what a future
                 // attacher of `primary` reaches, so it must not be reachable
                 // by an unauthenticated or unauthorized caller either.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1350,7 +2200,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("instances requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Enumeration is a read channel over the directory: gate it with
                 // `authorize` for the model type (empty action id) so a deployer
                 // can refuse listing without refusing use. It discloses the live
@@ -1364,7 +2214,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("schemas requires a typeId");
                 }
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Gated exactly like `instances`, and for the same reason: a
                 // description is a read channel over the model type, so
                 // `authorize` with an empty action id lets a deployer refuse
@@ -1385,7 +2235,7 @@ private:
                 // env.session.principal, so that principal must be the verified
                 // one: without the stamp a caller holding any token, or none,
                 // could claim the owner's name and release the owner's instance.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 // Type-level gate, as for `instances`/`schemas`. A deregister
                 // names no type, so both ids are empty; it lets a verifying
                 // authorizer refuse a caller with no valid token outright.
@@ -1420,7 +2270,7 @@ private:
                 // Stamped before the ownership comparison in cancelCall, for
                 // the reason deregister is: the comparison keys on the
                 // verified principal, never on the client's claim.
-                stampVerifiedPrincipal(env);
+                stampVerifiedPrincipal(env, cid);
                 cancelCall(env, cid);
                 // One answer whatever became of the call -- stopped, unknown,
                 // finished, or another caller's -- so a cancel cannot be used
@@ -1440,12 +2290,17 @@ private:
                         body);
                     reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
                 }
+            } else if (env.kind == ::morph::wire::kWatchKind || env.kind == ::morph::wire::kUnwatchKind) {
+                // Stamped first: the watch keeps the verified principal, and
+                // admission decides on it.
+                stampVerifiedPrincipal(env, cid);
+                handleWatch(env, reply, cid);
             } else if (IEnvelopeService* const service = serviceFor(env.kind); service != nullptr) {
                 // Stamped first, as for every built-in kind that authorises:
                 // the service decides on the verified principal, never on the
                 // client's claim.
-                stampVerifiedPrincipal(env);
-                reply(service->handle(env, *_authorizer));
+                stampVerifiedPrincipal(env, cid);
+                reply(service->handle(env, *_authorizer, factsOf(cid)));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
@@ -1475,6 +2330,12 @@ private:
         auto reject = [&env, &reply](const char* message) {
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
+        // Verified once, on entry, and compared with the connection's baseline
+        // before any check below can refuse the call: an execute under another
+        // principal, or under none, drops the connection's watches even when it
+        // is refused, and before its own fan-out when it is not.
+        std::string verified = verifiedPrincipal(env.session);
+        compareWithBaseline(verified, cid);
         LimitPolicy const& limits = _config.limits;
         // Exact, not advisory: the count is this strand's own state, so nothing
         // can be admitted between this check and the increment below.
@@ -1486,17 +2347,16 @@ private:
             reject("unauthorized");
             return;
         }
-        // Make the identity authoritative. A verifying authorizer returns the
-        // principal it extracted from a valid token; we stamp it so model code
-        // reading session::current()->principal can trust it. If authenticate()
-        // returns nullopt the authorizer cannot vouch for the caller, so we CLEAR
-        // the client-asserted principal rather than passing it through unverified.
-        // This closes two holes: (1) the TOCTOU window where a token that passed
-        // authorize() expires before authenticate() (worst case is an empty
-        // principal, never the attacker's claim), and (2) an authorize-only or
-        // allow-all authorizer that never authenticates (the model never sees an
-        // untrusted principal as authoritative). See docs/spec/security.md.
-        stampVerifiedPrincipal(env);
+        // Make the identity authoritative: the principal verified on entry
+        // replaces the client's claim, so model code reading
+        // session::current()->principal can trust it. When authenticate()
+        // could not vouch for the caller it is empty, never the client's claim:
+        // a token that expires between the two checks yields at worst an empty
+        // principal, and an authorize-only or allow-all authorizer, which never
+        // authenticates, never presents an unverified principal to the model.
+        // `authorize` above saw the session as the client sent it; the verified
+        // principal lands only here. See docs/spec/security.md.
+        env.session.principal = std::move(verified);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         // One lookup for the holder, its recorded owner and its hydration state
         // together: they are fields of one record.
@@ -1618,6 +2478,8 @@ private:
         run.timeoutHandle = timeoutHandle;
         run.stopSource = std::move(stopSource);
         run.mid = mid;
+        run.cid = cid;
+        run.sharedKey = inst->sharedKey;
         // Posted in this strand's order, which is the order `handle()` was
         // called in; the model's strand runs its tasks in the order they were
         // posted. That is the whole of per-model execute ordering.
@@ -1684,6 +2546,10 @@ private:
         /// Null without an `executeTimeout`.
         std::shared_ptr<::core::async::StopSource> stopSource;
         ::morph::exec::detail::ModelId mid{};
+        /// Connection the execute arrived on; `0` for unscoped.
+        ConnectionId cid{0};
+        /// The instance's directory key at admission; empty for a private instance.
+        std::optional<detail::DirectoryKey> sharedKey;
         std::chrono::steady_clock::time_point start;
         ::morph::observe::SpanId spanId{};
     };
@@ -1759,6 +2625,36 @@ private:
         }
     }
 
+    /// Derives what a successful execute changed and posts it to `fanOut` on
+    /// the server strand. On the model's strand, before the reply, so it runs
+    /// whether or not the caller is still waiting for that reply.
+    ///
+    /// A failure here is logged and goes no further: the reply and the action
+    /// gate's release still follow.
+    /// @param run    The finished execute.
+    /// @param result Its result JSON.
+    static void postChanges(RemoteRun const& run, std::string_view result) {
+        try {
+            auto changes = ::morph::effects::deriveChanges(
+                run.env.actionType, result,
+                ::morph::effects::InstanceChange{.modelType = run.env.modelType,
+                                                 .instance = run.mid.v,
+                                                 .primary = run.sharedKey ? run.sharedKey->second : std::string{}});
+            if (changes.empty()) {
+                return;
+            }
+            // The execute's principal is the verified one by now (`dispatchExecute`).
+            run.self->_strand.postTask([self = run.self, changes = std::move(changes), caller = run.cid,
+                                        principal = run.env.session.principal]() mutable {
+                self->fanOut(std::move(changes), caller, principal);
+            });
+        } catch (const std::exception& exc) {
+            ::morph::log::logError("[fanOut] changes of {} not derived: {}", run.env.actionType, exc.what());
+        } catch (...) {
+            ::morph::log::logError("[fanOut] changes of {} not derived: unknown exception", run.env.actionType);
+        }
+    }
+
     /// Records a finished execute, replies, and leaves the action gate so the
     /// next execute on the instance can start. On the strand.
     static void finishRemote(RemoteRun& run, std::string result, const std::exception_ptr& error) {
@@ -1784,6 +2680,7 @@ private:
             {{"modelType", run.env.modelType}, {"actionType", run.env.actionType}}};
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
         if (succeeded) {
+            postChanges(run, result);
             run.complete(::morph::wire::encode(::morph::wire::makeOk(run.env.callId, std::move(result))));
         } else {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
@@ -1837,6 +2734,23 @@ private:
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
+    // The writer of each open connection that has one, set by
+    // `setConnectionWriter` and dropped with the connection's scope.
+    std::unordered_map<ConnectionId, ConnectionOutbox> _writers;
+    // What services recorded about each open connection (`factsOf`), dropped
+    // with the connection's scope.
+    std::unordered_map<ConnectionId, ConnectionFacts> _facts;
+    // Handed to a service for a message with no open connection behind it;
+    // reset before each such message.
+    ConnectionFacts _throwawayFacts;
+    // What each open connection watches, filled by `watch`/`unwatch` and
+    // dropped with the connection's scope or on a failed write.
+    detail::WatchTable _watches;
+    // The verified principal of the first stamped envelope on each open
+    // connection, which a later one under another principal replaces after
+    // dropping the connection's watches (`compareWithBaseline`). Dropped
+    // with the connection's scope.
+    std::unordered_map<ConnectionId, std::string> _principalBaselines;
     /// Names one cancellable call: the connection it arrived on and the
     /// `callId` its client chose.
     struct CancelKey {
@@ -1884,8 +2798,12 @@ private:
     };
     std::vector<DrainWaiter> _drainWaiters;
     std::uint64_t _nextDrainWaiter{0};
-    // Arms drain deadlines; created by the first waiter that needs one.
-    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _drainTimer;
+    // Arms drain deadlines and coalescing windows; created by the first that
+    // needs one. Its callbacks only post back to the strand.
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _strandTimer;
+    // Numbers each coalescing window, so a window's late close cannot send a
+    // queue a later window holds.
+    std::uint64_t _nextWindow{0};
 
     // Drawn off the strand by openConnection(), which answers at once.
     std::atomic<uint64_t> _nextConnectionId{0};
@@ -1904,6 +2822,12 @@ private:
 /// Its pending list and session belong to the caller's owner (`setOwner`) and
 /// are touched only there, without a lock; the server's reply callback touches
 /// only the completion it settles.
+///
+/// A backend scoped to a connection also receives the server's events for it
+/// (`setEventHandler`): it registers a `ConnectionWriter` whose `write` hands
+/// each envelope to the handler, in the order the server posted them, with a
+/// `backlog` that always reads `0` -- an in-process hand-off holds nothing
+/// back, so the server never withholds an event or owes a `resync`.
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
@@ -1943,8 +2867,33 @@ public:
     /// the simulated connection should be reclaimed.
     /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
     ///               on the same terms as the constructor above.
+    ///
+    /// The backend also becomes @p cid's event receiver: it gives the server a
+    /// `ConnectionWriter` for @p cid, replacing any writer the connection had,
+    /// so a second backend on the same scope takes the events over.
     /// @param cid    Connection scope, as returned by `server.openConnection()`.
-    SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND, ConnectionId cid) : _server{server}, _cid{cid} {}
+    SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND, ConnectionId cid)
+        : _server{server}, _cid{cid}, _inbox{std::make_shared<EventInbox>()} {
+        if (_cid == 0) {
+            return;
+        }
+        _server.setConnectionWriter(
+            _cid, ConnectionWriter{.write = [inbox = _inbox](std::string const& frame) { inbox->receive(frame); },
+                                   .backlog = [] { return std::size_t{0}; }});
+    }
+
+    /// @brief Stops delivering events: the server may still post to the
+    ///        connection, and those envelopes are dropped.
+    ~SimulatedRemoteBackend() override {
+        if (_inbox) {
+            _inbox->set(nullptr, nullptr);
+        }
+    }
+
+    SimulatedRemoteBackend(const SimulatedRemoteBackend&) = delete;
+    SimulatedRemoteBackend& operator=(const SimulatedRemoteBackend&) = delete;
+    SimulatedRemoteBackend(SimulatedRemoteBackend&&) = delete;
+    SimulatedRemoteBackend& operator=(SimulatedRemoteBackend&&) = delete;
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
@@ -2200,6 +3149,25 @@ public:
         }
     }
 
+    /// @brief Installs the handler each server-initiated event is posted to.
+    ///        See `IBackend::setEventHandler`.
+    ///
+    /// Only a backend scoped to a connection (the `ConnectionId` constructor)
+    /// receives events; an unscoped one has no connection to post to. Events
+    /// are posted to @p exec in the order the server posted them. An `event`
+    /// envelope is recognised by its kind, so it never settles a call.
+    /// @param handler Callable posted to @p exec once per event. Pass
+    ///                `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    void setEventHandler(std::function<void(::morph::wire::EventBody)> handler,
+                         ::morph::exec::IExecutor* exec) override {
+        if (_inbox) {
+            _inbox->set(std::move(handler), exec);
+        }
+    }
+
     /// @brief Installs the session stamped onto every control envelope this
     ///        backend subsequently builds (`register`, `registerShared`,
     ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
@@ -2210,6 +3178,46 @@ public:
     }
 
 private:
+    /// @brief The event handler and the entry point the connection's writer
+    ///        calls, shared with that writer so the server can outlive the backend.
+    ///
+    /// The writer runs on the server strand and `setEventHandler` on the
+    /// backend's owner, so both sit behind a mutex.
+    struct EventInbox {
+        /// @brief Replaces the handler and its executor.
+        /// @param next   New handler; empty clears it.
+        /// @param target Executor it is posted to.
+        void set(std::function<void(::morph::wire::EventBody)> next, ::morph::exec::IExecutor* target) {
+            std::scoped_lock const lock{mutex};
+            handler =
+                next ? std::make_shared<std::function<void(::morph::wire::EventBody)>>(std::move(next)) : nullptr;
+            exec = target;
+        }
+
+        /// @brief Decodes one envelope the server wrote and posts an event to the handler.
+        /// @param frame The encoded envelope. Anything that is not a well-formed event is dropped.
+        void receive(const std::string& frame) {
+            std::shared_ptr<std::function<void(::morph::wire::EventBody)>> current;
+            ::morph::exec::IExecutor* target = nullptr;
+            {
+                std::scoped_lock const lock{mutex};
+                current = handler;
+                target = exec;
+            }
+            if (!current || target == nullptr) {
+                return;
+            }
+            // By kind: an event's `callId` is not a reply's.
+            static_cast<void>(detail::routeEvent(::morph::wire::decode(frame), [&](::morph::wire::EventBody event) {
+                target->post([current, event = std::move(event)]() mutable { (*current)(std::move(event)); });
+            }));
+        }
+
+        std::mutex mutex;
+        std::shared_ptr<std::function<void(::morph::wire::EventBody)>> handler;
+        ::morph::exec::IExecutor* exec = nullptr;
+    };
+
     /// @brief Checks, in a debug build, that the caller is on the owner the
     ///        backend was given. Nothing to check before `setOwner`.
     /// @param site Name of the calling body.
@@ -2252,6 +3260,8 @@ private:
     // constructed with a ConnectionId from server.openConnection(). Threaded
     // through every handle()/handleInline() call this backend makes.
     ConnectionId _cid{0};
+    // Null for an unscoped backend, which has no connection to receive on.
+    std::shared_ptr<EventInbox> _inbox;
     // The owner every verb is called from, once `setOwner` has named it. The
     // two fields below are touched only there.
     std::optional<::morph::exec::detail::OwnerAffinity> _affinity;

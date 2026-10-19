@@ -6,6 +6,7 @@
 #include <morph/ui/value.hpp>
 // clang-format on
 
+#include <algorithm>
 #include <app/app_source.hpp>
 #include <app/client_shell.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -14,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
+#include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
@@ -21,6 +23,7 @@
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/memory_history.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -467,6 +470,184 @@ TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[examp
         backend.click(*entry);
         CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
         CHECK(log.mounted == std::vector<std::string>{"probe.home", "probe.other"});
+        CHECK(log.problems.empty());
+    }
+    source.close();
+}
+
+namespace {
+
+// A local backend whose connect hook the test fires, as a transport does after each connect. `reconnect` replays a
+// transport's reconnect: the connect hook, then the bridge's reconnect handler posted to its executor. It logs each
+// bind and execute, in order.
+class ConnectingBackend final : public morph::backend::LocalBackend {
+public:
+    using LocalBackend::LocalBackend;
+    void setConnectHandler(std::function<void()> const& handler) override { *_handler = handler; }
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _reconnect = std::move(handler);
+        _reconnectExec = exec;
+    }
+    [[nodiscard]] std::shared_ptr<std::function<void()>> handler() const { return _handler; }
+
+    morph::async::Completion<morph::exec::detail::ModelId> bindModel(morph::backend::detail::BindRequest request,
+                                                                     morph::exec::IExecutor& cbExec) override {
+        note("bind");
+        return LocalBackend::bindModel(std::move(request), cbExec);
+    }
+    void executeInto(morph::exec::detail::ModelId mid, morph::backend::detail::ActionCall call,
+                     morph::exec::IExecutor* cbExec,
+                     std::shared_ptr<morph::async::detail::ISettleSink> sink) override {
+        note("execute");
+        LocalBackend::executeInto(mid, std::move(call), cbExec, std::move(sink));
+    }
+
+    void reconnect() {
+        (*_handler)();
+        if (_reconnect && _reconnectExec != nullptr) {
+            _reconnectExec->post(_reconnect);
+        }
+    }
+
+    std::vector<std::string> calls() {
+        std::scoped_lock const lock{_mutex};
+        return _calls;
+    }
+    void clearCalls() {
+        std::scoped_lock const lock{_mutex};
+        _calls.clear();
+    }
+
+private:
+    void note(std::string call) {
+        std::scoped_lock const lock{_mutex};
+        _calls.push_back(std::move(call));
+    }
+
+    std::shared_ptr<std::function<void()>> _handler = std::make_shared<std::function<void()>>();
+    std::function<void()> _reconnect;
+    morph::exec::IExecutor* _reconnectExec = nullptr;
+    std::mutex _mutex;
+    std::vector<std::string> _calls;
+};
+
+// The probe application behind a server-like transport: the UI service answers the `ui-*` kinds in process, the
+// exchange answers `watch` itself, as `RemoteServer` does, and every request's kind is logged in order.
+class ReconnectingSource final : public morph::examples::ClientSource {
+public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test fires and inspects these.
+    std::vector<std::string> kinds;
+    std::vector<std::string> watchBodies;
+    std::shared_ptr<std::function<void()>> connectHook;
+    ConnectingBackend* backend = nullptr;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    ReconnectingSource() = default;
+    ~ReconnectingSource() override { close(); }
+    ReconnectingSource(ReconnectingSource const&) = delete;
+    ReconnectingSource& operator=(ReconnectingSource const&) = delete;
+    ReconnectingSource(ReconnectingSource&&) = delete;
+    ReconnectingSource& operator=(ReconnectingSource&&) = delete;
+
+protected:
+    [[nodiscard]] std::expected<Transport, morph::ui::ConnectError> connect(
+        morph::ui::AppContext& /*context*/) override {
+        auto served = probe::bundle();
+        REQUIRE(served.has_value());
+        _service =
+            std::make_shared<morph::ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        auto made = std::make_unique<ConnectingBackend>(*_workers);
+        backend = made.get();
+        connectHook = made->handler();
+        return Transport{
+            .backend = std::move(made),
+            .exchange =
+                [this](morph::wire::Envelope const& request,
+                       std::function<void(morph::ui::ExchangeReply)> const& done) {
+                    kinds.push_back(request.kind);
+                    if (request.kind == "watch" || request.kind == "unwatch") {
+                        watchBodies.push_back(request.body);
+                        morph::wire::Envelope answer;
+                        answer.kind = "ok";
+                        answer.body = "{}";
+                        done(answer);
+                        return;
+                    }
+                    done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+                },
+            .serverEvents = true};
+    }
+    void disconnect() override {
+        _workers.reset();
+        _service.reset();
+    }
+
+private:
+    std::shared_ptr<morph::ui::UiService> _service;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+}  // namespace
+
+// Mutation: call the listeners before the ui-hello, or forward no events — the order or the last watch changes.
+TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[examples-common][source][push]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend screens;
+    ReconnectingSource source;
+    ShellLog log;
+    {
+        auto shell =
+            morph::examples::mountClientShell(context, screens, openAndWait(context, source), source, log.options());
+        REQUIRE(log.mounted == std::vector<std::string>{"probe.home"});
+        REQUIRE(source.connectHook != nullptr);
+
+        // A connect once the bundle loaded is a new connection: it negotiates events again, then the session
+        // re-sends its whole watch set.
+        source.kinds.clear();
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&] { return source.kinds.size() >= 2; }));
+        CHECK(source.kinds == std::vector<std::string>{"ui-hello", "watch"});
+        CHECK(source.watchBodies.back() == R"({"records":[],"instances":[],"replace":true})");
+
+        // A server event reaches the session: a resync answers with the whole watch set.
+        source.kinds.clear();
+        source.backend->deliverEvent({.topic = "resync", .payload = {"null"}});
+        REQUIRE(pumpUntil(context.owner(), [&] { return !source.kinds.empty(); }));
+        CHECK(source.kinds == std::vector<std::string>{"watch"});
+        CHECK(log.problems.empty());
+    }
+    source.close();
+}
+
+// Mutation: run the connect listeners in the connect hook's own task, ahead of the bridge's reconnect handler — the
+// mounted query refetches through the old connection's binding before the rebind.
+TEST_CASE("remote_source_refetches_after_the_bridge_rebinds", "[examples-common][source][push]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend screens;
+    ReconnectingSource source;
+    ShellLog log;
+    {
+        auto const shell =
+            morph::examples::mountClientShell(context, screens, openAndWait(context, source), source, log.options());
+        REQUIRE(log.mounted == std::vector<std::string>{"probe.home"});
+        REQUIRE(source.backend != nullptr);
+        // The screen's query has run, through a bound private instance.
+        REQUIRE(pumpUntil(context.owner(), [&] {
+            auto const calls = source.backend->calls();
+            return std::ranges::find(calls, "execute") != calls.end();
+        }));
+
+        source.backend->clearCalls();
+        source.backend->reconnect();
+        REQUIRE(pumpUntil(context.owner(), [&] {
+            auto const calls = source.backend->calls();
+            return std::ranges::find(calls, "execute") != calls.end();
+        }));
+        // The refetch waits for the new binding.
+        auto const calls = source.backend->calls();
+        REQUIRE_FALSE(calls.empty());
+        CHECK(calls.front() == "bind");
         CHECK(log.problems.empty());
     }
     source.close();
