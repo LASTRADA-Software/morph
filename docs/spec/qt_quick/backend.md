@@ -146,7 +146,8 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan` | — |
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
-| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view | — |
+| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
+| Splitter | `MorphSplitter` | a `SplitView` whose handles are made from its `handle` part (`MorphSplitterHandle`); the splitter sets each handle's `axis` and `scheme`, and leaves a handle's implicit extent along the axis between two panes | the panes' sizes once a drag ends |
 | Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
 | Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
@@ -276,8 +277,13 @@ surface is `Theme.background`.
   | Restyle kind | `MorphUi` base | What it replaces | Base API (beyond its Qt type's) |
   |---|---|---|---|
   | `tableRow` | `MorphTableRowBackground` | a table row's background: selection, hover, focus, zebra, tone, and the row's minimum height | `selected`, `hovered`, `current`, `alternate`, `tone` (−1 none, else a `ui::Tone` index), `scheme` |
+  | `scrollBar` | `MorphScrollBar` (a `ScrollBar`) | the bar a scroll area attaches on its axis | `scheme` |
+  | `splitterHandle` | `MorphSplitterHandle` | the handle between two panes of a splitter | `axis`, `scheme`; the handle reads `SplitHandle.pressed` and `.hovered` |
 
-  The layout kinds (column, row, grid, spacer, scroll, slot, splitter, drop zone) are not restyled as kinds.
+  A `scrollBar` restyle is a `ScrollBar` subclass: the names checked are every one beyond `QQuickItem`'s, so the
+  base's include all of `ScrollBar`'s. The layout kinds (column, row, grid, spacer, scroll, slot, splitter, drop zone)
+  are not restyled as kinds; what a scroll area and a splitter draw of their own is restyled as their parts, and the
+  refusal says so (`` `scroll` is a layout kind; restyle its bar as `scrollBar` ``).
 - `Backend::createCustom(parent, {name, props, minVersion})` loads a component and checks that it declares every
   prop the document declares. A component reports its events through `host.fire(event, payload)` (`host` a `var`
   property it declares and the backend sets); `CustomWidget::setOnEvent` receives the event's name and the payload
@@ -314,7 +320,10 @@ software scene graph:
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
   `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a
-  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused; a write
+  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused; a
+  `scrollBar` restyle is the bar a scroll area attaches, and one that is no `ScrollBar` is refused; a `splitterHandle`
+  restyle is every handle, and a 12 px one makes the panes leave 12 px where the stock one leaves 6; `scroll` and
+  `splitter` as kinds are refused naming their part kinds; a write
   of a property the item does not declare is refused and reported once, and a custom component in a container is
   offered no placement it does not declare.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a

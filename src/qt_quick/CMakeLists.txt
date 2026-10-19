@@ -50,6 +50,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphSpacer.qml
         qml/MorphPanel.qml
         qml/MorphScroll.qml
+        qml/MorphScrollBar.qml
         qml/MorphSlot.qml
         qml/MorphTabs.qml
         qml/MorphDialog.qml
@@ -68,6 +69,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphKeyValue.qml
         qml/MorphEmptyState.qml
         qml/MorphSplitter.qml
+        qml/MorphSplitterHandle.qml
         qml/MorphCollapsible.qml
         qml/MorphDropZone.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets

@@ -33,11 +33,11 @@ struct KindType {
 };
 
 // The kinds a bundle may restyle, and the MorphUi type each one is. A kind restyle replaces the kind's whole
-// component; a part restyle (`tableRow`, a row's background) replaces one part a component C++ makes draws, and the
-// container keeps its layout. The layout kinds are not restyled: they place other widgets and show nothing of their
-// own.
+// component; a part restyle (`tableRow`, `scrollBar`, `splitterHandle`) replaces one part a component C++ makes draws,
+// and the container keeps its layout. The layout kinds are not restyled as kinds: they place other widgets, and what
+// a scroll area and a splitter draw of their own is restyled as their parts.
 // NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, kind beside type, reads as one.
-constexpr std::array<KindType, 24> kRestylable = {
+constexpr std::array<KindType, 26> kRestylable = {
     {{"text", "MorphText"},           {"button", "MorphButton"},
      {"textInput", "MorphTextInput"}, {"checkbox", "MorphCheckbox"},
      {"select", "MorphSelect"},       {"menu", "MorphMenu"},
@@ -49,8 +49,42 @@ constexpr std::array<KindType, 24> kRestylable = {
      {"progress", "MorphProgress"},   {"steps", "MorphSteps"},
      {"keyValue", "MorphKeyValue"},   {"emptyState", "MorphEmptyState"},
      {"drawer", "MorphDrawer"},       {"collapsible", "MorphCollapsible"},
-     {"textArea", "MorphTextArea"},   {"tableRow", "MorphTableRowBackground"}}};
+     {"textArea", "MorphTextArea"},   {"tableRow", "MorphTableRowBackground"},
+     {"scrollBar", "MorphScrollBar"}, {"splitterHandle", "MorphSplitterHandle"}}};
+
+struct LayoutKind {
+    std::string_view kind;
+    // What the kind draws of its own and the part kind that restyles it, or empty for a kind that draws nothing.
+    std::string_view part;
+    std::string_view partKind;
+};
+
+// The layout kinds, refused as kinds with a reason that names the part kind where there is one.
+constexpr std::array<LayoutKind, 8> kLayoutKinds = {{{"scroll", "bar", "scrollBar"},
+                                                    {"splitter", "handle", "splitterHandle"},
+                                                    {"column", "", ""},
+                                                    {"row", "", ""},
+                                                    {"grid", "", ""},
+                                                    {"spacer", "", ""},
+                                                    {"slot", "", ""},
+                                                    {"dropZone", "", ""}}};
 // NOLINTEND(modernize-use-designated-initializers)
+
+/// Why @p kind cannot be restyled: a layout kind's reason, naming its part kind when it has one, or the generic one.
+std::string unrestylable(std::string const& kind) {
+    // A loop rather than std::ranges::find: an array's iterator is a pointer on some standard libraries only.
+    for (LayoutKind const& layout : kLayoutKinds) {
+        if (layout.kind != kind) {
+            continue;
+        }
+        if (layout.partKind.empty()) {
+            return "`" + kind + "` is a layout kind and is not restyled";
+        }
+        return "`" + kind + "` is a layout kind; restyle its " + std::string{layout.part} + " as `" +
+               std::string{layout.partKind} + "`";
+    }
+    return "`" + kind + "` is not a kind that can be restyled";
+}
 
 std::string errorsOf(QQmlComponent const& component) {
     std::string text;
@@ -220,7 +254,7 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
     auto const index = static_cast<std::size_t>(
         std::ranges::distance(kRestylable.begin(), std::ranges::find(kRestylable, kind, &KindType::kind)));
     if (index >= kRestylable.size()) {
-        return fail("`" + kind + "` is not a kind that can be restyled");
+        return fail(unrestylable(kind));
     }
     if (std::optional<std::string> const refused = _state->refusal(component, 0)) {
         return fail("restyle of `" + kind + "`: " + *refused);

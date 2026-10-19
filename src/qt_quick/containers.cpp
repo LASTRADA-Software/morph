@@ -57,7 +57,9 @@ void PanelImpl::setOnToggle(std::function<void(bool)> onToggle) {
 
 ScrollImpl::ScrollImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis)
     : ContainerItemWidget{context, QStringLiteral("MorphScroll"), parent,
-                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}} {}
+                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0},
+                                      {QStringLiteral("bar"),
+                                       QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 SlotImpl::SlotImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent} {}
@@ -91,8 +93,11 @@ int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
 // ── Splitter ──────────────────────────────────────────────────────────────
 
 SplitterImpl::SplitterImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis)
-    : ContainerItemWidget{context, QStringLiteral("MorphSplitter"), parent,
-                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}} {}
+    : ContainerItemWidget{
+          context, QStringLiteral("MorphSplitter"), parent,
+          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0},
+                      {QStringLiteral("handle"),
+                       QVariant::fromValue(&context.component(QStringLiteral("MorphSplitterHandle")))}}} {}
 
 void SplitterImpl::setSizes(std::vector<int> const& sizes) {
     QVariantList list;

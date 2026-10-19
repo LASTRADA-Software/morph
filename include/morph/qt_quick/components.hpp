@@ -38,8 +38,9 @@ struct ComponentFailure {
 ///   loads only when the text matches the digest, and compiles in a dedicated engine whose root context holds
 ///   nothing, so it sees nothing but what is set on it.
 /// - The **restyle map** names a component for a built-in kind, or for a part a built-in component draws (`tableRow`,
-///   a table row's background). The component must declare every property and function of its `MorphUi` base; one
-///   that does not is refused when it is mapped.
+///   a table row's background; `scrollBar`, a scroll area's bar; `splitterHandle`, a splitter's handle). The
+///   component must declare every property and function of its `MorphUi` base; one that does not is refused when it
+///   is mapped.
 ///
 /// Each component reports its events through `host.fire(event, payload)`, `host` being a `var` property it declares
 /// and the renderer sets. A component that fails to load is reported once, through the callback, and the caller

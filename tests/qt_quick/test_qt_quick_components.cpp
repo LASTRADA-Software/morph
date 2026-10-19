@@ -342,6 +342,94 @@ TEST_CASE("qt_quick components: a tableRow restyle draws every row's background,
     CHECK(reported.size() == 1);  // the refusal above, and nothing since
 }
 
+// Mutation: drop the `scrollBar` entry from the restylable kinds, or pass the stock part instead of the context's
+// (the restyle's marker never shows on the bar).
+TEST_CASE("qt_quick components: a scrollBar restyle is the bar a scroll area attaches on its axis", "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost("BrandBar", 1,
+                       writeFile(dir, QStringLiteral("BrandBar.qml"),
+                                 "import QtQuick\nimport MorphUi\nMorphScrollBar { property bool brand: true }\n"));
+    components.addHost("PlainBar", 1,
+                       writeFile(dir, QStringLiteral("PlainBar.qml"),
+                                 "import QtQuick\nItem { property var scheme; property real position }\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "scrollBar", "PlainBar");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason.contains("does not declare"));
+    CHECK(refused.error().reason.contains("orientation"));
+    auto asKind = components.restyle(probeEngine, "scroll", "BrandBar");
+    REQUIRE_FALSE(asKind.has_value());
+    CHECK(asKind.error().reason == "`scroll` is a layout kind; restyle its bar as `scrollBar`");
+    auto column = components.restyle(probeEngine, "column", "BrandBar");
+    REQUIRE_FALSE(column.has_value());
+    CHECK(column.error().reason == "`column` is a layout kind and is not restyled");
+    REQUIRE(components.restyle(probeEngine, "scrollBar", "BrandBar").has_value());
+
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
+    std::vector<std::unique_ptr<ui::TextWidget>> lines;
+    for (int line = 0; line < 60; ++line) {
+        lines.push_back(scene.backend().createText(scroll.get()));
+        lines.back()->setText("line " + std::to_string(line));
+    }
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*scroll);
+    auto* const bar = qobject_cast<QQuickItem*>(item.property("barItem").value<QObject*>());
+    REQUIRE(bar != nullptr);
+    CHECK(bar->property("brand").toBool());
+    CHECK(bar->property("orientation").toInt() == static_cast<int>(Qt::Vertical));
+    // Attached to the flickable, which lays it out along the scroll area's height.
+    CHECK(bar->height() == item.height());
+    CHECK(reported.size() == 3);  // the three refusals above, and nothing since
+}
+
+// Mutation: drop the `splitterHandle` entry from the restylable kinds, or keep the constant handle extent (the
+// splitter leaves 6 px for a 12 px handle).
+TEST_CASE("qt_quick components: a splitterHandle restyle is every handle between panes, and the panes leave its room",
+          "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost(
+        "BrandHandle", 1,
+        writeFile(dir, QStringLiteral("BrandHandle.qml"),
+                  "import QtQuick\nimport MorphUi\nMorphSplitterHandle { property bool brand: true; implicitWidth: 12 }\n"));
+    components.addHost("PlainHandle", 1,
+                       writeFile(dir, QStringLiteral("PlainHandle.qml"), "import QtQuick\nItem { property int axis }\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "splitterHandle", "PlainHandle");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason.contains("scheme"));
+    auto asKind = components.restyle(probeEngine, "splitter", "BrandHandle");
+    REQUIRE_FALSE(asKind.has_value());
+    CHECK(asKind.error().reason == "`splitter` is a layout kind; restyle its handle as `splitterHandle`");
+    REQUIRE(components.restyle(probeEngine, "splitterHandle", "BrandHandle").has_value());
+
+    auto extentOf = [](Scene& scene) {
+        auto splitter = scene.backend().createSplitter(nullptr, ui::Axis::Horizontal);
+        auto left = scene.backend().createText(splitter.get());
+        auto right = scene.backend().createText(splitter.get());
+        left->setText("Left");
+        right->setText("Right");
+        scene.settle();
+        QQuickItem const& item = Scene::itemOf(*splitter);
+        auto const* const handle = item.property("handleItem").value<QObject*>();
+        REQUIRE(handle != nullptr);
+        CHECK(handle->property("axis").toInt() == 1);
+        double const panes = Scene::itemOf(*left).implicitWidth() + Scene::itemOf(*right).implicitWidth();
+        return std::pair{handle->property("brand").toBool(), item.implicitWidth() - panes};
+    };
+    Scene restyled{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    CHECK(extentOf(restyled) == std::pair{true, 12.0});
+    Scene stock;
+    CHECK(extentOf(stock) == std::pair{false, 6.0});
+    CHECK(reported.size() == 2);  // the two refusals above, and nothing since
+}
+
 // Mutation: mount the fallback without asking the backend (the bundle component is never shown).
 TEST_CASE(
     "qt_quick components: a custom node mounted through the view tree shows its component, with its props "
