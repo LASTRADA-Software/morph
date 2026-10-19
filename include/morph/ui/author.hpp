@@ -939,6 +939,25 @@ template <typename R = Any>
     return call<std::string>("format", operands);
 }
 
+/// @brief `concatLists`: the lists, one after another; `null` while any of them is `null`.
+/// @param lists The lists, in order.
+/// @return The joined list.
+[[nodiscard]] inline AnyHandle concatLists(std::vector<AnyHandle> const& lists) { return call("concatLists", lists); }
+
+/// @brief `concatLists` of lists of one element type.
+/// @tparam T The element type.
+/// @param lists The lists, in order.
+/// @return The joined list.
+template <typename T>
+[[nodiscard]] Handle<std::vector<T>> concatLists(std::vector<Handle<std::vector<T>>> const& lists) {
+    std::vector<Json> json;
+    json.reserve(lists.size());
+    for (Handle<std::vector<T>> const& list : lists) {
+        json.push_back(list.json());
+    }
+    return Handle<std::vector<T>>::raw(detail::call("concatLists", std::move(json)));
+}
+
 /// @brief `count`: a list's length.
 /// @param list The list.
 /// @return The count.

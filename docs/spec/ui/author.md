@@ -60,7 +60,7 @@ by name.
 | `ref<T>("name.path")`, `row(&T::member)`, `row("path")`, `row<T>()` | `{"ref": ...}`, `{"row": ...}` |
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
-| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
+| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |
 | `element("id")` and its `value()`, `draft()`, `checked()`, `selected()`, `selection()`, `open()`, `valid()`, `ready()`, `get(path)` | An element's values (spec 5 §6) |
 | A query handle's `value()`, `at(&Result::m)`, `pending()`, `error()`, `errorKind()`, `can()`; a mutation handle's `result()`, `pending()`, `error()`, `errorKind()`, `can()` | `{"ref": q}`, `{"pending": q}`, `{"result": m}`, … |
@@ -80,6 +80,8 @@ by name.
   leaves out has no name and throws as well. A renamed member is a compile error.
 - **Absent handles.** A default-constructed handle is absent: an option left unset writes no key.
   Using an absent handle as an operand throws `AuthoringError`.
+- **`concatLists`** takes a list of `AnyHandle`s, or of `Handle<std::vector<T>>` for one element
+  type, which answers a `Handle<std::vector<T>>`.
 - **No `==`.** Equality is `eq` and `ne`. A `==` returning an expression rather than a `bool` breaks
   the comparisons C++20 rewrites from it.
 

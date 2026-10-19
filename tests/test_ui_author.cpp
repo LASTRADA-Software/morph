@@ -330,6 +330,11 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::engaged(ui::ref("x"))) == R"({"fn":"engaged","args":[{"ref":"x"}]})");
     CHECK(text(ui::coalesce({ui::ref("x"), 1})) == R"({"fn":"coalesce","args":[{"ref":"x"},1]})");
     CHECK(text(ui::concat({"a", ui::ref("b")})) == R"({"fn":"concat","args":["a",{"ref":"b"}]})");
+    CHECK(text(ui::concatLists({ui::ref("a"), ui::ref("b")})) ==
+          R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
+    ui::Handle<std::vector<std::int64_t>> const typed =
+        ui::concatLists(std::vector{ui::ref<std::vector<std::int64_t>>("a"), ui::ref<std::vector<std::int64_t>>("b")});
+    CHECK(text(typed) == R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
     CHECK(text(ui::format("{0} of {1}", {1, 2})) == R"({"fn":"format","args":["{0} of {1}",1,2]})");
     CHECK(text(ui::count(items)) == R"({"fn":"count","args":[{"ref":"items"}]})");
     CHECK(text(ui::sum(items)) == R"({"fn":"sum","args":[{"ref":"items"}]})");

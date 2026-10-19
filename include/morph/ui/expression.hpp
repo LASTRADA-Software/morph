@@ -124,6 +124,7 @@ enum class FunctionId : std::uint8_t {
     DateTime,
     Translate,
     ParseDecimal,
+    ConcatLists,
 };
 
 struct Expr;
@@ -188,7 +189,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 41> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -246,6 +247,11 @@ inline constexpr std::array<FunctionSpec, 41> kFunctions = {{
      TypeKind::String},
     {"t", 2, 3, {kindBit(TypeKind::String), kindBit(TypeKind::String), kindBit(TypeKind::Record)}, TypeKind::String},
     {"parseDecimal", 1, 2, {kindBit(TypeKind::String), kindBit(TypeKind::Int), 0}, TypeKind::Decimal},
+    {"concatLists",
+     1,
+     255,
+     {kindBit(TypeKind::List), kindBit(TypeKind::List), kindBit(TypeKind::List)},
+     TypeKind::Any},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -951,7 +957,26 @@ private:
         if (spec.result != TypeKind::Any) {
             return Type::of(spec.result, true);
         }
+        if (expr.function == FunctionId::ConcatLists) {
+            return concatenated(types);
+        }
         return numericResult(expr.function, types);
+    }
+
+    /// `concatLists`'s type: `list<T>` when every element type that is known is `T`, else `list<any>`.
+    [[nodiscard]] static Type concatenated(std::vector<Type> const& types) {
+        std::optional<Type> common;
+        for (Type const& type : types) {
+            if (type.isAny() || !type.element || type.element->isAny()) {
+                continue;
+            }
+            if (!common) {
+                common = *type.element;
+            } else if (!(*common == *type.element)) {
+                return Type::listOf(Type::any(), true);
+            }
+        }
+        return Type::listOf(common.value_or(Type::any()), true);
     }
 
     [[nodiscard]] static Type numericResult(FunctionId function, std::vector<Type> const& types) {
@@ -1972,6 +1997,17 @@ private:
                     return Decimal{*parsed};
                 }
                 return Value{};
+            }
+            case FunctionId::ConcatLists: {
+                ValueList out;
+                for (Value const& arg : args) {
+                    ValueList const* const items = arg.asList();
+                    if (items == nullptr) {
+                        return mismatch(expr, "`concatLists` takes lists");
+                    }
+                    out.insert(out.end(), items->begin(), items->end());
+                }
+                return out;
             }
             case FunctionId::Translate:
                 if (args.at(0).asString() == nullptr || args.at(1).asString() == nullptr) {
