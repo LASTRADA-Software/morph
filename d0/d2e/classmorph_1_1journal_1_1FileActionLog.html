@@ -181,7 +181,7 @@ Protected Member Functions</h2></td></tr>
 <dl class="section user"><dt>One owner</dt><dd>The file handle and the dedup state belong to the executor given at construction, which must run one task at a time. <span class="tt"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea" title="Appends entry as one JSON line, on the owner. Buffered until flush().">append()</a></span> runs there — at once when called on it, posted from anywhere else (a model's strand) — so appends from many threads reach the file one at a time, in the order the owner runs them. <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. On the owner.">flush()</a></span>, <span class="tt"><a class="el" href="#aee38ac14807005f7ba0e194d884b6cc3" title="Re-reads the file from disk and decodes every line. On the owner.">entries()</a></span> and <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path. On the owner.">rotate()</a></span> run only there; a caller elsewhere uses <span class="tt">flush(replyExec)</span> and <span class="tt">entries(replyExec, key)</span>. Not safe for multiple processes to append to the same path concurrently. See <span class="tt">docs/spec/journal/journal.md</span>, "One owner".</dd></dl>
 <dl class="section user"><dt>Rotation</dt><dd><span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path. On the owner.">rotate()</a></span> seals the active file (rename to a host-chosen path) and reopens a fresh, empty one at the original path — the seam a host uses to implement its own retention policy. See <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path. On the owner.">rotate()</a></span>'s own docs. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a37cefc8067dfeb8ad99b9bf3ba7f8afd" name="a37cefc8067dfeb8ad99b9bf3ba7f8afd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a37cefc8067dfeb8ad99b9bf3ba7f8afd">&#9670;&#160;</a></span>FileActionLog()</h2>
@@ -232,7 +232,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +278,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +318,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +356,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -388,7 +388,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#aa86b40cd5de2e717ad5f1545d79bbd8e">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +431,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +474,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#af9aad4a907dc5a79613a57c01c12615a">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00210">210</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -512,7 +512,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a3f493205ab439c0aa15f37e3e4332e7c">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>

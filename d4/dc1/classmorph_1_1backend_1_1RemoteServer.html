@@ -690,7 +690,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -720,7 +720,7 @@ Public Member Functions</h2></td></tr>
 <p>The server strand, as an executor. </p>
 <p>What <span class="tt">runningOn(server.strand())</span> asks about: true inside every task the server runs on its own state, false elsewhere. A task posted to it runs in order with the server's own, never beside one. </p><dl class="section return"><dt>Returns</dt><dd>The strand every envelope, verb and <span class="tt">execute</span> admission runs on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00585">585</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -750,7 +750,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the configured payload-completeness rule. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a0d1204bec80cf0bc0d0cd96c59c28597" title="Whether an execute body must carry every field the action&#39;s served schema marks required....">ServerConfig::payloadCompleteness</a></span>, as given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -786,7 +786,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand with <span class="tt">ready</span>, the live model count and the in-flight execute count; its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00602">602</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -817,7 +817,7 @@ Public Member Functions</h2></td></tr>
 <p>Posted to the server strand: an envelope this thread hands <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> after this call returns is refused. Idempotent. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>.</p>
 <p>Also flips <span class="tt"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092" title="The server&#39;s health, answered on the server strand.">health()</a></span>'s <span class="tt">ready</span> to <span class="tt">false</span> and calls <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a1ce5548f3f49f5349bdeede99ccb300b" title="Called with the server&#39;s health: once from the constructor, and again, on the server&#39;s strand,...">ServerConfig::healthHandler</a></span>, if set, with the post-shutdown status, on the server strand — what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#ad6574a0055fb8bf539dc525e68bac88e" title="Answers whether every in-flight execute delivers its reply within deadline.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00625">625</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -858,7 +858,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand: <span class="tt">true</span> once the count is zero, <span class="tt">false</span> if <code class="param">deadline</code> elapses first. Its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00656">656</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00657">657</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
