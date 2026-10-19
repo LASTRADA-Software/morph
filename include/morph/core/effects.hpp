@@ -570,6 +570,9 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// nothing under `MORPH_CLIENT_ONLY`.
 /// @param A The action type.
 /// @param ... The effects.
+// Each translation unit that includes a registration registers its own copy, which is the point, so the unnamed
+// namespace in a header and its static initialiser are suppressed here, once, rather than at every use.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)
 #ifdef MORPH_CLIENT_ONLY
 #define BRIDGE_REGISTER_EFFECTS(A, ...)
 #else
@@ -579,3 +582,4 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         morph::effects::detail::registerEffectsOnce<A, __VA_ARGS__>();                \
     }
 #endif
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)

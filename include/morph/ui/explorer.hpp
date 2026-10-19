@@ -800,10 +800,14 @@ private:
         std::vector<std::string> records;
         for (ActionRecordInfo const& record : info.records) {
             std::vector<std::string> paths;
+            paths.reserve(record.paths.size());
             for (std::string const& path : record.paths) {
                 paths.push_back(path.empty() ? std::string{"the result"} : path);
             }
-            std::string const key = record.keyField ? " by " + *record.keyField : std::string{" keyless"};
+            std::string key{" keyless"};
+            if (auto const& field = record.keyField) {
+                key = " by " + *field;
+            }
             records.push_back(record.record + key + " at " + detail::explorer::joined(paths, ", "));
         }
         return detail::explorer::joined(records, "; ");

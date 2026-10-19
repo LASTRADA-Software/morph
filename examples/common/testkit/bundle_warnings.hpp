@@ -29,8 +29,9 @@ namespace morph::examples::testing {
         };
     }
     if (bundle.actions) {
-        catalog.action = [actions = *bundle.actions](std::string_view id) -> std::optional<morph::ui::ActionInfo> {
-            auto const found = actions.find(id);
+        catalog.action = [actions =
+                              *bundle.actions](std::string_view actionId) -> std::optional<morph::ui::ActionInfo> {
+            auto const found = actions.find(actionId);
             return found == actions.end() ? std::nullopt : std::optional{found->second};
         };
     }

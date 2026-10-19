@@ -65,6 +65,7 @@
 #include <QTimer>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -81,6 +82,7 @@
 #include <morph/ui/service.hpp>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -197,12 +199,12 @@ int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     bool mcpStdio = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::string_view{argv[i]} == "--mcp-stdio") {
+    for (std::string_view const argument : std::span{argv, static_cast<std::size_t>(argc)}.subspan(1)) {
+        if (argument == "--mcp-stdio") {
             mcpStdio = true;
             continue;
         }
-        std::cerr << "bank-server: unknown argument '" << argv[i] << "' (usage: BANK_DB=... BANK_PORT=... "
+        std::cerr << "bank-server: unknown argument '" << argument << "' (usage: BANK_DB=... BANK_PORT=... "
                   << "ladder_bank_server [--mcp-stdio])\n";
         return 2;
     }
@@ -255,19 +257,22 @@ int main(int argc, char** argv) {
         // The one line scripts/scenario/run_scenarios.py parses to learn the
         // port (its `PORT_LINE`); `std::endl` because that tool reads this
         // pipe line by line and a buffered announcement would hang it.
-        status << "bank-server: listening on ws://127.0.0.1:" << wsServer.port() << std::endl;
+        status << "bank-server: listening on ws://127.0.0.1:" << wsServer.port()
+               << std::endl;  // NOLINT(performance-avoid-endl)
 
         // The agent's own thread: it owns the adapter and reads stdin, and stops the server once stdin ends.
         std::thread mcp;
         if (mcpStdio) {
-            mcp = std::thread{[server] {
-                ::morph::session::Context session;
-                if (char const* const principal = std::getenv("MORPH_MCP_PRINCIPAL")) {
-                    session.principal = principal;
-                }
-                if (char const* const token = std::getenv("MORPH_MCP_TOKEN")) {
-                    session.token = token;
-                }
+            ::morph::session::Context session;
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): nothing in this process sets the environment.
+            if (char const* const principal = std::getenv("MORPH_MCP_PRINCIPAL")) {
+                session.principal = principal;
+            }
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): nothing in this process sets the environment.
+            if (char const* const token = std::getenv("MORPH_MCP_TOKEN")) {
+                session.token = token;
+            }
+            mcp = std::thread{[server, session] {
                 {
                     ::morph::exec::MainThreadExecutor owner;
                     ::morph::ui::McpAdapter adapter{

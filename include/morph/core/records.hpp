@@ -230,6 +230,9 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
 /// @param T The record type.
 /// @param NAME The record's wire name.
 /// @param ... The options.
+// Each translation unit that includes a registration registers its own copy, which is the point, so the unnamed
+// namespace in a header and its static initialiser are suppressed here, once, rather than at every use.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)
 #ifdef MORPH_CLIENT_ONLY
 #define BRIDGE_REGISTER_RECORD(T, NAME, ...)
 #else
@@ -239,3 +242,4 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
         morph::record::detail::registerRecordOnce<T __VA_OPT__(, ) __VA_ARGS__>(NAME); \
     }
 #endif
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)

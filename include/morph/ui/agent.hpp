@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <functional>
 #include <istream>
 #include <map>
@@ -23,6 +24,7 @@
 #include "../core/executor.hpp"
 #include "../core/remote.hpp"
 #include "../core/wire.hpp"
+#include "../forms/forms.hpp"
 #include "../session/session.hpp"
 #include "bundle.hpp"
 #include "value.hpp"
@@ -89,7 +91,13 @@ public:
     }
 
     /// @brief Closes the adapter's connection, releasing its private instances.
-    ~McpAdapter() { _shared->server->closeConnection(_shared->cid); }
+    ~McpAdapter() {
+        // A destructor must not throw, so a close that fails is dropped.
+        try {
+            _shared->server->closeConnection(_shared->cid);
+        } catch (...) {  // NOLINT(bugprone-empty-catch)
+        }
+    }
 
     McpAdapter(McpAdapter const&) = delete;
     McpAdapter& operator=(McpAdapter const&) = delete;
@@ -100,11 +108,11 @@ public:
     /// @param message The message's JSON text.
     /// @return Completes with the reply's JSON text, or with nothing for a notification. It never fails: a fault is
     ///         answered as a JSON-RPC error.
-    [[nodiscard]] async::Completion<std::optional<std::string>> handle(std::string message) {
+    [[nodiscard]] async::Completion<std::optional<std::string>> handle(std::string const& message) {
         auto [completion, promise] =
             async::Completion<std::optional<std::string>>::makeSettleable(_shared->options.callbacks);
-        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
-        Shared::dispatch(_shared, std::move(message),
+        auto const settle = std::make_shared<decltype(promise)>(std::move(promise));
+        Shared::dispatch(_shared, message,
                          [settle](std::optional<std::string> reply) { settle->resolve(std::move(reply)); });
         return std::move(completion);
     }
@@ -128,6 +136,13 @@ private:
         std::map<std::string, std::uint64_t, std::less<>> privateIds;
         std::map<std::pair<std::string, std::string>, std::uint64_t> sharedIds;
 
+        // The schemas of every model a permitted action belongs to, gathered for one tool list.
+        struct Gather {
+            std::mutex mutex;
+            std::size_t waiting = 0;
+            std::map<std::string, Json, std::less<>> schemas;
+        };
+
         // Sends one envelope on the adapter's connection, carrying its session.
         static void send(std::shared_ptr<Shared> const& self, wire::Envelope env, EnvelopeReply done) {
             env.callId = self->nextCall.fetch_add(1) + 1;
@@ -146,52 +161,61 @@ private:
 
         static std::string write(Json const& value) { return glz::write_json(value).value_or(std::string{"null"}); }
 
-        static std::string result(Json const& id, Json value) {
-            Json reply;
-            reply["jsonrpc"] = "2.0";
-            reply["id"] = id;
-            reply["result"] = std::move(value);
-            return write(reply);
+        // A member of an object, or nullptr when the value is not an object or has no such member.
+        [[nodiscard]] static Json const* member(Json const& value, std::string_view key) {
+            return forms::detail::findMember(value, key);
         }
 
-        static std::string error(Json const& id, std::int64_t code, std::string const& message) {
-            Json reply;
-            reply["jsonrpc"] = "2.0";
-            reply["id"] = id;
-            reply["error"]["code"] = code;
-            reply["error"]["message"] = message;
-            return write(reply);
+        [[nodiscard]] static std::string const* textMember(Json const& value, std::string_view key) {
+            Json const* const found = member(value, key);
+            return found == nullptr ? nullptr : std::get_if<std::string>(&found->data);
+        }
+
+        // The object member @p key of @p object, made an object when it is missing or is not one.
+        static Json::object_t& objectMember(Json::object_t& object, std::string const& key) {
+            Json& slot = object.try_emplace(key, Json::object_t{}).first->second;
+            if (!std::holds_alternative<Json::object_t>(slot.data)) {
+                slot = Json::object_t{};
+            }
+            return std::get<Json::object_t>(slot.data);
+        }
+
+        // A JSON-RPC response: @p requestId's answer, under the member @p outcome (`result` or `error`).
+        static std::string answer(Json const& requestId, std::string const& outcome, Json content) {
+            return write(Json::object_t{{"jsonrpc", "2.0"}, {"id", requestId}, {outcome, std::move(content)}});
+        }
+
+        static std::string result(Json const& requestId, Json value) {
+            return answer(requestId, "result", std::move(value));
+        }
+
+        static std::string error(Json const& requestId, std::int64_t code, std::string const& message) {
+            return answer(requestId, "error", Json::object_t{{"code", code}, {"message", message}});
         }
 
         // A tool call's result: the text, flagged as an error or not.
-        static Json toolResult(std::string text, bool isError) {
-            Json content;
-            content["type"] = "text";
-            content["text"] = std::move(text);
-            Json out;
-            out["content"] = Json::array_t{std::move(content)};
-            out["isError"] = isError;
-            return out;
+        static Json toolResult(std::string const& text, bool isError) {
+            Json::array_t content;
+            content.emplace_back(Json::object_t{{"type", "text"}, {"text", text}});
+            return Json::object_t{{"content", std::move(content)}, {"isError", isError}};
         }
 
-        static void dispatch(std::shared_ptr<Shared> const& self, std::string const& message, Reply done) {
+        static void dispatch(std::shared_ptr<Shared> const& self, std::string const& message, Reply const& done) {
             auto parsed = parseJson(message);
             if (!parsed) {
-                done(error(Json{nullptr}, kMcpParseError, "not JSON: " + parsed.error()));
+                done(error(Json{}, kMcpParseError, "not JSON: " + parsed.error()));
                 return;
             }
-            Json::object_t const* const request = std::get_if<Json::object_t>(&parsed->data);
-            std::string const* const method = request != nullptr && request->contains("method")
-                                                  ? std::get_if<std::string>(&request->find("method")->second.data)
-                                                  : nullptr;
-            bool const notification = request != nullptr && !request->contains("id");
-            Json const id =
-                request != nullptr && request->contains("id") ? request->find("id")->second : Json{nullptr};
+            bool const isObject = std::holds_alternative<Json::object_t>(parsed->data);
+            std::string const* const method = textMember(*parsed, "method");
+            Json const* const givenId = member(*parsed, "id");
+            Json const requestId = givenId == nullptr ? Json{} : *givenId;
+            bool const notification = isObject && givenId == nullptr;
             if (method == nullptr) {
-                if (notification && request != nullptr) {
+                if (notification) {
                     done(std::nullopt);
                 } else {
-                    done(error(id, kMcpInvalidRequest, "no method"));
+                    done(error(requestId, kMcpInvalidRequest, "no method"));
                 }
                 return;
             }
@@ -199,32 +223,32 @@ private:
                 done(std::nullopt);
                 return;
             }
-            Json const params = request->contains("params") ? request->find("params")->second : Json{};
+            Json const* const givenParams = member(*parsed, "params");
+            Json const params = givenParams == nullptr ? Json{} : *givenParams;
             if (*method == "initialize") {
-                done(result(id, initialize(*self, params)));
+                done(result(requestId, initialize(*self, params)));
             } else if (*method == "ping") {
-                done(result(id, Json::object_t{}));
+                done(result(requestId, Json::object_t{}));
             } else if (*method == "tools/list") {
-                listTools(self, [id, done](Json tools) { done(result(id, std::move(tools))); });
+                listTools(self, [requestId, done](Json tools) { done(result(requestId, std::move(tools))); });
             } else if (*method == "tools/call") {
-                callTool(self, params, [id, done](std::expected<Json, std::string> called) {
-                    done(called ? result(id, std::move(*called)) : error(id, kMcpInvalidParams, called.error()));
+                callTool(self, params, [requestId, done](std::expected<Json, std::string> called) {
+                    done(called ? result(requestId, std::move(*called))
+                                : error(requestId, kMcpInvalidParams, called.error()));
                 });
             } else {
-                done(error(id, kMcpMethodNotFound, "method not found: " + *method));
+                done(error(requestId, kMcpMethodNotFound, "method not found: " + *method));
             }
         }
 
         static Json initialize(Shared const& self, Json const& params) {
-            Json out;
-            std::string const* const asked = params.contains("protocolVersion")
-                                                 ? std::get_if<std::string>(&params["protocolVersion"].data)
-                                                 : nullptr;
-            out["protocolVersion"] = asked != nullptr ? *asked : std::string{"2025-06-18"};
-            out["capabilities"]["tools"]["listChanged"] = false;
-            out["serverInfo"]["name"] = self.options.serverName;
-            out["serverInfo"]["version"] = self.options.serverVersion;
-            return out;
+            std::string const* const asked = textMember(params, "protocolVersion");
+            return Json::object_t{
+                {"protocolVersion", asked != nullptr ? *asked : std::string{"2025-06-18"}},
+                {"capabilities", Json::object_t{{"tools", Json::object_t{{"listChanged", false}}}}},
+                {"serverInfo",
+                 Json::object_t{{"name", self.options.serverName}, {"version", self.options.serverVersion}}},
+            };
         }
 
         // The catalog for the session, fetched once; an unreadable or refused one is empty.
@@ -277,32 +301,65 @@ private:
             if (!std::holds_alternative<Json::object_t>(schema.data)) {
                 schema = Json::object_t{};
             }
-            schema["type"] = "object";
+            auto& object = std::get<Json::object_t>(schema.data);
+            object.insert_or_assign("type", "object");
             if (keyedModel) {
-                schema["properties"]["instance"]["type"] = "string";
-                schema["properties"]["instance"]["description"] = "the key of the instance to run on";
-                if (!schema.contains("required") || !std::holds_alternative<Json::array_t>(schema["required"].data)) {
-                    schema["required"] = Json::array_t{};
+                objectMember(object, "properties")
+                    .insert_or_assign(
+                        "instance",
+                        Json::object_t{{"type", "string"}, {"description", "the key of the instance to run on"}});
+                Json& required = object.try_emplace("required", Json::array_t{}).first->second;
+                if (!std::holds_alternative<Json::array_t>(required.data)) {
+                    required = Json::array_t{};
                 }
-                std::get<Json::array_t>(schema["required"].data).emplace_back("instance");
+                std::get<Json::array_t>(required.data).emplace_back("instance");
             }
-            Json out;
-            out["name"] = actionId;
-            out["description"] = "Runs " + actionId + " on the server.";
-            out["inputSchema"] = std::move(schema);
-            return out;
+            return Json::object_t{{"name", actionId},
+                                  {"description", "Runs " + actionId + " on the server."},
+                                  {"inputSchema", std::move(schema)}};
         }
 
         static Json evaluateTool() {
-            Json out;
-            out["name"] = "evaluate";
-            out["description"] =
-                "A dry run: the action's body reconciled, its field errors, and whether it would run.";
-            out["inputSchema"]["type"] = "object";
-            out["inputSchema"]["properties"]["action"]["type"] = "string";
-            out["inputSchema"]["properties"]["body"]["type"] = "object";
-            out["inputSchema"]["required"] = Json::array_t{Json{"action"}, Json{"body"}};
-            return out;
+            Json::object_t properties{{"action", Json::object_t{{"type", "string"}}},
+                                      {"body", Json::object_t{{"type", "object"}}}};
+            Json::array_t required{std::string{"action"}, std::string{"body"}};
+            return Json::object_t{
+                {"name", "evaluate"},
+                {"description",
+                 "A dry run: the action's body reconciled, its field errors, and whether it would run."},
+                {"inputSchema",
+                 Json::object_t{
+                     {"type", "object"}, {"properties", std::move(properties)}, {"required", std::move(required)}}},
+            };
+        }
+
+        // The tool list: one tool per permitted action of a known model, then `evaluate`.
+        static Json toolList(CatalogReply const& catalog, std::map<std::string, Json, std::less<>> const& schemas) {
+            Json::array_t tools;
+            for (std::string const& action : catalog.permitted) {
+                std::string const type = modelOf(catalog, action);
+                if (type.empty()) {
+                    continue;
+                }
+                auto const found = schemas.find(action);
+                tools.push_back(tool(action, found == schemas.end() ? Json{} : found->second, keyed(catalog, type)));
+            }
+            tools.push_back(evaluateTool());
+            return Json::object_t{{"tools", std::move(tools)}};
+        }
+
+        // Folds one model's `schemas` reply into @p gather; true when it was the last one awaited.
+        [[nodiscard]] static bool gathered(Gather& gather, wire::Envelope const& reply) {
+            std::scoped_lock const lock{gather.mutex};
+            auto parsed = reply.kind == "ok" ? parseJson(reply.body) : std::unexpected(std::string{});
+            if (parsed) {
+                if (auto* const actions = std::get_if<Json::object_t>(&parsed->data)) {
+                    for (auto& [action, schema] : *actions) {
+                        gather.schemas.insert_or_assign(action, std::move(schema));
+                    }
+                }
+            }
+            return --gather.waiting == 0;
         }
 
         static void listTools(std::shared_ptr<Shared> const& self, std::function<void(Json)> done) {
@@ -313,52 +370,16 @@ private:
                         types.insert(std::move(type));
                     }
                 }
-                // The schemas of every model a permitted action belongs to, then the tools.
-                struct Gather {
-                    std::mutex mutex;
-                    std::size_t waiting = 0;
-                    std::map<std::string, Json, std::less<>> schemas;
-                };
-                auto const gather = std::make_shared<Gather>();
-                gather->waiting = types.size();
-                auto const finish = [self, catalog, done, gather] {
-                    Json::array_t tools;
-                    for (std::string const& action : catalog.permitted) {
-                        std::string const type = modelOf(catalog, action);
-                        if (type.empty()) {
-                            continue;
-                        }
-                        auto const found = gather->schemas.find(action);
-                        tools.push_back(tool(action, found == gather->schemas.end() ? Json{} : found->second,
-                                             keyed(catalog, type)));
-                    }
-                    tools.push_back(evaluateTool());
-                    Json out;
-                    out["tools"] = std::move(tools);
-                    done(std::move(out));
-                };
                 if (types.empty()) {
-                    finish();
+                    done(toolList(catalog, {}));
                     return;
                 }
+                auto const gather = std::make_shared<Gather>();
+                gather->waiting = types.size();
                 for (std::string const& type : types) {
-                    send(self, wire::makeSchemas(type), [gather, finish](wire::Envelope const& reply) {
-                        bool last = false;
-                        {
-                            std::scoped_lock const lock{gather->mutex};
-                            if (reply.kind == "ok") {
-                                if (auto parsed = parseJson(reply.body)) {
-                                    if (auto* const actions = std::get_if<Json::object_t>(&parsed->data)) {
-                                        for (auto& [action, schema] : *actions) {
-                                            gather->schemas.insert_or_assign(action, std::move(schema));
-                                        }
-                                    }
-                                }
-                            }
-                            last = --gather->waiting == 0;
-                        }
-                        if (last) {
-                            finish();
+                    send(self, wire::makeSchemas(type), [catalog, done, gather](wire::Envelope const& reply) {
+                        if (gathered(*gather, reply)) {
+                            done(toolList(catalog, gather->schemas));
                         }
                     });
                 }
@@ -404,25 +425,25 @@ private:
             });
         }
 
-        [[nodiscard]] static std::optional<std::string> instanceKey(Json const& value) {
-            if (auto const* const text = std::get_if<std::string>(&value.data)) {
-                return *text;
-            }
-            if (std::holds_alternative<std::nullptr_t>(value.data)) {
+        [[nodiscard]] static std::optional<std::string> instanceKey(Json const* value) {
+            if (value == nullptr || std::holds_alternative<std::nullptr_t>(value->data)) {
                 return std::nullopt;
             }
-            return write(value);
+            if (auto const* const text = std::get_if<std::string>(&value->data)) {
+                return *text;
+            }
+            return write(*value);
         }
 
         static void callTool(std::shared_ptr<Shared> const& self, Json const& params,
                              std::function<void(std::expected<Json, std::string>)> done) {
-            std::string const* const name =
-                params.contains("name") ? std::get_if<std::string>(&params["name"].data) : nullptr;
+            std::string const* const name = textMember(params, "name");
             if (name == nullptr) {
                 done(std::unexpected(std::string{"tools/call names no tool"}));
                 return;
             }
-            Json arguments = params.contains("arguments") ? params["arguments"] : Json::object_t{};
+            Json const* const given = member(params, "arguments");
+            Json arguments = given == nullptr ? Json{Json::object_t{}} : *given;
             if (!std::holds_alternative<Json::object_t>(arguments.data)) {
                 done(std::unexpected(std::string{"the arguments are not an object"}));
                 return;
@@ -438,29 +459,27 @@ private:
                     done(std::unexpected("no tool named " + tool));
                     return;
                 }
-                auto& fields = std::get<Json::object_t>(arguments.data);
                 std::optional<std::string> key;
                 if (keyed(catalog, type)) {
-                    auto const found = fields.find("instance");
-                    key = found == fields.end() ? std::nullopt : instanceKey(found->second);
+                    key = instanceKey(member(arguments, "instance"));
                     if (!key) {
                         done(std::unexpected(tool + " runs on a keyed model: give the instance key as `instance`"));
                         return;
                     }
-                    fields.erase("instance");
+                    std::get<Json::object_t>(arguments.data).erase("instance");
                 }
                 std::string body = write(arguments);
                 withInstance(
                     self, type, key,
                     [self, type, tool, body = std::move(body),
-                     done = std::move(done)](std::expected<std::uint64_t, std::string> const& id) mutable {
-                        if (!id) {
-                            done(toolResult(id.error(), true));
+                     done = std::move(done)](std::expected<std::uint64_t, std::string> const& modelId) mutable {
+                        if (!modelId) {
+                            done(toolResult(modelId.error(), true));
                             return;
                         }
                         wire::Envelope request;
                         request.kind = "execute";
-                        request.modelId = *id;
+                        request.modelId = *modelId;
                         request.modelType = type;
                         request.actionType = tool;
                         request.body = std::move(body);
@@ -473,18 +492,17 @@ private:
 
         static void evaluate(std::shared_ptr<Shared> const& self, CatalogReply const& catalog, Json const& arguments,
                              std::function<void(std::expected<Json, std::string>)> done) {
-            std::string const* const action =
-                arguments.contains("action") ? std::get_if<std::string>(&arguments["action"].data) : nullptr;
-            std::string const type = action == nullptr ? std::string{} : modelOf(catalog, *action);
-            if (type.empty()) {
+            std::string const* const action = textMember(arguments, "action");
+            if (action == nullptr || modelOf(catalog, *action).empty()) {
                 done(std::unexpected(std::string{"evaluate names no action the catalog knows"}));
                 return;
             }
+            Json const* const body = member(arguments, "body");
             wire::Envelope request;
             request.kind = std::string{kEvaluateKind};
-            request.modelType = type;
+            request.modelType = modelOf(catalog, *action);
             request.actionType = *action;
-            request.body = arguments.contains("body") ? write(arguments["body"]) : std::string{"{}"};
+            request.body = body == nullptr ? std::string{"{}"} : write(*body);
             send(self, std::move(request), [done = std::move(done)](wire::Envelope const& reply) {
                 done(reply.kind == "ok" ? toolResult(reply.body, false) : toolResult(reply.message, true));
             });
@@ -494,17 +512,18 @@ private:
     std::shared_ptr<Shared> _shared;
 };
 
-/// @brief Serves an adapter over MCP's stdio transport: one JSON-RPC message per line of @p in, each reply on a
-///        line of @p out, in order, until @p in ends. An empty line is skipped.
+/// @brief Serves an adapter over MCP's stdio transport: one JSON-RPC message per line of @p input, each reply on a
+///        line of @p output, in order, until @p input ends. An empty line is skipped.
 ///
 /// The calling thread is the adapter's owner: it pumps @p owner while it waits for each reply.
 /// @param adapter The adapter; its `McpOptions::callbacks` is @p owner.
 /// @param owner   The adapter's owner, run on the calling thread.
-/// @param in      Where messages arrive.
-/// @param out     Where replies go; flushed after each.
-inline void serveStdio(McpAdapter& adapter, exec::MainThreadExecutor& owner, std::istream& in, std::ostream& out) {
+/// @param input   Where messages arrive.
+/// @param output  Where replies go; flushed after each.
+inline void serveStdio(McpAdapter& adapter, exec::MainThreadExecutor& owner, std::istream& input,
+                       std::ostream& output) {
     std::string line;
-    while (std::getline(in, line)) {
+    while (std::getline(input, line)) {
         if (line.empty()) {
             continue;
         }
@@ -514,7 +533,7 @@ inline void serveStdio(McpAdapter& adapter, exec::MainThreadExecutor& owner, std
             owner.runFor(std::chrono::milliseconds{10});
         }
         if (*replied) {
-            out << **replied << '\n' << std::flush;
+            output << **replied << '\n' << std::flush;
         }
     }
 }

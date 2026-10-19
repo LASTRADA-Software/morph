@@ -17,15 +17,16 @@ namespace {
 // Runs @p command through the shell and returns its stdout, one entry per line.
 std::vector<std::string> outputLines(std::string const& command) {
     std::vector<std::string> lines;
+    // NOLINTNEXTLINE(bugprone-command-processor,cert-env33-c): the command is this test's own, from its own paths.
     FILE* const pipe = ::popen(command.c_str(), "r");
     REQUIRE(pipe != nullptr);
     std::string line;
-    for (int c = std::fgetc(pipe); c != EOF; c = std::fgetc(pipe)) {
-        if (c == '\n') {
+    for (int next = std::fgetc(pipe); next != EOF; next = std::fgetc(pipe)) {
+        if (next == '\n') {
             lines.push_back(line);
             line.clear();
         } else {
-            line.push_back(static_cast<char>(c));
+            line.push_back(static_cast<char>(next));
         }
     }
     if (!line.empty()) {

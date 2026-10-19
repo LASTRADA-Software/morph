@@ -41,6 +41,9 @@ struct AddNote {
     std::string text;
 };
 struct WipeNotes {};
+struct Tally {
+    std::string label;
+};
 
 struct Store {
     std::mutex mutex;
@@ -68,6 +71,13 @@ struct NotesModel {
     }
 };
 
+// Keyed: each key is an instance of its own, which counts the tallies made on it.
+struct ShelfModel {
+    using PrimaryKey = std::string;
+    int count = 0;
+    int execute(Tally const& /*action*/) { return ++count; }
+};
+
 }  // namespace agent_test
 // NOLINTEND(misc-use-internal-linkage)
 
@@ -75,6 +85,8 @@ BRIDGE_REGISTER_MODEL(agent_test::NotesModel, "Ag_Notes")
 BRIDGE_REGISTER_ACTION(agent_test::NotesModel, agent_test::ListNotes, "Ag_List")
 BRIDGE_REGISTER_ACTION(agent_test::NotesModel, agent_test::AddNote, "Ag_Add")
 BRIDGE_REGISTER_ACTION(agent_test::NotesModel, agent_test::WipeNotes, "Ag_Wipe")
+BRIDGE_REGISTER_MODEL(agent_test::ShelfModel, "Ag_Shelf")
+BRIDGE_REGISTER_ACTION(agent_test::ShelfModel, agent_test::Tally, "Ag_Tally")
 BRIDGE_REGISTER_RECORD(agent_test::Note, "Ag_Note")
 BRIDGE_REGISTER_EFFECTS(agent_test::AddNote, morph::effects::changes<agent_test::Note>)
 BRIDGE_REGISTER_EFFECTS(agent_test::WipeNotes, morph::effects::changes<agent_test::Note>)
@@ -91,6 +103,13 @@ constexpr std::string_view kNotes = R"({
   "queries": { "list": { "model": "notes", "action": "Ag_List" } },
   "mutations": { "add": { "model": "notes", "action": "Ag_Add" }, "wipe": { "model": "notes", "action": "Ag_Wipe" } },
   "view": { "kind": "text", "text": "Notes" } })";
+
+// A screen over one shelf, a keyed instance.
+constexpr std::string_view kShelf = R"({
+  "vocab": "ui/1", "id": "shelf", "params": { "shelfKey": "string" },
+  "models": { "shelf": { "type": "Ag_Shelf", "instance": { "ref": "shelfKey" } } },
+  "mutations": { "tally": { "model": "shelf", "action": "Ag_Tally" } },
+  "view": { "kind": "text", "text": "Shelf" } })";
 
 // The token is the principal; `agent` may not wipe.
 struct Authorizer final : morph::session::IAuthorizer {
@@ -134,10 +153,14 @@ struct Rig {
         facts.action<agent_test::NotesModel, agent_test::ListNotes>();
         facts.action<agent_test::NotesModel, agent_test::AddNote>();
         facts.action<agent_test::NotesModel, agent_test::WipeNotes>();
+        facts.action<agent_test::ShelfModel, agent_test::Tally>();
         ui::UiRegistry registry{ui::ApplicationInfo{.id = "notes", .version = "1"}, facts.catalog()};
         ui::CatalogEntry entry;
         entry.id = "notes";
         REQUIRE(registry.addScreen(entry, std::string{kNotes}).has_value());
+        ui::CatalogEntry shelf;
+        shelf.id = "shelf";
+        REQUIRE(registry.addScreen(shelf, std::string{kShelf}).has_value());
         auto built = registry.build();
         REQUIRE(built.has_value());
         morph::backend::ServerConfig config;
@@ -181,11 +204,9 @@ struct Rig {
 };
 
 // The adapter's reply to @p message, waited for on the adapter's owner.
-std::optional<std::string> ask(Rig& rig, ui::McpAdapter& adapter, std::string message) {
+std::optional<std::string> ask(Rig& rig, ui::McpAdapter& adapter, std::string const& message) {
     std::optional<std::optional<std::string>> replied;
-    adapter.handle(std::move(message)).then([&replied](std::optional<std::string> const& answer) {
-        replied = answer;
-    });
+    adapter.handle(message).then([&replied](std::optional<std::string> const& answer) { replied = answer; });
     auto const deadline = std::chrono::steady_clock::now() + 10s;
     while (!replied && std::chrono::steady_clock::now() < deadline) {
         rig.callbacks.runFor(10ms);
@@ -247,7 +268,7 @@ TEST_CASE("tools_list_is_permitted_plus_evaluate", "[push][agent]") {
     auto const reply = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"));
     std::vector<std::string> names = toolNames(reply);
     std::ranges::sort(names);
-    CHECK(names == std::vector<std::string>{"Ag_Add", "Ag_List", "evaluate"});
+    CHECK(names == std::vector<std::string>{"Ag_Add", "Ag_List", "Ag_Tally", "evaluate"});
     for (auto const& tool : std::get<ui::Json::array_t>(reply["result"]["tools"].data)) {
         if (std::get<std::string>(tool["name"].data) == "Ag_Add") {
             CHECK(tool["inputSchema"]["properties"].contains("text"));
@@ -345,4 +366,76 @@ TEST_CASE("stdio_round_trip", "[push][agent]") {
     REQUIRE(replies.size() == 2);
     CHECK(dump(json(replies.at(0))["id"]) == "1");
     CHECK(dump(json(replies.at(1))["id"]) == "2");
+}
+
+// Mutation: register a private instance for each key — another connection tallies a shelf of its own.
+TEST_CASE("keyed_tool_runs_on_the_instance_it_names", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    auto const listed = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"));
+    bool found = false;
+    for (auto const& tool : std::get<ui::Json::array_t>(listed["result"]["tools"].data)) {
+        if (std::get<std::string>(tool["name"].data) == "Ag_Tally") {
+            found = true;
+            CHECK(tool["inputSchema"]["properties"].contains("instance"));
+            CHECK(dump(tool["inputSchema"]["required"]) == R"(["label","instance"])");
+        }
+    }
+    REQUIRE(found);
+
+    auto const tally = [&](std::string_view instance, ui::McpAdapter& through) {
+        auto const reply = json(ask(rig, through,
+                                    R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Ag_Tally",)"
+                                    R"("arguments":{"label":"x","instance":)" +
+                                        std::string{instance} + "}}}"));
+        REQUIRE_FALSE(std::get<bool>(reply["result"]["isError"].data));
+        return std::get<std::string>(reply["result"]["content"][0]["text"].data);
+    };
+    CHECK(tally(R"("a")", *adapter) == "1");
+    CHECK(tally(R"("a")", *adapter) == "2");
+    CHECK(tally(R"("b")", *adapter) == "1");
+    // The instance is the shared one under that key, so another connection's call reaches it too.
+    auto other = rig.adapter();
+    CHECK(tally(R"("a")", *other) == "3");
+
+    auto const keyless = json(ask(rig, *adapter,
+                                  R"({"jsonrpc":"2.0","id":3,"method":"tools/call",)"
+                                  R"("params":{"name":"Ag_Tally","arguments":{"label":"x"}}})"));
+    CHECK(dump(keyless["error"]["code"]) == "-32602");
+}
+
+TEST_CASE("faults_answer_as_json_rpc_errors", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    auto const unparsed = json(ask(rig, *adapter, "{not json"));
+    CHECK(dump(unparsed["id"]) == "null");
+    CHECK(dump(unparsed["error"]["code"]) == "-32700");
+    auto const noMethod = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":7})"));
+    CHECK(dump(noMethod["id"]) == "7");
+    CHECK(dump(noMethod["error"]["code"]) == "-32600");
+    auto const noTool = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{}})"));
+    CHECK(dump(noTool["error"]["code"]) == "-32602");
+    auto const unknownTool = json(ask(rig, *adapter,
+                                      R"({"jsonrpc":"2.0","id":9,"method":"tools/call",)"
+                                      R"("params":{"name":"Ag_Missing","arguments":{}}})"));
+    CHECK(dump(unknownTool["error"]["code"]) == "-32602");
+    auto const badArguments = json(ask(rig, *adapter,
+                                       R"({"jsonrpc":"2.0","id":10,"method":"tools/call",)"
+                                       R"("params":{"name":"Ag_Add","arguments":[1]}})"));
+    CHECK(dump(badArguments["error"]["code"]) == "-32602");
+}
+
+TEST_CASE("evaluate_tool_requires_action_and_body", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    auto const reply = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"));
+    for (auto const& tool : std::get<ui::Json::array_t>(reply["result"]["tools"].data)) {
+        if (std::get<std::string>(tool["name"].data) == "evaluate") {
+            CHECK(dump(tool["inputSchema"]["required"]) == R"(["action","body"])");
+        }
+    }
+    auto const unknown = json(ask(rig, *adapter,
+                                  R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"evaluate",)"
+                                  R"("arguments":{"action":"Ag_Missing","body":{}}}})"));
+    CHECK(dump(unknown["error"]["code"]) == "-32602");
 }

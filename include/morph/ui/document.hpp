@@ -2590,7 +2590,7 @@ private:
             }
         }
         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the key of the patch, then the name its reply is bound to.
-        auto patch = [&](auto const& decl, std::string_view key, std::string_view bound) {
+        auto const patch = [&](auto const& decl, std::string_view key, std::string_view bound) {
             std::string const path = pointerAppend(mutation.path, key);
             auto const target = _queries.find(decl.query);
             if (target == _queries.end()) {
@@ -2623,7 +2623,7 @@ private:
     // Only a catalog that knows the result is a record can say a patch misses its list; otherwise the interpreter
     // reports the miss when the patch runs.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the query's name, then the member holding the list.
-    void checkPatchAt(std::string const& queryName, std::string const& at, QueryDecl const& query,
+    void checkPatchAt(std::string const& queryName, std::string const& listMember, QueryDecl const& query,
                       std::string const& path) {
         if (!_options->catalog.action) {
             return;
@@ -2632,14 +2632,14 @@ private:
         if (!info || !info->listFields) {
             return;
         }
-        if (at.empty()) {
+        if (listMember.empty()) {
             refuse(path, std::format("`{}` answers a record, so a patch of `{}` names the member holding its list "
                                      "with `at`",
                                      query.action, queryName));
         }
-        if (std::ranges::find(*info->listFields, at) == info->listFields->end()) {
+        if (std::ranges::find(*info->listFields, listMember) == info->listFields->end()) {
             refuse(pointerAppend(path, "at"),
-                   std::format("the result of `{}` has no list member `{}`", query.action, at));
+                   std::format("the result of `{}` has no list member `{}`", query.action, listMember));
         }
     }
 
