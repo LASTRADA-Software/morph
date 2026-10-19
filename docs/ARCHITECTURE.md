@@ -540,7 +540,7 @@ visible to them, is declared effects:
   whose action declares effects.
 - `morph::ui::McpAdapter` (`ui/agent.hpp`) lets an AI agent drive the same server over MCP, as one more connection.
 
-The user guide is [`KEEPING-SCREENS-CURRENT.md`](KEEPING-SCREENS-CURRENT.md); the rules are in
+The user guide is `docs/KEEPING-SCREENS-CURRENT.md`; the rules are in
 `docs/spec/core/registry.md` ("Effects"), `docs/spec/core/backend.md` ("Fan-out"), `docs/spec/ui/interpreter.md` and
 `docs/spec/ui/document.md`.
 
