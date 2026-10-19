@@ -1563,7 +1563,7 @@ private:
     std::vector<Json> _items;
 };
 
-/// @brief One command of `ui/2` (spec 5 §8, spec 6).
+/// @brief One command of `ui/1` (spec 5 §8, spec 6).
 class Command {
 public:
     /// @brief A command over its JSON, for a form no builder spells.
@@ -2399,7 +2399,7 @@ public:
     /// @return The document.
     [[nodiscard]] Json document(std::string const& documentId, Node const& view) const {
         Json out = Json::object_t{};
-        detail::put(out, "vocab", std::string{kVocabulary2});
+        detail::put(out, "vocab", std::string{kVocabulary});
         detail::put(out, "id", documentId);
         for (auto const& [key, value] : std::get<Json::object_t>(_head.data)) {
             detail::put(out, key, value);

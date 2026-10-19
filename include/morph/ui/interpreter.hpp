@@ -723,7 +723,7 @@ struct CacheEntry {
     std::uint64_t generation = 0;
     /// @brief When the last reply was applied.
     std::optional<std::chrono::milliseconds> fetchedAt;
-    /// @brief Marked stale by an invalidation, `refreshOn`, a backend switch or a change.
+    /// @brief Marked stale by a `refetch`, a backend switch or a change.
     bool stale = false;
     /// @brief Marked stale while a fetch was in flight: that fetch may have read before the change, so when it
     ///        settles the entry stays stale and fetches once more.
@@ -832,7 +832,7 @@ struct HostCommands {
     std::function<HostCommandResult(std::string const& name, Value const& args)> run;
 };
 
-/// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, `refreshOn` bookkeeping, the
+/// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
 /// It belongs to the runtime's owner, outlives every screen mounted on it, and is cleared by `signOut` and on a
@@ -1171,7 +1171,7 @@ public:
             std::chrono::steady_clock::now().time_since_epoch());
     }
 
-    /// @brief Registers a mounted query, for `refreshOn` and invalidation.
+    /// @brief Registers a mounted query, which a reconnect and a backend switch refetch.
     /// @param query The query.
     void attachQuery(detail::QueryRuntime& query) { _mounted.push_back(&query); }
 
@@ -1179,14 +1179,14 @@ public:
     /// @param query The query.
     void forgetQuery(detail::QueryRuntime& query) { std::erase(_mounted, &query); }
 
-    /// @brief A call of @p actionId on a model of @p typeId succeeded: applies the action's effects to the cache, and
-    ///        refetches every mounted query of that model type whose `refreshOn` names it (spec 5 §5).
+    /// @brief A call of @p actionId on a model of @p typeId succeeded: applies the action's effects to the cache
+    ///        (spec 8 §9).
     ///
     /// `updates R` merges the reply's rows of `R` into each entry holding `R`, matched by the record's key field at
     /// the entry's paths, with no fetch; an entry whose fetch is in flight also fetches once more, since that fetch
     /// may have read before the write. `changes R` marks each entry holding `R` stale. `changesInstance` marks each
     /// entry read through the same instance. A marked entry refetches through a mounted query that uses it. A
-    /// discarded reply only marks: its `updates` act as `changes`, and `refreshOn` is not run.
+    /// discarded reply only marks: its `updates` act as `changes`.
     /// @param typeId        The model type.
     /// @param actionId      The action.
     /// @param reply         The reply's value.
@@ -1953,7 +1953,7 @@ private:
 /// @brief One run of a mutation, as a command sees it: whether it succeeded, and the reply.
 using RunDone = std::function<void(bool succeeded, Value const& reply)>;
 
-/// @brief A mutation at run time (spec 5 §5): concurrency, patch, optimistic writes, invalidation.
+/// @brief A mutation at run time (spec 5 §5): concurrency, optimistic writes and the reply's effects.
 class MutationRuntime {
 public:
     /// @brief A mutation of @p scope.
@@ -3093,16 +3093,6 @@ inline void Session::markInstanceChange(wire::InstanceTopic const& instance, det
 inline void Session::actionSucceeded(std::string const& typeId, std::string const& actionId, Value const& reply,
                                      ReplyUse use, std::string const& instanceToken) {
     _runtime->batch([&] { applyReplyEffects(typeId, actionId, reply, use, instanceToken); });
-    if (use == ReplyUse::Discarded) {
-        return;
-    }
-    std::vector<detail::QueryRuntime*> const mounted = _mounted;
-    for (detail::QueryRuntime* const query : mounted) {
-        auto const& names = query->decl().refreshOn;
-        if (query->typeId() == typeId && std::ranges::find(names, actionId) != names.end()) {
-            query->invalidate();
-        }
-    }
 }
 
 inline void Session::detachQuery(detail::QueryRuntime& query) { query.detach(); }
@@ -3687,33 +3677,6 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
             _result.set(*reply);
             _error.set(Value{});
             _errorKind.set(Value{});
-            if (_decl->patch) {
-                Bindings bindings = *run->bindings;
-                bindings.push_back(Binding{.name = "result", .read = [value = *reply] { return value; }});
-                NameRef const* const target = _scope->find(_decl->patch->query);
-                if (target != nullptr && target->category == NameCategory::Query) {
-                    auto entry = core.runtime().untracked([&] { return target->query->entry(); });
-                    Value const key =
-                        core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->key); });
-                    Value const with =
-                        core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->patch->with); });
-                    if (entry) {
-                        auto patched = patchRows(entry->confirmed, _decl->patch->at, key, with);
-                        if (patched) {
-                            session.confirm(*entry, *patched);
-                        } else if (patched.error() == PatchMiss::NoList && entry->hasValue.peek()) {
-                            core.report(pointerAppend(_decl->path, "patch"),
-                                        patchMissReason(_decl->patch->query, _decl->patch->at));
-                        }
-                    }
-                }
-            }
-            for (std::string const& name : _decl->invalidates) {
-                NameRef const* const target = _scope->find(name);
-                if (target != nullptr && target->category == NameCategory::Query) {
-                    target->query->invalidate();
-                }
-            }
             session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Applied, token);
             core.runList(_decl->onSuccess, commandCtx(*run->bindings), {});
             if (!secret.empty()) {
@@ -5940,7 +5903,7 @@ inline forms::Submitter ScreenCore::aliasCalls(ModelAlias* alias) {
 }
 
 // The calls of a form, collection or wizard: a success other than of @p read, the collection's own query, tells the
-// session, which refetches the queries whose `refreshOn` names the action, as a mutation's success does.
+// session, which applies the action's effects, as a mutation's success does.
 inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string read) {
     return [this, alias, call = aliasCalls(alias), read = std::move(read)](
                std::string_view actionId, std::string body) -> async::Completion<std::string> {

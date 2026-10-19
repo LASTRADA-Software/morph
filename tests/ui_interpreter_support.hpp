@@ -309,8 +309,11 @@ inline Catalog corpusCatalog() {
         if (action == "Auth_Login") {
             info.credential = true;
         }
+        // A result row, keyed by `id`: the capture's reply updates it in every list holding it.
+        ActionRecordInfo const resultsAtTop{.record = "Lims_Result", .keyField = "id", .paths = {""}};
         if (action == "Lims_ListResults") {
             info.calculatedFields = {"concentration"};
+            info.records = {resultsAtTop};
         }
         // Server push (spec 8): `T_Row` is keyed by `code`, not `id`, so a patch must use the catalog's key field.
         ActionRecordInfo const rowsAtTop{.record = "T_Row", .keyField = "code", .paths = {""}};
@@ -320,11 +323,16 @@ inline Catalog corpusCatalog() {
         if (action == "Push_Header") {
             info.records = {ActionRecordInfo{.record = "T_Row", .keyField = "code", .paths = {"header.rows"}}};
         }
-        if (action == "Push_EditRow" || action == "Lims_CaptureConcentration") {
+        if (action == "Push_EditRow") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "updates", .record = "T_Row"}};
             info.records = {rowsAtTop};
         }
-        if (action == "Push_RenameAll") {
+        if (action == "Lims_CaptureConcentration") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "updates", .record = "T_Row"},
+                                                     ActionEffect{.kind = "updates", .record = "Lims_Result"}};
+            info.records = {rowsAtTop, resultsAtTop};
+        }
+        if (action == "Push_RenameAll" || action == "Lims_DeleteSample") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
         }
         if (action == "Push_Reset") {

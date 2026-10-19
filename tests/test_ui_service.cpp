@@ -141,24 +141,6 @@ TEST_CASE("UiRegistry names every action and model type a document names, at any
     REQUIRE(bundle->actions->at("Auth_Login").credential);
 }
 
-// Mutation: leave refreshOn out of the walk (Lims_Save has no fact, and the client refuses the document).
-TEST_CASE("UiRegistry names the actions a query refreshes on, so the client has their facts",
-          "[ui-service][registry]") {
-    UiRegistry registry{morph::ui::ApplicationInfo{.id = "app", .version = "1"}, uiservice::facts()};
-    std::string const document =
-        R"({"vocab":"ui/1","id":"lims.watch","models":{"sample":{"type":"Lims_Sample"}},)"
-        R"("queries":{"list":{"model":"sample","action":"Lims_List","refreshOn":["Lims_Save"]}},)"
-        R"("view":{"kind":"text","text":"Watch"}})";
-    REQUIRE(registry.addScreen(entry("lims.watch"), document).has_value());
-    auto const built = registry.build();
-    REQUIRE(built.has_value());
-    REQUIRE((*built)->actions.has_value());
-    CHECK((*built)->actions->contains("Lims_Save"));
-    CHECK(std::ranges::any_of((*built)->allActions, [](morph::ui::ActionRef const& ref) {
-        return ref.action == "Lims_Save" && ref.modelType == "Lims_Sample";
-    }));
-}
-
 TEST_CASE("UiRegistry without catalog lookups serves no facts", "[ui-service][registry]") {
     auto const built = uiservice::registry(morph::ui::Catalog{}).build();
     REQUIRE(built);

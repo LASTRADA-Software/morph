@@ -257,7 +257,7 @@ evaluator.
 ```json
 "results": { "model": "sample", "action": "Lims_ListResults",
              "body": { "obj": { "sampleId": { "ref": "sampleId" } } },
-             "when": true, "debounce": 0, "refreshOn": ["Lims_CaptureConcentration"], "refreshEvery": 0 }
+             "when": true, "debounce": 0, "refreshEvery": 0 }
 ```
 
 A query is spec 1 §4b's `Query`, declared as data:
@@ -267,18 +267,11 @@ A query is spec 1 §4b's `Query`, declared as data:
 - `when` false, or a `body` that evaluates to `null`, makes the query idle.
 - `debounce` delays a fetch until the key has been stable for that many milliseconds.
 - The last value is kept while a refetch is in flight, so lists do not blank.
-- `refreshOn` names action ids of the query's model type: the query refetches when a call to one of
-  them, made by this client through any alias of that model type in any mounted screen, completes
-  successfully. It matches by model type, not by instance, because two private instances of a
-  database-backed model read the same rows: a capture in one tab must refresh the list in another. It
-  is the interpreter's own bookkeeping over its dispatch (through the query cache, below), not a
-  bridge subscription, so it works without the result type and two actions with one reply type do not
-  trigger each other. A change made by another client is not pushed; `refreshEvery` is the polling
-  answer, and it refetches on a timer and **skips a tick while a request is in flight**.
+- A query refreshes when an action changes a record it holds, on every client: the action declares what it
+  changes (its effects, spec 8), not the document. `refreshEvery` refetches on a timer, for data that changes with
+  time rather than through actions, and **skips a tick while a request is in flight**.
 - `staleTime` (milliseconds, default 0) is how long a cached value counts as fresh (below).
-- `refreshOn` is `ui/1` only. In `ui/2` an action declares what it changes (its effects, spec 8 §10), and
-  every query holding a changed record refreshes, on every client; a `ui/2` query that declares `refreshOn`
-  is refused. `refreshEvery` is in both, for data that changes with time rather than through actions.
+- A query declares no `refreshOn`: a document that names one is refused (spec 8 §10).
 
 ### The query cache
 
@@ -292,9 +285,8 @@ share it.
 - **Freshness.** A query that mounts on an entry younger than its `staleTime` uses the cached value and
   sends nothing; an older entry is shown at once and refetched (the value is kept while it refetches,
   as for any query). An entry no mounted query uses is kept for 5 minutes, then dropped.
-- **Invalidation.** `invalidates`, `refreshOn` and `{"refetch": "q"}` mark entries stale and refetch
-  those a mounted query uses, in one batch. `invalidates` names queries of the mutation's own document;
-  `refreshOn` reaches every mounted screen (above).
+- **Invalidation.** An action's effects (spec 8 §9) and `{"refetch": "q"}` mark entries stale and refetch
+  those a mounted query uses, in one batch.
 - **Isolation.** The cache belongs to the session: `signOut` and a principal change clear it, and a
   backend switch (spec 6 §9) marks every entry stale. A `secret` field is never cached (§13).
 - **Prefetch.** A screen may declare `"prefetch": ["q", ...]`: queries whose bodies depend only on the
@@ -310,8 +302,7 @@ fetcher that goes through the cache.
 
 ```json
 "capture": { "model": "sample", "action": "Lims_CaptureConcentration", "body": { ... },
-             "concurrency": "exclusive", "invalidates": ["results"],
-             "patch": { "query": "results", "key": { "ref": "result.id" }, "with": { "ref": "result" } },
+             "concurrency": "exclusive",
              "onSuccess": [ ... ], "onError": [ ... ] }
 ```
 
@@ -322,17 +313,14 @@ fetcher that goes through the cache.
     serializes per task whichever command started the run.
   - `latest`: every run is sent; only the newest reply is applied.
   - `parallel`: every run is sent; replies are applied as they arrive.
-- `invalidates` refetches the named queries after a success, in one batch with the result, so the
-  screen updates in one frame.
-- `patch` replaces one row of a query's cached list (the row whose `id` field equals `key`) with
-  `with` — a record `with` is merged over a record row, its fields replacing the row's —
-  without refetching. `key` and `with` are evaluated against the reply, bound as `result`.
-- `invalidates` and `patch` are `ui/1` only: in `ui/2` the action's effects refresh what it changed, and a
-  `ui/2` mutation that declares either is refused. A `ui/2` document that must refetch for a reason no action
-  declares runs `{"refetch": "q"}` in `onSuccess`.
-- `optimistic` is its own declaration, in both vocabularies, with the same shape as `patch` —
-  `{"query": "q", "at"?: m, "key": e, "with": e}` — but is applied when the run starts, evaluated against the run's body bound as `body`. A success confirms the written fields
-  (and `patch`, when declared, then applies the reply); a failure rolls the row back to its value
+- A success applies the action's effects (spec 8 §9): an `updates` reply replaces the rows it holds in every
+  cached query, without refetching, and a `changes` refetches the queries holding the record. A mutation declares
+  no `invalidates` or `patch`; a document that names either is refused. A document that must refetch for a reason
+  no action declares runs `{"refetch": "q"}` in `onSuccess`.
+- `optimistic` replaces one row of a query's cached list (the row whose `id` field equals `key`) with `with` — a
+  record `with` is merged over a record row — as `{"query": "q", "at"?: m, "key": e, "with": e}`, applied when the
+  run starts, evaluated against the run's body bound as `body`. A success confirms the written fields
+  (and the reply's effects then apply); a failure rolls the row back to its value
   without that run's write, and
   `onError` runs after the rollback. Only client-owned fields may be written optimistically: a field
   the server calculates (§7) is never predicted, and a document whose `with` names one is refused at
@@ -473,8 +461,8 @@ Two declarations cover it.
 
 **Write-through: save each edit.** Committing a value runs a mutation that persists it and replies
 with the recalculated row. `concurrency: "serial"` with `serialKey` set to the row id sends one row's
-edits in order. The mutation's `patch` replaces the row in the list, so the calculated cells update
-without refetching the list.
+edits in order. The action declares `updates` of the row's record, so its reply replaces the row in the list and
+the calculated cells update without refetching the list.
 
 **Rules for both:**
 
@@ -695,7 +683,7 @@ MORPH_REGISTER_SCREEN(screen);
   compile error on the server. A query or mutation body is the action's own members with
   expression handles in place of values, written as `{&Action::member, handle}` pairs: C++ cannot
   synthesise the action's struct with its members retyped, which `{.sampleId = sampleId}` would
-  need. The builders write `ui/2`, so they offer no `invalidates`, `patch` or `refreshOn` (§5).
+  need. Documents have no `invalidates`, `patch` or `refreshOn`, so the builders offer none (§5).
 - Registration emits the JSON once and runs the load-time validation of §3; a screen that fails is a
   failing server test, never a client surprise.
 - Registration also runs the **accessibility rules**: every text input, date-time input, slider, select,
@@ -751,11 +739,11 @@ MORPH_REGISTER_SCREEN(screen);
 - **Versions.** Within a vocabulary version, changes are additive: a client ignores an optional key it
   does not know, unless the key's name begins with `!` (`"!requires"`), which marks it
   must-understand: a client that does not know it refuses the node and renders its fallback, or
-  refuses the document. A new node kind, function or command, or a removed key, is a new vocabulary
-  version. `ui/2` is the first: `ui/1` without `invalidates`, `patch` and `refreshOn` (§5). A client
-  reads every version it speaks, and a document is served as written, so a bundle needs the
-  vocabulary of each of its documents: a server keeps `ui/1` documents to keep serving clients that
-  speak only `ui/1`, and the C++ builders (§11) write `ui/2`.
+  refuses the document. A new node kind, function or command is a new vocabulary version
+  (`ui/2`, `expr/2`). A server may keep documents for more than one version and sends the newest the
+  client speaks. A key leaves a vocabulary by being refused, never ignored, so a document that still
+  declares it fails at load instead of silently losing what it did (`invalidates`, `patch` and
+  `refreshOn`, §5).
 - **Development reload.** A client started in development mode re-sends `ui-hello` every second. When
   the manifest digest changes, it fetches the changed entries and remounts the mounted screens whose
   documents changed, keeping the screen scope's state where the new document still declares it under
@@ -834,7 +822,7 @@ places, none of which changes the document:
 - **Expressions:** a shared JSON corpus of expressions, inputs and results, covering exact arithmetic
   across units, null propagation, three-valued logic, every function, and the size bound.
 - **Control:** query latest-wins under forced reply orders; `debounce`; `refreshEvery` skipping while
-  pending; each mutation concurrency mode; `patch`; one-batch invalidation.
+  pending; each mutation concurrency mode; an `updates` reply replacing a row without a refetch.
 - **Relations:** cascading `watch` with `source: "user"` against a server patch; check targets and
   `ready`; dependent options with `onStale`; cycle refusal.
 - **Server-calculated values (§7):** replies out of order; typing while a calculation is in flight;
@@ -864,10 +852,8 @@ places, none of which changes the document:
   handshake; a server without the UI service; a `!`-prefixed key an old client does not know.
 - **Bridge seams:** a binding by type id, a raw execute and a string-keyed attach behave as their
   typed counterparts for session, timeout, cancellation, accounting and `switchBackend`.
-- **Dispatch refresh:** `refreshOn` fires on the named action through the alias and not on another
-  action with the same reply type.
 - **Query cache:** two screens with an equal key send one request; `staleTime` spares a remount's
-  fetch; a mutation in one tab refreshes, through `refreshOn`, a query of the same model type in
+  fetch; a mutation in one tab refreshes, through its effects, a query holding the record it changed in
   another; `signOut` clears the cache; a prefetch warms the entry the screen then mounts on.
 - **Optimistic:** the row shows `with` before the reply, the reply replaces it, a failure rolls it back
   before `onError` runs, two overlapping runs end at the last confirmed value, and an optimistic write
@@ -889,9 +875,8 @@ places, none of which changes the document:
 - **Free layout editing.** A user adjusts a screen only through its declared customization points
   (§12b); positioning or sizing panels freely is not part of this design. Ordering and hiding the
   children a document declares is the `arrange` point.
-- **Server push.** A document learns of a change by its own calls, by `refreshOn` over its own
-  dispatch and by polling with `refreshEvery`. A server-initiated message (pushed progress, another
-  client's change) needs a wire kind the protocol does not have; it is carried by the core
-  `event` kind, which `ui-hello` negotiates per connection.
+- **Server push.** A document learns of a change through its actions' effects, from its own calls and,
+  over the core `event` kind that `ui-hello` negotiates per connection, from other clients' (spec 8), and
+  by polling with `refreshEvery`.
 - **Server-side composite actions.** Committing several models in one transaction is not part of this
   design; a dialog that must commit atomically runs one server action (§5).

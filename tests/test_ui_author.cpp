@@ -931,7 +931,7 @@ TEST_CASE("the registry keeps one screen per id and answers the catalog", "[ui][
     CHECK(duplicate.error().path == "/id");
     REQUIRE(registry.add(commandsScreen()).has_value());
     CHECK(registry.size() == 2);
-    CHECK(registry.find("lims.commands")->text.starts_with(R"({"vocab":"ui/2","id":"lims.commands")"));
+    CHECK(registry.find("lims.commands")->text.starts_with(R"({"vocab":"ui/1","id":"lims.commands")"));
 
     morph::ui::Catalog const catalog = registry.catalog();
     auto const sample = catalog.model("Lims_SampleModel");

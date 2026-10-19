@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Documents checked against action effects (spec 8 §10): a query must read, and three warnings point at refresh
-// declarations that effects make redundant, at mutations nothing refreshes after, and at watches that may feed
-// another client's changes back.
+// Documents checked against action effects (spec 8 §10): a query must read, and two warnings point at mutations
+// nothing refreshes after and at watches that may feed another client's changes back.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -111,69 +110,6 @@ TEST_CASE("query_of_action_with_effects_refused", "[push][documents]") {
     CHECK(ui::loadDocumentText(document(R"({"rows":{"model":"m","action":"T_Edit"}})", "{}")).has_value());
 }
 
-TEST_CASE("redundant_invalidates_warns", "[push][documents]") {
-    auto const covered = warningsOf(document(R"({"rows":{"model":"m","action":"T_List"},
-                                                 "other":{"model":"m","action":"T_ListOther"}})",
-                                             R"({"rename":{"model":"m","action":"T_Rename",
-                                                 "invalidates":["other","rows"]}})"),
-                                    LoadWarningKind::Redundant);
-    REQUIRE(covered.size() == 1);
-    CHECK(covered.front().path == "/mutations/rename/invalidates/1");
-    CHECK(covered.front().text.contains("`T_Rename` changes `T_Row`"));
-
-    // `updates` covers the query too: a reply patches the rows it holds.
-    CHECK(warningsOf(document(R"({"rows":{"model":"m","action":"T_List"}})",
-                              R"({"edit":{"model":"m","action":"T_Edit","invalidates":["rows"]}})"),
-                     LoadWarningKind::Redundant)
-              .size() == 1);
-
-    // `changesInstance` covers a query through the same alias, and only that.
-    auto const instance = warningsOf(document(R"({"rows":{"model":"m","action":"T_List"}})",
-                                              R"({"reset":{"model":"m","action":"T_Reset","invalidates":["rows"]}})"),
-                                     LoadWarningKind::Redundant);
-    REQUIRE(instance.size() == 1);
-    CHECK(instance.front().path == "/mutations/reset/invalidates/0");
-    auto const otherAlias = warningsOf(
-        R"({"vocab":"ui/1","id":"t","models":{"m":{"type":"T_Model"},"n":{"type":"T_Model"}},
-            "queries":{"rows":{"model":"n","action":"T_List"}},
-            "mutations":{"reset":{"model":"m","action":"T_Reset","invalidates":["rows"]}},
-            "view":{"kind":"text","text":"x"}})",
-        LoadWarningKind::Redundant);
-    CHECK(otherAlias.empty());
-}
-
-TEST_CASE("redundant_patch_warns", "[push][documents]") {
-    auto const patched = warningsOf(document(R"({"rows":{"model":"m","action":"T_List"}})",
-                                             R"({"edit":{"model":"m","action":"T_Edit",
-                     "patch":{"query":"rows","key":{"ref":"result.id"},"with":{"ref":"result"}}}})"),
-                                    LoadWarningKind::Redundant);
-    REQUIRE(patched.size() == 1);
-    CHECK(patched.front().path == "/mutations/edit/patch");
-
-    // A patch of a query that holds no record the reply updates is the only thing that updates it.
-    CHECK(warningsOf(document(R"({"other":{"model":"m","action":"T_ListOther"}})",
-                              R"({"edit":{"model":"m","action":"T_Edit",
-                                  "patch":{"query":"other","key":{"ref":"result.id"},"with":{"ref":"result"}}}})"),
-                     LoadWarningKind::Redundant)
-              .empty());
-}
-
-TEST_CASE("redundant_refresh_on_warns", "[push][documents]") {
-    auto const refreshed =
-        warningsOf(document(R"({"rows":{"model":"m","action":"T_List","refreshOn":["T_Write","T_Rename"]},
-                     "other":{"model":"m","action":"T_ListOther","refreshOn":["T_Rename"]}})",
-                            "{}"),
-                   LoadWarningKind::Redundant);
-    REQUIRE(refreshed.size() == 1);
-    CHECK(refreshed.front().path == "/queries/rows/refreshOn/1");
-    CHECK(refreshed.front().text.contains("`T_Rename` changes `T_Row`"));
-
-    // `refreshOn` names an action run anywhere, through any instance, so `changesInstance` does not cover it.
-    CHECK(warningsOf(document(R"({"rows":{"model":"m","action":"T_List","refreshOn":["T_Reset"]}})", "{}"),
-                     LoadWarningKind::Redundant)
-              .empty());
-}
-
 TEST_CASE("uncovered_mutation_warns", "[push][documents]") {
     auto const uncovered = warningsOf(
         document(R"({"rows":{"model":"m","action":"T_List"}})", R"({"write":{"model":"m","action":"T_Write"}})"),
@@ -182,20 +118,11 @@ TEST_CASE("uncovered_mutation_warns", "[push][documents]") {
     CHECK(uncovered.front().path == "/mutations/write");
     CHECK(uncovered.front().text.contains("`T_Write`"));
 
-    // Each of these refreshes something after a success.
-    for (std::string const& covered :
-         {document(R"({"rows":{"model":"m","action":"T_List"}})",
-                   R"({"write":{"model":"m","action":"T_Write","invalidates":["rows"]}})"),
-          document(R"({"rows":{"model":"m","action":"T_List"}})",
-                   R"({"write":{"model":"m","action":"T_Write",
-                       "patch":{"query":"rows","key":{"ref":"result.id"},"with":{"ref":"result"}}}})"),
-          document(R"({"rows":{"model":"m","action":"T_List","refreshOn":["T_Write"]}})",
-                   R"({"write":{"model":"m","action":"T_Write"}})"),
-          document(R"({"rows":{"model":"m","action":"T_List"}})",
-                   R"({"write":{"model":"m","action":"T_Write","onSuccess":[{"refetch":"rows"}]}})")}) {
-        CAPTURE(covered);
-        CHECK(warningsOf(covered, LoadWarningKind::Uncovered).empty());
-    }
+    // A `refetch` after a success is a refresh the document declares itself.
+    CHECK(warningsOf(document(R"({"rows":{"model":"m","action":"T_List"}})",
+                              R"({"write":{"model":"m","action":"T_Write","onSuccess":[{"refetch":"rows"}]}})"),
+                     LoadWarningKind::Uncovered)
+              .empty());
     // Without the catalog's actions nothing is known about effects.
     auto const blind = ui::loadDocumentText(document("{}", R"({"write":{"model":"m","action":"T_Write"}})"));
     REQUIRE(blind.has_value());

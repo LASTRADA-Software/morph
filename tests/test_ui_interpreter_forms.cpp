@@ -229,63 +229,69 @@ TEST_CASE("collection node: a view document listing another action is reported",
 
 namespace {
 
-// A query of the sample model refetched by the submits of a form, a collection and a wizard on the same screen.
+// A query holding `T_Row` rows beside a form, a collection or a wizard: their submits apply the action's effects, so
+// `Lims_CaptureConcentration` (`updates T_Row`) patches the row it replies, and `Lims_DeleteSample` (`changes T_Row`)
+// refetches the query.
 std::string refreshedBy(std::string_view node) {
     return std::string{R"({
   "vocab": "ui/1", "id": "refreshed",
   "models": { "sample": { "type": "Lims_SampleModel" } },
-  "queries": { "results": { "model": "sample", "action": "Lims_ListResults",
-    "refreshOn": [ "Lims_CaptureConcentration", "Lims_DeleteSample", "Lims_ListSamples", "Lims_ConfirmSample" ] } },
-  "view": { "kind": "column", "children": [ { "kind": "text", "text": { "query": "results" } }, )"} +
+  "queries": { "rows": { "model": "sample", "action": "Push_ListRows" } },
+  "view": { "kind": "column", "children": [ { "kind": "text", "text": { "fn": "format", "args": [ "{0}", { "query": "rows" } ] } }, )"} +
            std::string{node} + " ] } }";
 }
 
+constexpr char const* kOneRow = R"([{"code":"a","name":"x"}])";
+constexpr char const* kCaptured = R"({"code":"a","name":"captured"})";
+
 }  // namespace
 
-TEST_CASE("form, collection and wizard nodes: a submit that succeeds refetches the queries naming it in refreshOn",
+// Mutation: leave the submits out of `actionSucceeded` — no row is patched and no delete refetches.
+TEST_CASE("form, collection and wizard nodes: a submit that succeeds applies its action's effects",
           "[ui][interpreter][forms]") {
     Harness h;
     SECTION("a form") {
         auto const screen = h.mount(refreshedBy(
             R"({ "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration", "submit": "explicit" })"));
-        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.reply(h.dispatcher.last("Push_ListRows"), kOneRow);
         h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
         h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
         h.settle();
         h.backend.click(h.byTestId("Button", "form_submit"));
         h.settle();
         h.fail(h.dispatcher.last("Lims_CaptureConcentration"));
-        CHECK(h.dispatcher.count("Lims_ListResults") == 1);  // a failure is not a success
+        CHECK(readJson(*screen, R"({"query": "rows"})") == kOneRow);  // a failure is not a success
         h.backend.click(h.byTestId("Button", "form_submit"));
         h.settle();
-        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), kCaptured);
+        CHECK(readJson(*screen, R"({"query": "rows"})") == R"([{"code":"a","name":"captured"}])");
+        CHECK(h.dispatcher.count("Push_ListRows") == 1);
     }
     SECTION("a collection, whose own list query is a read, not a submit") {
         auto const screen =
             h.mount(refreshedBy(R"({ "kind": "collection", "model": "sample", "action": "Lims_ListSamples" })"));
-        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.reply(h.dispatcher.last("Push_ListRows"), kOneRow);
         h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":7,"name":"Water"}]})");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 1);
+        CHECK(h.dispatcher.count("Push_ListRows") == 1);
         h.backend.click(h.byTestId("Button", "rowAction_Lims_DeleteSample_7"));
         h.settle();
         h.backend.click(h.byTestId("Button", "confirm_accept"));
         h.settle();
         h.reply(h.dispatcher.last("Lims_DeleteSample"), "{}");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+        CHECK(h.dispatcher.count("Push_ListRows") == 2);
         // The collection reloads its list after the delete; that read refetches nothing.
         h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[]})");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+        CHECK(h.dispatcher.count("Push_ListRows") == 2);
     }
     SECTION("a wizard's step") {
         auto const screen =
             h.mount(refreshedBy(R"({ "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" })"));
-        h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+        h.reply(h.dispatcher.last("Push_ListRows"), kOneRow);
         h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
         h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
         h.settle();
-        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 2);
+        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), kCaptured);
+        CHECK(readJson(*screen, R"({"query": "rows"})") == R"([{"code":"a","name":"captured"}])");
     }
 }
 

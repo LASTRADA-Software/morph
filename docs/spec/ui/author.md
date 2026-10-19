@@ -7,9 +7,9 @@ Design spec for the server-side builders of the UI document and their registrati
 `ui::loadDocument` and then the accessibility rules, so a screen that breaks a rule is a failing
 server test and never reaches a client.
 
-The builders write `ui/2` documents. `ui/2` has no `invalidates`, `patch` or `refreshOn`, because an action
-declares what it changes beside the action (its effects) and every query holding a changed record refreshes, so the
-builders offer no option for them and setting one does not compile. A screen that must refetch for a reason no action
+Documents have no `invalidates`, `patch` or `refreshOn`, because an action declares what it changes beside the
+action (its effects) and every query holding a changed record refreshes, so the builders offer no option for them
+and setting one does not compile. A screen that must refetch for a reason no action
 declares runs `refetch(query)`; data that changes with time rather than through actions polls with `.refreshEvery`.
 
 Read this before changing what a builder writes. What the JSON means is [`document.md`](document.md)
@@ -249,9 +249,7 @@ is reviewed like code.
   guarantees of spec 5 §11 — a renamed or foreign field and a value of the wrong type are compile
   errors — at the cost of naming the action in each pair.
 - **No refresh options.** The refresh keys restate, per document, what an action's effects already say once for
-  every client, and a restatement can drift from the action. The builders emit only `ui/2` rather than offering both
-  vocabularies: a server that must keep `ui/1` documents for older clients keeps them as hand-written JSON, which
-  the UI service still serves.
+  every client, and a restatement can drift from the action.
 - **Facts from the types.** `keyed` is a property of the C++ type, and the model of an action is
   the model it runs through. The facts a type cannot show are traits an application specialises
   beside the action, which keeps them next to the code they describe.

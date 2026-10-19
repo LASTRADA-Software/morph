@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The control corpus of spec 5 §14: queries (latest wins, debounce, timed refresh, the cache), mutations (the four
-// concurrency modes, patch, optimistic writes, one-batch invalidation) and boundaries, mounted on RecordingBackend
-// with a scripted dispatcher.
+// concurrency modes and optimistic writes) and boundaries, mounted on RecordingBackend with a scripted dispatcher.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -150,7 +149,6 @@ constexpr char const* kMutations = R"({
   "mutations": {
     "m": { "model": "sample", "action": "Lims_Save", "concurrency": "MODE", SERIAL
            "body": { "obj": { "n": { "ref": "n" } } },
-           "invalidates": [ "rows", "other" ],
            "onSuccess": [ { "set": "n", "value": { "fn": "add", "args": [ { "ref": "n" }, 1 ] } } ],
            "onError": [ { "notify": { "error": "m" }, "role": "error" } ] } },
   "view": { "kind": "column", "children": [
@@ -303,23 +301,8 @@ TEST_CASE("interpreter control: a failure sets the error and runs onError", "[ui
     CHECK(h.host.log.back() == "notify error it failed");
     CHECK(readJson(*screen, R"({"errorKind": "m"})") == R"("denied")");
     CHECK(h.host.stale == 1);
-    // A failure invalidates nothing.
+    // A failure fetches nothing.
     CHECK(h.dispatcher.calls.size() == before);
-}
-
-TEST_CASE("interpreter control: invalidation refetches every named query in the success batch", "[ui][interpreter]") {
-    Harness h;
-    auto screen = h.mount(mutations("exclusive"));
-    loadQueries(h);
-    h.backend.click(h.byTestId("Button", "go"));
-    h.settle();
-    h.dispatcher.reply(h.dispatcher.last("Lims_Save"), "1");
-    // The delivery is one task of the owner: the result, the cleared pending flag and both refetches.
-    REQUIRE(h.owner.runOne());
-    CHECK(h.dispatcher.count("Lims_ListResults") == 2);
-    CHECK(h.dispatcher.count("Lims_GetLimits") == 2);
-    h.settle();
-    CHECK(h.text("result") == "1");
 }
 
 namespace {
@@ -329,8 +312,6 @@ constexpr char const* kRows = R"({
   "models": { "sample": { "type": "Lims_SampleModel" } },
   "queries": { "results": { "model": "sample", "action": "Lims_ListResults" } },
   "mutations": {
-    "capture": { "model": "sample", "action": "Lims_CaptureConcentration", "concurrency": "parallel",
-                 "patch": { "query": "results", "key": { "ref": "result.id" }, "with": { "ref": "result" } } },
     "guess": { "model": "sample", "action": "Lims_Save", "concurrency": "parallel",
                "optimistic": { "query": "results", "key": { "ref": "body.id" },
                                "with": { "obj": { "mass": { "ref": "body.mass" } } } },
@@ -338,7 +319,6 @@ constexpr char const* kRows = R"({
   "let": { "row2": { "fn": "first", "args": [ { "filter": { "query": "results" }, "as": "r",
                "where": { "fn": "eq", "args": [ { "ref": "r.id" }, 2 ] } } ] } },
   "view": { "kind": "column", "children": [
-    { "kind": "textInput", "testId": "capture", "onSubmit": { "run": "capture", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } },
     { "kind": "textInput", "testId": "guess", "onSubmit": { "run": "guess", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } },
     { "kind": "forEach", "rows": { "query": "results" }, "key": { "row": "id" },
       "children": [ { "kind": "text", "text": { "fn": "format", "args": [ "{0}:{1}", { "row": "id" }, { "row": "mass" } ] } } ] } ] } })";
@@ -352,18 +332,6 @@ std::vector<std::string> rowTexts(Harness& h) {
 }
 
 }  // namespace
-
-TEST_CASE("interpreter control: patch replaces the replied row without refetching", "[ui][interpreter]") {
-    Harness h;
-    auto screen = h.mount(kRows);
-    h.reply(0, R"([{"id":1,"mass":10},{"id":2,"mass":20}])");
-    CHECK(rowTexts(h) == std::vector<std::string>{"1:10", "2:20"});
-    h.backend.submit(h.byTestId("TextInput", "capture"), "25");
-    h.settle();
-    h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"id":2,"mass":25,"concentration":5})");
-    CHECK(rowTexts(h) == std::vector<std::string>{"1:10", "2:25"});
-    CHECK(h.dispatcher.count("Lims_ListResults") == 1);
-}
 
 TEST_CASE("interpreter control: an optimistic write shows before the reply and rolls back on failure",
           "[ui][interpreter]") {
@@ -414,20 +382,16 @@ TEST_CASE("interpreter control: an optimistic write shows before the reply and r
 namespace {
 
 // The rows of `results` live in the record member its `at` names, as a list action that answers
-// `{"results": [...]}` gives them. AT is replaced with the `at` member of both patches, or with nothing.
+// `{"results": [...]}` gives them. AT is replaced with the `at` member of the optimistic write, or with nothing.
 constexpr char const* kRecordRows = R"({
   "vocab": "ui/1", "id": "recordrows",
   "models": { "sample": { "type": "Lims_SampleModel" } },
   "queries": { "results": { "model": "sample", "action": "Lims_ListResults" } },
   "mutations": {
-    "capture": { "model": "sample", "action": "Lims_CaptureConcentration", "concurrency": "parallel",
-                 "patch": { "query": "results", AT "key": { "ref": "result.id" }, "with": { "ref": "result" } } },
     "guess": { "model": "sample", "action": "Lims_Save", "concurrency": "parallel",
                "optimistic": { "query": "results", AT "key": { "ref": "body.id" },
                                "with": { "obj": { "mass": { "ref": "body.mass" } } } } } },
-  "view": { "kind": "column", "children": [
-    { "kind": "textInput", "testId": "capture", "onSubmit": { "run": "capture", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } },
-    { "kind": "textInput", "testId": "guess", "onSubmit": { "run": "guess", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } } ] } })";
+  "view": { "kind": "textInput", "testId": "guess", "onSubmit": { "run": "guess", "body": { "obj": { "id": 2, "mass": { "ref": "event" } } } } } })";
 
 std::string recordRows(std::string_view at) {
     std::string text = kRecordRows;
@@ -442,41 +406,30 @@ constexpr char const* kRecordReply = R"({"results":[{"id":1,"mass":10},{"id":2,"
 
 }  // namespace
 
-TEST_CASE("interpreter control: a patch with `at` replaces a row of the list inside the query's record",
+TEST_CASE("interpreter control: an optimistic write with `at` writes a row of the list inside the query's record",
           "[ui][interpreter]") {
     Harness h;
     auto const screen = h.mount(recordRows(R"("at": "results",)"));
     h.reply(0, kRecordReply);
-
-    SECTION("patch") {
-        h.backend.submit(h.byTestId("TextInput", "capture"), "25");
-        h.settle();
-        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"id":2,"mass":25})");
-        CHECK(readJson(*screen, R"({"ref": "results"})") == R"({"results":[{"id":1,"mass":10},{"id":2,"mass":25}]})");
-        CHECK(h.dispatcher.count("Lims_ListResults") == 1);
-    }
-    SECTION("optimistic, then rolled back on failure") {
-        h.backend.submit(h.byTestId("TextInput", "guess"), "30");
-        h.settle();
-        CHECK(readJson(*screen, R"({"ref": "results"})") ==
-              R"({"results":[{"id":1,"mass":10},{"id":2,"mass":"30"}]})");
-        h.fail(h.dispatcher.last("Lims_Save"));
-        CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
-    }
+    h.backend.submit(h.byTestId("TextInput", "guess"), "30");
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "results"})") == R"({"results":[{"id":1,"mass":10},{"id":2,"mass":"30"}]})");
+    h.fail(h.dispatcher.last("Lims_Save"));
+    CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
     CHECK(h.diagnostics.empty());
 }
 
-TEST_CASE("interpreter control: a patch that finds no list in the query's value is reported", "[ui][interpreter]") {
+TEST_CASE("interpreter control: an optimistic write that finds no list in the query's value is reported",
+          "[ui][interpreter]") {
     Harness h;
     SECTION("a record value and no `at`") {
         auto const screen = h.mount(recordRows(""));
         h.reply(0, kRecordReply);
-        h.backend.submit(h.byTestId("TextInput", "capture"), "25");
+        h.backend.submit(h.byTestId("TextInput", "guess"), "30");
         h.settle();
-        h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"id":2,"mass":25})");
         CHECK(readJson(*screen, R"({"ref": "results"})") == kRecordReply);
         REQUIRE(h.diagnostics.size() == 1);
-        CHECK(h.diagnostics.front().path == "/mutations/capture/patch");
+        CHECK(h.diagnostics.front().path == "/mutations/guess/optimistic");
         CHECK(h.diagnostics.front().reason.contains("not a list"));
     }
     SECTION("an `at` the record does not have") {
@@ -521,38 +474,6 @@ TEST_CASE("interpreter control: two queries with an equal key share one request"
         h.session.clear();
         CHECK(h.session.cacheSize() == 0);
     }
-}
-
-TEST_CASE("interpreter control: refreshOn refetches a query of the same model type in another screen",
-          "[ui][interpreter]") {
-    Harness h;
-    auto lists = h.mount(R"({
-      "vocab": "ui/1", "id": "list",
-      "models": { "sample": { "type": "Lims_SampleModel" } },
-      "queries": { "results": { "model": "sample", "action": "Lims_ListResults", "refreshOn": [ "Lims_CaptureConcentration" ] } },
-      "view": { "kind": "text", "text": { "query": "results" } } })");
-    h.reply(0, "1");
-    ui::testing::RecordingBackend other;
-    auto capture = h.interpreter.mount(ui::testing::loadOrFail(R"({
-      "vocab": "ui/1", "id": "capture",
-      "models": { "work": { "type": "Lims_SampleModel", "instance": "private" } },
-      "mutations": { "c": { "model": "work", "action": "Lims_CaptureConcentration" },
-                     "s": { "model": "work", "action": "Lims_Save" } },
-      "view": { "kind": "column", "children": [
-        { "kind": "button", "testId": "c", "label": "c", "onClick": { "run": "c" } },
-        { "kind": "button", "testId": "s", "label": "s", "onClick": { "run": "s" } } ] } })",
-                                                               ui::testing::corpusCatalog()),
-                                       {}, other);
-    REQUIRE(capture);
-    h.settle();
-    other.click(*other.find("Button", "testId", "s"));
-    h.settle();
-    h.reply(h.dispatcher.last("Lims_Save"), "{}");
-    CHECK(h.dispatcher.count("Lims_ListResults") == 1);
-    other.click(*other.find("Button", "testId", "c"));
-    h.settle();
-    h.reply(h.dispatcher.last("Lims_CaptureConcentration"), "{}");
-    CHECK(h.dispatcher.count("Lims_ListResults") == 2);
 }
 
 TEST_CASE("interpreter control: a boundary shows loading, then its children, or its error and retries",
@@ -652,7 +573,8 @@ TEST_CASE("interpreter control: refetch ends a debounce wait; a reply that is no
 }
 
 TEST_CASE(
-    "interpreter control: a mutation whose reply is not a document value fails; patch of an idle query is a no-op",
+    "interpreter control: a mutation whose reply is not a document value fails; an optimistic write to an idle query "
+    "is a no-op",
     "[ui][interpreter]") {
     Harness h;
     auto screen = h.mount(R"({
@@ -661,7 +583,6 @@ TEST_CASE(
       "state": { "on": { "init": false } },
       "queries": { "rows": { "model": "sample", "action": "Lims_ListResults", "when": { "ref": "on" } } },
       "mutations": { "m": { "model": "sample", "action": "Lims_Save",
-                            "patch": { "query": "rows", "key": 1, "with": { "ref": "result" } },
                             "optimistic": { "query": "rows", "key": 1, "with": { "ref": "body" } } } },
       "view": { "kind": "button", "testId": "go", "label": "go", "onClick": { "run": "m" } } })");
     h.backend.click(h.byTestId("Button", "go"));

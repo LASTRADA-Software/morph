@@ -484,34 +484,31 @@ The interpreter's query cache applies a change the same way whether it came from
 
 With effects declared, a document needs no refresh declarations.
 
-**At load, in `ui/1`, additively.** The loader already has the catalog, and it reports:
+**At load.** The loader already has the catalog, and it reports:
 
 - **refused: a query whose action declares effects** (anything other than nothing declared). A query must read, so a
-  fetch never produces a change and two clients cannot refetch each other through their queries. It is new in what
-  it refuses, so it applies only to actions that declare effects, which no existing action does.
+  fetch never produces a change and two clients cannot refetch each other through their queries.
+- **refused: `invalidates`, `patch` and `refreshOn`.** They restate, per document, what the action's effects say once
+  for every client, and a restatement can only drift from the action. A document that declares one is refused
+  rather than having it ignored, since its author meant a refresh the client would silently not do.
+  - `optimistic` stays, with its `{query, at?, key, with}` shape.
+  - A document that must refetch for a reason no action declares uses the existing `{"refetch": "q"}` command.
+  - `refreshEvery` stays, for data that changes with time rather than through actions, such as a clock or an
+    external feed.
 - **warning, watch feedback:** a `watch` declaration (spec 5 §6, not the `watch` wire kind of §7) whose `on` reads a query's value, whose `source` is `any` (the
   default), and whose `do` runs a mutation with effects. Another client's change refetches the query, the watch
   fires, and the mutation's change reaches the other client, which may do the same. Such a watch should use
   `"source": "user"`. The loader cannot prove a ring, so this is a warning, and the claim above is limited to
   queries.
-- **warning, redundant:** an `invalidates`, `patch` or `refreshOn` that the mutation's action's effects already
-  cover, so a document can migrate one screen at a time.
-- **warning, uncovered:** a mutation whose action declares nothing (not even `none`), with no `invalidates` or
-  `patch` of its own and no query naming it in `refreshOn`. After it succeeds, nothing on any screen updates.
-  `effects::none` silences it for actions that attach or open, such as lims's `OpenSample`.
+- **warning, uncovered:** a mutation whose action declares nothing (not even `none`) and that runs no `refetch` in
+  its `onSuccess`. After it succeeds, nothing on any screen updates. `effects::none` silences it for actions that
+  attach or open, such as lims's `OpenSample`.
 
-**In `ui/2`, the removal.** `invalidates`, `patch` and `refreshOn` are removed from mutations and queries. Removing
-keys is not additive, so it is a new vocabulary version under spec 5 §12. A server that keeps `ui/1` documents for
-older clients keeps them working.
-
-- `optimistic` stays, and keeps the `{query, key, with}` shape it has today, now as its own definition rather than
-  `patch`'s.
-- A document that must refetch for a reason no action declares uses the existing `{"refetch": "q"}` command.
-- `refreshEvery` stays, for data that changes with time rather than through actions, such as a clock or an external
-  feed.
+The removal stays in `ui/1` rather than opening a `ui/2`: a refused key is loud, so no document loses a refresh
+silently, and one vocabulary keeps the server from choosing documents per client.
 
 **The C++ authoring layer** (`include/morph/ui/author.hpp`) gains nothing for effects, because they are declared
-beside the action, not in a document. It drops `.invalidates`, `.patch` and `.refreshOn` when it emits `ui/2`, and
+beside the action, not in a document. It offers no `.invalidates`, `.patch` or `.refreshOn`, and
 its golden files (`tests/ui/golden/`) change with it.
 
 ## 11. Agents through the server
@@ -649,7 +646,7 @@ Every test below must fail if the feature does nothing, so each names the change
   - *Mutation: restore the unconditional `stale = false`; the mid-flight case fails.*
 - **Documents (ui).**
   - A query whose action declares effects is refused at load.
-  - A redundant `invalidates` warns.
+  - An `invalidates` is refused.
   - An uncovered mutation warns, and `effects::none` silences it.
   - The watch-feedback shape warns.
 - **Explorer (ui).** An action with `changes<R>` shows `changes R` in `explorer_facts`, and one with nothing
@@ -680,9 +677,9 @@ row, and keeps every new public symbol's Doxygen complete. The implementation pl
 | 3 | **Catalog and wire shapes.** `ActionInfo::effects` and `records` (key field, paths), local lookup and `ui-catalog`; `events` in `ui-hello`, and `ConnectionFacts` on `IEnvelopeService::handle`; the `watch`/`unwatch` and `changes` body shapes, defined here so parts 4 and 5 share them | ui, core (`wire.hpp` shapes, `remote.hpp` `ConnectionFacts`) | 1, 2 | `ui/service.md`, `ui/document.md`, `core/wire.md`, spec 5 §15 (the push kind is core `event`, not `ui-event`) |
 | 4 | **Watching and fan-out.** Core `watch`/`unwatch` kinds in `RemoteServer` with the `cid`; the watch table with session contexts; the principal comparison in `stampVerifiedPrincipal`; fan-out in `dispatchExecute`, with private instances to their owner; `derivedFrom` expansion, coalescing, re-authorisation, `privateKeys` | core | 1, 2, 3 | `core/backend.md`, `core/shared_instances.md`, `security.md` |
 | 5 | **Client cache and reconnect seams.** `actionSucceeded` carries the reply and applies effects; patch by key field and path; `refetchAfter`, set by a stale mark or a patch on a fetching entry; discarded `latest` replies as marks; events and `resync`; topic reference counting; watch before fetch; `Session::reconnected()`; `AppSource::onConnected` with an empty default; `watcherOver` and `SessionOptions::watcher`; the generic client's remote source and shell wired to them (`examples/common/app`) | ui, examples/common | 2, 3 (4 for its remote tests) | `ui/interpreter.md`, `ui/frontend.md`, `ui/service.md`, `offline/offline.md`, spec 5 §5 |
-| 6 | **Document checks.** Query-must-read refused; watch-feedback, redundant and uncovered warnings | ui | 3 | `ui/document.md` |
+| 6 | **Document checks.** Query-must-read refused; watch-feedback and uncovered warnings | ui | 3 | `ui/document.md` |
 | 7 | **End-to-end harness, examples and the explorer.** The two-session harness in `tests/`. Records and effects in the three rungs: bookmarks, bank (both model sets) and lims, with `none` on attach-style actions; their 9 `invalidates`, 5 `refreshOn` and 1 `patch` removed from `ui/1` documents where the warnings say so. The explorer's effects and records rows | tests, examples, ui | 4, 5, 6 | the rungs' READMEs, `testing_strategy.md`, `ui/explorer.md` |
-| 8 | **`ui/2`.** Remove `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer and golden files emit `ui/2`; the server keeps serving `ui/1` | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
+| 8 | **No refresh keys.** `ui/1` refuses `invalidates`, `patch` and `refreshOn`; `optimistic` keeps its own shape; the authoring layer offers none of them | ui | 7 | `ui/document.md`, `ui/author.md`, spec 5 §5 and §12 |
 | 9 | **MCP adapter.** `McpAdapter` over a connection scope, tools from `permitted`, calls through `RemoteServer::handle`, `serveStdio`, bank's `--mcp-stdio` | ui, examples | 4 | a new `ui/agent.md` |
 
 **Order in the branch:** 1, 2, 3, 4, 5, 6, 7, 8, 9. Parts 1 and 2 are independent and 6 needs only 3, but one

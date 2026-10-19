@@ -123,7 +123,7 @@ std::expected<ClientArgs, std::string> readClientArgs(std::vector<std::string>& 
 }
 
 std::vector<std::string> clientVocabularies() {
-    return {std::string{ui::kVocabulary}, std::string{ui::kVocabulary2}, std::string{ui::kExprVocabulary}};
+    return {std::string{ui::kVocabulary}, std::string{ui::kExprVocabulary}};
 }
 
 ui::HelloRequest clientHello() {
