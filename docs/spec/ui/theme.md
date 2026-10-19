@@ -104,7 +104,9 @@ replaces one, and declares any other:
 
 **In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
 shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the index's `base`, and each of its surfaces
-resolved with its layer; a bundle without a theme index restores the defaults. No variant or density is chosen yet.
+resolved with its layer; a bundle without a theme index restores the defaults. It does so unless the frontend is told
+to ignore the bundle's theme (`FrontendConfig::bundleTheme`), for an application that applies its own. No variant or
+density is chosen yet.
 
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
 is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither

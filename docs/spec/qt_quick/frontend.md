@@ -36,7 +36,15 @@ int main(int argc, char** argv) {
   components and restyle map the backend uses (borrowed), the window's title, and the width class callback
   (`BackendOptions::onWidthClass`), and `devTools`, a `ui::DevelopmentTools`: with `On`, Ctrl+Shift+I in the
   window opens the inspector over the shell's focused screen ([`../ui/inspector.md`](../ui/inspector.md)).
+- `onEngine`, `std::function<void(QQmlEngine&, QQuickWindow&)>`: called once per run with the engine and the window,
+  after both exist and before the backend is built, where an application registers its QML modules, maps its
+  restyles and applies its own theme. Empty calls nothing.
+- `bundleTheme`, a `BundleTheme` (`Apply`, the default, or `Ignore`): whether the bundle's theme is applied when the
+  source opens.
 - `Frontend(argc, argv, config)`; `name()` is `"qt"`.
+
+There is no variant taking an application-owned engine or window: an application that must own those objects
+builds `qt_quick::Backend` itself ([`backend.md`](backend.md)).
 
 ## Run
 
@@ -47,12 +55,23 @@ int main(int argc, char** argv) {
 2. a `qt::QtExecutor`, the reactive runtime's owner and every bridge handler's callback executor;
 3. the `reactive::Runtime`;
 4. a `QtScheduler`;
-5. the `QQmlEngine`, the `QQuickWindow` (1024 × 768, the configured title) and the `Backend` on its content item;
+5. the `QQmlEngine`, the `QQuickWindow` (1024 × 768, the configured title), then `onEngine(engine, window)`, then the
+   `Backend` on the window's content item. Restyles and `applyTheme` made in the hook reach every widget the shell
+   creates, since the backend resolves a kind's component on its first use;
 6. the `AppContext` it lends: `runtime()`, `executor()`, `scheduler()`, `ioLoop()` (null: Qt's loop is the only one),
    `quit()`.
 
 Then `ui::runApp` opens the source, mounts the shell through `mountShell` when the source is ready, shows the window
-and runs a `QEventLoop`. With `devTools` `On`, a `qt_quick::InspectorWindow` is made before the loop and attached to the
+and runs a `QEventLoop`. Before the shell mounts, the bundle's theme is handled as `bundleTheme` says:
+
+- `Apply` applies the bundle's theme index, or the defaults for a bundle without one (`applyBundleTheme`). `run`
+  compares the `Theme` singleton's writable typed properties before and after `onEngine`; when the hook changed any,
+  it reports once on `std::cerr` that the theme `onEngine` applied is replaced by the bundle's, and to set
+  `bundleTheme` to `Ignore` to keep it.
+- `Ignore` leaves the theme as `onEngine` set it. A bundle that carries a theme index is reported once on
+  `std::cerr`: the bundle's theme is not applied.
+
+A problem applying the theme goes to `std::cerr` too. A source that fails to open applies nothing. With `devTools` `On`, a `qt_quick::InspectorWindow` is made before the loop and attached to the
 window; it reads the mounted shell through `inspectFocused`, and is hidden when the loop ends, before the shell is
 destroyed. On the `offscreen` platform the window renders in software. Teardown is the reverse: `runApp`
 destroys the screens and closes the source; then the backend, the window and the engine go, then the scheduler, the
@@ -65,6 +84,8 @@ runtime and the executor, and Qt last. A task posted to the executor after that 
 - Closing the window quits with 0.
 - A shell factory that throws quits with 1 inside `runApp`, and `run` rethrows once the teardown is done; an empty
   factory is `std::invalid_argument`, before anything is made.
+- An `onEngine` that throws: `run` destroys the window, the engine, the scheduler, the runtime and the executor, in
+  that order, and rethrows. The source is not opened and nothing is mounted.
 
 ## Choosing it
 
@@ -87,7 +108,11 @@ is logged. `pendingTimers()` counts the armed timers.
 `tests/qt_quick/test_qt_quick_frontend.cpp` is an executable of its own, with no `QGuiApplication` in `main`, since
 `run` makes one: a run opens the source, mounts the shell, and tears the shell down before it closes the source; a
 quit posted from the shell, a quit before the loop and a closed window each end the run with their code; a throwing
-factory ends it after the teardown; the option is named `qt` and is usable as the environment says.
+factory ends it after the teardown; the option is named `qt` and is usable as the environment says. `onEngine` runs
+before the backend has added anything to the window's content item and before the source opens; a throwing hook ends
+the run after the teardown with nothing mounted; with `Ignore` a bundle theme leaves what the hook set and is reported
+once, and with `Apply` a hook that changed the theme is reported once when the bundle's replaces it, and one that
+changed nothing is not.
 `tests/qt_quick/test_qt_quick_scheduler.cpp` drives `QtScheduler` on Qt's own timers, in real time with short delays.
 
 ## Design decisions

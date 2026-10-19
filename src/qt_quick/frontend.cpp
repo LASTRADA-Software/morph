@@ -3,12 +3,17 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QGuiApplication>
+#include <QMetaObject>
+#include <QMetaProperty>
+#include <QMetaType>
 #include <QObject>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QVariant>
+#include <QVariantList>
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -19,6 +24,7 @@
 #include <morph/qt_quick/scheduler.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/runtime.hpp>
+#include <morph/ui/theme.hpp>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -86,6 +92,31 @@ private:
     bool _running = false;
 };
 
+/// The values of the `Theme` singleton's writable typed properties, in declaration order; empty when there is none.
+/// A `var` property (the schemes a theme declared) holds a JavaScript value that compares unequal to itself, and is
+/// left out.
+QVariantList themeSnapshot(QQmlEngine& engine) {
+    QVariantList values;
+    QObject const* const theme =
+        engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr) {
+        return values;
+    }
+    QMetaObject const* const meta = theme->metaObject();
+    for (int index = QObject::staticMetaObject.propertyCount(); index < meta->propertyCount(); ++index) {
+        QMetaProperty const property = meta->property(index);
+        if (property.isWritable() && property.metaType() != QMetaType::fromType<QVariant>()) {
+            values.append(property.read(theme));
+        }
+    }
+    return values;
+}
+
+/// Whether a bundle's theme files hold a theme index, the file that gives a bundle a theme.
+bool carriesTheme(ui::Bundle const& bundle) {
+    return std::ranges::any_of(bundle.themes, [](auto const& file) { return ui::isThemeIndex(file.second); });
+}
+
 }  // namespace
 
 Frontend::Frontend(int& argc, char** argv, FrontendConfig config)
@@ -125,6 +156,14 @@ int Frontend::run(ui::AppSource& source) {
     QQuickWindow window;
     window.setTitle(detail::toQString(_config.title));
     window.resize(1024, 768);
+    // The hook runs before the backend exists, so what it maps and applies reaches every widget the shell makes. A
+    // throw unwinds the window, the engine, the scheduler, the runtime and the executor, in that order.
+    bool hookChangedTheme = false;
+    if (_config.onEngine) {
+        QVariantList const before = themeSnapshot(engine);
+        _config.onEngine(engine, window);
+        hookChangedTheme = themeSnapshot(engine) != before;
+    }
     Backend backend{engine, *window.contentItem(),
                     BackendOptions{.components = _config.components, .onWidthClass = _config.onWidthClass}};
     Context context{runtime, executor, scheduler};
@@ -142,12 +181,20 @@ int Frontend::run(ui::AppSource& source) {
     }
     return ui::runApp(
         context, source,
-        [this, &backend, &engine, &shown](ui::AppContext& opened, std::expected<ui::Bundle, ui::ConnectError> result) {
+        [this, &backend, &engine, &shown, hookChangedTheme](ui::AppContext& opened,
+                                                            std::expected<ui::Bundle, ui::ConnectError> result) {
             // The application's look, before the shell mounts its first screen.
-            if (result) {
+            if (result && _config.bundleTheme == BundleTheme::Apply) {
+                if (hookChangedTheme) {
+                    std::cerr << "morph::qt_quick: the theme onEngine applied is replaced by the bundle's; set "
+                                 "FrontendConfig::bundleTheme to Ignore to keep it\n";
+                }
                 for (std::string const& problem : applyBundleTheme(engine, result->themes)) {
                     std::cerr << "morph::qt_quick: " << problem << '\n';
                 }
+            } else if (result && carriesTheme(*result)) {
+                std::cerr << "morph::qt_quick: the bundle's theme is not applied: FrontendConfig::bundleTheme is "
+                             "Ignore\n";
             }
             auto shell = _config.mountShell(opened, backend, std::move(result));
             shown = shell.get();

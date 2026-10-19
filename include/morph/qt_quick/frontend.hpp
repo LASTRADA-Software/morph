@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -17,6 +18,9 @@
 ///
 /// Specified in `docs/spec/qt_quick/frontend.md`.
 
+class QQmlEngine;
+class QQuickWindow;
+
 namespace morph::qt_quick {
 
 class Components;
@@ -27,6 +31,12 @@ class Components;
 /// once, on the owner.
 using ShellFactory = std::function<std::unique_ptr<ui::MountedShell>(
     ui::AppContext& context, ui::IViewBackend& backend, std::expected<ui::Bundle, ui::ConnectError> opened)>;
+
+/// @brief Whether the bundle's theme is applied when the source opens.
+enum class BundleTheme : std::uint8_t {
+    Apply,  ///< The bundle's theme index, or the defaults for a bundle without one, replaces the `Theme` singleton's.
+    Ignore  ///< The theme stays as `FrontendConfig::onEngine` set it; a bundle that carries a theme is reported.
+};
 
 /// @brief What a `qt_quick::Frontend` runs with.
 struct FrontendConfig {
@@ -43,6 +53,13 @@ struct FrontendConfig {
     /// @brief Development mode (spec 6 §21): with `On`, Ctrl+Shift+I in the window opens the inspector over the screen
     ///        the shell shows (`ui::MountedShell::inspectFocused`). With `Off`, the key does nothing.
     ui::DevelopmentTools devTools = ui::DevelopmentTools::Off;
+    /// @brief Called once per run with the engine and the window, after both exist and before the backend is built:
+    ///        where an application registers its QML modules, maps its restyles and applies its own theme. Empty
+    ///        calls nothing. When it throws, `run` tears down what it made and rethrows; nothing is mounted.
+    std::function<void(QQmlEngine& engine, QQuickWindow& window)> onEngine;
+    /// @brief Whether the bundle's theme is applied when the source opens. With `Apply`, a theme `onEngine` set that
+    ///        the bundle's then replaces is reported once on `std::cerr`.
+    BundleTheme bundleTheme = BundleTheme::Apply;
 };
 
 /// @brief Whether a Qt Quick window can be shown here: on macOS, Windows and WebAssembly always; elsewhere when
