@@ -37,29 +37,19 @@ struct KindType {
 // container keeps its layout. The layout kinds are not restyled: they place other widgets and show nothing of their
 // own.
 // NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, kind beside type, reads as one.
-constexpr std::array<KindType, 23> kRestylable = {{{"text", "MorphText"},
-                                                   {"button", "MorphButton"},
-                                                   {"textInput", "MorphTextInput"},
-                                                   {"checkbox", "MorphCheckbox"},
-                                                   {"select", "MorphSelect"},
-                                                   {"menu", "MorphMenu"},
-                                                   {"panel", "MorphPanel"},
-                                                   {"tabs", "MorphTabs"},
-                                                   {"dialog", "MorphDialog"},
-                                                   {"busy", "MorphBusy"},
-                                                   {"table", "MorphTable"},
-                                                   {"dateTimeInput", "MorphDateTimeInput"},
-                                                   {"slider", "MorphSlider"},
-                                                   {"filePicker", "MorphFilePicker"},
-                                                   {"banner", "MorphBanner"},
-                                                   {"badge", "MorphBadge"},
-                                                   {"progress", "MorphProgress"},
-                                                   {"steps", "MorphSteps"},
-                                                   {"keyValue", "MorphKeyValue"},
-                                                   {"emptyState", "MorphEmptyState"},
-                                                   {"drawer", "MorphDrawer"},
-                                                   {"collapsible", "MorphCollapsible"},
-                                                   {"tableRow", "MorphTableRowBackground"}}};
+constexpr std::array<KindType, 24> kRestylable = {
+    {{"text", "MorphText"},           {"button", "MorphButton"},
+     {"textInput", "MorphTextInput"}, {"checkbox", "MorphCheckbox"},
+     {"select", "MorphSelect"},       {"menu", "MorphMenu"},
+     {"panel", "MorphPanel"},         {"tabs", "MorphTabs"},
+     {"dialog", "MorphDialog"},       {"busy", "MorphBusy"},
+     {"table", "MorphTable"},         {"dateTimeInput", "MorphDateTimeInput"},
+     {"slider", "MorphSlider"},       {"filePicker", "MorphFilePicker"},
+     {"banner", "MorphBanner"},       {"badge", "MorphBadge"},
+     {"progress", "MorphProgress"},   {"steps", "MorphSteps"},
+     {"keyValue", "MorphKeyValue"},   {"emptyState", "MorphEmptyState"},
+     {"drawer", "MorphDrawer"},       {"collapsible", "MorphCollapsible"},
+     {"textArea", "MorphTextArea"},   {"tableRow", "MorphTableRowBackground"}}};
 // NOLINTEND(modernize-use-designated-initializers)
 
 std::string errorsOf(QQmlComponent const& component) {

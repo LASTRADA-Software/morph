@@ -234,7 +234,9 @@ surface is `Theme.background`.
   does not is refused when it is mapped, naming what it lacks; the kind then keeps its `MorphUi` component. A base's
   properties are its restyle API, so a property a base gains is one a restyle written from scratch must then declare.
   There are two kinds of restyle:
-  - **A kind restyle** replaces a kind's whole component. A text input's restyle replaces its single-line component.
+  - **A kind restyle** replaces a kind's whole component. A text input's restyle (`textInput`) replaces its
+    single-line component, and a `textArea` restyle its multi-line one (`MorphTextArea`, whose API is
+    `MorphField`'s field API with `placeholder`, `edited`, `assigning` and `assign(value)`).
   - **A part restyle** replaces one drawn part inside a component C++ creates, never its layout. The container's
     component declares the part as a `Component` property, and C++ passes the context's component for the part's
     type, restyled or not, as an initial property when it makes the container.
@@ -276,7 +278,7 @@ software scene graph:
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
   `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a
-  destroy.
+  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
   driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
   name and press action, a key-value pair named `"<caption>: <value>"`, the test id as `objectName` and, from Qt

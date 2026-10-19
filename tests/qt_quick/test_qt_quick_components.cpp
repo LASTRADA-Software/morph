@@ -236,6 +236,44 @@ TEST_CASE("qt_quick components: a restyle maps a kind to a component that declar
     CHECK_FALSE(Scene::itemOf(*text).property("brand").isValid());
 }
 
+// Mutation: drop the `textArea` entry from the restylable kinds (the restyle is refused and the area is MorphUi's).
+TEST_CASE("qt_quick components: a textArea restyle is what a multi-line input is made of", "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost("BrandArea", 1,
+                       writeFile(dir, QStringLiteral("BrandArea.qml"),
+                                 "import QtQuick\nimport MorphUi\nMorphTextArea { property bool brand: true }\n"));
+    components.addHost("PlainArea", 1,
+                       writeFile(dir, QStringLiteral("PlainArea.qml"),
+                                 "import QtQuick\nimport MorphUi\n"
+                                 "MorphField { property string placeholder; property bool edited; "
+                                 "property bool assigning }\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "textArea", "PlainArea");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason.contains("does not declare"));
+    CHECK(refused.error().reason.contains("assign"));
+    REQUIRE(components.restyle(probeEngine, "textArea", "BrandArea").has_value());
+
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    auto area = scene.backend().createTextInput(nullptr, ui::TextInputMode::Multiline);
+    auto line = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    std::vector<std::string> edits;
+    area->setOnChange([&edits](std::string const& text) { edits.push_back(text); });
+    area->setText("first");
+    scene.settle();
+    CHECK(Scene::itemOf(*area).property("brand").toBool());
+    CHECK_FALSE(Scene::itemOf(*line).property("brand").isValid());
+    CHECK(Scene::controlOf(*area).property("text").toString() == QStringLiteral("first"));
+    scene.click(Scene::controlOf(*area));
+    scene.enter(QStringLiteral("x"));
+    REQUIRE_FALSE(edits.empty());
+    CHECK(edits.back().contains('x'));
+    CHECK(reported.size() == 1);  // the refusal above
+}
+
 // Mutation: make the row's background from the stock MorphUi component instead of the context's (the restyle's
 // marker and height never show); or stop writing `alternate` (the stripes do not follow the move).
 TEST_CASE("qt_quick components: a tableRow restyle draws every row's background, and the row takes its height",

@@ -72,8 +72,8 @@ public:
     /// @brief Maps a built-in kind to a registered component, checking that the component declares every property
     ///        and function of the kind's `MorphUi` component.
     /// @param engine    The engine the backend renders with. Borrowed for the call.
-    /// @param kind      The kind as a document names it (`button`, `textInput`, `checkbox`, `select`, …), or a part
-    ///                  kind (`tableRow`).
+    /// @param kind      The kind as a document names it (`button`, `textInput`, `checkbox`, `select`, …), the
+    ///                  multi-line input (`textArea`), or a part kind (`tableRow`).
     /// @param component The registered component's name.
     /// @return Nothing, or why the mapping is refused; a refusal is also reported, and the kind keeps its
     ///         `MorphUi` component.
