@@ -509,6 +509,7 @@ target_sources(morph
         include/morph/ui/dev_tools.hpp
         include/morph/ui/inspector.hpp
         include/morph/ui/workspace.hpp
+        include/morph/ui/workspace_model.hpp
         include/morph/ui/navigator.hpp
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp

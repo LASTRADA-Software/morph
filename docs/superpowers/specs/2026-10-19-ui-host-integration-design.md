@@ -569,8 +569,12 @@ public:
 - `Workspace` builds a `WorkspaceModel` whose `mountPage` makes a page slot of its bar (and the head row of §8.1) and
   mounts into it, and drives `setTabs`/`setSelected` from `tabs()`/`active()`. It keeps the three chords, `root()`,
   index-based `close`/`activate`/`handleOf` over the model's order, and exposes `model()`.
+- **As built.** `WorkspaceScreen`, `WorkspaceStart` and `WorkspaceOptions` live in `workspace_model.hpp`, which
+  `workspace.hpp` includes. The model also answers `order()`, the open tabs' ids read without tracking, which
+  `Workspace` maps its indexes through. `Workspace`'s head row reads the head through the model (a tracked read of
+  `tabs()`), since `mountPage` mounts the row before the model holds the tab.
 - **Misuse.** An empty `mountPage` is `std::invalid_argument` at construction; a `mountPage` that throws is reported
-  as the `MountError` it would have answered, and opens nothing; a `WorkspaceTabId` the model does not hold (never
+  as the `MountError` it would have answered (as does one answering a null handle), and opens nothing; a `WorkspaceTabId` the model does not hold (never
   issued, or closed) is `std::out_of_range` from every member that takes one except `handleOf`, which answers null.
 - **Terminal.** The model has no widgets; `Workspace` runs on both backends as today.
 - **Specs.** `ui/workspace.md`: a new first section *Model* with the API, the existing sections restated as the

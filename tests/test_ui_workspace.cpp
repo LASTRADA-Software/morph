@@ -425,3 +425,148 @@ TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "
     CHECK(head->actions().peek().empty());
     CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
 }
+
+namespace {
+
+using morph::ui::WorkspaceModel;
+using morph::ui::WorkspaceModelOptions;
+using morph::ui::WorkspaceTabId;
+
+/// A model over the harness whose pages are slots it counts: what an application's own tab strip has.
+struct ModelPages {
+    explicit ModelPages(Harness& harness, Host& host, WorkspaceOptions options = catalog()) : _harness{&harness} {
+        WorkspaceModelOptions made{std::move(options), {}, {}};
+        made.mountPage = [this, &host](WorkspaceTabId tab, std::string_view screenId, ParamMap const& params)
+            -> std::expected<std::unique_ptr<ScreenHandle>, morph::ui::MountError> {
+            ++mounted;
+            auto page = _harness->backend.createSlot(nullptr);
+            auto handle = host.mountInto(screenId, params, *page);
+            if (handle) {
+                pages.insert_or_assign(tab.value, std::move(page));
+            }
+            return handle;
+        };
+        made.unmountPage = [this](WorkspaceTabId tab) {
+            // The handle is gone by now: the model no longer answers it, and the page is still the application's.
+            // While the model is destroyed, `model` is already null.
+            unmountedAfterHandle.push_back((model == nullptr || model->handleOf(tab) == nullptr) &&
+                                           pages.contains(tab.value));
+            pages.erase(tab.value);
+        };
+        model = std::make_unique<WorkspaceModel>(harness.runtime, host, std::move(made));
+    }
+    ~ModelPages() { model.reset(); }
+    ModelPages(ModelPages const&) = delete;
+    ModelPages& operator=(ModelPages const&) = delete;
+    ModelPages(ModelPages&&) = delete;
+    ModelPages& operator=(ModelPages&&) = delete;
+
+    int mounted = 0;
+    std::vector<bool> unmountedAfterHandle;
+    std::map<std::uint64_t, std::unique_ptr<morph::ui::SlotWidget>> pages;
+    std::unique_ptr<WorkspaceModel> model;
+
+private:
+    Harness* _harness;
+};
+
+}  // namespace
+
+// Mutation: keep the logic in Workspace and leave the model opening a new tab every time (note 1 twice, home
+// twice, the empty draft kept).
+TEST_CASE("workspace model: identity, singleton and reuseEmpty decide which tab an open answers", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    ModelPages pages{harness, host};
+    WorkspaceModel& model = *pages.model;
+    auto const first = model.open("note", note(1));
+    REQUIRE(first.has_value());
+    CHECK(model.open("note", note(1)).value() == *first);
+    auto const home = model.open("home", {});
+    CHECK(model.open("home", {}).value() == home.value());
+    auto const empty = model.open("draft", {});
+    REQUIRE(empty.has_value());
+    auto const kept = model.open("draft", ParamMap{{"noteId", Value{std::int64_t{5}}}});
+    REQUIRE(kept.has_value());
+    CHECK(*kept != *empty);
+    harness.settle();
+    CHECK(pages.mounted == 4);
+    CHECK(model.order() == std::vector<WorkspaceTabId>{*first, *home, *kept});
+    CHECK(model.handleOf(*empty) == nullptr);
+    CHECK(model.active().peek() == kept);
+    CHECK(pages.unmountedAfterHandle == std::vector<bool>{true});
+    CHECK_THROWS_AS(model.activate(*empty), std::out_of_range);
+    CHECK_THROWS_AS(model.close(WorkspaceTabId{999}, {}), std::out_of_range);
+}
+
+// Mutation: let tabs() follow only opens and closes (a rename never reaches the strip).
+TEST_CASE("workspace model: tabs() changes once per open and once per title change", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    ModelPages pages{harness, host};
+    WorkspaceModel& model = *pages.model;
+    int runs = 0;
+    morph::reactive::Effect const watch{harness.runtime, [&] {
+                                            static_cast<void>(model.tabs().get());
+                                            ++runs;
+                                        }};
+    CHECK(runs == 1);
+    REQUIRE(model.open("note", note(1)).has_value());
+    harness.settle();
+    CHECK(runs == 2);
+    REQUIRE(model.tabs().peek().size() == 1);
+    CHECK(model.tabs().peek().front().title == "Note");
+    harness.backend.click(harness.byTestId("Button", "rename"));
+    harness.settle();
+    CHECK(runs == 3);
+    CHECK(model.tabs().peek().front().title == "Renamed");
+    harness.settle();
+    CHECK(runs == 3);
+}
+
+// Mutation: let closeAll go on past a veto (the dirty note closes too).
+TEST_CASE("workspace model: a veto stops closeAll, forceCloseAll closes everything, newest first", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, false};
+    std::vector<std::vector<std::string>> records;
+    WorkspaceOptions options = catalog();
+    options.onRecord = [&records](std::vector<std::string> const& routes) { records.push_back(routes); };
+    ModelPages pages{harness, host, options};
+    WorkspaceModel& model = *pages.model;
+    REQUIRE(model.open("note", note(1)).has_value());
+    REQUIRE(model.open("note", note(2)).has_value());
+    harness.backend.click(harness.backend.all("Button").front());  // edit: the first note now has unsaved changes
+    harness.settle();
+    std::optional<bool> closed;
+    model.closeAll([&closed](bool all) { closed = all; });
+    harness.settle();
+    CHECK(closed == false);
+    CHECK(model.order().size() == 2);
+    model.forceCloseAll();
+    CHECK(model.order().empty());
+    CHECK(pages.unmountedAfterHandle == std::vector<bool>{true, true});
+    REQUIRE_FALSE(records.empty());
+    CHECK(records.back().empty());
+
+    // The record reopens the tabs it lists.
+    std::vector<std::string> const recorded{records.at(1)};
+    CHECK(model.start({.start = "resume", .fallback = {}, .recorded = recorded}) == 2);
+    CHECK(model.order().size() == 2);
+}
+
+TEST_CASE("workspace model: an empty mountPage is refused, and one that throws opens nothing", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    CHECK_THROWS_AS(WorkspaceModel(harness.runtime, host, WorkspaceModelOptions{}), std::invalid_argument);
+    WorkspaceModelOptions throwing{catalog(), {}, {}};
+    throwing.mountPage = [](WorkspaceTabId, std::string_view,
+                            ParamMap const&) -> std::expected<std::unique_ptr<ScreenHandle>, morph::ui::MountError> {
+        throw std::runtime_error{"no page"};
+    };
+    WorkspaceModel model{harness.runtime, host, std::move(throwing)};
+    auto const opened = model.open("home", {});
+    REQUIRE_FALSE(opened.has_value());
+    CHECK(opened.error().reason == "no page");
+    CHECK(model.order().empty());
+    CHECK(model.handleOf(WorkspaceTabId{1}) == nullptr);
+}

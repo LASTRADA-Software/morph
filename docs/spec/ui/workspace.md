@@ -1,10 +1,12 @@
-# The workspace shell (`ui::Workspace`)
+# The workspace shell (`ui::WorkspaceModel`, `ui::Workspace`)
 
-`include/morph/ui/workspace.hpp`. Spec 6 §7 and §15: tabs over screens, each one screen instance, mounted through a
-`DocumentScreenHost` into the tab's own page.
+`include/morph/ui/workspace_model.hpp` and `include/morph/ui/workspace.hpp`. Spec 6 §7 and §15: tabs over screens,
+each one screen instance, mounted through a `DocumentScreenHost` into the tab's own page. `WorkspaceModel` holds the
+tab logic with no widgets, for an application's own tab strip; `Workspace` is the framework's tab bar over it.
 
 ## Contents
 
+- [Model](#model)
 - [Shape](#shape)
 - [Opening](#opening)
 - [Closing](#closing)
@@ -15,12 +17,41 @@
 - [Navigator and pins](#navigator-and-pins)
 - [Design decisions](#design-decisions)
 
+## Model
+
+`WorkspaceModel(runtime, host, WorkspaceModelOptions)` holds the tabs: which screens are open, in which order, which
+one is active, and how they open, close and are recorded. The rules of the sections below are its own; `Workspace`
+answers them by index over its order.
+
+- **Options.** `WorkspaceModelOptions` is `WorkspaceOptions` (`screens`, `hosts`, `onRecord`, `scheduler`,
+  `recordDelay`, `onChanged`) and two callbacks. `mountPage(tab, screenId, params)` makes the tab's page and mounts
+  the screen in it, a document screen or a host screen alike, and answers its handle, which the model owns.
+  `unmountPage(tab)` is called after the tab's handle is destroyed, so the application destroys the page.
+- **Tabs.** A tab is a `WorkspaceTabId`, issued when it opens and never reused. `open` answers the tab it opened or
+  focused; `activate`, `close`, `closeOthers` take one; `closeAll`, `closeSaved`, `forceCloseAll`, `start`, `next`,
+  `previous`, `record` and `flushRecord` are as below.
+- **Observed values.** `tabs()` is a `reactive::Computed` of the open tabs in order, each a
+  `WorkspaceTabState{id, screenId, identity, title, dirty}` that follows its handle; `active()` one of the active
+  tab. Both are equality-gated, so an Effect over `tabs()` runs once per open, close, move, and change of a tab's
+  title, unsaved state or identity. `order()` lists the open tabs' ids without tracking, and `handleOf(tab)` is a
+  tab's handle. `onChanged` is called after each such change, at once.
+- **Identity and routes.** `DocumentScreenHost` is borrowed for `identityOf`, `routeOf` and `parseRoute`; mounting
+  is `mountPage`'s.
+- **Misuse.** An empty `mountPage` is `std::invalid_argument` at construction; a `mountPage` that throws is answered
+  as a `MountError` with the exception's text, and opens nothing; a `WorkspaceTabId` the model does not hold (never
+  issued, or closed) is `std::out_of_range` from every member that takes one, except `handleOf`, which answers null.
+- The destructor unmounts every screen without asking, newest first, each followed by its `unmountPage`.
+
 ## Shape
 
-- `Workspace(runtime, backend, host, options, parent)` makes a `TabsWidget` appended to `parent` (a backend root
+- `Workspace(runtime, backend, host, options, parent)` builds a `WorkspaceModel` whose `mountPage` makes a page slot
+  of its bar, mounts the screen into it (a host screen from `hosts`) and the head row above it, and whose
+  `unmountPage` destroys the page; `model()` answers it. It makes a `TabsWidget` appended to `parent` (a backend root
   when it is null): the shell's root, which the host places. Each tab is a page slot of that bar, and its screen is
-  mounted into it with `DocumentScreenHost::mountInto`. The bar and every page stretch both ways, so a screen whose
-  root stretches fills the page; a content-sized one keeps its own size.
+  mounted into it with `DocumentScreenHost::mountInto`. On each change of the model the bar shows its tabs in order,
+  with their captions, the active one selected and its page alone visible, and moves a page the model moved. The bar
+  and every page stretch both ways, so a screen whose root stretches fills the page; a content-sized one keeps its
+  own size.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
@@ -55,7 +86,8 @@ A refused mount answers its `MountError` and opens nothing; its page is destroye
   unsaved changes) run each screen's `requestClose` (spec 6 §3), one tab at a time, and stop at the first screen that
   stays open: `done(false)`. `done(true)` when every tab asked closed. A dirty screen without `onClose` goes to the
   `CloseGuard` the application gave the host.
-- A closed tab's reactive scope, screen and page are destroyed in that order. When the active tab closes, the most
+- A closed tab's reactive scope, screen and page are destroyed in that order: the model destroys the first two,
+  then `unmountPage` lets the page go. When the active tab closes, the most
   recently used of the rest is shown.
 - Ctrl+W closes the active tab.
 
@@ -75,12 +107,15 @@ badges, a spacer and the actions as buttons, with test ids `head`, `head_subtitl
 place among the visible ones) and `head_action_<id>`. A button is disabled while its action is, and a click runs the
 action through `ScreenHead::run`. The row is hidden while the head has no subtitle, badges or actions, so a screen
 without them looks as it would without the row; a handle without a head (a host screen) gets no row. The row is
-mounted after the screen, since it reads the handle, and moved above it; it is unmounted before the handle goes.
+mounted after the screen, since it reads the handle, and moved above it. It reads the head through the model, a
+tracked read of `tabs()`, so a row mounted while the model is still opening the tab reads the head once the model
+holds it, and one whose handle has gone reads nothing.
 
 ## Captions
 
-A tab's caption is its screen's `title`, followed by ` •` while `dirty` is true. Each tab has an effect over its
-handle's `title` and `dirty` that re-sends every caption and the selection with `setTabs` and `setSelected`. A tab is
+A tab's caption is its screen's `title`, followed by ` •` while `dirty` is true. Each tab of the model has an effect
+over its handle's `title`, `dirty` and `identity` that bumps `tabs()` and calls `onChanged`, on which the bar re-sends
+every caption and the selection with `setTabs` and `setSelected`. A tab is
 re-keyed without any action: `open` reads each tab's identity from its handle when it looks.
 
 ## Start and record
