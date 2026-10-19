@@ -277,6 +277,11 @@ beside its evaluator and hands it to the shell as `SessionOptions::watcher`.
 
 ## Files
 
+The file store is the path for large files. A document may also move a file's bytes inline, in a mutation's body or
+a value it holds (`upload` into bytes, `download` from bytes), under the session's cap
+(`SessionOptions::maxInlineFileBytes`, 1 MiB by default, at most `kMaxInlineFileBytes`); above it, the file goes
+through the store, whose chunked transfer has no such bound (`docs/spec/ui/interpreter.md`, "Commands").
+
 `ui-file` is the file side channel of `files/1` (spec 6 §18). A server serves it when its `UiService` is built with
 an `IFileStore` (`ui/file_store.hpp`); without one, `ui-file` is an unknown kind.
 

@@ -33,7 +33,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `Dispatcher` | Binds a model by type id, privately or to a shared instance (`bind`), and returns a `ModelChannel` whose `execute(actionId, bodyJson, CallOptions)` sends one action and resolves with the reply's JSON text on the runtime's owner. |
 | `BridgeDispatcher` | The application's `Dispatcher`: `bind` makes a `bridge::RawHandler` (`bindByType`, and `attach` for a key), `execute` is `executeRaw`. An `evaluate` query goes through the `Evaluator` it was built with (`ui::evaluatorOver`, the UI service's `ui-evaluate`); without one it is refused with a `std::runtime_error`. It has no offline queue of its own: `queueOffline` is ignored unless a `QueueingDispatcher` wraps it. A shared binding without a key is left unattached, which the bridge refuses at the first call. |
 | `QueueingDispatcher` | The client's offline queue (`include/morph/ui/queueing_dispatcher.hpp`), around any `Dispatcher`. A call made with `queueOffline` that fails with `backend::DisconnectedError` is held, and the caller's completion stays pending, so the mutation stays `pending` and its elements `stale`. While anything is held, a later queued call joins the queue unsent, so the server sees calls in the order they were made. `replay()` re-sends the held calls oldest first, one at a time, and settles each caller with its replay: a refusal runs the mutation's `onError`, and a call still unreachable stops the replay and stays held with every call behind it. A call without `queueOffline`, and an evaluation, are never held. `held()` and `setOnHeld` report the count. When to replay is the host's: it calls `replay()` once its transport reconnects. |
-| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
+| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `readFile(file, maxBytes, done)` and `saveFile(InlineFile{name, mediaType, bytes}, option, done)` (a file's bytes moved inline; a host reads a file's size before its bytes and refuses one over `maxBytes`), `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
 | `Session` | What screens of one client session share: the query cache, the mounted queries, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
 | `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, a mutation run, or an upload or download in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
@@ -43,7 +43,10 @@ Read this before changing what a mounted document does. What a document may say 
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
 `backendChanged`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
-(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source).
+(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source), and `maxInlineFileBytes`,
+the most bytes a document moves inline in one file (default `kDefaultInlineFileBytes`, 1 MiB). `Session` construction
+throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, ⌊(`wire::kMaxEnvelopeBytes` −
+64 KiB) · 3 / 4⌋ = 6 242 304 bytes: base64 grows bytes by 4/3, and 64 KiB are left for the rest of the envelope.
 
 
 ## The app root scope
@@ -254,6 +257,16 @@ its target does not resolve, and when the host does not support it.
   with the file reference added to the mutation's body under `as` (`file` by default). A body cannot
   name the reference itself, since a mutation's body is checked where the mutation is declared.
 - `download` to `preview` writes the local reference to the state it names.
+- **Inline bytes.** `upload` with `"into": "bytes"` asks the host's `readFile` with the session's cap, refuses a
+  reply over the cap even when the host did not, and runs the mutation with `as` (default `file`) set to the bytes
+  in base64, and `nameAs` and `typeAs`, when given, to the file's name and media type; its transfer's `pending`,
+  `progress` (1 once the bytes are read) and `error` behave as for a reference. `download` with `"from": "bytes"`
+  evaluates its file to base64 text (with or without padding) or a list of integers 0 to 255, decodes it, and calls
+  `saveFile` with its `name` and `type`; content over the cap, or that does not decode, fails the command with a
+  diagnostic (`download: 2.4 MiB is over the 1 MiB inline cap; serve it through the file store`) and the host is
+  not called. A field component writing a member whose schema says `contentEncoding: base64`
+  (`FieldSpec::bytes`) is held to the cap too (`field <name>: <n> bytes is over the <cap> inline cap`); any other
+  field is not.
 - `retry` refetches the failed queries of the innermost boundary.
 
 ## Lowering

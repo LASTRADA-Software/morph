@@ -494,3 +494,30 @@ TEST_CASE("form node: without the component loaded, the field's built-in control
     CHECK_FALSE(h.backend.find("Custom", "component", "ReadingsGrid").has_value());
     CHECK(h.backend.find("Button", "testId", "add_readings").has_value());
 }
+
+// Mutation: skip the cap on a field component's change (the oversize file lands in the base64 member).
+TEST_CASE("form node: a component writing a base64 member is held to the inline cap, and a plain one is not",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    h.backend.loadsComponents({"Sheet"});
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sheet", "models": { "sample": { "type": "Lims_SampleModel" } },
+      "components": { "Sheet": { "host": "Sheet", "version": 1, "props": { "value": "json" },
+                                 "events": { "change": "any" }, "fallback": { "kind": "text", "text": "-" } } },
+      "view": { "kind": "form", "id": "att", "model": "sample", "action": "Lims_AttachSheet", "submit": "explicit",
+                "fields": { "sheet": { "component": "Sheet" }, "note": { "component": "Sheet" } } } })");
+    h.settle();
+    std::vector<int> const sheets = h.backend.all("Custom");
+    REQUIRE(sheets.size() == 2);
+    std::string const big(((morph::ui::kDefaultInlineFileBytes + 3) / 3) * 4, 'A');
+    h.backend.raiseEvent(sheets.at(0), "change", "\"" + big + "\"");
+    h.backend.raiseEvent(sheets.at(1), "change", "\"" + big + "\"");
+    h.settle();
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "field sheet: 1048578 bytes is over the 1048576 inline cap");
+    CHECK(readJson(*screen, R"({"ref":"att.sheet.value"})") == "null");
+    CHECK(readJson(*screen, R"({"ref":"att.note.value"})") == "\"" + big + "\"");
+    h.backend.raiseEvent(sheets.at(0), "change", R"("AQID")");
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"att.sheet.value"})") == R"("AQID")");
+}

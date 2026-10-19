@@ -131,6 +131,9 @@ A command list is an array of commands, or one command object. `Command` carries
 | `binding` | `run`'s and `upload`'s `as` |
 | `option` | `navigate`'s `as`; `notify`'s `role`; `download`'s `dialog` or `preview` |
 | `transfer` | `upload`'s `id`, whose `progress`, `pending` and `error` are element values |
+| `bytes` | `download`'s `"from": "bytes"` and `upload`'s `"into": "bytes"` (default `ref`): the file moves inline, under the session's cap |
+| `mediaType` | `download`'s `type`, the media type of inline bytes |
+| `nameAs`, `typeAs` | `upload`'s body members for an inline file's name and media type |
 | `commands`, `alternative` | `seq` and `all` steps; `if`'s branches; `navigate`'s `onResult` and `onCancel` |
 
 `run`'s `as` names the element of `each` inside its body when `each` is given, and the reply for
@@ -240,7 +243,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 - **Targets.** `set` names state, an input (`textInput`, `checkbox`, `select`, `dateTimeInput`,
   `slider`) or `app.name`; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
   `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`); `focus` an element;
-  `resetPrefs` a point or `all`; a download to preview a state. A check's targets are elements;
+  `resetPrefs` a point or `all`; a download to preview a state. `from` and `into` are `ref` or `bytes`; a download
+  from bytes gives a `name`; `type` is given only with `"from": "bytes"`, and `nameAs` and `typeAs` only with
+  `"into": "bytes"`. A check's targets are elements;
   `optimistic` names a query of the document.
 - **Models.** Queries, mutations and model-backed nodes name a model alias in scope. An alias in a
   row scope names its `instance`; only a screen's own aliases borrow (`{"from": alias}`).

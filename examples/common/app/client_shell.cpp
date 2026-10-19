@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -30,6 +31,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -74,6 +76,21 @@ std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
 /// install the principal a sign-in mutation answered into the source; and the file commands, which read a picked file
 /// from disk to upload it and save a downloaded one, moving the bytes over the source's file side channel.
 class Application final : public ui::InterpreterHost {
+    // Writes @p bytes under the suggested name, else @p own, in @p directory, and answers the saved path. Only the
+    // name's last component is kept: a file never lands outside the downloads directory.
+    static std::expected<ui::Value, std::string> save(std::filesystem::path const& directory,
+                                                      std::string const& suggested, std::string const& own,
+                                                      std::string const& bytes) {
+        auto const leaf = std::filesystem::path{suggested.empty() ? own : suggested}.filename();
+        auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);
+        std::ofstream out{target, std::ios::binary};
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (!out) {
+            return std::unexpected("cannot write " + target.string());
+        }
+        return ui::Value{target.string()};
+    }
+
 public:
     /// The shell's side of a sign-in: install the principal and token, reload, then mount.
     using SignedIn = std::function<void(std::string principal, std::string token)>;
@@ -141,6 +158,45 @@ public:
         return true;
     }
 
+    // Reads a picked file whose bytes a document moves inline; its size is read first, and one over the cap is
+    // refused without reading it.
+    bool readFile(ui::Value const& file, std::size_t maxBytes,
+                  std::function<void(std::expected<ui::InlineFile, std::string>)> done) override {
+        auto const path = pickedPath(file);
+        if (!path) {
+            return false;
+        }
+        std::error_code error;
+        std::uintmax_t const size = std::filesystem::file_size(*path, error);
+        if (error) {
+            done(std::unexpected("cannot read " + path->string()));
+            return true;
+        }
+        if (size > maxBytes) {
+            done(std::unexpected(path->filename().string() + " is " + std::to_string(size) + " bytes, over the " +
+                                 std::to_string(maxBytes) + "-byte inline cap"));
+            return true;
+        }
+        std::ifstream input{*path, std::ios::binary};
+        if (!input) {
+            done(std::unexpected("cannot read " + path->string()));
+            return true;
+        }
+        std::string bytes{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+        done(ui::InlineFile{.name = path->filename().string(), .mediaType = {}, .bytes = std::move(bytes)});
+        return true;
+    }
+
+    // Saves a file a document holds the bytes of, as `download` saves a fetched one.
+    bool saveFile(ui::InlineFile const& file, std::string const& option,
+                  std::function<void(std::expected<ui::Value, std::string>)> done) override {
+        if (option == "preview") {
+            return false;
+        }
+        done(save(_downloads, file.name, file.name, file.bytes));
+        return true;
+    }
+
     // Saves the file under the name the screen suggested, else its own, in the downloads directory, and answers the
     // saved path. Only saving is supported: a preview needs a viewer the shell does not have.
     bool download(ui::Value const& file, std::string const& option, ui::Value const& name,
@@ -158,17 +214,7 @@ public:
                                 done(std::unexpected(got.error()));
                                 return;
                             }
-                            // Only the name's last component: a file never lands outside the downloads directory.
-                            auto const leaf =
-                                std::filesystem::path{suggested.empty() ? got->name : suggested}.filename();
-                            auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);
-                            std::ofstream out{target, std::ios::binary};
-                            out.write(got->bytes.data(), static_cast<std::streamsize>(got->bytes.size()));
-                            if (!out) {
-                                done(std::unexpected("cannot write " + target.string()));
-                                return;
-                            }
-                            done(ui::Value{target.string()});
+                            done(save(directory, suggested, got->name, got->bytes));
                         });
         return true;
     }

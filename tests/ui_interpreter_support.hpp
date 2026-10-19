@@ -187,6 +187,12 @@ public:
     std::vector<Value> signedIn;
     /// @brief How often permissions went stale.
     int stale = 0;
+    /// @brief The last inline read's completion.
+    std::function<void(std::expected<InlineFile, std::string>)> readDone;
+    /// @brief The cap the last inline read was given.
+    std::size_t readCap = 0;
+    /// @brief The files `saveFile` was given, in order; each is answered `null` at once.
+    std::vector<InlineFile> saved;
     /// @brief Whether `upload` and `download` answer "not supported".
     bool refuseTransfers = false;
     /// @brief Whether every other request answers "not supported".
@@ -260,6 +266,23 @@ public:
                       glz::write_json(valueToJson(name)).value_or(""));
         downloadDone = std::move(done);
         return !refuseTransfers;
+    }
+    bool readFile(Value const& file, std::size_t maxBytes,
+                  std::function<void(std::expected<InlineFile, std::string>)> done) override {
+        log.push_back("readFile " + glz::write_json(valueToJson(file)).value_or("") + " " + std::to_string(maxBytes));
+        readCap = maxBytes;
+        readDone = std::move(done);
+        return !refuseTransfers;
+    }
+    bool saveFile(InlineFile const& file, std::string const& option,
+                  std::function<void(std::expected<Value, std::string>)> done) override {
+        log.push_back("saveFile " + file.name + " " + option);
+        if (refuseTransfers) {
+            return false;
+        }
+        saved.push_back(file);
+        done(Value{});
+        return true;
     }
     void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override {
         log.push_back("pref " + screen + " " + point + " " + glz::write_json(valueToJson(value)).value_or(""));
@@ -345,6 +368,11 @@ inline Catalog corpusCatalog() {
         if (action == "Lims_ConfirmSample") {
             return std::string{R"({"type":"object","title":"Confirm","properties":{
               "sampleId":{"type":"integer","title":"Sample","x-order":0}},"required":["sampleId"]})"};
+        }
+        if (action == "Lims_AttachSheet") {
+            return std::string{R"({"type":"object","title":"Sheet","properties":{
+              "sheet":{"type":"string","title":"Sheet","contentEncoding":"base64","x-order":0},
+              "note":{"type":"string","title":"Note","x-order":1}}})"};
         }
         if (action == "Lims_RecordReadings") {
             return std::string{R"({"type":"object","title":"Readings","properties":{

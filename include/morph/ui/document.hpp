@@ -261,8 +261,10 @@ enum class CommandKind : std::uint8_t {
     Retry,          ///< `{"retry": true}`
     SignIn,         ///< `{"signIn": {"from": "m"}}`
     SignOut,        ///< `{"signOut": true}`
-    Upload,         ///< `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}`
-    Download,  ///< `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}`
+    Upload,         ///< `{"upload": e, "to": "m", "as": "x"?, "id": "t"?, "into": "bytes"?, "nameAs"?, "typeAs"?}`
+    /// `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}`, either
+    /// with `"from": "bytes"`, a `name` and a `type`
+    Download,
 };
 
 /// @brief One command. Which members a kind uses is listed with each member.
@@ -287,6 +289,14 @@ struct Command {
     std::string option;
     /// @brief The transfer id of `upload`, whose progress is an element value.
     std::string transfer;
+    /// @brief Whether the file moves inline: `download`'s `"from": "bytes"`, `upload`'s `"into": "bytes"`.
+    bool bytes = false;
+    /// @brief `download`'s media type of inline bytes.
+    ExprPtr mediaType;
+    /// @brief `upload`'s body members for an inline file's name and media type; empty for none.
+    std::string nameAs;
+    /// @brief See `nameAs`.
+    std::string typeAs;
     /// @brief Nested commands: `seq` and `all`; `if`'s then branch; `navigate`'s `onResult`.
     Commands commands;
     /// @brief The alternative: `if`'s else branch; `navigate`'s `onCancel`.
@@ -1467,7 +1477,7 @@ private:
     struct CommandSpec {
         std::string_view key;
         CommandKind kind;
-        std::array<std::string_view, 4> companions;
+        std::array<std::string_view, 6> companions;
     };
 
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per command reads as a table.
@@ -1493,8 +1503,8 @@ private:
         {"retry", CommandKind::Retry, {}},
         {"signIn", CommandKind::SignIn, {}},
         {"signOut", CommandKind::SignOut, {}},
-        {"upload", CommandKind::Upload, {"to", "as", "id"}},
-        {"download", CommandKind::Download, {"save", "name", "to", "as"}},
+        {"upload", CommandKind::Upload, {"to", "as", "id", "into", "nameAs", "typeAs"}},
+        {"download", CommandKind::Download, {"save", "name", "to", "as", "from", "type"}},
     }};
     // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1663,6 +1673,18 @@ private:
                 if (Json const* const transfer = member(fields, "id")) {
                     cmd.transfer = nameOf(*transfer, pointerAppend(path, "id"), "`id` is a name");
                 }
+                static constexpr std::array<std::string_view, 2> kInto = {"ref", "bytes"};
+                cmd.bytes = choiceOf(fields, "into", path, kInto) == "bytes";
+                for (auto const& [key, slot] : {std::pair{"nameAs", &cmd.nameAs}, std::pair{"typeAs", &cmd.typeAs}}) {
+                    if (Json const* const name = member(fields, key)) {
+                        if (!cmd.bytes) {
+                            refuse(pointerAppend(path, key),
+                                   "`" + std::string{key} +
+                                       "` names a body member for inline bytes; give `\"into\": \"bytes\"`");
+                        }
+                        *slot = nameOf(*name, pointerAppend(path, key), "a body member is a name");
+                    }
+                }
                 break;
             }
             case CommandKind::Download:
@@ -1697,6 +1719,19 @@ private:
 
     static void download(Command& cmd, Json::object_t const& fields, Json const& primary, std::string const& path) {
         cmd.value = expr(primary, pointerAppend(path, "download"));
+        static constexpr std::array<std::string_view, 2> kFrom = {"ref", "bytes"};
+        cmd.bytes = choiceOf(fields, "from", path, kFrom) == "bytes";
+        if (cmd.bytes) {
+            // Inline bytes carry no name or type of their own, so the document gives the name.
+            if (member(fields, "name") == nullptr) {
+                refuse(path, "a download from bytes names its file with `name`");
+            }
+            cmd.extra = optionalExpr(fields, "name", path);
+            cmd.mediaType = optionalExpr(fields, "type", path);
+        } else if (member(fields, "type") != nullptr) {
+            refuse(pointerAppend(path, "type"),
+                   "`type` is the media type of inline bytes; give `\"from\": \"bytes\"`");
+        }
         std::string const save = text(fields, "save", path, false);
         std::string const destination = text(fields, "to", path, false);
         if (save == "dialog" && destination.empty()) {
@@ -3040,6 +3075,9 @@ private:
                 checkExpr(*cmd.value, context);
                 if (cmd.extra) {
                     checkExpr(*cmd.extra, context);
+                }
+                if (cmd.mediaType) {
+                    checkExpr(*cmd.mediaType, context);
                 }
                 if (cmd.option == "preview") {
                     static_cast<void>(require(context, cmd.target, where, {NameCategory::State}, "state"));

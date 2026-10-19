@@ -647,3 +647,88 @@ TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refuse
     ui::Node const bar = ui::actionBar(ui::ActionBar{.children = {ui::button(ui::Button{.label = "Save"})}});
     CHECK_THROWS_AS(ui::Mounted(h.runtime, h.backend, ui::column(ui::Column{.children = {bar}})), std::logic_error);
 }
+
+namespace {
+
+/// Files moved inline: three downloads from bytes and an upload into bytes.
+constexpr char const* kInline = R"({
+  "vocab": "ui/1", "id": "inline", "params": { "blob": "string?" },
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "picked": { "init": "/data/readings.csv" }, "saved": { "init": 0 } },
+  "mutations": { "attach": { "model": "sample", "action": "Lims_Attach", "body": { "obj": { "kind": "csv" } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "save", "label": "save",
+      "onClick": [ { "download": "AQID", "from": "bytes", "save": "dialog", "name": "three.bin",
+                     "type": "application/octet-stream" } ] },
+    { "kind": "button", "testId": "saveList", "label": "saveList",
+      "onClick": [ { "download": { "lit": [ 1, 2, 255 ] }, "from": "bytes", "save": "dialog", "name": "list.bin" } ] },
+    { "kind": "button", "testId": "saveBig", "label": "saveBig",
+      "onClick": [ { "download": { "ref": "blob" }, "from": "bytes", "save": "dialog", "name": "big.bin" } ] },
+    { "kind": "button", "testId": "send", "label": "send",
+      "onClick": [ { "upload": { "ref": "picked" }, "to": "attach", "into": "bytes", "as": "content",
+                     "nameAs": "fileName", "id": "up" } ] },
+    { "kind": "text", "testId": "progress",
+      "text": { "fn": "format", "args": [ "{0}/{1}", { "ref": "up.progress" }, { "ref": "up.pending" } ] } } ] } })";
+
+}  // namespace
+
+// Mutation: skip the cap check (the oversize download reaches the host).
+TEST_CASE("interpreter commands: a download from bytes reaches saveFile decoded, and one over the cap never does",
+          "[ui][interpreter]") {
+    Harness h;
+    std::string const big(((ui::kDefaultInlineFileBytes + 3) / 3) * 4, 'A');
+    auto screen = h.mount(kInline, ui::ValueRecord{{"blob", ui::Value{big}}});
+    h.backend.click(h.byTestId("Button", "save"));
+    h.backend.click(h.byTestId("Button", "saveList"));
+    h.settle();
+    REQUIRE(h.host.saved.size() == 2);
+    CHECK(h.host.saved.at(0).name == "three.bin");
+    CHECK(h.host.saved.at(0).mediaType == "application/octet-stream");
+    CHECK(h.host.saved.at(0).bytes == std::string{"\x01\x02\x03", 3});
+    CHECK(h.host.saved.at(1).bytes == std::string{"\x01\x02\xff", 3});
+    CHECK(h.diagnostics.empty());
+
+    h.backend.click(h.byTestId("Button", "saveBig"));
+    h.settle();
+    CHECK(h.host.saved.size() == 2);
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason ==
+          "download: 1 MiB is over the 1 MiB inline cap; serve it through the file store");
+}
+
+// Mutation: skip the cap check on the host's reply (the oversize file runs the mutation).
+TEST_CASE("interpreter commands: an upload into bytes runs its mutation with the base64 and the name",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kInline);
+    h.backend.click(h.byTestId("Button", "send"));
+    h.settle();
+    CHECK(h.host.readCap == ui::kDefaultInlineFileBytes);
+    CHECK(h.text("progress") == "0/true");
+    h.host.readDone(ui::InlineFile{.name = "readings.csv", .mediaType = "text/csv", .bytes = "a,b"});
+    h.settle();
+    CHECK(h.text("progress") == "1/false");
+    REQUIRE(h.dispatcher.count("Lims_Attach") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_Attach")).body ==
+          R"({"content":"YSxi","fileName":"readings.csv","kind":"csv"})");
+
+    // A host that answers more than the cap is refused all the same.
+    h.backend.click(h.byTestId("Button", "send"));
+    h.settle();
+    h.host.readDone(ui::InlineFile{
+        .name = "huge.csv", .mediaType = {}, .bytes = std::string(ui::kDefaultInlineFileBytes + 1, 'x')});
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_Attach") == 1);
+    CHECK(readJson(*screen, R"({"ref": "up.error"})") ==
+          R"("upload: 1 MiB is over the 1 MiB inline cap; send it through the file store")");
+}
+
+TEST_CASE("interpreter commands: the session's inline cap is 1 to kMaxInlineFileBytes", "[ui][interpreter]") {
+    STATIC_REQUIRE(ui::kMaxInlineFileBytes == 6'242'304);
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    CHECK_THROWS_AS(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = 0}), std::invalid_argument);
+    CHECK_THROWS_AS(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = ui::kMaxInlineFileBytes + 1}),
+                    std::invalid_argument);
+    CHECK_NOTHROW(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = ui::kMaxInlineFileBytes}));
+}

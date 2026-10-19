@@ -204,6 +204,23 @@ struct UploadRequest {
     std::string action;
 };
 
+/// @brief A file whose bytes a document moves inline: `download` from bytes, `upload` into bytes.
+struct InlineFile {
+    /// @brief The file's name.
+    std::string name;
+    /// @brief Its media type; empty when unknown.
+    std::string mediaType;
+    /// @brief Its bytes.
+    std::string bytes;
+};
+
+/// @brief The inline cap a session has unless it is given another: 1 MiB.
+inline constexpr std::size_t kDefaultInlineFileBytes = std::size_t{1024} * 1024;
+
+/// @brief The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for
+///        the rest of the body, so the encoded file still fits `wire::kMaxEnvelopeBytes`.
+inline constexpr std::size_t kMaxInlineFileBytes = (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4;
+
 /// @brief What the application answers for the commands a document cannot carry out alone (spec 6). Every default
 ///        answers "not supported", which the interpreter reports as a diagnostic.
 class InterpreterHost {
@@ -348,6 +365,33 @@ public:
         return false;
     }
 
+    /// @brief Reads a file's bytes for `upload` into bytes. A host reads the file's size first and refuses one over
+    ///        @p maxBytes without reading it; the interpreter refuses a reply over the cap as well.
+    /// @param file     What the user picked or dropped.
+    /// @param maxBytes The session's inline cap.
+    /// @param done     Called once with the file, or the failure's text.
+    /// @return Whether the host can read files.
+    virtual bool readFile(Value const& file, std::size_t maxBytes,
+                          std::function<void(std::expected<InlineFile, std::string>)> done) {
+        static_cast<void>(file);
+        static_cast<void>(maxBytes);
+        static_cast<void>(done);
+        return false;
+    }
+
+    /// @brief Saves a file a document holds the bytes of, for `download` from bytes.
+    /// @param file   The file.
+    /// @param option `dialog` to save, `preview` for a local reference.
+    /// @param done   Called once with the local reference (`preview`) or `null` (`dialog`), or the failure.
+    /// @return Whether the host can save files.
+    virtual bool saveFile(InlineFile const& file, std::string const& option,
+                          std::function<void(std::expected<Value, std::string>)> done) {
+        static_cast<void>(file);
+        static_cast<void>(option);
+        static_cast<void>(done);
+        return false;
+    }
+
     /// @brief The user chose at a customization point through a `customize` editor; the host stores the choice.
     /// @param screen The screen's id.
     /// @param point  The point.
@@ -392,6 +436,9 @@ struct SessionOptions {
     /// @brief Sends the cache's watch changes to the server. Empty: the session still counts what its cache holds,
     ///        and sends nothing, which is right for a local source, whose replies carry every change it sees.
     Watcher watcher;
+    /// @brief The most bytes a document moves inline in one file (`download` from bytes, `upload` into bytes, a
+    ///        field component writing a base64 member); 1 to `kMaxInlineFileBytes`.
+    std::size_t maxInlineFileBytes = kDefaultInlineFileBytes;
 };
 
 namespace detail {
@@ -841,10 +888,11 @@ class Session {
 public:
     /// @brief An empty session.
     /// @param runtime The runtime. Borrowed.
-    /// @param options Timers, clock and catalog.
+    /// @param options Timers, clock, catalog and the inline cap.
+    /// @throws std::invalid_argument when `maxInlineFileBytes` is 0 or above `kMaxInlineFileBytes`.
     explicit Session(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, SessionOptions options = {})
         : _runtime{&runtime},
-          _options{std::move(options)},
+          _options{checkedOptions(std::move(options))},
           _permitted{runtime},
           _format{runtime, std::make_shared<FormatContext const>()},
           _env{runtime},
@@ -1235,6 +1283,16 @@ public:
     }
 
 private:
+    // A cap of 0 moves nothing inline, and one above the largest would not fit an envelope once encoded.
+    [[nodiscard]] static SessionOptions checkedOptions(SessionOptions options) {
+        if (options.maxInlineFileBytes == 0 || options.maxInlineFileBytes > kMaxInlineFileBytes) {
+            throw std::invalid_argument{"morph::ui::Session: maxInlineFileBytes is " +
+                                        std::to_string(options.maxInlineFileBytes) + "; it is 1 to " +
+                                        std::to_string(kMaxInlineFileBytes) + " (kMaxInlineFileBytes)"};
+        }
+        return options;
+    }
+
     void settleReply(detail::CacheEntry& entry, std::string const& reply) {
         auto json = parseJson(reply);
         auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
@@ -4969,6 +5027,127 @@ private:
     State _state = State::NotTaken;
 };
 
+/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file.
+/// @param bytes The bytes.
+/// @return The text.
+[[nodiscard]] inline std::string base64Encode(std::string_view bytes) {
+    static constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((bytes.size() + 2) / 3) * 4);
+    for (std::size_t index = 0; index < bytes.size(); index += 3) {
+        std::size_t const left = std::min<std::size_t>(3, bytes.size() - index);
+        std::uint32_t group = 0;
+        for (std::size_t offset = 0; offset < 3; ++offset) {
+            group <<= 8U;
+            if (offset < left) {
+                group |= static_cast<unsigned char>(bytes[index + offset]);
+            }
+        }
+        for (std::size_t digit = 0; digit < 4; ++digit) {
+            out.push_back(digit <= left ? kAlphabet[(group >> (18U - (6U * digit))) & 0x3FU] : '=');
+        }
+    }
+    return out;
+}
+
+/// @brief Base64 text as bytes (RFC 4648, with or without padding).
+/// @param text The text.
+/// @return The bytes, or `std::nullopt` for text that is not base64.
+[[nodiscard]] inline std::optional<std::string> base64Decode(std::string_view text) {
+    while (!text.empty() && text.back() == '=') {
+        text.remove_suffix(1);
+    }
+    if (text.size() % 4 == 1) {
+        return std::nullopt;
+    }
+    auto digitOf = [](char chr) -> int {
+        if (chr >= 'A' && chr <= 'Z') {
+            return chr - 'A';
+        }
+        if (chr >= 'a' && chr <= 'z') {
+            return chr - 'a' + 26;
+        }
+        if (chr >= '0' && chr <= '9') {
+            return chr - '0' + 52;
+        }
+        if (chr == '+') {
+            return 62;
+        }
+        return chr == '/' ? 63 : -1;
+    };
+    std::string out;
+    out.reserve((text.size() * 3) / 4);
+    std::uint32_t group = 0;
+    int bits = 0;
+    for (char const chr : text) {
+        int const digit = digitOf(chr);
+        if (digit < 0) {
+            return std::nullopt;
+        }
+        group = (group << 6U) | static_cast<std::uint32_t>(digit);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((group >> static_cast<std::uint32_t>(bits)) & 0xFFU));
+        }
+    }
+    return out;
+}
+
+/// @brief How many bytes base64 text decodes to, read from its length alone.
+/// @param text The text.
+/// @return The byte count.
+[[nodiscard]] inline std::size_t base64Size(std::string_view text) {
+    while (!text.empty() && text.back() == '=') {
+        text.remove_suffix(1);
+    }
+    return (text.size() * 3) / 4;
+}
+
+/// @brief A byte count as a person reads it: `512 bytes`, `2.4 KiB`, `1 MiB`.
+/// @param bytes The count.
+/// @return The text.
+[[nodiscard]] inline std::string sizeText(std::size_t bytes) {
+    constexpr std::size_t kKiB = 1024;
+    if (bytes < kKiB) {
+        return std::to_string(bytes) + " bytes";
+    }
+    bool const mebi = bytes >= kKiB * kKiB;
+    std::size_t const unit = mebi ? kKiB * kKiB : kKiB;
+    // One decimal place, rounded half up, and none when it is zero.
+    std::size_t const tenths = ((bytes * 10) + (unit / 2)) / unit;
+    std::string text = std::to_string(tenths / 10);
+    if (tenths % 10 != 0) {
+        text += "." + std::to_string(tenths % 10);
+    }
+    return text + (mebi ? " MiB" : " KiB");
+}
+
+/// @brief A document's inline file content as bytes: base64 text, or a list of integers 0 to 255.
+/// @param value The value.
+/// @return The bytes, or why the value is neither.
+[[nodiscard]] inline std::expected<std::string, std::string> inlineBytes(Value const& value) {
+    if (std::string const* const text = value.asString()) {
+        if (std::optional<std::string> bytes = base64Decode(*text)) {
+            return *std::move(bytes);
+        }
+        return std::unexpected(std::string{"the text is not base64"});
+    }
+    if (ValueList const* const list = value.asList()) {
+        std::string bytes;
+        bytes.reserve(list->size());
+        for (Value const& item : *list) {
+            std::int64_t const* const byte = item.asInt();
+            if (byte == nullptr || *byte < 0 || *byte > 255) {
+                return std::unexpected(std::string{"a byte list holds integers 0 to 255"});
+            }
+            bytes.push_back(static_cast<char>(static_cast<unsigned char>(*byte)));
+        }
+        return bytes;
+    }
+    return std::unexpected(std::string{"inline bytes are base64 text or a list of bytes"});
+}
+
 inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
     Value const file = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
     if (command.kind == CommandKind::Download) {
@@ -5001,6 +5180,39 @@ inline void ScreenCore::runDownload(Command const& command, CommandCtx const& ct
             hold->release();
         });
     };
+    if (command.bytes) {
+        // Inline bytes are checked before the host is asked: content over the cap, or that does not decode, never
+        // reaches it.
+        std::size_t const cap = session.options().maxInlineFileBytes;
+        std::string const* const text = file.asString();
+        std::size_t const size = text != nullptr ? base64Size(*text) : file.asList() ? file.asList()->size() : 0;
+        std::expected<std::string, std::string> bytes =
+            size > cap ? std::unexpected(std::string{}) : inlineBytes(file);
+        if (size > cap || (bytes && bytes->size() > cap)) {
+            report(command.path, "download: " + sizeText(bytes ? bytes->size() : size) + " is over the " +
+                                     sizeText(cap) + " inline cap; serve it through the file store");
+            done(false);
+            return;
+        }
+        if (!bytes) {
+            report(command.path, "download: " + bytes.error());
+            done(false);
+            return;
+        }
+        InlineFile const inlined{
+            .name = textOf(name, session.formatting()),
+            .mediaType = command.mediaType
+                             ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), session.formatting())
+                             : std::string{},
+            .bytes = *std::move(bytes)};
+        if (host == nullptr || !host->saveFile(inlined, command.option, settled)) {
+            unsupported(command, "`download`");
+            done(false);
+            return;
+        }
+        hold->take();
+        return;
+    }
     if (host == nullptr || !host->download(file, command.option, name, settled)) {
         unsupported(command, "`download`");
         done(false);
@@ -5022,8 +5234,10 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
             transfer->progress.set(std::move(fraction));
         }
     };
+    // Settles with the members the mutation's body gets beside its own (the reference or the inline file), or the
+    // failure.
     auto const settled = [this, weak, kept = detached(ctx), transfer, command = &command, done,
-                          hold](std::expected<Value, std::string> reply) {
+                          hold](std::expected<ValueRecord, std::string> reply) {
         auto const held = weak.lock();
         if (!held) {
             hold->release();
@@ -5045,7 +5259,9 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
             MutationRuntime& mutation = *found->mutation;
             Value const base = evalIn(*held, kept.bindings.get(), mutation.decl().body);
             ValueRecord fields = base.asRecord() == nullptr ? ValueRecord{} : *base.asRecord();
-            fields.insert_or_assign(command->binding.empty() ? std::string{"file"} : command->binding, *reply);
+            for (auto& [member, value] : *reply) {
+                fields.insert_or_assign(member, std::move(value));
+            }
             // The run takes its own count before this one is given back, so pending never reads zero in between.
             mutation.run(Value{std::move(fields)}, std::make_shared<Bindings const>(*kept.bindings),
                          [done](bool succeeded, Value const&) { done(succeeded); });
@@ -5068,7 +5284,48 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
         request.modelType = target->mutation->typeId();
         request.action = target->mutation->decl().action;
     }
-    if (!host->uploadFor(request, progress, settled)) {
+    std::string const as = command.binding.empty() ? std::string{"file"} : command.binding;
+    bool started = false;
+    if (command.bytes) {
+        std::size_t const cap = session.options().maxInlineFileBytes;
+        started = host->readFile(
+            file, cap,
+            [this, settled, progress, cap, as, command = &command](std::expected<InlineFile, std::string> read) {
+                if (!read) {
+                    settled(std::unexpected(read.error()));
+                    return;
+                }
+                if (read->bytes.size() > cap) {
+                    // The host should have refused it; the cap holds whether or not it did.
+                    std::string why = "upload: " + sizeText(read->bytes.size()) + " is over the " + sizeText(cap) +
+                                      " inline cap; send it through the file store";
+                    report(command->path, why);
+                    settled(std::unexpected(std::move(why)));
+                    return;
+                }
+                progress(Value{std::int64_t{1}});
+                ValueRecord added;
+                added.insert_or_assign(as, Value{base64Encode(read->bytes)});
+                if (!command->nameAs.empty()) {
+                    added.insert_or_assign(command->nameAs, Value{read->name});
+                }
+                if (!command->typeAs.empty()) {
+                    added.insert_or_assign(command->typeAs, Value{read->mediaType});
+                }
+                settled(std::move(added));
+            });
+    } else {
+        started = host->uploadFor(request, progress, [settled, as](std::expected<Value, std::string> reference) {
+            if (!reference) {
+                settled(std::unexpected(reference.error()));
+                return;
+            }
+            ValueRecord added;
+            added.insert_or_assign(as, *std::move(reference));
+            settled(std::move(added));
+        });
+    }
+    if (!started) {
         if (transfer != nullptr) {
             transfer->pending.set(false);
             transfer->progress.set(Value{});
@@ -6218,12 +6475,19 @@ inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode con
                                                           })});
         }
     }
-    spec.onEvent = [this, state, path = overlay.path, field = view.spec().name,
+    spec.onEvent = [this, state, path = overlay.path, field = view.spec().name, bytes = view.spec().bytes,
                     valueType = component.props.at("value")](std::string const& event, std::string const& payload) {
         if (event != "change") {
             return;
         }
         auto wire = changeWire(payload, valueType);
+        // A base64 member holds a file's bytes, which a document moves inline only under the session's cap.
+        if (std::size_t const cap = session.options().maxInlineFileBytes;
+            wire && bytes && wire->is_string() && base64Size(wire->get_string()) > cap) {
+            report(path, "field " + field + ": " + std::to_string(base64Size(wire->get_string())) +
+                             " bytes is over the " + std::to_string(cap) + " inline cap");
+            return;
+        }
         if (wire) {
             if (auto edited = state->edit(*wire); !edited) {
                 wire = std::unexpected(edited.error());
