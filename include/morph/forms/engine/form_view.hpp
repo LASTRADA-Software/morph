@@ -186,7 +186,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 [[nodiscard]] inline ui::Node fieldControl(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState* const field = &state;
     FieldSpec const& spec = state.spec();
-    auto const textInput = [field](ui::TextInputMode mode) {
+    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, int decimals = -1) {
         return ui::textInput(ui::TextInput{
             .value = [field] { return field->text().get(); },
             .onChange = [field](std::string text) { field->text().set(std::move(text)); },
@@ -194,18 +194,26 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .onCommit = {},
             .placeholder = field->placeholder(),
             .mode = mode,
+            .unit = std::move(unit),
+            .decimals = decimals,
             .field = fieldState(field),
             .common = controlCommon(field),
         });
     };
-    auto const unitSuffix = [&](ui::Node input) {
-        if (spec.unit.empty()) {
-            return input;
+    // A number's input shows its unit and knows its entry places: an integer's 0, the entry unit's, a plain
+    // number's display places, a decimal's declared ones; -1 where none is declared.
+    auto const numberInput = [&] {
+        int decimals = -1;
+        if (spec.kind == FieldKind::Integer) {
+            decimals = 0;
+        } else if (!spec.units.empty()) {
+            decimals = static_cast<int>(spec.units.at(spec.entryUnit).decimals);
+        } else if (spec.displayDecimals) {
+            decimals = static_cast<int>(*spec.displayDecimals);
+        } else if (spec.decimalPlaces) {
+            decimals = static_cast<int>(*spec.decimalPlaces);
         }
-        return ui::row(ui::Row{
-            .children = {std::move(input), ui::text(ui::Text{.text = spec.unit, .role = ui::TextRole::Muted})},
-            .gap = 4,
-        });
+        return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
     };
     auto const dateInput = [&](bool date) {
         int const offset = date ? 0 : session.options().displayOffsetMinutes;
@@ -225,11 +233,11 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         return textInput(ui::TextInputMode::Multiline);
     }
     if (spec.kind == FieldKind::Integer || spec.kind == FieldKind::Number || spec.kind == FieldKind::Decimal) {
-        return unitSuffix(textInput(ui::TextInputMode::SingleLine));
+        return numberInput();
     }
     if (spec.kind == FieldKind::Quantity) {
         if (spec.units.size() <= 1) {
-            return unitSuffix(textInput(ui::TextInputMode::SingleLine));
+            return numberInput();
         }
         std::vector<ui::SelectOption> units;
         units.reserve(spec.units.size());

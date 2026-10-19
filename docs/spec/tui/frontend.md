@@ -74,7 +74,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 |---|---|---|
 | Text | one row per line, styled by role | — |
 | Button | `[ label ]` | Enter, Space, click |
-| TextInput | `core::tui::InputField`; single-line, multiline or masked | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
+| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Enter, Space, click |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |

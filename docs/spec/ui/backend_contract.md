@@ -156,7 +156,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
 | `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
-| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder` | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
+| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |

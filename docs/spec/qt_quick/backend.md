@@ -113,7 +113,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 |---|---|---|---|
 | Text | `MorphText` | a label in a text role | — |
 | Button | `MorphButton` | a `Button` | click, Space or Enter |
-| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea` | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
+| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
 | Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |
 | Menu | `MorphMenu` | a bar of top-level entries; a submenu opens in a popup, one level at a time | the chosen entry's path |

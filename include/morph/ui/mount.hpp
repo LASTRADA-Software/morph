@@ -579,11 +579,22 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
+        bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
+        if ((hasUnit || spec.decimals >= 0) && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input holds no number, so it takes no unit or places"};
+        }
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
         auto reassert = controlled(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
         bind(scope, spec.placeholder, [&widget](std::string const& text) { widget.setPlaceholder(text); });
+        // An input without a unit or places is not told any, so a backend sees only what a field declares.
+        if (hasUnit) {
+            bind(scope, spec.unit, [&widget](std::string const& unit) { widget.setUnit(unit); });
+        }
+        if (spec.decimals >= 0) {
+            widget.setDecimals(spec.decimals);
+        }
         widget.setOnChange(inputEvent(spec.onChange, reassert));
         widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
         widget.setOnCommit(event(spec.onCommit));

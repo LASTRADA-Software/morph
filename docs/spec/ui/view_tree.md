@@ -103,7 +103,7 @@ lowers them to the kinds below.
 |---|---|---|
 | `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success}`) |
 | `Button` | `button` | `label`, `onClick` |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
@@ -159,7 +159,7 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | `stale` | The value shown is the last known one while a newer one is computed |
 
 The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
-`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
+`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value`, `placeholder` and `unit`; Checkbox
 `label` and `checked`; Select `options` and `selected`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
@@ -247,7 +247,9 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    Dialog's `open`, whose `Effect` reads the binding itself ([below](#switch-tabs-dialog)). Fields
    set once (a stack's gap, a grid's columns and gap, a panel's padding and collapsibility, a
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
-   setters once. Each callback is handed over once, as an empty function when the node has none —
+   setters once. A TextInput's `unit` is applied only when bound or not empty, and its `decimals`
+   only when 0 or more, so an input that holds no number is told neither; a multiline input with
+   either is refused (`std::logic_error`). Each callback is handed over once, as an empty function when the node has none —
    except a Menu's `setOnActivate`, which always gets the mount's dispatcher over its items. Then
    the exceptions:
    - a Grid child's span is set only when it is not 1;

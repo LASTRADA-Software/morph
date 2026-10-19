@@ -245,8 +245,8 @@ before it.
 | Kind | Control |
 |---|---|
 | Text, Multiline | `TextInput` (single-line, multiline) |
-| Integer, Number, Decimal | `TextInput`, with the unit beside it |
-| Quantity | `TextInput` and a unit `Select` (with alternatives); switching converts the draft exactly |
+| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the entry unit's, the display places or the declared places) |
+| Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
 | DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date) |

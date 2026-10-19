@@ -423,6 +423,12 @@ struct TextInput {
     Prop<std::string> placeholder;
     /// @brief Single-line, multiline or password; set once.
     TextInputMode mode = TextInputMode::SingleLine;
+    /// @brief The unit the input shows beside its text, such as `kg`; empty shows none. Only a single-line or
+    ///        password input shows one: the mount refuses a multiline input with a unit.
+    Prop<std::string> unit;
+    /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
+    ///        not hold a number. Set once; the mount refuses places on a multiline input.
+    int decimals = -1;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.

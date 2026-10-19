@@ -15,6 +15,7 @@
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -102,6 +103,42 @@ TEST_CASE("formView: each kind draws its control", "[forms-engine][view]") {
     CHECK(mounted.backend.prop(volume, "range") == "0..10/2");
     CHECK(mounted.has("TextInput", "field_mass"));
     CHECK(mounted.has("Select", "unit_mass"));
+}
+
+// Mutation: drop the unit from the number input (the unit is drawn nowhere, and the input reports none).
+TEST_CASE("formView: a number's input shows its unit and knows its places; a unit choice keeps its select",
+          "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "density":{"type":"number","ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},"x-displayDecimals":2,"x-order":0},
+      "count":{"type":"integer","ExtUnits":{"unitAscii":"pcs","unitUnicode":"pcs"},"x-order":1},
+      "note":{"type":"string","x-order":2}}})";
+    Mounted const mounted{kSchema};
+    int const density = mounted.widget("TextInput", "field_density");
+    CHECK(mounted.backend.prop(density, "unit") == "kg");
+    CHECK(mounted.backend.prop(density, "decimals") == "2");
+    CHECK_FALSE(mounted.backend.find("Text", "text", "kg").has_value());  // no muted text beside the input
+    int const count = mounted.widget("TextInput", "field_count");
+    CHECK(mounted.backend.prop(count, "unit") == "pcs");
+    CHECK(mounted.backend.prop(count, "decimals") == "0");
+    int const note = mounted.widget("TextInput", "field_note");
+    CHECK_FALSE(mounted.backend.hasProp(note, "unit"));
+    CHECK_FALSE(mounted.backend.hasProp(note, "decimals"));
+
+    // A Quantity with alternatives keeps its unit select, and its input names no unit of its own.
+    Mounted const kinds{kKinds};
+    CHECK(kinds.has("Select", "unit_mass"));
+    CHECK_FALSE(kinds.backend.hasProp(kinds.widget("TextInput", "field_mass"), "unit"));
+}
+
+TEST_CASE("formView: a multiline input with a unit or places is refused when it mounts", "[forms-engine][view]") {
+    morph::test::formsengine::Harness harness;
+    RecordingBackend backend;
+    CHECK_THROWS_AS((ui::Mounted{harness.rt, backend,
+                                 ui::textInput({.mode = ui::TextInputMode::Multiline, .unit = std::string{"kg"}})}),
+                    std::logic_error);
+    CHECK_THROWS_AS(
+        (ui::Mounted{harness.rt, backend, ui::textInput({.mode = ui::TextInputMode::Multiline, .decimals = 2})}),
+        std::logic_error);
 }
 
 TEST_CASE("formView: labels fall back to the wire key, follow x-order and come from translations",

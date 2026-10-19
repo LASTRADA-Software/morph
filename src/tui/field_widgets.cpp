@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <format>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -285,8 +286,25 @@ void TextInputImpl::setOnSubmit(std::function<void(std::string)> onSubmit) { _on
 
 void TextInputImpl::setOnCommit(std::function<void(std::string)> onCommit) { _onCommit = std::move(onCommit); }
 
+// The mount never asks a multiline input for a unit or places.
+void TextInputImpl::setUnit(std::string_view unit) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input shows no unit"};
+    }
+    _unit = std::string{unit};
+    refresh();
+}
+
+void TextInputImpl::setDecimals(int decimals) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input takes no places"};
+    }
+    static_cast<void>(decimals);
+}
+
 ::core::tui::Size TextInputImpl::naturalSize() const {
-    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)});
+    int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
+    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
     return {.width = width, .height = height};
 }
@@ -294,7 +312,14 @@ void TextInputImpl::setOnCommit(std::function<void(std::string)> onCommit) { _on
 std::string TextInputImpl::probeText() const { return std::string{_field->text()}; }
 
 void TextInputImpl::paint(::core::tui::Canvas& canvas) {
-    paintField(*_field, *this, actionable(), canvas);
+    if (_unit.empty()) {
+        paintField(*_field, *this, actionable(), canvas);
+    } else {
+        int const unitX = std::max(0, canvas.width() - marksWidth() - displayWidth(_unit));
+        auto text = canvas.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = canvas.height()});
+        paintField(*_field, *this, actionable(), text);
+        canvas.putString(0, unitX, _unit, canvas.theme().textMuted);
+    }
     paintMarks(canvas);
 }
 

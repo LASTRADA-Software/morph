@@ -89,6 +89,8 @@ public:
     void setOnChange(std::function<void(std::string)> onChange) override;
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
+    void setUnit(std::string_view unit) override;
+    void setDecimals(int decimals) override;
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
@@ -110,6 +112,7 @@ private:
     ::core::tui::InputField* _field;
     std::string _reported;
     std::string _placeholder;
+    std::string _unit;  ///< Drawn muted at the right edge, before the marks; the editable width ends a cell before it.
     std::function<void(std::string)> _onChange;
     std::function<void(std::string)> _onSubmit;
     std::function<void(std::string)> _onCommit;

@@ -368,6 +368,8 @@ public:
 protected:
     /// Draws the marks at the right edge of the canvas's first row.
     void paintMarks(::core::tui::Canvas& canvas) const { detail::paintFieldMarks(canvas, marks()); }
+    /// How many cells the marks take at the right edge.
+    [[nodiscard]] int marksWidth() const { return static_cast<int>(marks().size()); }
 
 private:
     [[nodiscard]] std::string marks() const {

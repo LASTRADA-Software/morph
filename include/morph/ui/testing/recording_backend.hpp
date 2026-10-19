@@ -873,6 +873,8 @@ public:
     [[nodiscard]] std::string const& text() const noexcept { return _shown; }
 
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
+    void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
+    void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
     void setOnChange(std::function<void(std::string)> onChange) override { callbacks().change = std::move(onChange); }
     void setOnSubmit(std::function<void(std::string)> onSubmit) override { callbacks().submit = std::move(onSubmit); }
     void setOnCommit(std::function<void(std::string)> onCommit) override { callbacks().commit = std::move(onCommit); }

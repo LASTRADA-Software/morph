@@ -39,6 +39,8 @@ public:
     void setOnChange(std::function<void(std::string)> onChange) override;
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
+    void setUnit(std::string_view unit) override;
+    void setDecimals(int decimals) override;
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
     [[nodiscard]] std::size_t cursor() const;

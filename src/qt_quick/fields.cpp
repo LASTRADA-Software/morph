@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 #include <utility>
 
 #include "qt_quick/kinds.hpp"
@@ -90,6 +91,21 @@ void TextInputImpl::setText(std::string_view text) {
 }
 
 void TextInputImpl::setPlaceholder(std::string_view placeholder) { write("placeholder", toQString(placeholder)); }
+
+// MorphTextArea declares neither property; the mount never asks a multiline input for them.
+void TextInputImpl::setUnit(std::string_view unit) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input shows no unit"};
+    }
+    write("unit", toQString(unit));
+}
+
+void TextInputImpl::setDecimals(int decimals) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input takes no places"};
+    }
+    write("decimals", decimals);
+}
 
 void TextInputImpl::setOnChange(std::function<void(std::string)> onChange) {
     relay().on(QStringLiteral("change"), textHandler(std::move(onChange)));

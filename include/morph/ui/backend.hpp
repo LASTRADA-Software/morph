@@ -185,6 +185,17 @@ public:
     ///        leaving the field after an edit.
     /// @param onCommit The handler; empty does nothing.
     virtual void setOnCommit(std::function<void(std::string)> onCommit) = 0;
+
+    /// @brief Sets the unit the input shows, muted, at its trailing edge, inside the field; empty shows none. Called
+    ///        only on a single-line or password input.
+    /// @param unit The unit's display text, UTF-8.
+    virtual void setUnit(std::string_view unit) = 0;
+
+    /// @brief Sets the fraction digits a number is entered with: what a backend or a kit may use to align or
+    ///        format the text. Nothing is required of a backend that draws nothing from it. Called only on a
+    ///        single-line or password input.
+    /// @param decimals The places, from 0; -1 when the input does not hold a number.
+    virtual void setDecimals(int decimals) = 0;
 };
 
 /// @brief A labelled check box.
