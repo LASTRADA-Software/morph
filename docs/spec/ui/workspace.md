@@ -68,6 +68,15 @@ A refused mount answers its `MountError` and opens nothing; its page is destroye
   walk. The bar takes the three chords through `Widget::setKeys`; a document cannot declare them (`document.hpp`
   refuses reserved chords at load).
 
+## The head row
+
+Above each tab's screen, in its page, the shell mounts a row over the handle's `head()`: the subtitle (muted), the
+badges, a spacer and the actions as buttons, with test ids `head`, `head_subtitle`, `head_status_<n>` (the badge's
+place among the visible ones) and `head_action_<id>`. A button is disabled while its action is, and a click runs the
+action through `ScreenHead::run`. The row is hidden while the head has no subtitle, badges or actions, so a screen
+without them looks as it would without the row; a handle without a head (a host screen) gets no row. The row is
+mounted after the screen, since it reads the handle, and moved above it; it is unmounted before the handle goes.
+
 ## Captions
 
 A tab's caption is its screen's `title`, followed by ` •` while `dirty` is true. Each tab has an effect over its

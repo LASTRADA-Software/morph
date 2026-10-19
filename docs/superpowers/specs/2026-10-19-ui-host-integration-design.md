@@ -343,6 +343,8 @@ public:
 [[nodiscard]] virtual ScreenHead* head() noexcept { return nullptr; }
 ```
 
+  `HeadBadge` and `HeadAction` are declared in `include/morph/ui/interpreter.hpp`, beside `Screen`, which answers
+  them; `host.hpp` includes it, so a host sees them where it sees `ScreenHead`.
   A document screen's handle answers its head (empty values when the document declares none); a host screen's
   answers null unless it overrides `head()`. `run` runs the action's `onClick` as a user event in the screen scope,
   in one batch; it answers `false` and reports a diagnostic (`head action <id> is unknown`, `… is disabled`, `… is

@@ -1254,3 +1254,23 @@ TEST_CASE("a local registry enrols a screen directly, and counts a maker that th
 TEST_CASE("parseDecimal builds the library call over the text and its places", "[ui][author]") {
     CHECK(text(ui::parseDecimal(ui::ref("typed"), 2)) == R"({"fn":"parseDecimal","args":[{"ref":"typed"},2]})");
 }
+
+// Mutation: leave `actions` out of the head (the document carries no action, and its run has nothing to name).
+TEST_CASE("a screen's head writes its subtitle, status badges and actions beside the title", "[ui][author]") {
+    auto const emitted = ui::screen("author.head", [](ui::Scope& screen) {
+                             auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
+                             screen.title(ui::AnyHandle{"Sample"});
+                             screen.subtitle(stage);
+                             screen.status({.text = ui::AnyHandle{"Draft"}, .tone = ui::AnyHandle{"warn"}});
+                             screen.action({.id = "save",
+                                            .label = ui::AnyHandle{"Save"},
+                                            .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                            .onClick = {ui::set(stage, ui::AnyHandle{"Saved"})}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("subtitle":{"ref":"stage"})"));
+    CHECK(emitted->text.contains(R"("status":[{"tone":"warn","text":"Draft"}])"));
+    CHECK(emitted->text.contains(
+        R"("actions":[{"id":"save","label":"Save","emphasis":"primary","onClick":[{"set":"stage","value":"Saved"}]}])"));
+}

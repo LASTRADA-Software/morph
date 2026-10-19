@@ -2289,6 +2289,97 @@ private:
     std::string _name;
 };
 
+/// @brief A status badge of the screen's head (`screen.status`).
+struct HeadBadgeOptions {
+    /// @brief The badge's text.
+    AnyHandle text;
+    /// @brief Its tone: `neutral`, `info`, `ok`, `warn` or `err`.
+    AnyHandle tone;
+    /// @brief The name of an icon.
+    AnyHandle icon;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+};
+
+/// @brief A button of a screen's head (`screen.action`), or of a dialog's or drawer's footer.
+struct ActionButtonOptions {
+    /// @brief The action's id, unique in its list: a name.
+    std::string id;
+    /// @brief The label; required.
+    AnyHandle label;
+    /// @brief The name of an icon.
+    AnyHandle icon;
+    /// @brief How much it stands out; `Normal` writes no key.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run; absent enables it.
+    AnyHandle enabled;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Commands run when it is clicked, in the scope its list belongs to.
+    Commands onClick;
+};
+
+namespace detail {
+
+/// @brief An expression key of a part, left out when absent.
+/// @param json  The part.
+/// @param key   The key.
+/// @param value The expression.
+inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
+    if (value.present()) {
+        detail::put(json, key, value.json());
+    }
+}
+
+/// @brief A `headBadge` part's JSON.
+/// @param badge The badge.
+/// @return The JSON.
+[[nodiscard]] inline Json headBadge(HeadBadgeOptions const& badge) {
+    Json json = Json::object_t{};
+    putPresent(json, "tone", badge.tone);
+    putPresent(json, "text", badge.text);
+    putPresent(json, "icon", badge.icon);
+    putPresent(json, "visible", badge.visible);
+    return json;
+}
+
+/// @brief An `actionButton` part's JSON.
+/// @param action The button.
+/// @return The JSON.
+[[nodiscard]] inline Json actionButton(ActionButtonOptions const& action) {
+    Json json = Json::object_t{};
+    detail::put(json, "id", action.id);
+    putPresent(json, "label", action.label);
+    putPresent(json, "icon", action.icon);
+    if (action.emphasis == ButtonEmphasis::Primary) {
+        detail::put(json, "emphasis", std::string{"primary"});
+    } else if (action.emphasis == ButtonEmphasis::Danger) {
+        detail::put(json, "emphasis", std::string{"danger"});
+    }
+    putPresent(json, "enabled", action.enabled);
+    putPresent(json, "visible", action.visible);
+    if (!action.onClick.empty()) {
+        detail::put(json, "onClick", action.onClick.json());
+    }
+    return json;
+}
+
+/// @brief Appends @p item to the array at @p key of @p json, making the array on first use.
+/// @param json The object.
+/// @param key  The key.
+/// @param item The item.
+inline void append(Json& json, char const* key, Json item) {
+    auto& object = std::get<Json::object_t>(json.data);
+    auto found = object.find(key);
+    if (found == object.end()) {
+        detail::put(json, key, Json::array_t{});
+        found = object.find(key);
+    }
+    std::get<Json::array_t>(found->second.data).push_back(std::move(item));
+}
+
+}  // namespace detail
+
 /// @brief The screen's own scope: its declarations, params, lifecycle keys, components and customization points.
 class Scope : public DeclScope {
 public:
@@ -2313,6 +2404,18 @@ public:
     /// @brief Whether the screen has unsaved changes.
     /// @param dirty The condition.
     void dirty(AnyHandle const& dirty) { detail::put(_head, "dirty", dirty.json()); }
+
+    /// @brief The head's line under the title.
+    /// @param subtitle The expression.
+    void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }
+
+    /// @brief Appends a status badge to the head.
+    /// @param badge The badge.
+    void status(HeadBadgeOptions const& badge) { detail::append(_head, "status", detail::headBadge(badge)); }
+
+    /// @brief Appends an action to the head, run in the screen scope.
+    /// @param action The action; its id is unique among the head's actions.
+    void action(ActionButtonOptions const& action) { detail::append(_head, "actions", detail::actionButton(action)); }
 
     /// @brief Commands run when the screen mounts.
     /// @param commands The commands.

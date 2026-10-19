@@ -104,6 +104,7 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
+| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)` | The screen's head: its subtitle, and a status badge or an action appended in order |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
 | `columnsPoint`, `arrangePoint`, `choicePoint`, `valuePoint<T>`, `point(name, "layout" \| "saved")` | `customize.name`, returning the `Point` `customize`, `resetPrefs` and `pref` name |
 

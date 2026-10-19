@@ -19,8 +19,10 @@
 #include "../reactive/scope.hpp"
 #include "backend.hpp"
 #include "host.hpp"
+#include "mount.hpp"
 #include "route.hpp"
 #include "value.hpp"
+#include "view.hpp"
 
 /// @file
 /// @brief The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a `DocumentScreenHost`.
@@ -361,6 +363,8 @@ private:
         std::unique_ptr<SlotWidget> page;
         std::unique_ptr<ScreenHandle> handle;
         std::unique_ptr<reactive::Scope> scope;
+        // The head row above the screen; it reads the handle, so it goes first.
+        std::optional<Mounted> head;
 
         Tab() = default;
         Tab(Tab const&) = delete;
@@ -368,11 +372,67 @@ private:
         Tab(Tab&&) = delete;
         Tab& operator=(Tab&&) = delete;
         ~Tab() {
+            head.reset();
             scope.reset();
             handle.reset();
             page.reset();
         }
     };
+
+    // A badge of the head row, by its place among the visible badges.
+    struct PlacedBadge {
+        std::size_t index = 0;
+        HeadBadge badge;
+    };
+
+    // The head row above a tab's screen: the subtitle (muted), the badges, a spacer and the actions as buttons. It is
+    // hidden while the head has none of them, so a screen without a head looks as it would without the row.
+    [[nodiscard]] static Node headRow(ScreenHead& head) {
+        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
+        row.common.testId = "head";
+        row.common.visible = Prop<bool>{[&head] {
+            return !head.subtitle().get().empty() || !head.status().get().empty() || !head.actions().get().empty();
+        }};
+        Text subtitle{.text = Prop<std::string>{[&head] { return head.subtitle().get(); }},
+                      .role = TextRole::Muted,
+                      .field = {},
+                      .common = {}};
+        subtitle.common.testId = "head_subtitle";
+        subtitle.common.visible = Prop<bool>{[&head] { return !head.subtitle().get().empty(); }};
+        row.children.push_back(ui::text(std::move(subtitle)));
+        row.children.push_back(ui::forEach<PlacedBadge>(
+            [&head] {
+                std::vector<PlacedBadge> placed;
+                for (HeadBadge const& badge : head.status().get()) {
+                    placed.push_back(PlacedBadge{.index = placed.size(), .badge = badge});
+                }
+                return placed;
+            },
+            [](PlacedBadge const& placed) { return Key{static_cast<std::int64_t>(placed.index)}; },
+            [](reactive::Signal<PlacedBadge> const& placed) {
+                Badge badge{.tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
+                            .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
+                            .icon = placed.peek().badge.icon,
+                            .common = {}};
+                badge.common.testId = "head_status_" + std::to_string(placed.peek().index);
+                return ui::badge(std::move(badge));
+            },
+            Axis::Horizontal, 1));
+        row.children.push_back(ui::spacer());
+        row.children.push_back(ui::forEach<HeadAction>(
+            [&head] { return head.actions().get(); }, [](HeadAction const& action) { return Key{action.id}; },
+            [&head](reactive::Signal<HeadAction> const& action) {
+                Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
+                              .emphasis = action.peek().emphasis,
+                              .onClick = [&head, id = action.peek().id] { head.run(id); },
+                              .common = {}};
+                button.common.testId = "head_action_" + action.peek().id;
+                button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
+                return ui::button(std::move(button));
+            },
+            Axis::Horizontal, 1));
+        return ui::row(std::move(row));
+    }
 
     [[nodiscard]] static std::string identityText(Tab const& tab) {
         return identityKey(tab.handle->identity().peek()).value_or(std::string{});
@@ -437,6 +497,11 @@ private:
             return std::unexpected(std::move(handle.error()));
         }
         tab->handle = std::move(*handle);
+        if (ScreenHead* const head = tab->handle->head()) {
+            // Mounted after the screen, since it reads the handle, and moved above it.
+            tab->head.emplace(*_runtime, *_backend, headRow(*head), tab->page.get());
+            tab->page->moveChild(tab->head->root(), 0);
+        }
         tab->scope = std::make_unique<reactive::Scope>(*_runtime);
         ScreenHandle const* const screen = tab->handle.get();
         tab->scope->effect([this, screen] {

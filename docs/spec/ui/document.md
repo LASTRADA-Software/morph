@@ -60,6 +60,7 @@ declare the app-only customization kinds.
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
+| `subtitle`, `status`, `actions` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -80,6 +81,23 @@ action declares what it changes in its effects, and every query holding a change
 so a document that restated it per screen could only drift from the action. A document that declares one is refused
 rather than having it ignored: the author meant a refresh the client would silently not do. `optimistic`,
 `refreshEvery` and the `refetch` command stay; `refetch` is how a document refetches for a reason no action declares.
+
+### The head
+
+A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `status` (parts
+`headBadge`: `{tone, text, icon, visible}`) and `actions` (parts `actionButton`). All are evaluated in the screen
+scope, and the app document, which has no view, refuses them.
+
+An `actionButton` part is one button of a list:
+
+| Key | Shape | Notes |
+|---|---|---|
+| `id` | name, required | unique within its list |
+| `label` | expression, required | |
+| `icon` | expression | an icon name |
+| `emphasis` | text | `normal`, `primary`, `danger`, as a `button`'s |
+| `enabled`, `visible` | conditions | default `true` |
+| `onClick` | commands | run in the scope the list belongs to |
 
 ## Declarations
 
@@ -208,7 +226,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`) take one of their values; chords are
   modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`, once each) and a key name, and are not the workspace
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
-  `true` or `false`, and `showLabel` needs a `label` to show.
+  `true` or `false`, and `showLabel` needs a `label` to show. An `actionButton` has an `id` and a `label`, and its
+  id is used once in its list; `subtitle`, `status` and `actions` are refused on the app document.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's
   statically known argument kinds are ones it takes; `visible`, `enabled`, `readonly`, `required`,
   `stale`, `open`, `when`, `dirty`, a check's `assert` and every `if` condition are `bool` where

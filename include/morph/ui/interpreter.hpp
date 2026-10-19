@@ -2080,6 +2080,42 @@ struct LowerCtx {
     std::shared_ptr<BoundaryRuntime> boundary;
 };
 
+/// @brief An `actionButton` part, lowered in the scope of the list it belongs to: what a screen's head shows and
+///        an overlay's footer draws as buttons.
+struct ActionModel {
+    /// @brief The action's id, unique in its list.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief The label.
+    Prop<std::string> label;
+    /// @brief The name of an icon; empty for none.
+    Prop<std::string> icon;
+    /// @brief How much it stands out.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run.
+    Prop<bool> enabled = true;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+    /// @brief Runs its `onClick` as a user event, in one batch; empty when it declares none.
+    Action run;
+};
+
+/// @brief A list of lowered `actionButton` parts, in document order.
+using ActionModels = std::vector<ActionModel>;
+
+/// @brief A `headBadge` part, lowered in the screen scope.
+struct BadgeModel {
+    /// @brief The badge's text.
+    Prop<std::string> text;
+    /// @brief Its tone.
+    Prop<Tone> tone = Tone::Neutral;
+    /// @brief The name of an icon; empty for none.
+    Prop<std::string> icon;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+};
+
 /// @brief A kind's key spec, from the kind table.
 /// @param kind The kind spec.
 /// @param key  The key.
@@ -2319,6 +2355,19 @@ public:
         session.asUser([&] { runtime().batch([&] { runList(*commands, command, {}); }); });
     }
 
+    /// @brief Lowers a list of `actionButton` parts into reactive models: label, icon, enabled and visible bound in
+    ///        @p ctx's scope, and a run function that runs the part's `onClick` there as a user event.
+    /// @param parts The parts, in order.
+    /// @param ctx   The scope the list belongs to.
+    /// @return The models, in the parts' order.
+    [[nodiscard]] ActionModels lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
+    /// @brief Lowers a screen head's `headBadge` parts, bound in @p ctx's scope.
+    /// @param parts The parts, in order.
+    /// @param ctx   The screen scope.
+    /// @return The badges, in the parts' order.
+    [[nodiscard]] std::vector<BadgeModel> lowerBadgeParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
     // --- Lowering ----------------------------------------------------------------------------------------------
 
     /// @brief Lowers a document node to a view node.
@@ -2525,6 +2574,38 @@ private:
 
 }  // namespace detail
 
+/// @brief A status badge of a screen's head, as its handle answers it.
+struct HeadBadge {
+    /// @brief The badge's text.
+    std::string text;
+    /// @brief Its tone.
+    Tone tone = Tone::Neutral;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadBadge const&) const = default;
+};
+
+/// @brief An action of a screen's head, as its handle answers it.
+struct HeadAction {
+    /// @brief The action's id, what `ScreenHead::run` takes.
+    std::string id;
+    /// @brief The label.
+    std::string label;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+    /// @brief How much it stands out.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run now.
+    bool enabled = true;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadAction const&) const = default;
+};
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2546,6 +2627,8 @@ public:
         }
         _core->focusElement = {};
         _mounted.reset();
+        _headActions.clear();
+        _headStatus.clear();
         _scope.reset();
     }
 
@@ -2581,6 +2664,61 @@ public:
     /// @brief Evaluates the document's `identity`.
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
+
+    /// @brief Evaluates the document's `subtitle`, the head's line under the title.
+    /// @return It, or `null`.
+    [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
+
+    /// @brief The head's status badges that are visible now, in order. A tracked read.
+    /// @return They.
+    [[nodiscard]] std::vector<HeadBadge> status() const {
+        std::vector<HeadBadge> shown;
+        for (detail::BadgeModel const& badge : _headStatus) {
+            if (badge.visible.evaluate()) {
+                shown.push_back(HeadBadge{
+                    .text = badge.text.evaluate(), .tone = badge.tone.evaluate(), .icon = badge.icon.evaluate()});
+            }
+        }
+        return shown;
+    }
+
+    /// @brief The head's actions that are visible now, in order, each with whether it is enabled. A tracked read.
+    /// @return They.
+    [[nodiscard]] std::vector<HeadAction> actions() const {
+        std::vector<HeadAction> shown;
+        for (detail::ActionModel const& action : _headActions) {
+            if (action.visible.evaluate()) {
+                shown.push_back(HeadAction{.id = action.id,
+                                           .label = action.label.evaluate(),
+                                           .icon = action.icon.evaluate(),
+                                           .emphasis = action.emphasis,
+                                           .enabled = action.enabled.evaluate()});
+            }
+        }
+        return shown;
+    }
+
+    /// @brief Runs a head action's `onClick` as a user event in the screen scope, in one batch.
+    /// @param id The action's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled.
+    bool runAction(std::string_view id) {
+        auto const found = std::ranges::find(_headActions, id, &detail::ActionModel::id);
+        if (found == _headActions.end()) {
+            _core->report("/actions", "head action " + std::string{id} + " is unknown");
+            return false;
+        }
+        auto const [visible, enabled] =
+            runtime().untracked([&] { return std::pair{found->visible.evaluate(), found->enabled.evaluate()}; });
+        if (!visible || !enabled) {
+            _core->report(found->path, "head action " + found->id + (visible ? " is disabled" : " is hidden"));
+            return false;
+        }
+        if (found->run) {
+            found->run();
+        }
+        return true;
+    }
 
     /// @brief Evaluates the document's `dirty`.
     /// @return Whether it is `true`.
@@ -2717,6 +2855,9 @@ private:
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
     std::optional<Mounted> _mounted;
+    // The head's parts, bound in the screen scope.
+    std::vector<detail::BadgeModel> _headStatus;
+    detail::ActionModels _headActions;
 };
 
 /// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
@@ -5253,6 +5394,43 @@ inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> p
     return items;
 }
 
+inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    ActionModels models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        ActionModel model{.id = part->id,
+                          .path = part->path,
+                          .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+                          .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                          .emphasis = ButtonEmphasis::Normal,
+                          .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+                          .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+                          .run = {}};
+        if (part->name("emphasis") == "primary") {
+            model.emphasis = ButtonEmphasis::Primary;
+        } else if (part->name("emphasis") == "danger") {
+            model.emphasis = ButtonEmphasis::Danger;
+        }
+        if (Commands const* const commands = part->event("onClick")) {
+            model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+        }
+        models.push_back(std::move(model));
+    }
+    return models;
+}
+
+inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    std::vector<BadgeModel> badges;
+    badges.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        badges.push_back(BadgeModel{.text = bindProp<std::string>(ctx, part->prop("text"), std::string{}, stringOf),
+                                    .tone = bindProp<Tone>(ctx, part->prop("tone"), Tone::Neutral, toneOf),
+                                    .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                                    .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf)});
+    }
+    return badges;
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
@@ -6787,11 +6965,18 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         static_cast<void>(chord);
         lists.push_back(&commands);
     }
+    for (DocNodePtr const& action : doc->actions) {
+        if (Commands const* const commands = action->event("onClick")) {
+            lists.push_back(commands);
+        }
+    }
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
             .scope = screen->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
         Node lowered = core.lower(*doc->view, ctx);
+        screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
+        screen->_headActions = core.lowerActionParts(doc->actions, ctx);
         if (!doc->keys.empty()) {
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {

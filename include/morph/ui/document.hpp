@@ -534,6 +534,12 @@ struct Document {
     ExprPtr identity;
     /// @brief The unsaved-changes expression.
     ExprPtr dirty;
+    /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
+    ExprPtr subtitle;
+    /// @brief The head's status badges: `headBadge` parts, in order.
+    std::vector<DocNodePtr> status;
+    /// @brief The head's actions: `actionButton` parts, in order.
+    std::vector<DocNodePtr> actions;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -814,6 +820,17 @@ inline constexpr std::array<KeySpec, 5> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"onDismiss", Shape::Commands}}};
 /// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
+/// @brief The keys of an `actionButton` part: a button a screen's head or an overlay's footer shows.
+inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
+                                                              {"label", Shape::Expr, {}, kRequired},
+                                                              {"icon", Shape::Expr},
+                                                              {"emphasis", Shape::Text},
+                                                              {"enabled", Shape::Condition},
+                                                              {"visible", Shape::Condition},
+                                                              {"onClick", Shape::Commands}}};
+/// @brief The keys of a `headBadge` part: a status badge of a screen's head.
+inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
+    {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
 inline constexpr std::array<KeySpec, 3> kBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}}};
@@ -868,7 +885,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 46> kKinds = {{
+inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -914,6 +931,8 @@ inline constexpr std::array<KindSpec, 46> kKinds = {{
     {"a11y", kA11yKeys, kPart},
     {"drag", kDragKeys, kPart},
     {"drop", kDropKeys, kPart},
+    {"actionButton", kActionButtonKeys, kPart},
+    {"headBadge", kHeadBadgeKeys, kPart},
     {"fields", {}, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
@@ -1019,6 +1038,18 @@ public:
         doc.title = optionalExpr(*object, "title", "");
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
+        doc.subtitle = optionalExpr(*object, "subtitle", "");
+        doc.status = topParts(*object, "status", "headBadge");
+        doc.actions = topParts(*object, "actions", "actionButton");
+        if (doc.id == "app") {
+            // The head belongs to a screen's tab; the app document has no view and so no head.
+            for (std::string_view const key : {"subtitle", "status", "actions"}) {
+                if (member(*object, key) != nullptr) {
+                    refuse(pointerAppend("", key),
+                           "`" + std::string{key} + "` is a screen's; the app document has none");
+                }
+            }
+        }
         doc.showErrors = showErrors(*object, "");
         if (Json const* const params = member(*object, "params")) {
             for (auto const& [name, type] : objectOf(*params, "/params", "`params` maps names to types")) {
@@ -1173,6 +1204,25 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // A top-level list of parts: the screen head's `status` and `actions`.
+    [[nodiscard]] std::vector<DocNodePtr> topParts(Json::object_t const& object, std::string_view key,
+                                                   std::string_view kind) {
+        std::vector<DocNodePtr> parts;
+        Json const* const value = member(object, key);
+        if (value == nullptr) {
+            return parts;
+        }
+        std::string const path = pointerAppend("", key);
+        auto const* const array = std::get_if<Json::array_t>(&value->data);
+        if (array == nullptr) {
+            refuse(path, "`" + std::string{key} + "` is an array");
+        }
+        for (std::size_t index = 0; index < array->size(); ++index) {
+            parts.push_back(part(array->at(index), kind, pointerAppend(path, index)));
+        }
+        return parts;
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per kind of declaration.
@@ -2131,6 +2181,9 @@ public:
         if (_doc->view) {
             collect(*_doc->view, screen);
         }
+        for (DocNodePtr const& part : headParts()) {
+            collectPart(*part, screen, screen);
+        }
         std::vector<ScopeInfo*> componentScopes;
         for (auto const& [name, component] : _doc->components) {
             static_cast<void>(name);
@@ -2151,6 +2204,13 @@ public:
         if (_doc->dirty) {
             checkCondition(*_doc->dirty, root, "`dirty`");
         }
+        if (_doc->subtitle) {
+            checkExpr(*_doc->subtitle, root);
+        }
+        for (DocNodePtr const& part : headParts()) {
+            checkElement(*part, root, true);
+        }
+        checkActionButtons(_doc->actions, "/actions");
         for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
@@ -2792,6 +2852,26 @@ private:
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+    }
+
+    // The screen head's parts: its status badges, then its actions.
+    [[nodiscard]] std::vector<DocNodePtr> headParts() const {
+        std::vector<DocNodePtr> parts = _doc->status;
+        parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
+        return parts;
+    }
+
+    // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
+    static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
+        static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
+        std::set<std::string_view> ids;
+        for (DocNodePtr const& button : buttons) {
+            if (!ids.insert(button->id).second) {
+                refuse(pointerAppend(button->path, "id"),
+                       "the action id `" + button->id + "` is used twice in " + path + "; each action has its own");
+            }
+            checkChoice(*button, "emphasis", kEmphasis);
         }
     }
 

@@ -53,6 +53,25 @@ constexpr std::string_view kDraft = R"({
   "identity": { "ref": "noteId" }, "title": "Draft",
   "view": { "kind": "text", "testId": "draft", "text": "draft" } })";
 
+/// A screen with a head: a subtitle that follows its state, two badges (one hidden) and two actions (one disabled).
+constexpr std::string_view kHeaded = R"({
+  "vocab": "ui/1", "id": "headed", "title": "Sample",
+  "subtitle": { "ref": "stage" },
+  "status": [ { "text": "Draft", "tone": "warn" }, { "text": "Hidden", "visible": false } ],
+  "actions": [
+    { "id": "save", "label": "Save", "emphasis": "primary",
+      "onClick": [ { "set": "stage", "value": { "fn": "concat", "args": [ { "ref": "stage" }, "!" ] } } ] },
+    { "id": "publish", "label": "Publish", "enabled": false, "onClick": [ { "set": "stage", "value": "Published" } ] }
+  ],
+  "state": { "stage": { "init": "Editing" } },
+  "view": { "kind": "text", "testId": "body", "text": { "ref": "stage" } } })";
+
+/// What the document host reported, across the tests that read it.
+std::vector<std::string>& reported() {
+    static std::vector<std::string> reasons;
+    return reasons;
+}
+
 /// A host over the harness that routes navigation to the shell and decides a dirty screen's close by a script.
 class Host final : public DocumentScreenHost {
 public:
@@ -74,13 +93,15 @@ private:
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"home", loadOrFail(kHome, morph::ui::testing::corpusCatalog())},
-            {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())}};
+            {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
+            {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
         made.documents = [](std::string_view id) -> std::shared_ptr<Document const> {
             auto const found = documents.find(id);
             return found == documents.end() ? nullptr : found->second;
         };
         made.backend = &harness.backend;
+        made.diagnostics = [](morph::ui::Refusal const& refusal) { reported().push_back(refusal.reason); };
         if (guardAnswer) {
             made.guard = [answer = *guardAnswer](ScreenHandle&,
                                                  std::function<void(morph::ui::CloseChoice)> const& choose) {
@@ -339,4 +360,68 @@ TEST_CASE("workspace: a tab's handle is reachable, and forceCloseAll closes ever
     harness.settle();
     CHECK(shell.tabs().empty());
     CHECK(shell.activeHandle() == nullptr);
+}
+
+// Mutation: answer null from a document screen's `head()` (nothing reaches the head or the row).
+TEST_CASE("workspace: a document's head answers its subtitle, visible badges and actions, and runs an enabled one",
+          "[ui][workspace]") {
+    using morph::ui::HeadAction;
+    using morph::ui::HeadBadge;
+    reported().clear();
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("headed", {}) == 0U);
+    harness.settle();
+    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    REQUIRE(head != nullptr);
+    CHECK(head->subtitle().peek() == "Editing");
+    CHECK(head->status().peek() ==
+          std::vector<HeadBadge>{{.text = "Draft", .tone = morph::ui::Tone::Warn, .icon = ""}});
+    CHECK(head->actions().peek() == std::vector<HeadAction>{{.id = "save",
+                                                             .label = "Save",
+                                                             .icon = "",
+                                                             .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                                             .enabled = true},
+                                                            {.id = "publish",
+                                                             .label = "Publish",
+                                                             .icon = "",
+                                                             .emphasis = morph::ui::ButtonEmphasis::Normal,
+                                                             .enabled = false}});
+
+    CHECK(head->run("save"));
+    harness.settle();
+    CHECK(head->subtitle().peek() == "Editing!");
+    CHECK_FALSE(head->run("publish"));
+    CHECK_FALSE(head->run("nowhere"));
+    harness.settle();
+    CHECK(head->subtitle().peek() == "Editing!");
+    CHECK(reported() == std::vector<std::string>{"head action publish is disabled", "head action nowhere is unknown"});
+
+    // The row above the screen: the subtitle, the visible badge, and the actions as buttons.
+    CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") != "false");
+    CHECK(harness.text("head_subtitle") == harness.text("body"));
+    CHECK(harness.backend.prop(harness.byTestId("Badge", "head_status_0"), "text") == "Draft");
+    CHECK(harness.backend.find("Badge", "testId", "head_status_0").has_value());
+    CHECK_FALSE(harness.backend.find("Badge", "testId", "head_status_1").has_value());
+    CHECK(harness.backend.prop(harness.byTestId("Button", "head_action_publish"), "enabled") == "false");
+    harness.backend.click(harness.byTestId("Button", "head_action_save"));
+    harness.settle();
+    CHECK(head->subtitle().peek() == "Editing!!");
+    CHECK(reported().size() == 2);
+}
+
+// Mutation: show the row whatever the head holds (a screen without a head gets an empty row).
+TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}) == 0U);
+    harness.settle();
+    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    REQUIRE(head != nullptr);
+    CHECK(head->subtitle().peek().empty());
+    CHECK(head->status().peek().empty());
+    CHECK(head->actions().peek().empty());
+    CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
 }

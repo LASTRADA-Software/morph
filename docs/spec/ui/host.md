@@ -31,7 +31,8 @@ and is its `InterpreterHost` for `navigate`.
 |---|---|
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
-| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, and the save seam `canSave()` and `save(done)`. |
+| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
+| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -104,6 +105,13 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has
   closed, and `dirty()` is then `false`.
+- `head()` of a document screen is its head: the document's `subtitle` as text, its visible `status` badges and its
+  visible `actions`, empty when the document declares none. A host screen's `head()` is null unless its handle
+  overrides it. `run(id)` runs the action's `onClick` as a user event in the screen scope, in one batch, and answers
+  `true`; for an id the head does not hold, or holds hidden or disabled, it answers `false` and reports a diagnostic
+  (`head action <id> is unknown`, `… is hidden`, `… is disabled`). `subtitle()` keeps its last value once the screen
+  has closed, `status()` and `actions()` are then empty, and after a `remount` the head follows the new screen.
+  `HeadBadge` and `HeadAction` are declared in `interpreter.hpp`, since `Screen` answers them.
 
 ## The close protocol
 

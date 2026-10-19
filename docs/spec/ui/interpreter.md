@@ -267,6 +267,12 @@ applies to the width.
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
 - **`switch`** selects the first case whose `when` equals `on` (structurally), else `default`.
+- **Action parts.** `ScreenCore::lowerActionParts(parts, ctx)` lowers a list of `actionButton` parts into
+  `ActionModels`: the label, icon, `enabled` and `visible` bound in `ctx`'s scope, the emphasis, and a run function
+  that runs the part's `onClick` there as a user event, in one batch.
+- **The head.** A screen's `status` and `actions` are lowered once, at mount, in the screen scope; `Screen::status()`
+  and `Screen::actions()` read the visible ones (a tracked read), `Screen::subtitle()` evaluates `subtitle`, and
+  `Screen::runAction(id)` runs an enabled, visible action, reporting an unknown, hidden or disabled id.
 - **A field's `label`.** A text input, select, slider, date-time input or file picker shows no caption of
   its own unless the document asks, so its `label` is bound as its accessible name (`Common::a11y.name`). An
   `a11y` part that gives a `name` wins over it; one that gives only a `role` leaves the label as the name. A
