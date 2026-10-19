@@ -69,8 +69,9 @@ struct FrontendConfig {
   `Ignore` leaves the theme as `onEngine` set it; a bundle that carries a theme index is then reported once on
   `std::cerr` (`the bundle's theme is not applied: FrontendConfig::bundleTheme is Ignore`), the channel `run` already
   uses for theme problems (`frontend.cpp:146`). With `Apply`, `run` snapshots the `Theme` singleton's writable
-  properties before and after the hook; when the hook changed any and the open then applies the bundle's theme (or
-  the defaults, for a bundle without one, `theme.cpp:186-188`), it reports once on `std::cerr`
+  properties before and after the hook (all but its `var` properties, the schemes a theme declares: their JavaScript
+  values never compare equal, even to themselves); when the hook changed any and the open then applies the bundle's
+  theme (or the defaults, for a bundle without one, `theme.cpp:186-188`), it reports once on `std::cerr`
   (`the theme onEngine applied is replaced by the bundle's; set FrontendConfig::bundleTheme to Ignore to keep it`).
 - An `onEngine` that throws: `run` destroys the window, the engine, the scheduler, the runtime and the executor in
   the documented order and rethrows. Nothing is mounted.
@@ -163,15 +164,17 @@ now show it once. `statusText`'s "fill the required (*) fields" still names the 
 ### 4.2 A visible caption on standalone inputs (#1002-6)
 
 - **Document.** `textInput`, `select` and `dateTimeInput` gain `showLabel` (a literal `bool`, set once; default
-  `false`). With `true`, the `label` is also drawn as a visible caption. `label` stays the accessible name either way.
-  A non-bool `showLabel`, or `showLabel` without a `label`, is refused at load.
+  `false`; a literal-flag key, not an expression). With `true`, the `label` is also drawn as a visible caption.
+  `label` stays the accessible name either way. A non-bool `showLabel`, or `showLabel` without a `label`, is refused
+  at load.
 - **View tree.** `ui::TextInput`, `ui::Select` and `ui::DateTimeInput` gain `Prop<std::string> label` and
   `bool showLabel = false`. `formView` sets `label` to the field's label and leaves `showLabel` false: the cell draws
   the caption, so a kit never doubles it.
 - **Backend contract.** `TextInputWidget`, `SelectWidget` and `DateTimeInputWidget` each gain
   `virtual void setCaption(std::string_view label, bool shown) = 0;` — the field's label, and whether the field draws
   it as a visible caption. `FieldWidget`'s other subclasses (text, checkbox, slider, file picker) are unchanged. The
-  mount calls it for the three kinds (`RecordingBackend` logs `;caption=…;shown=…`).
+  mount calls it for the three kinds only when the input has a `label` (bound or non-empty) or `showLabel`, so an input
+  without a label is told nothing (`RecordingBackend` stores the properties `caption` and `captionShown`).
 - **Qt Quick.** `MorphField` gains `property string caption` and `property bool labelShown`, and lays the caption out
   above its control while `labelShown`. (Not `label`: `MorphCheckbox` already declares `label` for its own text.) A
   kit restyle reads `caption` with `labelShown` false to know its label is drawn elsewhere.
@@ -187,6 +190,9 @@ now show it once. `statusText`'s "fill the required (*) fields" still names the 
 - **View tree.** `ui::TextInput` gains `Prop<std::string> unit` (empty: none) and `int decimals = -1` (set once; −1:
   not a number field).
 - **Backend contract.** `TextInputWidget` gains `setUnit(std::string_view unit)` and `setDecimals(int decimals)`.
+  The mount calls `setUnit` only for an input with a unit (bound or non-empty) and `setDecimals` only for
+  `decimals ≥ 0`, so a backend sees only what a field declares. A `Multiline` input with either is refused with
+  `std::logic_error` (a multi-line input holds no number).
 - **Forms engine.** `fieldControl` sets `unit` from `spec.unit` (or the overlay's unit) and `decimals` from the entry
   unit's places for Integer (0), Number, Decimal and single-unit Quantity fields; `unitSuffix` and its muted text go
   away. A Quantity with alternatives keeps its unit `Select` beside the input, and its input gets no `unit`.
@@ -218,7 +224,11 @@ names the missing properties. `qt_quick/backend.md` states that a base's new pro
   `tone` is engaged outside a table, like `setRowKey` of a non-row. (A `Prop<std::optional<Tone>>` alone cannot tell
   "not given" from "given as none", `view.hpp:104-110`.)
 - **Backend contract.** `TableWidget::setRowTone(Widget& row, std::optional<Tone> tone)`, called after `setRowKey`
-  and on every change.
+  and on every change. The mount binds it through the table's row hook, whose signature takes the row's scope and
+  view node as well as its widget and key (`RowHook = std::function<void(reactive::Scope&, Node const&, Widget&,
+  Key const&)>`), so the tone binds in the row's own scope.
+- **Overloads.** With both `ui::table` overloads taking a `std::function`, an empty `{}` row builder is ambiguous; a
+  caller passing an empty one names its type.
 - **Qt Quick.** `TableImpl` writes the row's `tone`; the stock row background fills with the tone's `.bg` colour
   (§7.1) and draws a 3 px leading bar in its `.dot` colour; a selected row shows the selection colour and keeps the
   bar.
@@ -484,7 +494,8 @@ public:
   `Handle<T>` everywhere a handle is taken, so `screen.let(name, m.result())`, comparisons and
   `orElse` compile as before. The compiler's error points at the deleted declaration, whose comment names the fix.
 - The runtime refusal in `detail::fieldOf` (`AuthoringError`) stays the second line, for a `{"result": …}` expression
-  built through `Handle<Any>::raw`.
+  built through `Handle<Any>::raw`. Its test reaches `at` by converting the result handle first,
+  `Handle<ResultView>{capture.result()}.at(&ResultView::id)`, since `result().at` no longer compiles.
 - **Specs.** `ui/author.md` (the handle table; "throws `AuthoringError` on any other expression (a call, a
   `result`)" becomes: a `result()` handle has no `at` at compile time; a call is refused at registration).
 
