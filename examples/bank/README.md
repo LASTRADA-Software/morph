@@ -214,6 +214,23 @@ an audit trail to `bank_actions.jsonl` in its working directory, the same
 `morph::journal::FileActionLog` the CLI installs — the models' read-only actions
 carry `Loggable::No`, so what lands there is the mutating half of the surface.
 
+It also serves bank's screens through a `UiService`, so the generic client can open it with `--server`.
+
+#### An agent over MCP (`--mcp-stdio`)
+
+With `--mcp-stdio` the server also serves an agent, such as Claude Code, over MCP's stdio transport, beside its
+WebSocket clients. Each bank action the agent's principal may run is a tool, with the action's schema, and
+`evaluate` is a dry run. A tool call is an ordinary execute on the agent's own connection, so every open GUI that
+shows what it changes updates. Stdout then carries only JSON-RPC, so the status lines go to stderr. The agent's
+identity is `MORPH_MCP_PRINCIPAL`, which bank's demo authorizer vouches for (`MORPH_MCP_TOKEN` is carried as its
+token, for an authorizer that verifies one). The server stops when its stdin ends.
+
+```sh
+claude mcp add bank -e MORPH_MCP_PRINCIPAL=alice \
+    -e BANK_DB="DRIVER=SQLite3;Database=$PWD/bank.db" -e BANK_PORT=0 \
+    -- ./build/examples/bank/ladder_bank_server --mcp-stdio
+```
+
 #### Scenarios
 
 `scripts/scenario/scenarios/bank/` holds 22 scenario files that drive this

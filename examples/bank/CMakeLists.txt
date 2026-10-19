@@ -173,7 +173,7 @@ if(MORPH_BUILD_QT)
     # requirements name it.
     find_package(Qt6 REQUIRED COMPONENTS Core WebSockets)
     add_executable(ladder_bank_server src/server/main.cpp)
-    target_link_libraries(ladder_bank_server PRIVATE bank_lib morph::qt morph_qt_impl Qt6::Core)
+    target_link_libraries(ladder_bank_server PRIVATE bank_lib bank_screens morph::qt morph_qt_impl Qt6::Core)
     target_compile_features(ladder_bank_server PRIVATE cxx_std_23)
     apply_bigobj(ladder_bank_server)
     # No apply_warnings(), for the same reason bank_lib skips it: this target
@@ -221,6 +221,13 @@ if(MORPH_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${PROJECT_SOURCE_DIR}/tests)
         target_link_libraries(ladder_bank_tests PRIVATE bank_lib morph_test_main)
+        # The server's --mcp-stdio, driven over a shell pipe: a POSIX shell is what the case launches it with.
+        if(TARGET ladder_bank_server AND NOT WIN32)
+            target_sources(ladder_bank_tests PRIVATE tests/test_mcp_stdio.cpp)
+            target_compile_definitions(ladder_bank_tests PRIVATE
+                BANK_SERVER_PATH="$<TARGET_FILE:ladder_bank_server>")
+            add_dependencies(ladder_bank_tests ladder_bank_server)
+        endif()
         target_compile_features(ladder_bank_tests PRIVATE cxx_std_23)
         apply_bigobj(ladder_bank_tests)
         # A ctest command, so this block is not optional: without it the
