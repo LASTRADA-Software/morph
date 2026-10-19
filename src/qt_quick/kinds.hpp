@@ -41,6 +41,7 @@ public:
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
     void setDecimals(int decimals) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
     [[nodiscard]] std::size_t cursor() const;
@@ -68,6 +69,7 @@ public:
     void setSelected(std::optional<ui::Key> const& key) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
     void setOnOpen(ui::Action onOpen) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The index of the option the select marks, or -1.
     [[nodiscard]] int marked() const;
@@ -86,6 +88,7 @@ public:
     DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes);
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
 
 private:

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "qt_quick/context.hpp"
+#include "qt_quick/keys.hpp"
 #include "qt_quick/relay.hpp"
 
 namespace morph::qt_quick::detail {
@@ -219,6 +220,13 @@ public:
     void setRequired(bool required) override { this->write("required", required); }
     void setErrors(std::vector<std::string> const& errors) override;
     void setStale(bool stale) override { this->write("stale", stale); }
+
+protected:
+    /// The field's label as `caption`, and `labelShown`: what `setCaption` writes for the kinds that have one.
+    void showCaption(std::string_view label, bool shown) const {
+        this->write("caption", toQString(label));
+        this->write("labelShown", shown);
+    }
 };
 
 /// The messages as a QML string list.

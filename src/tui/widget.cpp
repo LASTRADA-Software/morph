@@ -361,6 +361,23 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
 }
 
+::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption) {
+    if (caption.empty()) {
+        return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});
+    }
+    if (canvas.height() > 0) {
+        canvas.putString(0, 0, caption, canvas.theme().textNormal);
+    }
+    return canvas.subcanvas({.x = 0, .y = 1, .width = canvas.width(), .height = std::max(0, canvas.height() - 1)});
+}
+
+::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption) {
+    if (caption.empty()) {
+        return control;
+    }
+    return {.width = std::max(control.width, displayWidth(caption)), .height = control.height + 1};
+}
+
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     using Type = ::core::tui::MouseEvent::Type;
     if (blockedByDialog()) {

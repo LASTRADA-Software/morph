@@ -306,21 +306,22 @@ void TextInputImpl::setDecimals(int decimals) {
     int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
     int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
-    return {.width = width, .height = height};
+    return withFieldCaption({.width = width, .height = height}, caption());
 }
 
 std::string TextInputImpl::probeText() const { return std::string{_field->text()}; }
 
 void TextInputImpl::paint(::core::tui::Canvas& canvas) {
+    auto control = paintFieldCaption(canvas, caption());
     if (_unit.empty()) {
-        paintField(*_field, *this, actionable(), canvas);
+        paintField(*_field, *this, actionable(), control);
     } else {
-        int const unitX = std::max(0, canvas.width() - marksWidth() - displayWidth(_unit));
-        auto text = canvas.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = canvas.height()});
+        int const unitX = std::max(0, control.width() - marksWidth() - displayWidth(_unit));
+        auto text = control.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = control.height()});
         paintField(*_field, *this, actionable(), text);
-        canvas.putString(0, unitX, _unit, canvas.theme().textMuted);
+        control.putString(0, unitX, _unit, control.theme().textMuted);
     }
-    paintMarks(canvas);
+    paintMarks(control);
 }
 
 void TextInputImpl::edited() {
@@ -376,14 +377,15 @@ void DateTimeInputImpl::setOnChange(std::function<void(std::optional<morph::time
 }
 
 ::core::tui::Size DateTimeInputImpl::naturalSize() const {
-    return {.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1};
+    return withFieldCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1}, caption());
 }
 
 std::string DateTimeInputImpl::probeText() const { return std::string{_field->text()}; }
 
 void DateTimeInputImpl::paint(::core::tui::Canvas& canvas) {
-    paintField(*_field, *this, actionable(), canvas);
-    paintMarks(canvas);
+    auto control = paintFieldCaption(canvas, caption());
+    paintField(*_field, *this, actionable(), control);
+    paintMarks(control);
 }
 
 void DateTimeInputImpl::edited() { _invalid = false; }

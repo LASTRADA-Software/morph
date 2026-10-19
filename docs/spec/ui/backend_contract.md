@@ -156,9 +156,9 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
 | `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
-| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
+| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
-| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
+| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
 | `StackWidget` | `setGap` | — |
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)` | — |
@@ -169,7 +169,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `DialogWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
-| `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field) | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
+| `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)` |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |

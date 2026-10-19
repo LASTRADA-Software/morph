@@ -429,6 +429,12 @@ struct TextInput {
     /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
     ///        not hold a number. Set once; the mount refuses places on a multiline input.
     int decimals = -1;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -474,6 +480,12 @@ struct Select {
     Action onOpen;
     /// @brief Dropdown or radio; set once.
     SelectStyle style = SelectStyle::Dropdown;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -840,6 +852,12 @@ struct DateTimeInput {
     DateMode mode = DateMode::DateTime;
     /// @brief The display zone's offset from UTC, in minutes; set once.
     int offsetMinutes = 0;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.

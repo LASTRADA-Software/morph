@@ -171,6 +171,9 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             },
         .onOpen = [field] { field->retryOptions(); },
         .style = style,
+        // The cell draws the caption, so the select is told its label and not to show it.
+        .label = [field] { return field->label(); },
+        .showLabel = false,
         .field = fieldState(field),
         .common = controlCommon(field),
     });
@@ -196,6 +199,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .mode = mode,
             .unit = std::move(unit),
             .decimals = decimals,
+            .label = [field] { return field->label(); },
+            .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
         });
@@ -225,6 +230,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 },
             .mode = date ? ui::DateMode::Date : ui::DateMode::DateTime,
             .offsetMinutes = offset,
+            .label = [field] { return field->label(); },
+            .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
         });

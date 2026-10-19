@@ -133,6 +133,21 @@ TEST_CASE("tui fields: a unit is drawn muted at the right edge before the marks,
     CHECK_THROWS_AS(multiline->setUnit("kg"), std::logic_error);
 }
 
+// Mutation: ignore `shown` in setCaption (no caption row is drawn).
+TEST_CASE("tui fields: a shown caption is drawn on its own row above the control", "[tui][fields]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const input = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    input->setText("Ada");
+    input->setCaption("Name", true);
+    auto const other = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    other->setText("x");
+    other->setCaption("Hidden", false);
+    CHECK(harness.draw() == Rows{"Name", "Ada", "x"});
+    input->setCaption("Name", false);
+    CHECK(harness.draw() == Rows{"Ada", "x"});
+}
+
 TEST_CASE("tui fields: a password field never shows what was typed", "[tui][fields]") {
     Harness harness{20, 1};
     auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Password);

@@ -399,3 +399,31 @@ TEST_CASE("form, collection and wizard nodes: a catalog document that does not b
     CHECK(reasons.at(3) == "the wizard document of `Lims_ConfirmSample` starts with `Lims_CaptureConcentration`");
     CHECK(h.dispatcher.calls.empty());
 }
+
+// Mutation: tell the inputs their label is never shown (the standalone inputs report `captionShown=false`).
+TEST_CASE("an input shows its label as a caption only when the document asks; a form's cell draws its own",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "captions",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "textInput", "testId": "shownText", "label": "Name", "showLabel": true },
+        { "kind": "select", "testId": "shownSelect", "label": "Grade", "showLabel": true },
+        { "kind": "dateTimeInput", "testId": "shownWhen", "label": "When", "showLabel": true },
+        { "kind": "textInput", "testId": "named", "label": "Hidden caption" },
+        { "kind": "textInput", "testId": "bare" },
+        { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration" } ] } })");
+    auto const caption = [&h](std::string_view kind, std::string_view testId) {
+        int const widget = h.byTestId(kind, testId);
+        return h.backend.prop(widget, "caption") + "|" + h.backend.prop(widget, "captionShown");
+    };
+    CHECK(caption("TextInput", "shownText") == "Name|true");
+    CHECK(caption("Select", "shownSelect") == "Grade|true");
+    CHECK(caption("DateTimeInput", "shownWhen") == "When|true");
+    CHECK(caption("TextInput", "named") == "Hidden caption|false");  // the accessible name, not drawn
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("TextInput", "bare"), "caption"));
+    // In a form the cell draws the caption, and the input is told not to.
+    CHECK(caption("TextInput", "field_sampleId") == "Sample|false");
+    CHECK(h.text("label_sampleId") == "Sample");
+}

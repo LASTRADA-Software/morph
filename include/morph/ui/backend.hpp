@@ -196,6 +196,12 @@ public:
     ///        single-line or password input.
     /// @param decimals The places, from 0; -1 when the input does not hold a number.
     virtual void setDecimals(int decimals) = 0;
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief A labelled check box.
@@ -240,6 +246,12 @@ public:
     /// @param onOpen The handler; empty stops calling one.
     // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from; the default drops it.
     virtual void setOnOpen(Action onOpen) { static_cast<void>(onOpen); }
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief One entry of a menu as a `MenuWidget` shows it.
@@ -439,6 +451,12 @@ public:
     /// @brief Sets what a user edit calls, with the instant entered or `nullopt` for a cleared field.
     /// @param onChange The handler; empty does nothing.
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief An integer on a range.

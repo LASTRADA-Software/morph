@@ -542,6 +542,16 @@ private:
         return found;
     }
 
+    /// An input's label and whether it shows it: only when it has a label or shows one, so an input without a label
+    /// is told nothing.
+    template <class Widget>
+    void applyCaption(reactive::Scope& scope, Widget& widget, Prop<std::string> const& label, bool shown) {
+        if (!shown && !label.isBound() && label.constant().empty()) {
+            return;
+        }
+        bind(scope, label, [&widget, shown](std::string const& text) { widget.setCaption(text, shown); });
+    }
+
     // Like applyCommon, a constant default calls no setter.
     void applyField(reactive::Scope& scope, FieldWidget& widget, FieldState const& field) {
         if (field.readonly.isBound() || field.readonly.constant()) {
@@ -595,6 +605,7 @@ private:
         if (spec.decimals >= 0) {
             widget.setDecimals(spec.decimals);
         }
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));
         widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
         widget.setOnCommit(event(spec.onCommit));
@@ -620,6 +631,7 @@ private:
             spec.onSelect,
             controlled(scope, spec.selected, [&widget](std::optional<Key> const& key) { widget.setSelected(key); })));
         widget.setOnOpen(event(spec.onOpen));
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         return widget;
     }
 
@@ -1239,6 +1251,7 @@ private:
             spec.onChange,
             controlled(scope, spec.value,
                        [&widget](std::optional<morph::time::Timestamp> const& value) { widget.setValue(value); })));
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         return widget;
     }
 

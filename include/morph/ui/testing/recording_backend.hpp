@@ -833,7 +833,8 @@ public:
     void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, the field state, and a text cursor.
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,
+///        `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
 /// the field shows leaves it alone, as the contract requires, and `setText` with another text puts it at the end.
@@ -875,6 +876,10 @@ public:
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
+    }
     void setOnChange(std::function<void(std::string)> onChange) override { callbacks().change = std::move(onChange); }
     void setOnSubmit(std::function<void(std::string)> onSubmit) override { callbacks().submit = std::move(onSubmit); }
     void setOnCommit(std::function<void(std::string)> onCommit) override { callbacks().commit = std::move(onCommit); }
@@ -893,7 +898,7 @@ public:
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };
 
-/// @brief A fake `SelectWidget`: properties `style`, `options`, `selected`.
+/// @brief A fake `SelectWidget`: properties `style`, `options`, `selected`, `caption`, `captionShown`.
 ///
 /// `selected` shows the option the widget marks: the requested key while the options contain it, else `none`. The
 /// requested key is kept, so options that bring it back mark it again; that re-marking is the widget's own doing and
@@ -928,6 +933,10 @@ public:
     /// @brief Stores the handler `RecordingBackend::open` calls.
     /// @param onOpen The handler.
     void setOnOpen(Action onOpen) override { callbacks().open = std::move(onOpen); }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
+    }
 
     /// @brief Whether one of the current options has @p key.
     /// @param key The key.
@@ -1015,7 +1024,7 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`.
+/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`, `caption`, `captionShown`.
 class FakeDateTimeInput final : public FakeField<DateTimeInputWidget> {
 public:
     using FakeField<DateTimeInputWidget>::FakeField;
@@ -1024,6 +1033,10 @@ public:
     }
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override {
         callbacks().dateTime = std::move(onChange);
+    }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
     }
 };
 

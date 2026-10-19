@@ -103,9 +103,9 @@ lowers them to the kinds below.
 |---|---|---|
 | `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success}`) |
 | `Button` | `button` | `label`, `onClick` |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `label` and `showLabel` (below) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
-| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once) |
+| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
 | `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once) |
 | `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
@@ -118,7 +118,7 @@ lowers them to the kinds below.
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
 | `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells, and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
-| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once |
+| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
 | `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
@@ -158,9 +158,15 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
 
+**Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;
+default `false`). With `showLabel` the input draws the label as a visible caption above its control; without
+it the caption is drawn elsewhere or not at all. Inside a form the field's cell (the column `formView` draws per
+field) owns the caption, and the input owns the required mark and the unit: `formView` sets `label` to the field's
+label and leaves `showLabel` false, so a kit never draws the caption twice.
+
 The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
-`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value`, `placeholder` and `unit`; Checkbox
-`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
+`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value`, `placeholder`, `unit` and `label`; Checkbox
+`label` and `checked`; Select `options`, `selected` and `label`; DateTimeInput `label`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
 `text` and the action's `label`; Badge `tone` and `text`; Progress `value` and `label`; Steps `items` and
@@ -249,7 +255,8 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
    setters once. A TextInput's `unit` is applied only when bound or not empty, and its `decimals`
    only when 0 or more, so an input that holds no number is told neither; a multiline input with
-   either is refused (`std::logic_error`). Each callback is handed over once, as an empty function when the node has none —
+   either is refused (`std::logic_error`). A TextInput's, Select's and DateTimeInput's `label` is
+   applied, as `setCaption(label, showLabel)`, only when bound, not empty, or `showLabel` is set. Each callback is handed over once, as an empty function when the node has none —
    except a Menu's `setOnActivate`, which always gets the mount's dispatcher over its items. Then
    the exceptions:
    - a Grid child's span is set only when it is not 1;

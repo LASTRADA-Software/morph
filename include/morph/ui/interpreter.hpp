@@ -5289,6 +5289,13 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             common.a11y.name = textProp("label");
         }
     };
+    // A standalone input draws its label as a caption only when the document asks for it (`showLabel`).
+    auto captionOf = [&](auto& spec) {
+        if (node.prop("label")) {
+            spec.label = textProp("label");
+        }
+        spec.showLabel = node.flag("showLabel");
+    };
     auto action = [&](std::string_view key) -> Action {
         Commands const* const commands = node.event(key);
         if (commands == nullptr) {
@@ -5379,6 +5386,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
@@ -5426,6 +5434,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::select(std::move(spec));
     }
     if (kind == "slider") {
@@ -5475,6 +5484,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::dateTimeInput(std::move(spec));
     }
     if (kind == "filePicker") {

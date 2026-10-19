@@ -508,6 +508,44 @@ TEST_CASE("qt_quick interpreter: a required form field shows one required mark, 
     CHECK(marks == 1);
 }
 
+// Mutation: tell the inputs their label is never shown (no caption is visible).
+TEST_CASE("qt_quick interpreter: a standalone input draws its caption above the control when the document asks",
+          "[qt_quick][interpreter][forms]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "captions",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "textInput", "testId": "shownText", "label": "Name", "showLabel": true },
+        { "kind": "select", "testId": "shownSelect", "label": "Grade", "showLabel": true },
+        { "kind": "dateTimeInput", "testId": "shownWhen", "label": "When", "showLabel": true },
+        { "kind": "textInput", "testId": "named", "label": "Hidden caption" },
+        { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration" } ] } })");
+    auto const captionOf = [](std::string_view testId) -> QQuickItem const& {
+        QQuickItem const* const item = QtHarness::widget(testId).item();
+        REQUIRE(item != nullptr);
+        auto const* const caption = item->findChild<QQuickItem*>(QStringLiteral("caption"));
+        REQUIRE(caption != nullptr);
+        return *caption;
+    };
+    for (auto const& [testId, text] :
+         {std::pair{"shownText", "Name"}, std::pair{"shownSelect", "Grade"}, std::pair{"shownWhen", "When"}}) {
+        INFO(testId);
+        QQuickItem const& caption = captionOf(testId);
+        CHECK(caption.isVisible());
+        CHECK(caption.property("text").toString() == QString::fromUtf8(text));
+        // The control sits under it.
+        QQuickItem const* const control = qobject_cast<QQuickItem*>(QtHarness::widget(testId).part("control"));
+        REQUIRE(control != nullptr);
+        CHECK(control->y() >= caption.height());
+    }
+    CHECK_FALSE(captionOf("named").isVisible());
+    // In a form the cell's label is the caption, and the input draws none.
+    CHECK_FALSE(captionOf("field_sampleId").isVisible());
+    CHECK_FALSE(QtHarness::widget("field_sampleId").read("labelShown").toBool());
+    CHECK(QtHarness::widget("label_sampleId").shownText() == "Sample");
+}
+
 // A `collection` node renders through Qt Quick: the rows' exact cells, the confirm dialog gating a row action, and
 // the row editor in its dialog, submitting through the model alias.
 TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits", "[qt_quick][interpreter][forms]") {

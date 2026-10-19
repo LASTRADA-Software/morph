@@ -301,6 +301,11 @@ private:
 
 /// Draws @p marks right-aligned on the canvas's first row, over what is there.
 void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
+/// Draws @p caption on the canvas's first row and answers the canvas below it, where a captioned field draws its
+/// control; the whole canvas for an empty caption.
+[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption);
+/// @p control grown by @p caption's row, and as wide as the caption needs; @p control itself for an empty caption.
+[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption);
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
 ///
@@ -370,6 +375,16 @@ protected:
     void paintMarks(::core::tui::Canvas& canvas) const { detail::paintFieldMarks(canvas, marks()); }
     /// How many cells the marks take at the right edge.
     [[nodiscard]] int marksWidth() const { return static_cast<int>(marks().size()); }
+    /// Takes the field's label as its caption while @p shown; otherwise the field draws none: what `setCaption`
+    /// does for the kinds that have one.
+    void showCaption(std::string_view label, bool shown) {
+        _caption = shown ? std::string{label} : std::string{};
+        this->refresh();
+    }
+    /// The caption drawn above the control; empty when there is none.
+    [[nodiscard]] std::string const& caption() const noexcept { return _caption; }
+    /// Rows the caption takes above the control: 1 while there is one.
+    [[nodiscard]] int captionRows() const noexcept { return _caption.empty() ? 0 : 1; }
 
 private:
     [[nodiscard]] std::string marks() const {
@@ -390,6 +405,7 @@ private:
     bool _required = false;
     bool _stale = false;
     std::vector<std::string> _errors;
+    std::string _caption;
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.

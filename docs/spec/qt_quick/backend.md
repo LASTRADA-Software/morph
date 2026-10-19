@@ -135,6 +135,10 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Collapsible | `MorphCollapsible` | a toggle with the title, the header beside it, the content below while open | the open state asked for |
 | DropZone | `MorphDropZone` | a framed `DropArea` for files | the local paths of a drop it took |
 
+- **Captions.** `MorphField` carries `caption` and `labelShown`; while `labelShown` it draws the caption above its
+  control and moves the control under it, and the field's implicit size takes it in. A text input, select and
+  date-time input write both from `setCaption`. A restyle reads `caption` with `labelShown` false to know its
+  label is drawn elsewhere. (The property is not `label`: `MorphCheckbox` declares `label` for its own text.)
 - **Controlled inputs** behave as the contract says: the control shows the user's action at once, as Qt Quick does,
   and the mount re-asserts the document's value in a later turn. A read-only check box, select or slider takes
   focus and puts its own state back when the user acts; a read-only text field reports no edit, commit or submit.

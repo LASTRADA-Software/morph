@@ -401,6 +401,8 @@ struct DocNode {
     std::map<std::string, std::string, std::less<>> names;
     /// @brief Key bindings: chord to commands.
     std::map<std::string, Commands, std::less<>> keys;
+    /// @brief Literal flags, by key (`showLabel` of an input).
+    std::map<std::string, bool, std::less<>> flags;
     /// @brief The declarations of the scope the node creates (dialog, drawer, switch case, `forEach` or `table`
     ///        row); empty for a node that creates none.
     std::optional<ScopeDecl> scope;
@@ -443,6 +445,14 @@ struct DocNode {
     [[nodiscard]] std::string_view name(std::string_view key) const {
         auto const found = names.find(key);
         return found == names.end() ? std::string_view{} : std::string_view{found->second};
+    }
+
+    /// @brief A literal flag.
+    /// @param key The key.
+    /// @return Its value; `false` when absent.
+    [[nodiscard]] bool flag(std::string_view key) const {
+        auto const found = flags.find(key);
+        return found != flags.end() && found->second;
     }
 };
 
@@ -585,6 +595,7 @@ enum class Shape : std::uint8_t {
     ExprRecord,     ///< A record of expressions.
     CommandRecord,  ///< A record of command lists.
     Keys,           ///< Key bindings: chord to command list.
+    Flag,           ///< A literal `true` or `false`, set once.
 };
 
 /// @brief The key is evaluated in the node's own scope (a dialog's, a row's), not the scope around it.
@@ -685,11 +696,12 @@ inline constexpr std::array<KeySpec, 5> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 9> kTextInputKeys = {{{"value", Shape::Expr},
                                                            {"placeholder", Shape::Expr},
                                                            {"mode", Shape::Expr},
                                                            {"commitOn", Shape::Text},
                                                            {"label", Shape::Expr},
+                                                           {"showLabel", Shape::Flag},
                                                            {"onChange", Shape::Commands},
                                                            {"onCommit", Shape::Commands},
                                                            {"onSubmit", Shape::Commands}}};
@@ -697,10 +709,11 @@ inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr
 inline constexpr std::array<KeySpec, 4> kCheckboxKeys = {
     {{"label", Shape::Expr}, {"checked", Shape::Expr}, {"onToggle", Shape::Commands}, {"onChange", Shape::Commands}}};
 /// @brief The keys of `select`.
-inline constexpr std::array<KeySpec, 7> kSelectKeys = {{{"options", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kSelectKeys = {{{"options", Shape::Expr},
                                                         {"selected", Shape::Expr},
                                                         {"style", Shape::Expr},
                                                         {"label", Shape::Expr},
+                                                        {"showLabel", Shape::Flag},
                                                         {"onStale", Shape::Text},
                                                         {"onChoose", Shape::Commands},
                                                         {"onChange", Shape::Commands}}};
@@ -773,9 +786,10 @@ inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
 inline constexpr std::array<KeySpec, 4> kColumnKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
-inline constexpr std::array<KeySpec, 5> kDateTimeKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},
                                                           {"label", Shape::Expr},
+                                                          {"showLabel", Shape::Flag},
                                                           {"onChange", Shape::Commands},
                                                           {"onCommit", Shape::Commands}}};
 /// @brief The keys of `slider`.
@@ -1926,6 +1940,14 @@ private:
                                         commandList(commands, pointerAppend(path, event)));
                 }
                 break;
+            case Shape::Flag: {
+                auto const* const flag = std::get_if<bool>(&value.data);
+                if (flag == nullptr) {
+                    refuse(path, "`" + name + "` is a literal `true` or `false`");
+                }
+                made.flags.emplace(name, *flag);
+                break;
+            }
             case Shape::Keys:
             default:
                 made.keys = keyBindings(value, path);
@@ -2722,6 +2744,9 @@ private:
     }
 
     void checkKindRules(DocNode const& node, CheckContext const& context) {
+        if (node.flag("showLabel") && node.prop("label") == nullptr) {
+            refuse(pointerAppend(node.path, "showLabel"), "`showLabel` shows the `label`, and the node gives none");
+        }
         if (node.kind == "custom") {
             auto const found = _doc->components.find(node.name("name"));
             if (found == _doc->components.end()) {

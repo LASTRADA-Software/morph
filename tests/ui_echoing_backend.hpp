@@ -49,6 +49,7 @@ public:
         _onSelect = onSelect;
         _inner->setOnSelect(std::move(onSelect));
     }
+    void setCaption(std::string_view label, bool shown) override { _inner->setCaption(label, shown); }
 
 private:
     std::unique_ptr<::morph::ui::SelectWidget> _inner;

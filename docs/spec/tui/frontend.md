@@ -101,6 +101,10 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Collapsible | `▾ title` with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
 
+A text input, select or date-time input whose caption is shown (`setCaption(label, true)`) draws it on its own row
+above the control, one row taller; without it nothing changes. A radio select's rows, and a dropdown's list, keep
+to the rows below the caption.
+
 A terminal has no icon map and no assistive technology: icons, accessible names and roles are kept and not drawn,
 and a widget draws on its surface, its own or else its nearest container's: `sidebar` and `toolbar` draw every cell
 of the widget inverse, set after it paints so a child painting over its container stays inverse, and any other

@@ -256,7 +256,9 @@ before it.
 | ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
 
 - **A cell** is the label, the control (which marks a required field, live) and the help text, visible while the
-  field is. The mark is the control's alone, so a required field shows it once on every backend. Each control carries the view tree's field state: read-only, required, and the field's error as its
+  field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
+  control's alone, so a required field shows it once on every backend, and the control is told the field's label
+  with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, and the field's error as its
   one message. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
   `add_<path>`, `remove_<path>#<key>`, `form_submit`, `form_status`, `form_result`.
 - **Layout.** A section is a `Panel`, consecutive tab groups one `Tabs`, an accordion a collapsible `Panel`, the
