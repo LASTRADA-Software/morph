@@ -2472,20 +2472,7 @@ private:
             static_cast<void>(type);
         }
         for (QueryDecl const& query : decl.queries) {
-            auto const action = checkModelAction(context, query.model, query.action, query.path);
-            // An evaluation runs no handler, so only a call can change anything.
-            if (action && action->effects && !query.evaluate) {
-                refuse(query.path, std::format("a query reads, so its action declares no effects; `{}` declares {}, "
-                                               "so it runs as a mutation",
-                                               query.action, describeEffects(*action->effects)));
-            }
-            if (query.body) {
-                checkExpr(*query.body, context);
-            }
-            if (query.when) {
-                checkCondition(*query.when, context, "`when`");
-            }
-            checkRefreshOn(query, *lookup(context.scope, query.model)->model);
+            checkQuery(query, context);
         }
         for (MutationDecl const& mutation : decl.mutations) {
             checkMutation(mutation, context);
@@ -2505,6 +2492,23 @@ private:
                                           {NameCategory::Element}, "an element"));
             }
         }
+    }
+
+    void checkQuery(QueryDecl const& query, CheckContext const& context) {
+        auto const action = checkModelAction(context, query.model, query.action, query.path);
+        // An evaluation runs no handler, so only a call can change anything.
+        if (action && action->effects && !query.evaluate) {
+            refuse(query.path, std::format("a query reads, so its action declares no effects; `{}` declares {}, "
+                                           "so it runs as a mutation",
+                                           query.action, describeEffects(*action->effects)));
+        }
+        if (query.body) {
+            checkExpr(*query.body, context);
+        }
+        if (query.when) {
+            checkCondition(*query.when, context, "`when`");
+        }
+        checkRefreshOn(query, *lookup(context.scope, query.model)->model);
     }
 
     void checkRefreshOn(QueryDecl const& query, ModelDecl const& model) {
@@ -3069,10 +3073,11 @@ private:
         auto const held = _options->catalog.action(query.action);
         for (ActionEffect const& effect : *action.effects) {
             bool const records = effect.kind == "updates" || (!updatesOnly && effect.kind == "changes");
-            if (records && held && effect.record &&
-                std::ranges::find(held->records, *effect.record, &ActionRecordInfo::record) != held->records.end()) {
-                return std::format("`{}` {} `{}`, which `{}` holds", actionId, effect.kind, *effect.record,
-                                   query.name);
+            if (records && held && effect.record) {
+                std::string const& record = *effect.record;
+                if (std::ranges::find(held->records, record, &ActionRecordInfo::record) != held->records.end()) {
+                    return std::format("`{}` {} `{}`, which `{}` holds", actionId, effect.kind, record, query.name);
+                }
             }
             if (!updatesOnly && effect.kind == "changesInstance" && alias != nullptr && aliasOf(query) == alias) {
                 return std::format("`{}` changes the instance of `{}`, through which `{}` reads", actionId,

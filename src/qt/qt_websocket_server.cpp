@@ -248,6 +248,7 @@ void QtWebSocketServer::onNewConnection() {
         cid, ::morph::backend::ConnectionWriter{
                  .write =
                      [self, weakSocket, backlog](std::string envelope) {
+                         // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): Qt owns the queued callable.
                          if (!queueEnvelope(self, weakSocket, backlog, std::move(envelope))) {
                              throw std::runtime_error("no Qt application to write the connection from");
                          }
@@ -265,9 +266,7 @@ bool QtWebSocketServer::queueEnvelope(QPointer<QtWebSocketServer> const& server,
     // Before the queueing, so a backlog read on the server strand already
     // covers a frame still on its way to the Qt thread.
     backlog->fetch_add(counted);
-    // Qt owns the queued callable and deletes it once it ran or was dropped; the analyzer cannot see into
-    // QMetaObject's slot-object bookkeeping and reports it as leaked.
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // Qt owns the queued callable and deletes it once it ran or was dropped.
     bool const queued = QMetaObject::invokeMethod(
         app,
         [server, socket, backlog, counted, envelope = std::move(envelope)]() {
@@ -483,6 +482,8 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     _server.handle(
         message.toStdString(),
         [self, weakSocket, backlog = state.backlog](const std::string& reply) {
+            // queueEnvelope's queued callable is owned by Qt, which the analyzer cannot see; it reports the leak here.
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
             static_cast<void>(queueEnvelope(self, weakSocket, backlog, reply));
         },
         state.cid);

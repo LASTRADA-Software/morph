@@ -449,7 +449,7 @@ void ClientSource::connected() {
     }
 }
 
-void ClientSource::onConnected(std::function<void()> listener) { _connectListeners.push_back(std::move(listener)); }
+void ClientSource::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }
 
 void ClientSource::onEvent(std::function<void(wire::EventBody const&)> listener) {
     _eventListeners.push_back(std::move(listener));

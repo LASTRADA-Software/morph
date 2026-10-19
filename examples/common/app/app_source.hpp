@@ -171,7 +171,7 @@ public:
     ///        the source first sends `ui-hello` again, so the new connection negotiates events, then calls the
     ///        listeners.
     /// @param listener Called on the owner; it must stay callable while the source is open.
-    void onConnected(std::function<void()> listener) final;
+    void onConnected(std::function<void()> const& listener) final;
 
     /// @brief Adds a listener for the events the server sends: what a shell hands to `Session::deliverEvent`.
     /// @param listener Called on the owner, once per event, in the order they arrived.

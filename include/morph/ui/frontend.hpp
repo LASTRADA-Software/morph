@@ -166,7 +166,7 @@ public:
     ///
     /// The default does nothing: a local source has no connection to lose.
     /// @param listener Called on the owner after each connect; it must stay callable while the source is open.
-    virtual void onConnected(std::function<void()> listener) { static_cast<void>(listener); }
+    virtual void onConnected(std::function<void()> const& listener) { static_cast<void>(listener); }
 };
 
 /// @brief A frontend: owns an event loop and a renderer, and runs one source's screens.

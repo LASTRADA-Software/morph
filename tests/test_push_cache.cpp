@@ -398,7 +398,7 @@ TEST_CASE("watcher_over_stamps_the_current_session_and_reports_refusals", "[push
     morph::testing::StepExecutor owner;
     std::vector<morph::wire::Envelope> sent;
     bool refuse = false;
-    morph::ui::Exchange const exchange = [&](morph::wire::Envelope request,
+    morph::ui::Exchange const exchange = [&](morph::wire::Envelope const& request,
                                              std::function<void(morph::ui::ExchangeReply)> const& done) {
         sent.push_back(request);
         morph::wire::Envelope reply;

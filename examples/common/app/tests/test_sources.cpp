@@ -522,10 +522,10 @@ protected:
                     kinds.push_back(request.kind);
                     if (request.kind == "watch" || request.kind == "unwatch") {
                         watchBodies.push_back(request.body);
-                        morph::wire::Envelope ok;
-                        ok.kind = "ok";
-                        ok.body = "{}";
-                        done(ok);
+                        morph::wire::Envelope answer;
+                        answer.kind = "ok";
+                        answer.body = "{}";
+                        done(answer);
                         return;
                     }
                     done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));

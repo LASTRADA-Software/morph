@@ -79,6 +79,9 @@ coverage_exclusion_reason() {
         morph_declare_source_canary)
             echo "the BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION link canary's positive probe (tests/CMakeLists.txt): what it asserts is that the program links at all, and the fixture model it registers exists nowhere else in the tree, so instrumenting it would only score probe-unique template instantiations against the library"
             ;;
+        morph_effects_unseen_links)
+            echo "the BRIDGE_REGISTER_EFFECTS link probe (tests/CMakeLists.txt): two translation units, only one of which sees an action's effects, must link into one program and read the same effects; the fixture record and action exist nowhere else in the tree, so instrumenting it would only score probe-unique template instantiations against the library"
+            ;;
         fuzz_wire_decode|fuzz_dispatch_execute)
             echo "libFuzzer harnesses (MORPH_BUILD_FUZZERS=ON only, which the coverage leg does not set); apply_fuzzer() builds them at -O1 under -fsanitize=fuzzer,address, a different instrumentation from apply_coverage()'s"
             ;;

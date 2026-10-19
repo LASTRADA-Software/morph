@@ -749,30 +749,35 @@ struct CacheEntry {
     }
 };
 
-/// @brief The rows of a keyed record an entry's value holds, at each of the record's paths.
-/// @param value The entry's confirmed value.
-/// @param held  The record, as the entry's action returns it; it must have a key field.
+/// @brief The rows of a keyed record a value holds, at each of the record's paths.
+/// @param value    The value.
+/// @param paths    The record's paths.
+/// @param keyField The record's key field.
 /// @return The rows.
-[[nodiscard]] inline std::vector<Value const*> keyedRowsOf(Value const& value, ActionRecordInfo const& held) {
+[[nodiscard]] inline std::vector<Value const*> keyedRowsOf(Value const& value, std::vector<std::string> const& paths,
+                                                           std::string_view keyField) {
     std::vector<Value const*> rows;
-    for (std::string const& path : held.paths) {
+    for (std::string const& path : paths) {
         std::vector<std::string> const members = pathMembers(path);
-        keyedRowsAt(value, members, *held.keyField, rows);
+        keyedRowsAt(value, members, keyField, rows);
     }
     return rows;
 }
 
-/// @brief Merges new rows into an entry's value at each of the record's paths.
-/// @param value The entry's confirmed value.
-/// @param held  The record, as the entry's action returns it; it must have a key field.
-/// @param rows  The new rows by key.
+/// @brief Merges new rows into a value at each of the record's paths.
+/// @param value    The value.
+/// @param paths    The record's paths.
+/// @param keyField The record's key field.
+/// @param rows     The new rows by key.
 /// @return The new value, or nothing when no row matched.
-[[nodiscard]] inline std::optional<Value> patchHeldRows(Value const& value, ActionRecordInfo const& held,
-                                                        RowsByKey const& rows) {
+[[nodiscard]] inline std::optional<Value> patchHeldRows(Value const& value, std::vector<std::string> const& paths,
+                                                        std::string_view keyField, RowsByKey const& rows) {
     std::optional<Value> patched;
-    for (std::string const& path : held.paths) {
+    for (std::string const& path : paths) {
         std::vector<std::string> const members = pathMembers(path);
-        if (auto next = patchKeyedRows(patched ? *patched : value, members, *held.keyField, rows)) {
+        auto next = patched ? patchKeyedRows(*patched, members, keyField, rows)
+                            : patchKeyedRows(value, members, keyField, rows);
+        if (next) {
             patched = std::move(next);
         }
     }
@@ -1278,7 +1283,7 @@ private:
     /// @brief Sends one watch request, ignoring its reply: a refused topic simply sends no events.
     /// @param kind The kind, `watch` or `unwatch`.
     /// @param body The body.
-    void sendWatch(std::string_view kind, wire::WatchBody const& body);
+    void sendWatch(std::string_view kind, wire::WatchBody const& body) const;
 
     /// @brief Marks every entry but an `evaluate` one stale and refetches the mounted ones, in one batch.
     void markAllStale();
@@ -1289,13 +1294,14 @@ private:
 
     /// @brief Applies one `updates` or `changes` effect of a reply: patches the entries holding the record, or marks
     ///        them.
-    /// @param effect The effect; its record is set.
+    /// @param effect The effect.
+    /// @param record The record it names.
     /// @param info   The action's catalog entry, for the records its reply holds.
     /// @param reply  The reply's value.
     /// @param use    Whether the reply was applied or discarded.
     /// @param marks  Where entries to mark go.
-    void applyRecordEffect(ActionEffect const& effect, ActionInfo const& info, Value const& reply, ReplyUse use,
-                           detail::Marks& marks);
+    void applyRecordEffect(ActionEffect const& effect, std::string const& record, ActionInfo const& info,
+                           Value const& reply, ReplyUse use, detail::Marks& marks);
 
     /// @brief Finds the entries a `changes` event's record change names.
     /// @param change The change.
@@ -2861,23 +2867,23 @@ inline void Session::applyReplyEffects(std::string const& typeId, std::string co
                 }
             }
         } else if (effect.record && (effect.kind == "updates" || effect.kind == "changes")) {
-            applyRecordEffect(effect, *info, reply, use, marks);
+            applyRecordEffect(effect, *effect.record, *info, reply, use, marks);
         }
     }
     markAndRefetch(marks);
 }
 
-inline void Session::applyRecordEffect(ActionEffect const& effect, ActionInfo const& info, Value const& reply,
-                                       ReplyUse use, detail::Marks& marks) {
-    std::string const& record = *effect.record;
+inline void Session::applyRecordEffect(ActionEffect const& effect, std::string const& record, ActionInfo const& info,
+                                       Value const& reply, ReplyUse use, detail::Marks& marks) {
     // The reply's rows of the record, by key; none when the reply does not hold it keyed, or must only mark.
     auto const own = std::ranges::find(info.records, record, &ActionRecordInfo::record);
-    bool const patch =
-        effect.kind == "updates" && use == ReplyUse::Applied && own != info.records.end() && own->keyField.has_value();
+    std::optional<std::string> const ownKey =
+        effect.kind == "updates" && use == ReplyUse::Applied && own != info.records.end() ? own->keyField
+                                                                                          : std::nullopt;
     detail::RowsByKey rows;
-    if (patch) {
-        for (Value const* const row : detail::keyedRowsOf(reply, *own)) {
-            rows.insert_or_assign(detail::canonicalJson(*row->field(*own->keyField)), row);
+    if (ownKey) {
+        for (Value const* const row : detail::keyedRowsOf(reply, own->paths, *ownKey)) {
+            rows.insert_or_assign(detail::canonicalJson(*row->field(*ownKey)), row);
         }
     }
     for (auto const& [key, entry] : _entries) {
@@ -2886,11 +2892,11 @@ inline void Session::applyRecordEffect(ActionEffect const& effect, ActionInfo co
         if (held == nullptr) {
             continue;
         }
-        if (!patch || !held->keyField) {
+        if (!ownKey || !held->keyField) {
             marks.add(*entry);
             continue;
         }
-        if (auto patched = detail::patchHeldRows(entry->confirmed, *held, rows)) {
+        if (auto patched = detail::patchHeldRows(entry->confirmed, held->paths, *held->keyField, rows)) {
             confirm(*entry, *patched);
         }
         // A fetch in flight may have read before the write, and would settle over the patch.
@@ -2939,7 +2945,7 @@ inline void Session::countTopics(detail::CacheEntry const& entry, int delta) {
     }
 }
 
-inline void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) {
+inline void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) const {
     auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
     completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
 }
@@ -3054,11 +3060,15 @@ inline void Session::markRecordChange(effects::RecordChange const& change, detai
             continue;
         }
         // An entry still waiting for its first value may come to hold a key; keyless rows cannot be told apart.
-        bool const marked = !change.keys || !held->keyField || !entry->hasValue.peek() ||
-                            std::ranges::any_of(detail::keyedRowsOf(entry->confirmed, *held), [&](Value const* row) {
-                                return keys.contains(detail::canonicalJson(*row->field(*held->keyField)));
-                            });
-        if (marked) {
+        if (!change.keys || !held->keyField || !entry->hasValue.peek()) {
+            marks.add(*entry);
+            continue;
+        }
+        std::string const& keyField = *held->keyField;
+        bool const holdsKey = std::ranges::any_of(
+            detail::keyedRowsOf(entry->confirmed, held->paths, keyField),
+            [&](Value const* row) { return keys.contains(detail::canonicalJson(*row->field(keyField))); });
+        if (holdsKey) {
             marks.add(*entry);
         }
     }
