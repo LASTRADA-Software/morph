@@ -522,6 +522,26 @@ void OverlayCore::setTitle(std::string_view title) {
     _self->refresh();
 }
 
+::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
+
+std::vector<::core::tui::Rect> FooterImpl::childAreas(::core::tui::Size size) const {
+    ::core::tui::Size const natural = naturalSize();
+    int const width = std::min(size.width, natural.width);
+    return stackAreas(children(), {.x = size.width - width, .y = 0, .width = width, .height = size.height},
+                      StackSpec{.axis = ui::Axis::Horizontal, .gap = 1});
+}
+
+void FooterImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+
+ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
+    if (_footer == nullptr) {
+        _footer = std::make_unique<FooterImpl>(overlay.context());
+        overlay.attach(*_footer);
+    }
+    overlay.move(*_footer, overlay.children().size());
+    return *_footer;
+}
+
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
     return stackAreas(_self->children(),
                       {.x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)},

@@ -757,13 +757,14 @@ inline constexpr std::array<KeySpec, 1> kTabsKeys = {{{"tabs", Shape::Parts, "ta
 /// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 2> kTabKeys = {{{"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 8> kDialogKeys = {{{"open", Shape::Condition},
+inline constexpr std::array<KeySpec, 9> kDialogKeys = {{{"open", Shape::Condition},
                                                         {"title", Shape::Expr},
                                                         {"showErrors", Shape::Text},
                                                         {"children", Shape::Nodes, {}, kInner},
                                                         {"onDismiss", Shape::Commands},
                                                         {"default", Shape::Commands, {}, kInner},
                                                         {"cancel", Shape::Commands, {}, kInner},
+                                                        {"actions", Shape::Parts, "actionButton", kInner},
                                                         {"side", Shape::Expr}}};
 /// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
@@ -2434,9 +2435,8 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            static_cast<void>(key);
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, scope, *inner);
+                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner);
             }
         }
     }
@@ -2785,9 +2785,9 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            static_cast<void>(key);
+            CheckContext const& context = isInner(spec, key) ? inner : outer;
             for (DocNodePtr const& child : parts) {
-                checkElement(*child, outer, true);
+                checkElement(*child, context, true);
             }
         }
         if (!part) {
@@ -2843,6 +2843,7 @@ private:
             // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
+            checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
         }
         std::string_view const model = node.name("model");
         if (!model.empty()) {

@@ -1274,3 +1274,19 @@ TEST_CASE("a screen's head writes its subtitle, status badges and actions beside
     CHECK(emitted->text.contains(
         R"("actions":[{"id":"save","label":"Save","emphasis":"primary","onClick":[{"set":"stage","value":"Saved"}]}])"));
 }
+
+// Mutation: leave the options' actions out of the overlay (the dialog carries no footer buttons).
+TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", "[ui][author]") {
+    auto const emitted = ui::screen("author.dialog.actions", [](ui::Scope& screen) {
+                             auto saved = screen.state<std::string>("saved", ui::AnyHandle{"no"});
+                             return ui::dialog(ui::element("dlg"), {ui::text({.text = saved})},
+                                               {.title = ui::AnyHandle{"Confirm"},
+                                                .actions = {{.id = "ok",
+                                                             .label = ui::AnyHandle{"OK"},
+                                                             .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                                             .onClick = {ui::set(saved, ui::AnyHandle{"yes"})}}}});
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(
+        R"("actions":[{"id":"ok","label":"OK","emphasis":"primary","onClick":[{"set":"saved","value":"yes"}]}])"));
+}

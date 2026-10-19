@@ -84,8 +84,8 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
 | Tabs | a bar over the page slots | Left, Right, click on a label |
-| Dialog | a centred box over everything | Esc dismisses |
-| Drawer | a box against its side, the screen's height | Esc dismisses |
+| Dialog | a centred box over everything; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again | Esc dismisses |
+| Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
 | Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; a toned row's cells draw in the tone's style, keeping any inverse | arrows, Space selects or toggles, Enter activates, click and double click |
 | DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone | typing; Up/Down step |

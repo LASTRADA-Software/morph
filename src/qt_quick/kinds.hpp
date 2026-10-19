@@ -287,6 +287,27 @@ class OverlayImpl final : public ContainerItemWidget<Interface> {
 public:
     OverlayImpl(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ContainerItemWidget<Interface>{context, type, parent, std::move(initial)} {}
+    ~OverlayImpl() override = default;
+    OverlayImpl(OverlayImpl const&) = delete;
+    OverlayImpl& operator=(OverlayImpl const&) = delete;
+    OverlayImpl(OverlayImpl&&) = delete;
+    OverlayImpl& operator=(OverlayImpl&&) = delete;
+
+    /// The footer, a `MorphFooter` in the overlay's `footer` item, made the first time it is asked for.
+    ui::ContainerWidget& footer() override {
+        if (_footer == nullptr) {
+            _makingFooter = true;
+            try {
+                _footer = std::make_unique<ContainerItemWidget<ui::SlotWidget>>(this->context(),
+                                                                                QStringLiteral("MorphFooter"), this);
+            } catch (...) {
+                _makingFooter = false;
+                throw;
+            }
+            _makingFooter = false;
+        }
+        return *_footer;
+    }
     void setOpen(bool open) override {
         if (this->read("shown").toBool() != open) {
             this->call("show", open);
@@ -304,6 +325,17 @@ public:
     [[nodiscard]] bool open() const { return this->read("shown").toBool(); }
     /// Dismisses it as Escape would.
     void dismiss() const { this->call("dismiss"); }
+
+protected:
+    // The footer goes in the overlay's `footer` item; every other child in its content.
+    [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override {
+        static_cast<void>(child);
+        return qobject_cast<QQuickItem*>(this->part(_makingFooter ? "footer" : "content"));
+    }
+
+private:
+    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _footer;
+    bool _makingFooter = false;
 };
 
 using DialogImpl = OverlayImpl<ui::DialogWidget>;

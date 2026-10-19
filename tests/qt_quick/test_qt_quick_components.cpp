@@ -499,3 +499,20 @@ TEST_CASE("qt_quick components: a write of a property the item does not declare 
     CHECK(base->item()->property("text").toString() == QStringLiteral("shown"));
     CHECK(reported.size() == 1);
 }
+
+// Mutation: drop `footer` from MorphDialog (a restyle without it is accepted, and C++ finds nowhere for the actions).
+TEST_CASE("qt_quick components: a dialog restyle without the footer part is refused, naming it", "[qt_quick]") {
+    Components components;
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost(
+        "BareDialog", 1,
+        writeFile(dir, QStringLiteral("BareDialog.qml"),
+                  "import QtQuick\nimport MorphUi\nMorphWidget { property string title; property bool programmatic;"
+                  " readonly property Item content: null; readonly property bool shown: false;"
+                  " function show(open: bool) {} function dismiss() {} }\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "dialog", "BareDialog");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason == "restyle of `dialog`: BareDialog does not declare footer, footerChanged");
+}

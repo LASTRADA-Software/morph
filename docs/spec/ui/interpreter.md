@@ -270,6 +270,10 @@ applies to the width.
 - **Action parts.** `ScreenCore::lowerActionParts(parts, ctx)` lowers a list of `actionButton` parts into
   `ActionModels`: the label, icon, `enabled` and `visible` bound in `ctx`'s scope, the emphasis, and a run function
   that runs the part's `onClick` there as a user event, in one batch.
+- **Overlay actions.** A dialog's or drawer's `actions` are lowered with its content, in its scope, and end the
+  content as a `ui::ActionBar` of buttons (test id `action_<id>`, shown and enabled as the action is), so their
+  bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. `default`
+  and `cancel` keep their Enter and Escape bindings.
 - **The head.** A screen's `status` and `actions` are lowered once, at mount, in the screen scope; `Screen::status()`
   and `Screen::actions()` read the visible ones (a tracked read), `Screen::subtitle()` evaluates `subtitle`, and
   `Screen::runAction(id)` runs an enabled, visible action, reporting an unknown, hidden or disabled id.

@@ -166,7 +166,7 @@ place a kind is described.
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
 | `tabs` | `tabs`: parts `{label, children}`; the node keeps the user's pick, so picking a tab mounts and shows its page | |
-| `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `onDismiss` | `open`, `ready`, `submitted` |
+| `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
 | `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, cell ⓘ}`, or an expression), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
@@ -227,7 +227,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`, once each) and a key name, and are not the workspace
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
   `true` or `false`, and `showLabel` needs a `label` to show. An `actionButton` has an `id` and a `label`, and its
-  id is used once in its list; `subtitle`, `status` and `actions` are refused on the app document.
+  id is used once in its list (a screen's `actions`, a dialog's or drawer's); `subtitle`, `status` and `actions` are
+  refused on the app document.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's
   statically known argument kinds are ones it takes; `visible`, `enabled`, `readonly`, `required`,
   `stale`, `open`, `when`, `dirty`, a check's `assert` and every `if` condition are `bool` where

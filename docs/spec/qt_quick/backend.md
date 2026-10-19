@@ -150,8 +150,8 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Splitter | `MorphSplitter` | a `SplitView` whose handles are made from its `handle` part (`MorphSplitterHandle`); the splitter sets each handle's `axis` and `scheme`, and leaves a handle's implicit extent along the axis between two panes | the panes' sizes once a drag ends |
 | Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
 | Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
-| Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
-| Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |
+| Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
+| Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
 | Table | `MorphTable`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
@@ -169,6 +169,8 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
   and the mount re-asserts the document's value in a later turn. A read-only check box, select or slider takes
   focus and puts its own state back when the user acts; a read-only text field reports no edit, commit or submit.
 - **Dialogs and drawers** open and close without a transition, so what the document says is what the window shows.
+  `footer` is part of their restyle API: a kit's dialog places the footer item where it wants, and a restyle that
+  does not declare it is refused.
   A close by `setOpen(false)` reports nothing; Escape or a press outside closes the overlay first and then reports
   the dismissal.
 - **A date-time field** that the user leaves holding text that names no instant reports nothing and shows again what

@@ -51,6 +51,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphPanel.qml
         qml/MorphScroll.qml
         qml/MorphScrollBar.qml
+        qml/MorphFooter.qml
         qml/MorphSlot.qml
         qml/MorphTabs.qml
         qml/MorphDialog.qml

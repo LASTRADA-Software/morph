@@ -128,6 +128,7 @@ lowers them to the kinds below.
 | `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |
 | `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
 | `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
+| `ActionBar` | `actionBar` | `children` (a null child is skipped). It mounts as a horizontal stack, spacing step 2, in the footer of the Dialog or Drawer whose content holds it, at any depth, including content a Switch, Tabs or row mounts later; anywhere else the mount throws `std::logic_error`. The footer is asked for only when an `ActionBar` mounts |
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |

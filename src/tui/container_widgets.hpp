@@ -240,6 +240,25 @@ private:
 };
 
 /// Dialog: an `OverlayCore` centred on the screen. Closed until opened.
+/// An overlay's footer: its children in one row against the right edge, one cell apart. Empty, it takes no room.
+class FooterImpl final : public TuiContainer<ui::SlotWidget> {
+public:
+    explicit FooterImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    void paint(::core::tui::Canvas& canvas) override;
+};
+
+/// The footer of a dialog or drawer, made the first time it is asked for, and kept after the overlay's content:
+/// content mounted again when the overlay reopens comes after it among the children, so each ask moves it last.
+class OverlayFooter {
+public:
+    [[nodiscard]] ui::ContainerWidget& of(ContainerBase& overlay);
+
+private:
+    std::unique_ptr<FooterImpl> _footer;
+};
+
 class DialogImpl final : public TuiContainer<ui::DialogWidget> {
 public:
     explicit DialogImpl(Context& context) : TuiContainer{context}, _overlay{*this, std::nullopt} {
@@ -254,6 +273,7 @@ public:
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
+    [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
     [[nodiscard]] std::string probeText() const override { return _overlay.title(); }
     [[nodiscard]] ::core::tui::Component& host() override { return _overlay.frame(); }
@@ -266,6 +286,7 @@ public:
 
 private:
     OverlayCore _overlay;
+    OverlayFooter _footer;
 };
 
 /// Drawer: an `OverlayCore` against the side fixed at creation. Closed until opened.
@@ -283,6 +304,7 @@ public:
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
+    [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
     [[nodiscard]] std::string probeText() const override { return _overlay.title(); }
     [[nodiscard]] ::core::tui::Component& host() override { return _overlay.frame(); }
@@ -295,6 +317,7 @@ public:
 
 private:
     OverlayCore _overlay;
+    OverlayFooter _footer;
 };
 
 }  // namespace morph::tui::detail

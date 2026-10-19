@@ -456,6 +456,8 @@
     { "name": "a head action of an unknown emphasis", "doc": { "actions": [ { "id": "save", "label": "Save", "emphasis": "loud" } ] }, "at": "/actions/0/emphasis", "reason": "not one of the values of `emphasis`" },
     { "name": "a head status that is not a list", "doc": { "status": { "text": "Draft" } }, "at": "/status", "reason": "`status` is an array" },
     { "name": "a head action reading an unknown name", "doc": { "actions": [ { "id": "save", "label": { "ref": "nowhere" } } ] }, "at": "/actions/0/label", "reason": "nowhere" },
+    { "name": "a dialog action id used twice", "doc": { "view": { "kind": "dialog", "actions": [ { "id": "ok", "label": "OK" }, { "id": "ok", "label": "Again" } ] } }, "at": "/view/actions/1/id", "reason": "is used twice in /view/actions" },
+    { "name": "a drawer action reading a name its scope lacks", "doc": { "view": { "kind": "drawer", "actions": [ { "id": "ok", "label": { "ref": "nowhere" } } ] } }, "at": "/view/actions/0/label", "reason": "nowhere" },
     { "name": "a head on the app document", "doc": { "id": "app", "subtitle": "Lab" }, "at": "/subtitle", "reason": "is a screen's; the app document has none" },
     { "name": "an unknown onStale", "doc": { "view": { "kind": "select", "onStale": "drop" } }, "at": "/view/onStale", "reason": "not one of the values of `onStale`" },
     { "name": "an unknown dialog showErrors", "doc": { "view": { "kind": "dialog", "showErrors": "never" } }, "at": "/view/showErrors", "reason": "not one of the values of `showErrors`" },

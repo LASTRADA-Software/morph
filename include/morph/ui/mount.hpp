@@ -224,6 +224,38 @@ public:
     }
 
 private:
+    // Runs @p body with @p overlay as the overlay an ActionBar mounts into the footer of, and puts the previous one
+    // back after it.
+    template <typename F>
+    auto underOverlay(ContainerWidget* overlay, F const& body) -> std::invoke_result_t<F const&> {
+        class Restore {
+        public:
+            Restore(Mounter& self, ContainerWidget* next) : _self{&self}, _saved{std::exchange(self._overlay, next)} {}
+            Restore(Restore const&) = delete;
+            Restore& operator=(Restore const&) = delete;
+            Restore(Restore&&) = delete;
+            Restore& operator=(Restore&&) = delete;
+            ~Restore() { _self->_overlay = _saved; }
+
+        private:
+            Mounter* _self;
+            ContainerWidget* _saved;
+        };
+        Restore const restore{*this, overlay};
+        return body();
+    }
+
+    // The footer of the overlay whose content is being mounted, or null outside any.
+    [[nodiscard]] ContainerWidget* overlayFooter() const {
+        if (auto* const dialog = dynamic_cast<DialogWidget*>(_overlay)) {
+            return &dialog->footer();
+        }
+        if (auto* const drawer = dynamic_cast<DrawerWidget*>(_overlay)) {
+            return &drawer->footer();
+        }
+        return nullptr;
+    }
+
     // One mount: the root, or content, a page or a row a binding mounts later. The outermost pass focuses the first
     // autofocus widget mounted during it, in document order, after everything in it has mounted; a pass nested in
     // another (content a binding mounts while the root mounts) leaves that to the outer one. A pass that throws gives
@@ -729,13 +761,13 @@ private:
         applyCommon(scope, widget, spec.common);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         bind(scope, spec.selector,
-             [this, &widget, &content, depth = scope.depth() + 1, cases = spec.cases,
-              fallback = spec.fallback](Key const& key) {
+             [this, &widget, &content, depth = scope.depth() + 1, cases = spec.cases, fallback = spec.fallback,
+              overlay = _overlay](Key const& key) {
                  content.reset();
                  auto const chosen = std::ranges::find(cases, key, &SwitchCase::key);
                  Node const& node = chosen == cases.end() ? fallback : chosen->node;
                  if (node) {
-                     content = mountContent(depth, node, widget);
+                     content = underOverlay(overlay, [&] { return mountContent(depth, node, widget); });
                  }
              });
         return widget;
@@ -774,8 +806,9 @@ private:
         }
         widget.setOnSelect(inputEvent(spec.onSelect, reassert));
         pages.onSelect = inputEvent(spec.onSelect, std::move(reassert));
-        auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs](std::size_t index) {
-            _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); });
+        auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs, overlay = _overlay](std::size_t index) {
+            underOverlay(overlay,
+                         [&] { _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); }); });
         };
         if (!spec.selected.isBound()) {
             show(spec.selected.constant());
@@ -912,7 +945,7 @@ private:
                 content.reset();
             } else if (content == nullptr) {
                 try {
-                    content = mountContent(depth, child, widget);
+                    content = underOverlay(&widget, [&] { return mountContent(depth, child, widget); });
                 } catch (...) {
                     dismissFailed(dismiss);
                     throw;
@@ -991,11 +1024,14 @@ private:
         scope.make<std::shared_ptr<ForEachModel const>>(model);
         ForEachSession& session = scope.adopt(model->open(*_rt));
         auto& rows = scope.make<KeyedRows>();
-        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow)] {
+        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow),
+                      overlay = _overlay] {
             std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
             // Untracked: what a row view reads while it is built, or what a kept row's update touches, must not
             // become a dependency of the whole list.
-            _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+            underOverlay(overlay, [&] {
+                _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+            });
         });
     }
 
@@ -1233,6 +1269,22 @@ private:
     }
 
     // The component the backend loads in the custom node's place, or the fallback when it loads none.
+    // An ActionBar is a horizontal stack in the footer of the overlay whose content holds it, not in its own parent.
+    Widget& mountKind(reactive::Scope& scope, ActionBar const& spec, ContainerWidget* parent) {
+        static_cast<void>(parent);
+        ContainerWidget* const footer = overlayFooter();
+        if (footer == nullptr) {
+            throw std::logic_error{"morph::ui: an action bar mounts only in a dialog's or drawer's content"};
+        }
+        StackWidget& widget = scope.adopt(_backend->createStack(footer, Axis::Horizontal));
+        applyCommon(scope, widget, spec.common);
+        widget.setGap(spacingStep(2));
+        for (Node const& child : spec.children) {
+            static_cast<void>(mount(scope, child, &widget));
+        }
+        return widget;
+    }
+
     Widget& mountKind(reactive::Scope& scope, Custom const& spec, ContainerWidget* parent) {
         CustomRequest request{.name = spec.name, .props = {}, .minVersion = spec.minVersion};
         request.props.reserve(spec.props.size());
@@ -1289,6 +1341,10 @@ private:
 
     reactive::Runtime* _rt;
     IViewBackend* _backend;
+    // The dialog or drawer whose content is being mounted, while it is: an ActionBar mounts into its footer. A binding
+    // that mounts later (a Switch case, a Tabs page, a row) mounts under the overlay it was made under. The footer is
+    // asked for only when an ActionBar mounts, so an overlay without actions never makes one.
+    ContainerWidget* _overlay = nullptr;
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;

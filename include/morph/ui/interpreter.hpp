@@ -2362,6 +2362,12 @@ public:
     /// @return The models, in the parts' order.
     [[nodiscard]] ActionModels lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
 
+    /// @brief An overlay's actions as the action bar its footer shows: a button per action, test id
+    ///        `action_<id>`, shown and enabled as the action is.
+    /// @param actions The lowered actions, in order.
+    /// @return The `ActionBar` node.
+    [[nodiscard]] static Node actionBarOf(ActionModels actions);
+
     /// @brief Lowers a screen head's `headBadge` parts, bound in @p ctx's scope.
     /// @param parts The parts, in order.
     /// @param ctx   The screen scope.
@@ -5419,6 +5425,21 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
     return models;
 }
 
+inline Node ScreenCore::actionBarOf(ActionModels actions) {
+    ActionBar bar;
+    for (ActionModel& action : actions) {
+        Button button{.label = std::move(action.label),
+                      .emphasis = action.emphasis,
+                      .onClick = std::move(action.run),
+                      .common = {}};
+        button.common.visible = std::move(action.visible);
+        button.common.enabled = std::move(action.enabled);
+        button.common.testId = "action_" + action.id;
+        bar.children.push_back(ui::button(std::move(button)));
+    }
+    return ui::actionBar(std::move(bar));
+}
+
 inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     std::vector<BadgeModel> badges;
     badges.reserve(parts.size());
@@ -6226,6 +6247,11 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 lists.push_back(commands);
             }
         }
+        for (DocNodePtr const& action : node.partList("actions")) {
+            if (Commands const* const commands = action->event("onClick")) {
+                lists.push_back(commands);
+            }
+        }
         declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
         element->inner.set(inner.get());
         LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
@@ -6233,6 +6259,10 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         children.reserve(content.size());
         for (DocNode const* const child : content) {
             children.push_back(lower(*child, innerCtx));
+        }
+        // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its footer.
+        if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
+            children.push_back(actionBarOf(std::move(actions)));
         }
         std::vector<KeyBinding> keys;
         if (Commands const* const commands = node.event("default")) {

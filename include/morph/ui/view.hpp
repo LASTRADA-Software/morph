@@ -1017,6 +1017,15 @@ struct Drawer {
     Common common{};
 };
 
+/// @brief A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay
+///        `actions` lower to. The mount refuses one anywhere else.
+struct ActionBar {
+    /// @brief The buttons, in order; a null child is skipped.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, layout, drag-and-drop of the row.
+    Common common{};
+};
+
 /// @brief Panes side by side, or stacked, with handles the user drags to share the space between them.
 struct Splitter {
     /// @brief The panes, in order; a null child is skipped.
@@ -1095,7 +1104,7 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar>
         kind;
 };
 
@@ -1241,6 +1250,11 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node drawer(Drawer spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief An action bar node.
+/// @param spec The bar.
+/// @return The node.
+[[nodiscard]] inline Node actionBar(ActionBar spec) { return detail::makeNode(std::move(spec)); }
 
 /// @brief Panes with handles the user drags.
 /// @param spec The node.

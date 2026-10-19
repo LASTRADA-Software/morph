@@ -3402,6 +3402,8 @@ struct DialogOptions {
     Commands cancel;
     /// @brief Commands run when the user dismisses it.
     Commands onDismiss;
+    /// @brief The buttons of its footer, run in its scope; each id once.
+    std::vector<ActionButtonOptions> actions;
 };
 
 namespace detail {
@@ -3420,6 +3422,14 @@ namespace detail {
     node.text("id", element.name()).put("title", options.title).put("open", options.open);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));
+    }
+    if (!options.actions.empty()) {
+        Json::array_t actions;
+        actions.reserve(options.actions.size());
+        for (ActionButtonOptions const& action : options.actions) {
+            actions.push_back(actionButton(action));
+        }
+        node.raw("actions", std::move(actions));
     }
     return node.put("side", options.side)
         .scope(scope)

@@ -586,3 +586,64 @@ TEST_CASE("table: rowTone tones each row in its own scope, follows the row, and 
     h.settle();
     CHECK(tones() == std::vector<std::string>{"Warn", "Err", "Info", "none", "none"});
 }
+
+namespace {
+
+/// Whether @p widget or anything under it has the test id @p testId.
+bool holds(ui::testing::RecordingBackend const& backend, int widget, std::string const& testId) {
+    if (backend.prop(widget, "testId") == testId) {
+        return true;
+    }
+    auto const children = backend.children(widget);
+    return std::ranges::any_of(children, [&](int child) { return holds(backend, child, testId); });
+}
+
+}  // namespace
+
+// Mutation: mount the action bar in place, in the content, instead of in the overlay's footer.
+TEST_CASE("interpreter commands: a dialog's actions are buttons in its footer, run in the dialog's scope",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "overlay.actions", "state": { "saved": { "init": "no" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "text", "testId": "saved", "text": { "ref": "saved" } },
+        { "kind": "dialog", "id": "dlg", "scope": { "state": { "draft": { "init": "inner" } } },
+          "default": [ { "set": "saved", "value": "by enter" } ],
+          "actions": [
+            { "id": "save", "label": "Save", "emphasis": "primary", "onClick": [ { "set": "saved", "value": { "ref": "draft" } } ] },
+            { "id": "later", "label": "Later", "enabled": false } ],
+          "children": [ { "kind": "text", "testId": "body", "text": "Body" } ] } ] } })");
+    CHECK(h.backend.all("Footer").empty());  // closed, its content and its actions are not mounted
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const dialog = h.backend.all("Dialog").front();
+    std::vector<int> const footers = h.backend.all("Footer");
+    REQUIRE(footers.size() == 1);
+    CHECK(holds(h.backend, footers.front(), "action_save"));
+    CHECK(holds(h.backend, footers.front(), "action_later"));
+    for (int const child : h.backend.children(dialog)) {
+        if (child != footers.front()) {
+            CHECK(holds(h.backend, child, "body"));
+            CHECK_FALSE(holds(h.backend, child, "action_save"));
+        }
+    }
+    CHECK(h.backend.prop(h.byTestId("Button", "action_later"), "enabled") == "false");
+    CHECK(h.backend.prop(h.byTestId("Button", "action_save"), "emphasis") == "Primary");
+
+    h.backend.click(h.byTestId("Button", "action_save"));
+    h.settle();
+    CHECK(h.text("saved") == "inner");
+    REQUIRE(h.backend.find("Column", "keys", "Enter").has_value());
+    CHECK(h.backend.press(*h.backend.find("Column", "keys", "Enter"), "Enter"));
+    h.settle();
+    CHECK(h.text("saved") == "by enter");
+}
+
+// Mutation: let an action bar mount wherever it is (it would show in the column, under no overlay).
+TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refused", "[ui][interpreter]") {
+    Harness h;
+    ui::Node const bar = ui::actionBar(ui::ActionBar{.children = {ui::button(ui::Button{.label = "Save"})}});
+    CHECK_THROWS_AS(ui::Mounted(h.runtime, h.backend, ui::column(ui::Column{.children = {bar}})), std::logic_error);
+}

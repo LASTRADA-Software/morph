@@ -383,6 +383,11 @@ public:
     /// @brief Sets what a user dismissal (Esc on the TUI) of the open dialog calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief The dialog's footer: a container it lays out after its content, which shows nothing while it is empty.
+    ///        The mount puts the dialog's actions here.
+    /// @return It, owned by the dialog and valid as long as the dialog.
+    virtual ContainerWidget& footer() = 0;
 };
 
 /// @brief A progress indicator.
@@ -609,6 +614,11 @@ public:
     /// @brief Sets what a user dismissal (Esc on the TUI) calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief The drawer's footer: a container it lays out after its content, which shows nothing while it is empty.
+    ///        The mount puts the drawer's actions here.
+    /// @return It, owned by the drawer and valid as long as the drawer.
+    virtual ContainerWidget& footer() = 0;
 };
 
 /// @brief Panes along the axis fixed at creation, with handles between them that the user drags.

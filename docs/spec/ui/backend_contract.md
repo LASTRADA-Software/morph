@@ -127,7 +127,7 @@ reorders children, and only through this.
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
-| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included |
+| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer |
 | `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
@@ -166,7 +166,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
 | `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none) | `setOnSelect(index)` |
-| `DialogWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
+| `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
@@ -178,7 +178,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
-| `DrawerWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open drawer |
+| `DrawerWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |

@@ -760,6 +760,10 @@ protected:
     /// @return The store.
     [[nodiscard]] RecordStore& store() const noexcept { return *_store; }
 
+    /// @brief The store, shared: what a part this widget makes (an overlay's footer) records into.
+    /// @return The store.
+    [[nodiscard]] std::shared_ptr<RecordStore> const& sharedStore() const noexcept { return _store; }
+
     /// @brief This widget's id.
     /// @return The id.
     [[nodiscard]] int id() const noexcept { return _id; }
@@ -1070,10 +1074,31 @@ public:
     void setOnSelect(std::function<void(std::size_t)> onSelect) override { callbacks().index = std::move(onSelect); }
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`.
-class FakeDialog final : public FakeContainer<DialogWidget> {
+/// @brief A fake overlay's footer: a `Footer` child, made when it is first asked for, so an overlay that never shows
+///        actions logs none.
+/// @tparam Interface `DialogWidget` or `DrawerWidget`.
+template <typename Interface>
+class FakeOverlay : public FakeContainer<Interface> {
 public:
-    using FakeContainer<DialogWidget>::FakeContainer;
+    using FakeContainer<Interface>::FakeContainer;
+
+    /// @brief The footer, a `Footer` container child of the overlay.
+    /// @return It.
+    ContainerWidget& footer() override {
+        if (_footer == nullptr) {
+            _footer = std::make_unique<FakeContainer<SlotWidget>>(this->sharedStore(), "Footer", this);
+        }
+        return *_footer;
+    }
+
+private:
+    std::unique_ptr<FakeContainer<SlotWidget>> _footer;
+};
+
+/// @brief A fake `DialogWidget`: properties `open`, `title`; a `Footer` child once its footer is asked for.
+class FakeDialog final : public FakeOverlay<DialogWidget> {
+public:
+    using FakeOverlay<DialogWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
@@ -1143,10 +1168,10 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
 };
 
-/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`.
-class FakeDrawer final : public FakeContainer<DrawerWidget> {
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`; a `Footer` child once its footer is asked for.
+class FakeDrawer final : public FakeOverlay<DrawerWidget> {
 public:
-    using FakeContainer<DrawerWidget>::FakeContainer;
+    using FakeOverlay<DrawerWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
