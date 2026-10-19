@@ -97,7 +97,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1214,
+      "line": 1281,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant."
     },
@@ -115,34 +115,34 @@
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 1043,
+      "line": 1103,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 1530,
+      "line": 1643,
       "source": "default:",
       "context": "download(cmd, fields, primary, path);",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentParser::command's switch over the command kinds."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 1856,
+      "line": 1969,
       "source": "default:",
       "context": "case Shape::Keys:",
       "reason": "The default arm is unreachable: the switch names every enumerator of detail::Shape, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentParser::entry's switch over a key's shape."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 2819,
+      "line": 2957,
       "source": "default:",
       "context": "if (cmd.value) {",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentValidator::checkCommand's switch."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 3013,
+      "line": 3363,
       "source": "default: {",
       "reason": "The default arm is unreachable: the switch names every enumerator of NameCategory, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ScopeResolver::ref's switch over what a name declares."
     },

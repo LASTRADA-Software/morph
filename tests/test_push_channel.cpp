@@ -268,6 +268,42 @@ TEST_CASE("post_after_close_is_dropped", "[push][channel]") {
     CHECK(wire.snapshot().empty());
 }
 
+// Mutation: keep a writer whose `write` is empty — the post after it is handed to an empty function.
+TEST_CASE("an_empty_writer_removes_the_connections_writer", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    FakeWire wire;
+    auto const cid = server->openConnection();
+    // Connection 0 is no connection: neither a writer nor a drain for it does anything.
+    server->setConnectionWriter(0, wire.writer());
+    server->connectionDrained(0);
+    // A writer without a backlog read never holds an event back.
+    server->setConnectionWriter(cid,
+                                {.write = [&wire](std::string frame) { wire.push(std::move(frame)); }, .backlog = {}});
+    auto const first = encodedEvent("changes", R"({"n":1})");
+    server->post(cid, first);
+    flush(*server);
+    REQUIRE(wire.snapshot() == std::vector<std::string>{first});
+
+    server->setConnectionWriter(cid, {});
+    server->post(cid, encodedEvent("changes", R"({"n":2})"));
+    flush(*server);
+    CHECK(wire.snapshot() == std::vector<std::string>{first});
+}
+
+TEST_CASE("a_watch_whose_body_does_not_parse_is_refused", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    auto const cid = server->openConnection();
+    ::morph::wire::Envelope watch;
+    watch.kind = std::string{::morph::wire::kWatchKind};
+    watch.callId = 3;
+    watch.body = "not json";
+    auto const reply = ::morph::wire::decode(server->handleInline(::morph::wire::encode(watch), cid));
+    CHECK(reply.kind == "err");
+    CHECK(reply.callId == 3);
+}
+
 TEST_CASE("post_above_envelope_cap_is_dropped_and_counted", "[push][channel]") {
     ::morph::observe::ScopedObserveOverride const restore;
     std::atomic<int> oversize{0};
