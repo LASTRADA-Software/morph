@@ -3,8 +3,10 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <random>
 #include <ranges>
@@ -83,9 +85,20 @@ public:
     /// @return `false` as soon as a byte cannot extend valid UTF-8; once it
     ///         returns `false` the validator must not be fed further.
     bool feed(std::string_view data) {
-        return std::ranges::all_of(data, [this](unsigned char currentByte) {
-            return _remaining == 0 ? startSequence(currentByte) : continueSequence(currentByte);
-        });
+        std::size_t at = 0;
+        while (at < data.size()) {
+            if (_remaining == 0) {
+                at = skipAscii(data, at);
+                if (at == data.size()) {
+                    break;
+                }
+            }
+            auto const currentByte = static_cast<unsigned char>(data[at++]);
+            if (!(_remaining == 0 ? startSequence(currentByte) : continueSequence(currentByte))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// @return `true` if no multi-byte sequence was left dangling -- call at
@@ -93,6 +106,27 @@ public:
     [[nodiscard]] bool complete() const { return _remaining == 0; }
 
 private:
+    /// @brief The index of the first byte at or after @p at that is not ASCII,
+    ///        or `data.size()`.
+    ///
+    /// Eight bytes at a time: an envelope is JSON, almost all ASCII, and a
+    /// byte-at-a-time walk over it is most of what validation costs.
+    static std::size_t skipAscii(std::string_view data, std::size_t at) {
+        constexpr std::uint64_t kHighBits = 0x8080808080808080ULL;
+        while (data.size() - at >= sizeof(std::uint64_t)) {
+            std::uint64_t word = 0;
+            std::memcpy(&word, &data[at], sizeof word);
+            if ((word & kHighBits) != 0) {
+                break;
+            }
+            at += sizeof word;
+        }
+        while (at < data.size() && static_cast<unsigned char>(data[at]) < 0x80U) {
+            ++at;
+        }
+        return at;
+    }
+
     /// @brief Consumes a byte that starts a new (possibly single-byte) sequence.
     bool startSequence(unsigned char currentByte) {
         if (currentByte < 0x80) {
@@ -429,7 +463,18 @@ private:
             for (std::size_t i = 0; i < 4; ++i) {
                 key[i] = static_cast<std::uint8_t>(_buf[headerLen + i]);
             }
-            for (std::size_t i = 0; i < payload.size(); ++i) {
+            // Eight bytes at a time, with the key repeated twice: every word
+            // starts at a multiple of eight, so key byte `i % 4` lines up.
+            std::array<std::uint8_t, 8> const doubled{key[0], key[1], key[2], key[3], key[0], key[1], key[2], key[3]};
+            auto const wideKey = std::bit_cast<std::uint64_t>(doubled);
+            std::size_t i = 0;
+            for (; payload.size() - i >= sizeof wideKey; i += sizeof wideKey) {
+                std::uint64_t word = 0;
+                std::memcpy(&word, &payload[i], sizeof word);
+                word ^= wideKey;
+                std::memcpy(&payload[i], &word, sizeof word);
+            }
+            for (; i < payload.size(); ++i) {
                 payload[i] = static_cast<char>(static_cast<std::uint8_t>(payload[i]) ^ key[i % key.size()]);
             }
         }
