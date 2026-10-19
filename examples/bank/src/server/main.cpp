@@ -271,11 +271,12 @@ int main(int argc, char** argv) {
                 {
                     ::morph::exec::MainThreadExecutor owner;
                     ::morph::ui::McpAdapter adapter{
-                        server, ::morph::ui::McpOptions{.session = session, .serverName = "bank", .callbacks = &owner}};
+                        server,
+                        ::morph::ui::McpOptions{.session = session, .serverName = "bank", .callbacks = &owner}};
                     ::morph::ui::serveStdio(adapter, owner, std::cin, std::cout);
                 }
-                QMetaObject::invokeMethod(QCoreApplication::instance(), [] { QCoreApplication::quit(); },
-                                          Qt::QueuedConnection);
+                QMetaObject::invokeMethod(
+                    QCoreApplication::instance(), [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
             }};
         }
 
