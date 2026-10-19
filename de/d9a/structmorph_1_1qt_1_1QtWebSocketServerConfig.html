@@ -138,6 +138,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ad4e5d1376e1c4cce8c9d1806dcd789a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Time allowed for a newly-accepted connection to send its first text frame before it is closed. <span class="tt">0</span> = disabled.  <br /></td></tr>
 <tr class="memitem:a155d5ef7c944cfa8689929275d7d400f" id="r_a155d5ef7c944cfa8689929275d7d400f"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a155d5ef7c944cfa8689929275d7d400f">idleTimeout</a> {0}</td></tr>
 <tr class="memdesc:a155d5ef7c944cfa8689929275d7d400f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Time a connection may go without sending any frame before it is closed. <span class="tt">0</span> = disabled.  <br /></td></tr>
+<tr class="memitem:a2c3efd240e512728d71a64ce5f8f1ae7" id="r_a2c3efd240e512728d71a64ce5f8f1ae7"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a2c3efd240e512728d71a64ce5f8f1ae7">sendTimeout</a> {30000}</td></tr>
+<tr class="memdesc:a2c3efd240e512728d71a64ce5f8f1ae7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Time a frame handed to a connection may stay unwritten before the connection is closed. <span class="tt">0</span> = disabled.  <br /></td></tr>
 <tr class="memitem:a9d7b4c1a0aca4414d4789738389fd0ae" id="r_a9d7b4c1a0aca4414d4789738389fd0ae"><td class="memItemLeft">QHostAddress&#160;</td><td class="memItemRight"><a class="el" href="#a9d7b4c1a0aca4414d4789738389fd0ae">bindAddress</a> = QHostAddress::LocalHost</td></tr>
 <tr class="memdesc:a9d7b4c1a0aca4414d4789738389fd0ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Address <span class="tt">listen()</span> binds to. Default <span class="tt">QHostAddress::LocalHost</span>.  <br /></td></tr>
 <tr class="memitem:aeb30cc5b19543d22feef392669c98834" id="r_aeb30cc5b19543d22feef392669c98834"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aeb30cc5b19543d22feef392669c98834">allowPlaintextExposure</a> = false</td></tr>
@@ -147,7 +149,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Per-connection resource limits and bind/exposure policy enforced by <span class="tt"><a class="el" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html" title="Qt WebSocket server that bridges incoming connections to a RemoteServer.">QtWebSocketServer</a></span>. </p>
 <p>Declared outside <span class="tt"><a class="el" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html" title="Qt WebSocket server that bridges incoming connections to a RemoteServer.">QtWebSocketServer</a></span> so its default member initialisers are fully parsed before any constructor default argument that names <span class="tt">Config{}</span> is evaluated (same rationale as <span class="tt"><a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html" title="Reconnect tuning for QtWebSocketBackend.">morph::qt::QtWebSocketBackendConfig</a></span> and <span class="tt"><a class="el" href="../../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html" title="Configuration for NetworkMonitor.">morph::offline::NetworkMonitorConfig</a></span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af6e06a0286bf9a348a7b62def318b85d" name="af6e06a0286bf9a348a7b62def318b85d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af6e06a0286bf9a348a7b62def318b85d">&#9670;&#160;</a></span>maxConnections</h2>
@@ -164,7 +166,7 @@ Public Attributes</h2></td></tr>
 <p>Max simultaneous live client connections. <span class="tt">0</span> = unbounded. </p>
 <p>A new connection beyond this count is closed immediately in <span class="tt">onNewConnection</span>, before any message exchange and before it is tracked internally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -183,7 +185,7 @@ Public Attributes</h2></td></tr>
 <p>Per-frame size cap enforced before a message reaches <span class="tt">RemoteServer::handle()</span>. </p>
 <p>Defaults to <span class="tt">morph::wire::kMaxEnvelopeBytes</span>, the wire layer's own bound, so an unconfigured server is capped only there. Set lower to reject oversized frames earlier, before the cost of a pool round-trip and JSON decode. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +204,7 @@ Public Attributes</h2></td></tr>
 <p>Per-connection token-bucket rate limit, in messages per second. <span class="tt">0</span> = unbounded. </p>
 <p>The bucket capacity equals <span class="tt"><a class="el" href="#ac3b4213d87c1ab2cc55a38f31b48c37e" title="Per-connection token-bucket rate limit, in messages per second. 0 = unbounded.">messagesPerSecond</a></span> (an immediate one-second burst is allowed right after connecting), refilling continuously at that rate. A frame that arrives with an empty bucket is <b>refused, not queued</b>: it never reaches <span class="tt">RemoteServer</span>, and the sender is answered with an <span class="tt">err "rate limited"</span> addressed to that frame's own <span class="tt">callId</span>, so a caller's <span class="tt">Completion</span> fails rather than waiting forever. The connection stays open — throttling slows a client down, it does not evict one. See <span class="tt">docs/spec/core/backend.md</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +223,7 @@ Public Attributes</h2></td></tr>
 <p>Time allowed for a newly-accepted connection to send its first text frame before it is closed. <span class="tt">0</span> = disabled. </p>
 <p><span class="tt">QWebSocketServer::newConnection()</span> fires only after the WebSocket (and, in <span class="tt">SecureMode</span>, TLS) opening handshake has already completed, so in practice this bounds time-to-first-frame after that point, not the handshake itself — Qt exposes no earlier hook at this layer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +242,26 @@ Public Attributes</h2></td></tr>
 <p>Time a connection may go without sending any frame before it is closed. <span class="tt">0</span> = disabled. </p>
 <p>Checked by a periodic housekeeping sweep (roughly once per second), so the actual close can lag the configured value by up to that sweep interval. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2c3efd240e512728d71a64ce5f8f1ae7" name="a2c3efd240e512728d71a64ce5f8f1ae7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2c3efd240e512728d71a64ce5f8f1ae7">&#9670;&#160;</a></span>sendTimeout</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::qt::QtWebSocketServerConfig::sendTimeout {30000}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Time a frame handed to a connection may stay unwritten before the connection is closed. <span class="tt">0</span> = disabled. </p>
+<p>A peer that stops reading leaves the oldest frame queued on its socket; once that frame is older than this, the socket is aborted, so the connection is retired — its models reclaimed, its events no longer written — instead of holding frames it will never read. The same bound, with the same default, as <span class="tt"><a class="el" href="../../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#ad5d6b90e070444d5ed25ca09b3a3aae2" title="Bound on writing one chunk (up to 64 KiB) of a reply frame.">morph::net::SocketServerConfig::sendTimeout</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +279,7 @@ Public Attributes</h2></td></tr>
 
 <p>Address <span class="tt">listen()</span> binds to. Default <span class="tt">QHostAddress::LocalHost</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +297,7 @@ Public Attributes</h2></td></tr>
 
 <p>Deliberate opt-out of the exposure guard: set <span class="tt">true</span> only to knowingly serve plaintext (no TLS) on a non-loopback <span class="tt"><a class="el" href="#a9d7b4c1a0aca4414d4789738389fd0ae" title="Address listen() binds to. Default QHostAddress::LocalHost.">bindAddress</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>

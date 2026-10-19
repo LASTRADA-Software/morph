@@ -5,5 +5,6 @@ var structmorph_1_1ui_1_1HelloRequest =
     [ "components", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a048b2986b1edf595bf662cc1814c77de", null ],
     [ "hostComponents", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#af71515561d0782d3c63b32af2f37151e", null ],
     [ "hostCommands", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a487ca9e5f87255c21562f02b8bfb3229", null ],
-    [ "hostValues", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a4b4d7e632fdcf6e7e835fb5fc454dc26", null ]
+    [ "hostValues", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a4b4d7e632fdcf6e7e835fb5fc454dc26", null ],
+    [ "events", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html#ac79db869da72d0265d61ceca7a2d1719", null ]
 ];

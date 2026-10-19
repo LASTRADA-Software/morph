@@ -138,11 +138,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac9b8b302076808d32e7d036ad7497115"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the action sends a credential.  <br /></td></tr>
 <tr class="memitem:ad6373ecab96b0b4825a9bb06ac3ee5b0" id="r_ad6373ecab96b0b4825a9bb06ac3ee5b0"><td class="memItemLeft">std::optional&lt; std::vector&lt; std::string &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad6373ecab96b0b4825a9bb06ac3ee5b0">listFields</a></td></tr>
 <tr class="memdesc:ad6373ecab96b0b4825a9bb06ac3ee5b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">When the action's result is a record, the names of its members that hold a list: what a <span class="tt">patch</span> or <span class="tt">optimistic</span> of a query of the action may name as its <span class="tt">at</span>. Empty when the catalog does not say, or the result is not a record.  <br /></td></tr>
+<tr class="memitem:a1f88cf86ae2b25c9eb8dddfa8e0dd847" id="r_a1f88cf86ae2b25c9eb8dddfa8e0dd847"><td class="memItemLeft">std::optional&lt; std::vector&lt; <a class="el" href="../../d9/d0c/structmorph_1_1ui_1_1ActionEffect.html">ActionEffect</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f88cf86ae2b25c9eb8dddfa8e0dd847">effects</a></td></tr>
+<tr class="memdesc:a1f88cf86ae2b25c9eb8dddfa8e0dd847"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the action declares it changes. Absent when it declared nothing, which makes it a read; present and empty is not produced by the registry.  <br /></td></tr>
+<tr class="memitem:ac164889353910831ca99eddeda0ff4e0" id="r_ac164889353910831ca99eddeda0ff4e0"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac164889353910831ca99eddeda0ff4e0">records</a></td></tr>
+<tr class="memdesc:ac164889353910831ca99eddeda0ff4e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The records the action's result holds, with the paths to each. Empty when it holds none or the catalog does not say.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the catalog says about an action. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ab85a5553fa29dc12a09c267f4d59b90c" name="ab85a5553fa29dc12a09c267f4d59b90c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab85a5553fa29dc12a09c267f4d59b90c">&#9670;&#160;</a></span>modelType</h2>
@@ -158,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>The registered type id of the model the action belongs to. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>The fields of the action's reply rows that the server calculates; an <span class="tt">optimistic</span> write may not name them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>The reply fields the server marks <span class="tt">secret</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the action sends a credential. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +234,43 @@ Public Attributes</h2></td></tr>
 
 <p>When the action's result is a record, the names of its members that hold a list: what a <span class="tt">patch</span> or <span class="tt">optimistic</span> of a query of the action may name as its <span class="tt">at</span>. Empty when the catalog does not say, or the result is not a record. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1f88cf86ae2b25c9eb8dddfa8e0dd847" name="a1f88cf86ae2b25c9eb8dddfa8e0dd847"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f88cf86ae2b25c9eb8dddfa8e0dd847">&#9670;&#160;</a></span>effects</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::vector&lt;<a class="el" href="../../d9/d0c/structmorph_1_1ui_1_1ActionEffect.html">ActionEffect</a>&gt; &gt; morph::ui::ActionInfo::effects</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What the action declares it changes. Absent when it declared nothing, which makes it a read; present and empty is not produced by the registry. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac164889353910831ca99eddeda0ff4e0" name="ac164889353910831ca99eddeda0ff4e0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac164889353910831ca99eddeda0ff4e0">&#9670;&#160;</a></span>records</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a>&gt; morph::ui::ActionInfo::records</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The records the action's result holds, with the paths to each. Empty when it holds none or the catalog does not say. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

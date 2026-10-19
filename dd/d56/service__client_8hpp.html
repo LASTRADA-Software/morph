@@ -181,6 +181,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a633b0dc9cf83174fafc064b82d0a93ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element.  <br /></td></tr>
 <tr class="memitem:a58c25963d99bf45c425dc9a0767058f5" id="r_a58c25963d99bf45c425dc9a0767058f5"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a58c25963d99bf45c425dc9a0767058f5">morph::ui::evaluatorOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
 <tr class="memdesc:a58c25963d99bf45c425dc9a0767058f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluator over the UI service: each evaluation is one <span class="tt">ui-evaluate</span> request through <code class="param">exchange</code>, and resolves with <span class="tt"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae" title="The value an evaluate query takes from a ui-evaluate reply: the evaluated body&#39;s members,...">evaluationValue</a></span> of its reply. What <span class="tt"><a class="el" href="../../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html" title="A Dispatcher over the bridge&#39;s model-free seams: bindByType, executeRaw and the string-keyed attach,...">BridgeDispatcher</a></span> takes as its <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span>.  <br /></td></tr>
+<tr class="memitem:a1690457eb94f2afd6e00fa94c316aad4" id="r_a1690457eb94f2afd6e00fa94c316aad4"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1690457eb94f2afd6e00fa94c316aad4">morph::ui::watcherOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, std::function&lt;<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>()&gt; currentSession, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:a1690457eb94f2afd6e00fa94c316aad4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A watcher over the server (spec 8 §7): each <span class="tt">watch</span> or <span class="tt">unwatch</span> is one request of that kind through <code class="param">exchange</code>, carrying the session <code class="param">currentSession</code> returns when it is sent. What <span class="tt"><a class="el" href="../../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#acbb2aac89841c0aad006e65ffb6d3510" title="Sends the cache&#39;s watch changes to the server. Empty: the session still counts what its cache holds,...">SessionOptions::watcher</a></span> takes.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The client side of the UI service (spec 5 §12, "Content addressing"): <span class="tt">UiClient</span> runs <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> over a transport the caller supplies, verifies every file against the manifest and the manifest against the <span class="tt">ui-hello</span> digest, and keeps what it verified in a <span class="tt">VerifiedCache</span>. </p>
@@ -346,6 +348,53 @@ Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The evaluator: the model's type id, the action id and its JSON body in, the query's value out. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1690457eb94f2afd6e00fa94c316aad4" name="a1690457eb94f2afd6e00fa94c316aad4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1690457eb94f2afd6e00fa94c316aad4">&#9670;&#160;</a></span>watcherOver()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::watcherOver </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a></td>          <td class="paramname"><span class="paramname"><em>exchange</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt;<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>()&gt;</td>          <td class="paramname"><span class="paramname"><em>currentSession</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A watcher over the server (spec 8 §7): each <span class="tt">watch</span> or <span class="tt">unwatch</span> is one request of that kind through <code class="param">exchange</code>, carrying the session <code class="param">currentSession</code> returns when it is sent. What <span class="tt">SessionOptions::watcher</span> takes. </p>
+<p>The session is read at each send, not fixed when the watcher is built, because a <span class="tt">watch</span> must carry whoever is signed in now: the exchange does not stamp it, and the server refuses an unsigned one. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">exchange</td><td>The transport. </td></tr>
+    <tr><td class="paramname">currentSession</td><td>The session to stamp on each request, read when it is sent. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>The executor the completion is delivered on: the interpreter runtime's owner. Borrowed. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The watcher: the kind and the <span class="tt">WatchBody</span> JSON in; the reply body out, or the transport's or the server's reason as the failure. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00680">680</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

@@ -1,12 +1,15 @@
 var searchData=
 [
-  ['tableerrorcode_0',['TableErrorCode',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0',1,'morph::table']]],
-  ['tablemode_1',['TableMode',['../df/d8f/selection_8hpp.html#af31b0b480b49cbe79648d1a0a8890550',1,'morph::table::TableMode'],['../d1/dc0/author_8hpp.html#a497493840c4e698f3c78175070886ed7',1,'morph::ui::author::TableMode']]],
-  ['textinputmode_2',['TextInputMode',['../d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37',1,'morph::ui']]],
-  ['textrole_3',['TextRole',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5',1,'morph::ui']]],
-  ['themetokenkind_4',['ThemeTokenKind',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9a',1,'morph::ui']]],
-  ['tone_5',['Tone',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a',1,'morph::ui']]],
-  ['tri_6',['Tri',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865',1,'morph::forms']]],
-  ['tryitkind_7',['TryItKind',['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d',1,'morph::ui']]],
-  ['typekind_8',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
+  ['selection_0',['Selection',['../d1/dc0/author_8hpp.html#a386c8f27968d11a8eb2cf7ad0aeff62c',1,'morph::ui::author']]],
+  ['selectionmode_1',['SelectionMode',['../df/d8f/selection_8hpp.html#a0c5a863bb2ec27062f9111027ab3fee8',1,'morph::table::SelectionMode'],['../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7',1,'morph::ui::SelectionMode']]],
+  ['selectstyle_2',['SelectStyle',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1',1,'morph::ui']]],
+  ['shape_3',['Shape',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1',1,'morph::ui::detail']]],
+  ['showerrors_4',['ShowErrors',['../d1/dc0/author_8hpp.html#a5b4a4ba2853d3bfe0ba8aa0a23a526dc',1,'morph::ui::author']]],
+  ['side_5',['Side',['../d8/d11/view_8hpp.html#a8daf47ed0a8077e7aadb93f026ade76f',1,'morph::ui']]],
+  ['sortdirection_6',['SortDirection',['../d4/d54/sort_8hpp.html#a4bf8bff3068017a35668bddb3600b79a',1,'morph::table']]],
+  ['source_7',['Source',['../d1/dc0/author_8hpp.html#a41c4c2be9ab5803e49a0e828cc594bbe',1,'morph::ui::author']]],
+  ['state_8',['State',['../d4/d24/structmorph_1_1forms_1_1RuleOperand.html#a76e19d2c99099b466fbedb1192770ef5',1,'morph::forms::RuleOperand']]],
+  ['stepstate_9',['StepState',['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0',1,'morph::ui']]],
+  ['submitmode_10',['SubmitMode',['../d5/dc9/field__model_8hpp.html#ad7bd075645a4f59f7cf110b0b4fc3510',1,'morph::forms']]],
+  ['synchronous_11',['Synchronous',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542',1,'morph::offline::SqliteOfflineQueue']]]
 ];

@@ -148,6 +148,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a998542ab6e7b9aeca272f2a05fc452a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allows the call iff <code class="param">ctx</code> carries a valid token the policy admits.  <br /></td></tr>
 <tr class="memitem:ab46b3d7dabef6cf09d31cf51023762ef" id="r_ab46b3d7dabef6cf09d31cf51023762ef"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef">authenticate</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx) const override</td></tr>
 <tr class="memdesc:ab46b3d7dabef6cf09d31cf51023762ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the verified principal so the server can make it authoritative.  <br /></td></tr>
+<tr class="memitem:adefe4288d131e93edc64ca6707e003b1" id="r_adefe4288d131e93edc64ca6707e003b1"><td class="memItemLeft"><a class="el" href="../../dd/d88/structmorph_1_1session_1_1IAuthorizer_1_1Admission.html">Admission</a>&#160;</td><td class="memItemRight"><a class="el" href="#adefe4288d131e93edc64ca6707e003b1">admit</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType, std::string_view actionType) const override</td></tr>
+<tr class="memdesc:adefe4288d131e93edc64ca6707e003b1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Verifies <code class="param">ctx's</code> token once, then asks <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> and <span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> as the default <span class="tt"><a class="el" href="#adefe4288d131e93edc64ca6707e003b1" title="Verifies ctx&#39;s token once, then asks authenticate and authorize as the default admit does.">admit</a></span> does.  <br /></td></tr>
 <tr class="inherit_header pub_methods_structmorph_1_1session_1_1IAuthorizer"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">morph::session::IAuthorizer</a></td></tr>
 <tr class="memitem:a521dc064df62863d7afbd860301cc52e pub_methods_structmorph_1_1session_1_1IAuthorizer" id="r_a521dc064df62863d7afbd860301cc52e"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a521dc064df62863d7afbd860301cc52e">authorizeInstance</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const</td></tr>
 <tr class="memdesc:a521dc064df62863d7afbd860301cc52e pub_methods_structmorph_1_1session_1_1IAuthorizer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Optional per-**instance** authorization hook — the multi-tenant gate.  <br /></td></tr>
@@ -159,7 +161,7 @@ Public Member Functions</h2></td></tr>
 <p><span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> returns <span class="tt">true</span> only for a token with a valid signature and unexpired claims (and, if a policy is supplied, one the policy admits). <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> returns the verified principal so <span class="tt">RemoteServer</span> makes it authoritative. Install it on the server: </p><div class="fragment"><div class="line"><span class="keyword">auto</span> authz = std::make_shared&lt;morph::session::SigningAuthorizer&gt;(sharedSecret);</div>
 <div class="line"><span class="keyword">auto</span> server = std::make_shared&lt;morph::backend::RemoteServer&gt;(pool, authz);</div>
 </div><!-- fragment --> 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00522">522</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00523">523</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abe59e3f6f1cfa9772a9eaaa0bd003ad4" name="abe59e3f6f1cfa9772a9eaaa0bd003ad4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abe59e3f6f1cfa9772a9eaaa0bd003ad4">&#9670;&#160;</a></span>Policy</h2>
@@ -174,12 +176,12 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line"> </div>
 <div class="line">std::function&lt;bool(<span class="keyword">const</span> <a class="code hl_struct" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">SessionToken</a>&amp; claims, std::string_view modelType, std::string_view actionType)&gt;</div>
-<div class="ttc" id="astructmorph_1_1session_1_1SessionToken_html"><div class="ttname"><a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></div><div class="ttdoc">Verified claims carried by a session token.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d6a/session__auth_8hpp_source.html#l00288">session_auth.hpp:288</a></div></div>
+<div class="ttc" id="astructmorph_1_1session_1_1SessionToken_html"><div class="ttname"><a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></div><div class="ttdoc">Verified claims carried by a session token.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d6a/session__auth_8hpp_source.html#l00289">session_auth.hpp:289</a></div></div>
 </div><!-- fragment -->
 <p>Optional per-request policy over verified claims. </p>
 <p>Receives the verified token plus the target ids; return <span class="tt">false</span> to deny. The action id is <b>empty</b> for the <span class="tt">instances</span>, <span class="tt">schemas</span> and <span class="tt">deregister</span> envelopes, and the model type id is empty for <span class="tt">deregister</span> &ndash; see <span class="tt"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901" title="Returns true if ctx is allowed to invoke actionType on modelType.">IAuthorizer::authorize</a></span>'s own doc comment for why, and handle those cases explicitly rather than letting them reach a default arm. The default (empty) admits any validly-signed, unexpired token. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00532">532</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +234,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00566">566</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00567">567</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +284,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00576">576</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00577">577</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +322,56 @@ Public Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adefe4288d131e93edc64ca6707e003b1" name="adefe4288d131e93edc64ca6707e003b1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adefe4288d131e93edc64ca6707e003b1">&#9670;&#160;</a></span>admit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d88/structmorph_1_1session_1_1IAuthorizer_1_1Admission.html">Admission</a> morph::session::SigningAuthorizer::admit </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>modelType</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Verifies <code class="param">ctx's</code> token once, then asks <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> and <span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> as the default <span class="tt"><a class="el" href="#adefe4288d131e93edc64ca6707e003b1" title="Verifies ctx&#39;s token once, then asks authenticate and authorize as the default admit does.">admit</a></span> does. </p>
+<p>Both are still called through the vtable, so a subclass that overrides either keeps its own decision: a carve-out that admits a call without a token, or a rule that refuses more than the token does. While this call runs, <span class="tt"><a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html" title="IAuthorizer that authenticates via a signed Context::token.">SigningAuthorizer</a></span>'s own <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> and <span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> answer from the one verification instead of verifying again, so a token is judged against one clock reading. Nothing outlives the call. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">ctx</td><td>Per-call session (its <span class="tt">token</span> is verified). </td></tr>
+    <tr><td class="paramname">modelType</td><td>Target model type id (passed to <span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span>). </td></tr>
+    <tr><td class="paramname">actionType</td><td>Target action type id (passed to <span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span>). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span>'s answer and <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span>'s, from one verification. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a28db30a7032652f6eecf7581364e819c">morph::session::IAuthorizer</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00612">612</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

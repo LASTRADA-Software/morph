@@ -36,5 +36,9 @@ var classmorph_1_1ui_1_1Session =
     [ "now", "df/d20/classmorph_1_1ui_1_1Session.html#afa88deebbe8927120f2991215b2cc8c8", null ],
     [ "attachQuery", "df/d20/classmorph_1_1ui_1_1Session.html#a39df9674ea0fee6b608b736296cb340f", null ],
     [ "forgetQuery", "df/d20/classmorph_1_1ui_1_1Session.html#a19ad2e9929f7e170297d382672bbb064", null ],
-    [ "actionSucceeded", "df/d20/classmorph_1_1ui_1_1Session.html#a84ef4186a2c6a48fa8a98b06f66faf4f", null ]
+    [ "actionSucceeded", "df/d20/classmorph_1_1ui_1_1Session.html#a7bcb4848f324038c77973a7dc5ab7103", null ],
+    [ "reconnected", "df/d20/classmorph_1_1ui_1_1Session.html#a3c03b7fa3e8260dcce635aa2b34647d4", null ],
+    [ "watchSet", "df/d20/classmorph_1_1ui_1_1Session.html#a6fb2cf7771c05f53a16ce05be8ea496a", null ],
+    [ "deliverEvent", "df/d20/classmorph_1_1ui_1_1Session.html#a5ff483a6980bd495a7ee4fae53c8bc80", null ],
+    [ "applyChanges", "df/d20/classmorph_1_1ui_1_1Session.html#ada3da49c7e36630c8153fc56f22b58e1", null ]
 ];

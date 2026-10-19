@@ -9,6 +9,5 @@ var structmorph_1_1ui_1_1QueryDecl =
     [ "when", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a8f3b0e5eb2566c132ff8b4bc19645188", null ],
     [ "debounce", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a6ea9775603eb116b66e77321b466f3bd", null ],
     [ "refreshEvery", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a82dc696702b1db701256c869bb3ce61a", null ],
-    [ "staleTime", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a3de49bad5bfa57a8b0988cb11e3e8a1d", null ],
-    [ "refreshOn", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a4c3aac10114012504106b9674462092e", null ]
+    [ "staleTime", "da/db7/structmorph_1_1ui_1_1QueryDecl.html#a3de49bad5bfa57a8b0988cb11e3e8a1d", null ]
 ];

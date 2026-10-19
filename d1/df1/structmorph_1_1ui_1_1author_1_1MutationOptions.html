@@ -134,12 +134,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:afbd5a5717fb95c9ed7f2b5c9b8ccc6cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a run does while another is in flight.  <br /></td></tr>
 <tr class="memitem:a862ddf18560103237853ea63a267ae95" id="r_a862ddf18560103237853ea63a267ae95"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a862ddf18560103237853ea63a267ae95">serialKey</a></td></tr>
 <tr class="memdesc:a862ddf18560103237853ea63a267ae95"><td class="mdescLeft">&#160;</td><td class="mdescRight">The queue key of <span class="tt">serial</span> runs.  <br /></td></tr>
-<tr class="memitem:a875fd267334c1bb984e07b20f18898a1" id="r_a875fd267334c1bb984e07b20f18898a1"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html">QueryRef</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a875fd267334c1bb984e07b20f18898a1">invalidates</a></td></tr>
-<tr class="memdesc:a875fd267334c1bb984e07b20f18898a1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Queries refetched after a success, in one batch with the result.  <br /></td></tr>
-<tr class="memitem:a1f577d498d75c84f051de3e8ca53922b" id="r_a1f577d498d75c84f051de3e8ca53922b"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html">Patch</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f577d498d75c84f051de3e8ca53922b">patch</a></td></tr>
-<tr class="memdesc:a1f577d498d75c84f051de3e8ca53922b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row a reply replaces without a refetch.  <br /></td></tr>
-<tr class="memitem:a5777b3f5b723cec7d5c6137bf45a986b" id="r_a5777b3f5b723cec7d5c6137bf45a986b"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html">Patch</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5777b3f5b723cec7d5c6137bf45a986b">optimistic</a></td></tr>
-<tr class="memdesc:a5777b3f5b723cec7d5c6137bf45a986b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row a run predicts before its reply.  <br /></td></tr>
+<tr class="memitem:a1f861b3004fcc34650e53cce2cfd5ffd" id="r_a1f861b3004fcc34650e53cce2cfd5ffd"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d7/d41/structmorph_1_1ui_1_1author_1_1Optimistic.html">Optimistic</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f861b3004fcc34650e53cce2cfd5ffd">optimistic</a></td></tr>
+<tr class="memdesc:a1f861b3004fcc34650e53cce2cfd5ffd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row a run predicts before its reply.  <br /></td></tr>
 <tr class="memitem:a44dd76aba0fb24b845a94bfaf3a87958" id="r_a44dd76aba0fb24b845a94bfaf3a87958"><td class="memItemLeft"><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44dd76aba0fb24b845a94bfaf3a87958">onSuccess</a></td></tr>
 <tr class="memdesc:a44dd76aba0fb24b845a94bfaf3a87958"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run after a success.  <br /></td></tr>
 <tr class="memitem:a81c7a8eb440b2b796537b304563905b3" id="r_a81c7a8eb440b2b796537b304563905b3"><td class="memItemLeft"><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a>&#160;</td><td class="memItemRight"><a class="el" href="#a81c7a8eb440b2b796537b304563905b3">onError</a></td></tr>
@@ -157,7 +153,7 @@ struct morph::ui::author::MutationOptions&lt; Action &gt;</div><p>Options of a m
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01572">1572</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01595">1595</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ae22b66028fdd465f74d2db4f79ff8f81" name="ae22b66028fdd465f74d2db4f79ff8f81"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae22b66028fdd465f74d2db4f79ff8f81">&#9670;&#160;</a></span>body</h2>
@@ -175,7 +171,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>The body; empty sends the body each <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a4c086fb8615dd5f363aaf96d9615d60a" title="run: runs a mutation.">run</a></span> gives. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01574">1574</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01597">1597</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -195,7 +191,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>What a run does while another is in flight. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01576">1576</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01599">1599</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -215,12 +211,12 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>The queue key of <span class="tt">serial</span> runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01578">1578</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01601">1601</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a875fd267334c1bb984e07b20f18898a1" name="a875fd267334c1bb984e07b20f18898a1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a875fd267334c1bb984e07b20f18898a1">&#9670;&#160;</a></span>invalidates</h2>
+<a id="a1f861b3004fcc34650e53cce2cfd5ffd" name="a1f861b3004fcc34650e53cce2cfd5ffd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f861b3004fcc34650e53cce2cfd5ffd">&#9670;&#160;</a></span>optimistic</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -228,54 +224,14 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt;<a class="el" href="../../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html">QueryRef</a>&gt; <a class="el" href="../../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html">morph::ui::author::MutationOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt;::invalidates</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Queries refetched after a success, in one batch with the result. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01580">1580</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1f577d498d75c84f051de3e8ca53922b" name="a1f577d498d75c84f051de3e8ca53922b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1f577d498d75c84f051de3e8ca53922b">&#9670;&#160;</a></span>patch</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt; </div>
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt;<a class="el" href="../../d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html">Patch</a>&gt; <a class="el" href="../../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html">morph::ui::author::MutationOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt;::patch</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>The row a reply replaces without a refetch. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01582">1582</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a5777b3f5b723cec7d5c6137bf45a986b" name="a5777b3f5b723cec7d5c6137bf45a986b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5777b3f5b723cec7d5c6137bf45a986b">&#9670;&#160;</a></span>optimistic</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt; </div>
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt;<a class="el" href="../../d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html">Patch</a>&gt; <a class="el" href="../../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html">morph::ui::author::MutationOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt;::optimistic</td>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d7/d41/structmorph_1_1ui_1_1author_1_1Optimistic.html">Optimistic</a>&gt; <a class="el" href="../../d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html">morph::ui::author::MutationOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt;::optimistic</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 <p>The row a run predicts before its reply. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01584">1584</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01603">1603</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -295,7 +251,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run after a success. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01586">1586</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01605">1605</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -315,7 +271,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run after a failure. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01588">1588</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01607">1607</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -335,7 +291,7 @@ template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3b
 
 <p>Whether a run that cannot reach the server is queued offline. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01590">1590</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01609">1609</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

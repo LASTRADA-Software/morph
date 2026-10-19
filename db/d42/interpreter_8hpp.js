@@ -10,6 +10,7 @@ var interpreter_8hpp =
     [ "morph::ui::SessionOptions", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html", "d4/d0c/structmorph_1_1ui_1_1SessionOptions" ],
     [ "morph::ui::detail::OptimisticLayer", "de/d52/structmorph_1_1ui_1_1detail_1_1OptimisticLayer.html", "de/d52/structmorph_1_1ui_1_1detail_1_1OptimisticLayer" ],
     [ "morph::ui::detail::CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry" ],
+    [ "morph::ui::detail::Marks", "d3/d93/structmorph_1_1ui_1_1detail_1_1Marks.html", "d3/d93/structmorph_1_1ui_1_1detail_1_1Marks" ],
     [ "morph::ui::HostCommandResult", "d3/d01/structmorph_1_1ui_1_1HostCommandResult.html", "d3/d01/structmorph_1_1ui_1_1HostCommandResult" ],
     [ "morph::ui::HostCommands", "dd/d6a/structmorph_1_1ui_1_1HostCommands.html", "dd/d6a/structmorph_1_1ui_1_1HostCommands" ],
     [ "morph::ui::Session", "df/d20/classmorph_1_1ui_1_1Session.html", "df/d20/classmorph_1_1ui_1_1Session" ],
@@ -42,12 +43,18 @@ var interpreter_8hpp =
     [ "morph::ui::detail::DetachedLower", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower" ],
     [ "morph::ui::detail::ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild" ],
     [ "morph::ui::Evaluator", "db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666", null ],
+    [ "morph::ui::Watcher", "db/d42/interpreter_8hpp.html#ab1da6e62f0770d24628900fab76a3b58", null ],
+    [ "morph::ui::detail::RowsByKey", "db/d42/interpreter_8hpp.html#afcb4d5d0f21900606ab6bd8ee90a3bc7", null ],
     [ "morph::ui::detail::Bindings", "db/d42/interpreter_8hpp.html#ac688fc48fbdd94d382ee3860b43d0907", null ],
     [ "morph::ui::detail::RunDone", "db/d42/interpreter_8hpp.html#adb1bad3b6835a38393f5c80badce05e4", null ],
     [ "morph::ui::detail::Done", "db/d42/interpreter_8hpp.html#a82972b9a51cae8a658d17961a41c62fa", null ],
     [ "morph::ui::detail::PatchMiss", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3", [
       [ "NoList", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877", null ],
       [ "NoRow", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219", null ]
+    ] ],
+    [ "morph::ui::ReplyUse", "db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6", [
+      [ "Applied", "db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6a733d43480c8589b1368e5def6b480415", null ],
+      [ "Discarded", "db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6a5d5fbe880f62680a14a5e3979a19c861", null ]
     ] ],
     [ "morph::ui::detail::failureText", "db/d42/interpreter_8hpp.html#aa3d2af8e03d357a9574bced5f6db413a", null ],
     [ "morph::ui::detail::defaultErrorKind", "db/d42/interpreter_8hpp.html#aae8b72beb6632d39f9a977cad6a24e1e", null ],
@@ -58,6 +65,11 @@ var interpreter_8hpp =
     [ "morph::ui::detail::patchRows", "db/d42/interpreter_8hpp.html#ae01c2cbca049896d9b60af467e569f84", null ],
     [ "morph::ui::detail::patchMissReason", "db/d42/interpreter_8hpp.html#a583fb750935b651f18fd3242bda1ac07", null ],
     [ "morph::ui::detail::withoutFields", "db/d42/interpreter_8hpp.html#a63f2719002e489613c3068de7d23fce4", null ],
+    [ "morph::ui::detail::pathMembers", "db/d42/interpreter_8hpp.html#ab56870c8ba9904d26a40d87a108238a7", null ],
+    [ "morph::ui::detail::keyedRowsAt", "db/d42/interpreter_8hpp.html#a874ca1c269d28ba40cf150ed2e7f24ea", null ],
+    [ "morph::ui::detail::patchKeyedRows", "db/d42/interpreter_8hpp.html#a6079bd4850deffeb8fa904796b369c3f", null ],
+    [ "morph::ui::detail::keyedRowsOf", "db/d42/interpreter_8hpp.html#a6df1038a070a8aab1c40689c9df6cb93", null ],
+    [ "morph::ui::detail::patchHeldRows", "db/d42/interpreter_8hpp.html#aaf43a33ce80b4a2c813efe058c7364c6", null ],
     [ "morph::ui::detail::evalIn", "db/d42/interpreter_8hpp.html#abc78929076ccea8eba3a9bb6211985ba", null ],
     [ "morph::ui::detail::engaged", "db/d42/interpreter_8hpp.html#a9f2da6ea1c78f883e1684a72c2ac4a98", null ],
     [ "morph::ui::detail::textOf", "db/d42/interpreter_8hpp.html#a567a04ac358e5aba443f784ab7b4433b", null ],

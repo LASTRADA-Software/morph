@@ -1,6 +1,7 @@
 var structmorph_1_1ui_1_1detail_1_1CacheEntry =
 [
     [ "CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ae86064029ebd617463b2cd6af515a2f9", null ],
+    [ "holding", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a37afe2e2be0c5dc925f31a6215e031bc", null ],
     [ "key", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#aa9b727bc9e0978f38a669252cb321e61", null ],
     [ "typeId", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a75266252e1ee72d6c51456f7006c34f9", null ],
     [ "action", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a638dae2bad992fc26b29da8ea368d616", null ],
@@ -16,7 +17,10 @@ var structmorph_1_1ui_1_1detail_1_1CacheEntry =
     [ "generation", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a2f8621cfbc9962f3b5d7395bbe6b7c98", null ],
     [ "fetchedAt", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a57c3a421f9c420ce7055b407e825e08d", null ],
     [ "stale", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#aaf41e2771d199d8ca59243c84ce673e7", null ],
+    [ "refetchAfter", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a48a542839e03492b81b8bda7ee83d9a3", null ],
     [ "users", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab6df237aa0453d5d485378ca4bfa049b", null ],
     [ "evict", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a79f6559a5e3870eaeaa165e5cbc92945", null ],
-    [ "secretFields", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a4d0d45db2fdc95f608cd99f1d6061e6d", null ]
+    [ "secretFields", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a4d0d45db2fdc95f608cd99f1d6061e6d", null ],
+    [ "instanceToken", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a2e631040977f9603ffd1acbaf6b7e6fd", null ],
+    [ "records", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#aaa2250ca0d27106933809da10d8b4f22", null ]
 ];

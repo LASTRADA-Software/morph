@@ -155,7 +155,7 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
 <div class="textblock"><p>A <span class="tt"><a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html" title="The interpreter&#39;s view of the bridge: binds a model by its type id, privately or to a shared instance...">Dispatcher</a></span> over the bridge's model-free seams: <span class="tt">bindByType</span>, <span class="tt">executeRaw</span> and the string-keyed <span class="tt">attach</span>, through <span class="tt">RawHandler</span>. </p>
 <p>An evaluation goes through the <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span> it was given, since that envelope belongs to the UI service, not the bridge; without one it is refused with a <span class="tt">std::runtime_error</span>. It has no offline queue of its own: <span class="tt">queueOffline</span> is ignored unless a <span class="tt"><a class="el" href="../../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html" title="A Dispatcher that holds a queued call the server cannot be reached for, and replays it on reconnect.">QueueingDispatcher</a></span> wraps it. A shared binding without a key is bound unattached, which the bridge refuses at the first call; the interpreter never binds one, since a <span class="tt">"shared"</span> alias is a stateless model's and binds privately. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="acb6db9f3197970020faa23dd6848b961" name="acb6db9f3197970020faa23dd6848b961"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#acb6db9f3197970020faa23dd6848b961">&#9670;&#160;</a></span>BridgeDispatcher()</h2>
@@ -199,7 +199,7 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -249,7 +249,7 @@ Dispatcher &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Dispatcher
 
 <p>Implements <a class="el" href="../../d5/d80/classmorph_1_1ui_1_1Dispatcher.html#a9766e5fd803e097af301ec552cef981a">morph::ui::Dispatcher</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

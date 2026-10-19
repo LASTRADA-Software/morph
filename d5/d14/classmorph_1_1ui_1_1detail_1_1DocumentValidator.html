@@ -132,6 +132,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a6ccd21d6a674fc246de016fad7afdc09"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validates <code class="param">doc</code>.  <br /></td></tr>
 <tr class="memitem:aef3318ed71074d882596140dcd1f19a5" id="r_aef3318ed71074d882596140dcd1f19a5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aef3318ed71074d882596140dcd1f19a5">run</a> ()</td></tr>
 <tr class="memdesc:aef3318ed71074d882596140dcd1f19a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs every rule; throws <span class="tt"><a class="el" href="../../de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html" title="The exception the loader throws inside itself; loadDocument turns it into its result.">DocumentRefused</a></span> on the first refusal.  <br /></td></tr>
+<tr class="memitem:a122f323d29298dcb7f7b226a248da255" id="r_a122f323d29298dcb7f7b226a248da255"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html">LoadWarning</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a122f323d29298dcb7f7b226a248da255">takeWarnings</a> () noexcept</td></tr>
+<tr class="memdesc:a122f323d29298dcb7f7b226a248da255"><td class="mdescLeft">&#160;</td><td class="mdescRight">What validation found that does not refuse the document.  <br /></td></tr>
 <tr class="memitem:aa13fdbdd95598b1e0b162e95148178cb" id="r_aa13fdbdd95598b1e0b162e95148178cb"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa13fdbdd95598b1e0b162e95148178cb">derivedType</a> (<a class="el" href="../../dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html">NameEntry</a> &amp;entry, std::string_view name)</td></tr>
 <tr class="memdesc:aa13fdbdd95598b1e0b162e95148178cb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The type of a name whose type is derived from an expression, derived on first use.  <br /></td></tr>
 <tr class="memitem:a89a97c6a773fbfc1681f75d1e98fd078" id="r_a89a97c6a773fbfc1681f75d1e98fd078"><td class="memItemLeft"><a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a89a97c6a773fbfc1681f75d1e98fd078">document</a> () const noexcept</td></tr>
@@ -145,7 +147,7 @@ Static Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Checks a parsed document against its own names and the catalog: every load-time rule that needs more than one place in the document. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02006">2006</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02082">2082</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6ccd21d6a674fc246de016fad7afdc09" name="a6ccd21d6a674fc246de016fad7afdc09"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6ccd21d6a674fc246de016fad7afdc09">&#9670;&#160;</a></span>DocumentValidator()</h2>
@@ -183,7 +185,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02011">2011</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02087">2087</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +215,37 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Runs every rule; throws <span class="tt"><a class="el" href="../../de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html" title="The exception the loader throws inside itself; loadDocument turns it into its result.">DocumentRefused</a></span> on the first refusal. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02014">2014</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02090">2090</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a122f323d29298dcb7f7b226a248da255" name="a122f323d29298dcb7f7b226a248da255"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a122f323d29298dcb7f7b226a248da255">&#9670;&#160;</a></span>takeWarnings()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html">LoadWarning</a> &gt; morph::ui::detail::DocumentValidator::takeWarnings </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What validation found that does not refuse the document. </p>
+<dl class="section return"><dt>Returns</dt><dd>The warnings, in the order found; the validator keeps none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02163">2163</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +286,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The entry, or <span class="tt">nullptr</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02088">2088</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02169">2169</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -295,7 +327,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The type, or the cycle it closes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02102">2102</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02183">2183</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +357,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The document. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02129">2129</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02210">2210</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

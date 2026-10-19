@@ -17,6 +17,7 @@ var classmorph_1_1backend_1_1SynchronousBackendAdapter =
     [ "notifyBackendChanged", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a4889651dff3f0bb7bf273a5b6118d785", null ],
     [ "cancelPending", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a0e2736666c6da8838faee69226b1083b", null ],
     [ "setReconnectHandler", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#af32e3fabde3c4a9800e9831b0ed22f75", null ],
+    [ "setEventHandler", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a88ff19426d3d1627e781edbf24b08a1d", null ],
     [ "setConnectHandler", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a6ba904fe1cb33719d7b65cbad3eb3272", null ],
     [ "setDisconnectHandler", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#ad41bbe463bb1ad53994d876771feb11b", null ],
     [ "setSession", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a74902719604bfe14f02b1c32c00e49fc", null ]

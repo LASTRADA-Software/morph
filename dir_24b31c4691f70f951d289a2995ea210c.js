@@ -1,5 +1,6 @@
 var dir_24b31c4691f70f951d289a2995ea210c =
 [
+    [ "detail", "dir_f1feb2bb35468eeade9393d312140839.html", "dir_f1feb2bb35468eeade9393d312140839" ],
     [ "qt_executor.hpp", "d2/d3b/qt__executor_8hpp_source.html", null ],
     [ "qt_tls.hpp", "dd/d60/qt__tls_8hpp_source.html", null ],
     [ "qt_websocket_backend.hpp", "d8/dc3/qt__websocket__backend_8hpp_source.html", null ],

@@ -191,6 +191,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab67ef0cfd83f0e7fd5c5a857e94215bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a handler invoked on every successful connect, including the first.  <br /></td></tr>
 <tr class="memitem:a741e68faad6ca0388f2d6c3740a3c784" id="r_a741e68faad6ca0388f2d6c3740a3c784"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a741e68faad6ca0388f2d6c3740a3c784">setDisconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
 <tr class="memdesc:a741e68faad6ca0388f2d6c3740a3c784"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a handler invoked whenever the socket drops.  <br /></td></tr>
+<tr class="memitem:a91d7ceaf1e490760eba5c05ba85b0bc2" id="r_a91d7ceaf1e490760eba5c05ba85b0bc2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a91d7ceaf1e490760eba5c05ba85b0bc2">setEventHandler</a> (std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">::morph::wire::EventBody</a>)&gt; handler, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *exec) override</td></tr>
+<tr class="memdesc:a91d7ceaf1e490760eba5c05ba85b0bc2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler each server-initiated event is posted to. See <span class="tt">IBackend::setEventHandler</span>.  <br /></td></tr>
 <tr class="memitem:a898676248ae91890928c1e051a11c4bc" id="r_a898676248ae91890928c1e051a11c4bc"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a898676248ae91890928c1e051a11c4bc">setSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) override</td></tr>
 <tr class="memdesc:a898676248ae91890928c1e051a11c4bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the session stamped onto every control envelope this backend subsequently builds (<span class="tt">register</span>, <span class="tt">registerShared</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">deregister</span>). See <span class="tt">IBackend::setSession</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">morph::backend::IEnvelopeTransport</a></td></tr>
@@ -212,7 +214,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 <dl class="section user"><dt>SSL-less Qt builds (<span class="tt">QT_NO_SSL</span>, including the standard Qt-for-WebAssembly build)</dt><dd>The constructor's <span class="tt">tls</span> parameter (and the <span class="tt">_tls</span> member) does not exist at all when Qt itself was configured without SSL — <span class="tt">QSslConfiguration</span> isn't a type Qt provides in that configuration, so there is no value to accept or ignore. <span class="tt">wss://</span> still works on such a build regardless: in a WASM/browser deployment the browser terminates TLS before Qt's <span class="tt">QWebSocket</span> ever sees the connection, so the only thing genuinely unavailable is the ability to <em>configure</em> TLS from C++ (client certificates, pinning, etc.) — plain <span class="tt">wss://</span> and <span class="tt">ws://</span> both still connect normally.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. Every verb and the internal message handler are called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -228,7 +230,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,7 +333,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -371,7 +373,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -853,7 +855,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -989,6 +991,44 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 <p>Fires before reconnect scheduling, so an observer sees the disconnected state even when a retry follows immediately. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callable invoked on the Qt thread whenever the connection drops. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a91d7ceaf1e490760eba5c05ba85b0bc2" name="a91d7ceaf1e490760eba5c05ba85b0bc2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a91d7ceaf1e490760eba5c05ba85b0bc2">&#9670;&#160;</a></span>setEventHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::setEventHandler </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">::morph::wire::EventBody</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>exec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the handler each server-initiated event is posted to. See <span class="tt">IBackend::setEventHandler</span>. </p>
+<p>An <span class="tt">event</span> envelope is recognised by its kind before any reply matching, so whatever its <span class="tt">callId</span>, it never settles a call. Events are posted to <code class="param">exec</code> in the order they arrived. Callable from any thread: the handler is held under a mutex, and an event already being delivered keeps the handler it was read with. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable posted to <code class="param">exec</code> once per event. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+    <tr><td class="paramname">exec</td><td>Executor the handler is posted to. Borrowed: it must outlive the installation. May be null only when <code class="param">handler</code> is. </td></tr>
   </table>
   </dd>
 </dl>

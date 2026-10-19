@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/d53/structm
 Public Member Functions</h2></td></tr>
 <tr class="memitem:ae86064029ebd617463b2cd6af515a2f9" id="r_ae86064029ebd617463b2cd6af515a2f9"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ae86064029ebd617463b2cd6af515a2f9">CacheEntry</a> (<a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html">reactive::Runtime</a> &amp;runtime)</td></tr>
 <tr class="memdesc:ae86064029ebd617463b2cd6af515a2f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">An empty entry.  <br /></td></tr>
+<tr class="memitem:a37afe2e2be0c5dc925f31a6215e031bc" id="r_a37afe2e2be0c5dc925f31a6215e031bc"><td class="memItemLeft"><a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#a37afe2e2be0c5dc925f31a6215e031bc">holding</a> (std::string_view record) const</td></tr>
+<tr class="memdesc:a37afe2e2be0c5dc925f31a6215e031bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog entry of a record the entry holds.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -162,18 +164,24 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a57c3a421f9c420ce7055b407e825e08d" id="r_a57c3a421f9c420ce7055b407e825e08d"><td class="memItemLeft">std::optional&lt; std::chrono::milliseconds &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a57c3a421f9c420ce7055b407e825e08d">fetchedAt</a></td></tr>
 <tr class="memdesc:a57c3a421f9c420ce7055b407e825e08d"><td class="mdescLeft">&#160;</td><td class="mdescRight">When the last reply was applied.  <br /></td></tr>
 <tr class="memitem:aaf41e2771d199d8ca59243c84ce673e7" id="r_aaf41e2771d199d8ca59243c84ce673e7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aaf41e2771d199d8ca59243c84ce673e7">stale</a> = false</td></tr>
-<tr class="memdesc:aaf41e2771d199d8ca59243c84ce673e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marked stale by an invalidation, <span class="tt">refreshOn</span> or a backend switch.  <br /></td></tr>
+<tr class="memdesc:aaf41e2771d199d8ca59243c84ce673e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marked stale by a <span class="tt">refetch</span>, a backend switch or a change.  <br /></td></tr>
+<tr class="memitem:a48a542839e03492b81b8bda7ee83d9a3" id="r_a48a542839e03492b81b8bda7ee83d9a3"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a48a542839e03492b81b8bda7ee83d9a3">refetchAfter</a> = false</td></tr>
+<tr class="memdesc:a48a542839e03492b81b8bda7ee83d9a3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marked stale while a fetch was in flight: that fetch may have read before the change, so when it settles the entry stays stale and fetches once more.  <br /></td></tr>
 <tr class="memitem:ab6df237aa0453d5d485378ca4bfa049b" id="r_ab6df237aa0453d5d485378ca4bfa049b"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ab6df237aa0453d5d485378ca4bfa049b">users</a> = 0</td></tr>
 <tr class="memdesc:ab6df237aa0453d5d485378ca4bfa049b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The mounted queries using it.  <br /></td></tr>
 <tr class="memitem:a79f6559a5e3870eaeaa165e5cbc92945" id="r_a79f6559a5e3870eaeaa165e5cbc92945"><td class="memItemLeft"><a class="el" href="../../de/d18/classmorph_1_1reactive_1_1TimerHandle.html">reactive::TimerHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a79f6559a5e3870eaeaa165e5cbc92945">evict</a></td></tr>
 <tr class="memdesc:a79f6559a5e3870eaeaa165e5cbc92945"><td class="mdescLeft">&#160;</td><td class="mdescRight">The eviction timer, while no query uses it.  <br /></td></tr>
 <tr class="memitem:a4d0d45db2fdc95f608cd99f1d6061e6d" id="r_a4d0d45db2fdc95f608cd99f1d6061e6d"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4d0d45db2fdc95f608cd99f1d6061e6d">secretFields</a></td></tr>
 <tr class="memdesc:a4d0d45db2fdc95f608cd99f1d6061e6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fields never cached.  <br /></td></tr>
+<tr class="memitem:a2e631040977f9603ffd1acbaf6b7e6fd" id="r_a2e631040977f9603ffd1acbaf6b7e6fd"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2e631040977f9603ffd1acbaf6b7e6fd">instanceToken</a></td></tr>
+<tr class="memdesc:a2e631040977f9603ffd1acbaf6b7e6fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The alias's instance token the entry was read through.  <br /></td></tr>
+<tr class="memitem:aaa2250ca0d27106933809da10d8b4f22" id="r_aaa2250ca0d27106933809da10d8b4f22"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaa2250ca0d27106933809da10d8b4f22">records</a></td></tr>
+<tr class="memdesc:aaa2250ca0d27106933809da10d8b4f22"><td class="mdescLeft">&#160;</td><td class="mdescRight">The records the entry's action returns, with the key field and paths of each; empty for an <span class="tt"><a class="el" href="#a223fed46659af4ae7ca88d2a68616924" title="Whether it is an evaluate query.">evaluate</a></span> entry, which holds none.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One entry of the session's query cache (spec 5 §5): one request in flight, one value, one error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00574">574</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00692">692</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae86064029ebd617463b2cd6af515a2f9" name="ae86064029ebd617463b2cd6af515a2f9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae86064029ebd617463b2cd6af515a2f9">&#9670;&#160;</a></span>CacheEntry()</h2>
@@ -206,7 +214,44 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00577">577</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00695">695</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a37afe2e2be0c5dc925f31a6215e031bc" name="a37afe2e2be0c5dc925f31a6215e031bc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a37afe2e2be0c5dc925f31a6215e031bc">&#9670;&#160;</a></span>holding()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a> const  * morph::ui::detail::CacheEntry::holding </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>record</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The catalog entry of a record the entry holds. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">record</td><td>The record's wire name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> when the entry does not hold the record. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00746">746</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>The cache key: model type, instance, action and canonical body. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00581">581</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +288,7 @@ Public Attributes</h2></td></tr>
 
 <p>The model type. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00701">701</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -261,7 +306,7 @@ Public Attributes</h2></td></tr>
 
 <p>The action. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00585">585</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00703">703</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +324,7 @@ Public Attributes</h2></td></tr>
 
 <p>The body's JSON text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00587">587</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00705">705</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -297,7 +342,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether it is an <span class="tt"><a class="el" href="#a223fed46659af4ae7ca88d2a68616924" title="Whether it is an evaluate query.">evaluate</a></span> query. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00707">707</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -315,7 +360,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value shown: the confirmed value with the optimistic layers over it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00709">709</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +378,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether a reply has been applied. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00711">711</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -351,7 +396,7 @@ Public Attributes</h2></td></tr>
 
 <p>The last failure's text; empty when none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00713">713</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -369,7 +414,7 @@ Public Attributes</h2></td></tr>
 
 <p>The last failure's kind; empty when none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00597">597</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00715">715</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -387,7 +432,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether a request is in flight. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00599">599</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00717">717</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -405,7 +450,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value the server last confirmed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00601">601</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00719">719</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -423,7 +468,7 @@ Public Attributes</h2></td></tr>
 
 <p>The optimistic writes still waiting, oldest first. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00721">721</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -441,7 +486,7 @@ Public Attributes</h2></td></tr>
 
 <p>The generation of the request in flight; a reply of an older one is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00605">605</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00723">723</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -459,7 +504,7 @@ Public Attributes</h2></td></tr>
 
 <p>When the last reply was applied. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00725">725</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -475,9 +520,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Marked stale by an invalidation, <span class="tt">refreshOn</span> or a backend switch. </p>
+<p>Marked stale by a <span class="tt">refetch</span>, a backend switch or a change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00727">727</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a48a542839e03492b81b8bda7ee83d9a3" name="a48a542839e03492b81b8bda7ee83d9a3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a48a542839e03492b81b8bda7ee83d9a3">&#9670;&#160;</a></span>refetchAfter</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::CacheEntry::refetchAfter = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Marked stale while a fetch was in flight: that fetch may have read before the change, so when it settles the entry stays stale and fetches once more. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -495,7 +558,7 @@ Public Attributes</h2></td></tr>
 
 <p>The mounted queries using it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -513,7 +576,7 @@ Public Attributes</h2></td></tr>
 
 <p>The eviction timer, while no query uses it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00613">613</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -531,7 +594,43 @@ Public Attributes</h2></td></tr>
 
 <p>The fields never cached. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00615">615</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00736">736</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2e631040977f9603ffd1acbaf6b7e6fd" name="a2e631040977f9603ffd1acbaf6b7e6fd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2e631040977f9603ffd1acbaf6b7e6fd">&#9670;&#160;</a></span>instanceToken</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::detail::CacheEntry::instanceToken</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The alias's instance token the entry was read through. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00738">738</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaa2250ca0d27106933809da10d8b4f22" name="aaa2250ca0d27106933809da10d8b4f22"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaa2250ca0d27106933809da10d8b4f22">&#9670;&#160;</a></span>records</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html">ActionRecordInfo</a>&gt; morph::ui::detail::CacheEntry::records</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The records the entry's action returns, with the key field and paths of each; empty for an <span class="tt"><a class="el" href="#a223fed46659af4ae7ca88d2a68616924" title="Whether it is an evaluate query.">evaluate</a></span> entry, which holds none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00741">741</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

@@ -143,6 +143,8 @@ AppSource &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppSource &
 <tr class="memitem:a8f4a2c24fe518e38108369f4f2258d48" id="r_a8f4a2c24fe518e38108369f4f2258d48"><td class="memItemLeft"><a id="a8f4a2c24fe518e38108369f4f2258d48" name="a8f4a2c24fe518e38108369f4f2258d48"></a>
 virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
 <tr class="memdesc:a8f4a2c24fe518e38108369f4f2258d48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Releases everything <span class="tt"><a class="el" href="#a256cfb9a07cf71f77b316c80e159accd" title="Connects (or, local, sets up the models), signs the user in natively if the application needs it,...">open</a></span> made (connections, bridges, handlers) and drops a <span class="tt">ready</span> not yet delivered. Called by <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span> once the screens are gone and before the frontend's runtime is; the source may be opened again afterwards. <br /></td></tr>
+<tr class="memitem:aa8a336acd625c1e9b222d2c890e59acb" id="r_aa8a336acd625c1e9b222d2c890e59acb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa8a336acd625c1e9b222d2c890e59acb">onConnected</a> (std::function&lt; void()&gt; const &amp;listener)</td></tr>
+<tr class="memdesc:aa8a336acd625c1e9b222d2c890e59acb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener called on the owner after each successful connect to the server, the first included (spec 8 §7, "Reconnect"). A shell registers <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">Session::reconnected</a></span> here, so the session re-sends its watch set and re-reads what it shows after an outage. The source owns the backend's single connect hook, so anything else that wants connects subscribes here too.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Where the screens and the models are: a server (remote) or the application linked in-process (local). </p>
@@ -223,6 +225,41 @@ virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="aa8a336acd625c1e9b222d2c890e59acb" name="aa8a336acd625c1e9b222d2c890e59acb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa8a336acd625c1e9b222d2c890e59acb">&#9670;&#160;</a></span>onConnected()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::AppSource::onConnected </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void()&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>listener</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Adds a listener called on the owner after each successful connect to the server, the first included (spec 8 §7, "Reconnect"). A shell registers <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">Session::reconnected</a></span> here, so the session re-sends its watch set and re-reads what it shows after an outage. The source owns the backend's single connect hook, so anything else that wants connects subscribes here too. </p>
+<p>The default does nothing: a local source has no connection to lose. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">listener</td><td>Called on the owner after each connect; it must stay callable while the source is open. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>

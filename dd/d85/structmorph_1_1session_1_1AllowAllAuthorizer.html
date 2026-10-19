@@ -142,6 +142,8 @@ Public Member Functions</h2></td></tr>
 <tr class="inherit_header pub_methods_structmorph_1_1session_1_1IAuthorizer"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">morph::session::IAuthorizer</a></td></tr>
 <tr class="memitem:a639b6c6bfe77ba9143b0533788726568 pub_methods_structmorph_1_1session_1_1IAuthorizer" id="r_a639b6c6bfe77ba9143b0533788726568"><td class="memItemLeft">virtual std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">authenticate</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx) const</td></tr>
 <tr class="memdesc:a639b6c6bfe77ba9143b0533788726568 pub_methods_structmorph_1_1session_1_1IAuthorizer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the authenticated principal for <code class="param">ctx</code>, or <span class="tt">nullopt</span>.  <br /></td></tr>
+<tr class="memitem:a28db30a7032652f6eecf7581364e819c pub_methods_structmorph_1_1session_1_1IAuthorizer" id="r_a28db30a7032652f6eecf7581364e819c"><td class="memItemLeft">virtual <a class="el" href="../../dd/d88/structmorph_1_1session_1_1IAuthorizer_1_1Admission.html">Admission</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a28db30a7032652f6eecf7581364e819c">admit</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType, std::string_view actionType) const</td></tr>
+<tr class="memdesc:a28db30a7032652f6eecf7581364e819c pub_methods_structmorph_1_1session_1_1IAuthorizer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Authenticates and authorizes one call together.  <br /></td></tr>
 <tr class="memitem:a521dc064df62863d7afbd860301cc52e pub_methods_structmorph_1_1session_1_1IAuthorizer" id="r_a521dc064df62863d7afbd860301cc52e"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a521dc064df62863d7afbd860301cc52e">authorizeInstance</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const</td></tr>
 <tr class="memdesc:a521dc064df62863d7afbd860301cc52e pub_methods_structmorph_1_1session_1_1IAuthorizer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Optional per-**instance** authorization hook — the multi-tenant gate.  <br /></td></tr>
 <tr class="memitem:a2458bb624e5bc3bd7dad6858413135e6 pub_methods_structmorph_1_1session_1_1IAuthorizer" id="r_a2458bb624e5bc3bd7dad6858413135e6"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a2458bb624e5bc3bd7dad6858413135e6">authorizeRegister</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType) const</td></tr>
@@ -151,7 +153,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Default authorizer that permits everything. </p>
 <p>Wire it explicitly via <span class="tt">RemoteServer(pool, dispatcher, registry, allowAll)</span> for documentation, or rely on the server's default (which uses this type). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a15563dffc836682b80f6d15cba956f42" name="a15563dffc836682b80f6d15cba956f42"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a15563dffc836682b80f6d15cba956f42">&#9670;&#160;</a></span>authorize()</h2>
@@ -198,7 +200,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>

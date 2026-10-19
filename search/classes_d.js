@@ -14,11 +14,12 @@ var searchData=
   ['nodedata_11',['NodeData',['../d9/d5b/structmorph_1_1ui_1_1NodeData.html',1,'morph::ui']]],
   ['nodes_12',['Nodes',['../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html',1,'morph::ui::author']]],
   ['nodewriter_13',['NodeWriter',['../df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html',1,'morph::ui::author::detail']]],
-  ['nosharing_14',['NoSharing',['../d8/d38/structmorph_1_1bridge_1_1NoSharing.html',1,'morph::bridge']]],
-  ['not_15',['Not',['../d1/db1/structmorph_1_1forms_1_1Not.html',1,'morph::forms']]],
-  ['notengaged_16',['NotEngaged',['../d9/d86/structmorph_1_1forms_1_1NotEngaged.html',1,'morph::forms']]],
-  ['nullsinkerror_17',['NullSinkError',['../d6/d55/structmorph_1_1journal_1_1NullSinkError.html',1,'morph::journal']]],
-  ['number_18',['Number',['../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html',1,'morph::ui::detail']]],
-  ['numerator_19',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]],
-  ['numericlocale_20',['NumericLocale',['../dc/ddc/structmorph_1_1render_1_1NumericLocale.html',1,'morph::render']]]
+  ['none_14',['none',['../d9/d7d/structmorph_1_1effects_1_1none.html',1,'morph::effects']]],
+  ['nosharing_15',['NoSharing',['../d8/d38/structmorph_1_1bridge_1_1NoSharing.html',1,'morph::bridge']]],
+  ['not_16',['Not',['../d1/db1/structmorph_1_1forms_1_1Not.html',1,'morph::forms']]],
+  ['notengaged_17',['NotEngaged',['../d9/d86/structmorph_1_1forms_1_1NotEngaged.html',1,'morph::forms']]],
+  ['nullsinkerror_18',['NullSinkError',['../d6/d55/structmorph_1_1journal_1_1NullSinkError.html',1,'morph::journal']]],
+  ['number_19',['Number',['../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html',1,'morph::ui::detail']]],
+  ['numerator_20',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]],
+  ['numericlocale_21',['NumericLocale',['../dc/ddc/structmorph_1_1render_1_1NumericLocale.html',1,'morph::render']]]
 ];

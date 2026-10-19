@@ -149,12 +149,14 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <tr class="memdesc:a508eee14a840935f84eb6ab6ef91fece"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this service answers <code class="param">kind</code>.  <br /></td></tr>
 <tr class="memitem:a8824ddf6059dffcbe63219f81da70c7c" id="r_a8824ddf6059dffcbe63219f81da70c7c"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#a8824ddf6059dffcbe63219f81da70c7c">handle</a> (const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &amp;request, const <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &amp;authorizer)=0</td></tr>
 <tr class="memdesc:a8824ddf6059dffcbe63219f81da70c7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers one envelope of a kind <span class="tt"><a class="el" href="#a508eee14a840935f84eb6ab6ef91fece" title="Whether this service answers kind.">serves</a></span> accepted.  <br /></td></tr>
+<tr class="memitem:abfc8dd71a442686b61b259d60e17a08b" id="r_abfc8dd71a442686b61b259d60e17a08b"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#abfc8dd71a442686b61b259d60e17a08b">handle</a> (const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &amp;request, const <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &amp;authorizer, <a class="el" href="../../d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html">ConnectionFacts</a> &amp;facts)</td></tr>
+<tr class="memdesc:abfc8dd71a442686b61b259d60e17a08b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers one envelope of a kind <span class="tt"><a class="el" href="#a508eee14a840935f84eb6ab6ef91fece" title="Whether this service answers kind.">serves</a></span> accepted, with the facts of the connection it arrived on.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Envelope kinds a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> answers through an extension, such as the UI service's <span class="tt">ui-*</span> kinds. </p>
 <p>Core does not know the kinds a higher layer adds, and must not include that layer. A server consults its services only for a kind it does not answer itself, so a service cannot take over <span class="tt">execute</span>, <span class="tt">hello</span> or any other built-in kind; a kind no service serves is still answered <span class="tt">err "unknown envelope kind: &lt;kind&gt;"</span>. See <span class="tt">docs/spec/core/backend.md</span>, "Envelope services". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a508eee14a840935f84eb6ab6ef91fece" name="a508eee14a840935f84eb6ab6ef91fece"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a508eee14a840935f84eb6ab6ef91fece">&#9670;&#160;</a></span>serves()</h2>
@@ -193,7 +195,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </div>
 </div>
 <a id="a8824ddf6059dffcbe63219f81da70c7c" name="a8824ddf6059dffcbe63219f81da70c7c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8824ddf6059dffcbe63219f81da70c7c">&#9670;&#160;</a></span>handle()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a8824ddf6059dffcbe63219f81da70c7c">&#9670;&#160;</a></span>handle() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -230,6 +232,55 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <dl class="section return"><dt>Returns</dt><dd>The encoded reply envelope (<span class="tt">wire::encode</span>), addressed to <span class="tt">request.callId</span>. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a97d689952e3e755b7b1e70035f02f376">morph::ui::UiService</a>.</p>
+
+</div>
+</div>
+<a id="abfc8dd71a442686b61b259d60e17a08b" name="abfc8dd71a442686b61b259d60e17a08b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abfc8dd71a442686b61b259d60e17a08b">&#9670;&#160;</a></span>handle() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::string morph::backend::IEnvelopeService::handle </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>authorizer</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html">ConnectionFacts</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>facts</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Answers one envelope of a kind <span class="tt"><a class="el" href="#a508eee14a840935f84eb6ab6ef91fece" title="Whether this service answers kind.">serves</a></span> accepted, with the facts of the connection it arrived on. </p>
+<p>What the server calls. A service that learns something about the connection, as the UI service learns that <span class="tt">ui-hello</span> negotiated events, overrides this one and records it in <code class="param">facts</code>; the default forwards to the two-parameter <span class="tt"><a class="el" href="#a8824ddf6059dffcbe63219f81da70c7c" title="Answers one envelope of a kind serves accepted.">handle</a></span> and leaves <code class="param">facts</code> alone. A service overriding only one of the two adds <span class="tt">using <a class="el" href="#a8824ddf6059dffcbe63219f81da70c7c" title="Answers one envelope of a kind serves accepted.">IEnvelopeService::handle</a>;</span>, so the other is not hidden. Same thread and error rules as the two-parameter <span class="tt"><a class="el" href="#a8824ddf6059dffcbe63219f81da70c7c" title="Answers one envelope of a kind serves accepted.">handle</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">request</td><td>The decoded envelope. </td></tr>
+    <tr><td class="paramname">authorizer</td><td>The server's authoriser. </td></tr>
+    <tr><td class="paramname">facts</td><td>The connection's facts, which the service may set; fresh ones for a message handled without a connection. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The encoded reply envelope (<span class="tt">wire::encode</span>), addressed to <span class="tt">request.callId</span>. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a521159d2bd8e75b21dd6a6a2a726385d">morph::ui::UiService</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

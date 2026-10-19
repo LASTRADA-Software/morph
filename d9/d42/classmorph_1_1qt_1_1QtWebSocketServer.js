@@ -9,5 +9,6 @@ var classmorph_1_1qt_1_1QtWebSocketServer =
     [ "closeGracefully", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa", null ],
     [ "onNewConnection", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd", null ],
     [ "onTextMessage", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230", null ],
-    [ "onDisconnected", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3", null ]
+    [ "onDisconnected", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3", null ],
+    [ "onBytesWritten", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a214afeeb80965443d76f003470b79145", null ]
 ];

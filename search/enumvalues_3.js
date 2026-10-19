@@ -11,9 +11,10 @@ var searchData=
   ['dimension_8',['Dimension',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa9e0e31246b7b078403969b265870b3f4',1,'morph::ui']]],
   ['dirty_9',['Dirty',['../d9/de9/graph_8hpp.html#acbe9ee40590fbc2c7d377c3fe7937067a99feffc57dae9a01652065178fae5b19',1,'morph::reactive::detail']]],
   ['discard_10',['Discard',['../dd/d78/host_8hpp.html#a132a37e3f053472429b743bf0708cc0aad94b42030b9785fd754d5c1754961269',1,'morph::ui']]],
-  ['divisionbyzero_11',['DivisionByZero',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2',1,'morph::math']]],
-  ['done_12',['Done',['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'morph::ui']]],
-  ['download_13',['Download',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d',1,'morph::ui']]],
-  ['drawer_14',['Drawer',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6a9b1ed2cbe56f7a315f0a365d2b97cb59',1,'morph::ui::author']]],
-  ['dropdown_15',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
+  ['discarded_11',['Discarded',['../db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6a5d5fbe880f62680a14a5e3979a19c861',1,'morph::ui']]],
+  ['divisionbyzero_12',['DivisionByZero',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2',1,'morph::math']]],
+  ['done_13',['Done',['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'morph::ui']]],
+  ['download_14',['Download',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d',1,'morph::ui']]],
+  ['drawer_15',['Drawer',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6a9b1ed2cbe56f7a315f0a365d2b97cb59',1,'morph::ui::author']]],
+  ['dropdown_16',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
 ];

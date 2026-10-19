@@ -13,5 +13,6 @@ var structmorph_1_1ui_1_1Document =
     [ "prefetch", "d4/d02/structmorph_1_1ui_1_1Document.html#aa60636a1456374380492f15057cb393b", null ],
     [ "components", "d4/d02/structmorph_1_1ui_1_1Document.html#a3adc5e6abc4843c5fb4e18234ef2a0bc", null ],
     [ "customize", "d4/d02/structmorph_1_1ui_1_1Document.html#ad50853c0e76fbb81fadf7051cc4b435f", null ],
-    [ "view", "d4/d02/structmorph_1_1ui_1_1Document.html#a51cec9276e5d0bdc65c3844fdb291299", null ]
+    [ "view", "d4/d02/structmorph_1_1ui_1_1Document.html#a51cec9276e5d0bdc65c3844fdb291299", null ],
+    [ "warnings", "d4/d02/structmorph_1_1ui_1_1Document.html#a65b8b97b29914c1a60ad5e4c39360034", null ]
 ];

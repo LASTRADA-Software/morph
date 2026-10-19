@@ -6,5 +6,6 @@ var structmorph_1_1backend_1_1ServerConfig =
     [ "minProtocolVersion", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a473b284cae5257b6901a661932c622de", null ],
     [ "maxProtocolVersion", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a274facbfd4d88bdf90b107acd85597a8", null ],
     [ "payloadCompleteness", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a0d1204bec80cf0bc0d0cd96c59c28597", null ],
-    [ "services", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a603c136c3365d4db231069a4a8f3b208", null ]
+    [ "services", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a603c136c3365d4db231069a4a8f3b208", null ],
+    [ "coalesceWindow", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#af49a7940b3ae7345a58bb499dff8c50f", null ]
 ];

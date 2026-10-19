@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de1/tcp__so
 <div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>        addrinfo hints{};</div>
 <div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>        hints.ai_family = AF_UNSPEC;</div>
 <div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>        hints.ai_socktype = SOCK_STREAM;</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        addrinfo* resolved = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        addrinfo* <a class="code hl_function" href="../../d0/d83/effects_8hpp.html#a0618bb1fbcf9061c17abd1a2f96abbb1">resolved</a> = <span class="keyword">nullptr</span>;</div>
 <div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>        <span class="comment">// Widened explicitly: std::to_string has no uint16_t overload, and</span></div>
 <div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        <span class="comment">// letting the integral promotion pick one trips GCC&#39;s -Wsign-promo</span></div>
 <div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>        <span class="comment">// (it would choose the signed `int` overload over `unsigned`).</span></div>
@@ -330,7 +330,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de1/tcp__so
 <div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>        <span class="keyword">struct </span>AddrInfoGuard {</div>
 <div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>            addrinfo* p;</div>
 <div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>            ~AddrInfoGuard() { ::freeaddrinfo(p); }</div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>        } guard{resolved};</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>        } guard{<a class="code hl_function" href="../../d0/d83/effects_8hpp.html#a0618bb1fbcf9061c17abd1a2f96abbb1">resolved</a>};</div>
 <div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span> </div>
 <div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>        <span class="comment">// One deadline for the whole call, not one timeout per candidate.</span></div>
 <div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>        <span class="comment">// `ai_family = AF_UNSPEC` makes several candidates the norm (&quot;localhost&quot;</span></div>
@@ -704,6 +704,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/de1/tcp__so
 <div class="line"><a id="l00582" name="l00582"></a><span class="lineno">  582</span> </div>
 <div class="line"><a id="l00583" name="l00583"></a><span class="lineno">  583</span>}  <span class="comment">// namespace morph::net::detail</span></div>
 <div class="ttc" id="aauthor_8hpp_html_a43f619a034a1943138185f0cef94e699"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699">morph::ui::author::host</a></div><div class="ttdeci">Command host(std::string const &amp;name, AnyHandle const &amp;args={})</div><div class="ttdoc">host: a command the application registered with the client.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l02606">author.hpp:2606</a></div></div>
+<div class="ttc" id="aeffects_8hpp_html_a0618bb1fbcf9061c17abd1a2f96abbb1"><div class="ttname"><a href="../../d0/d83/effects_8hpp.html#a0618bb1fbcf9061c17abd1a2f96abbb1">morph::effects::detail::resolved</a></div><div class="ttdeci">Resolved const &amp; resolved()</div><div class="ttdoc">The process registries, matched and validated on the first call.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/d83/effects_8hpp_source.html#l00511">effects.hpp:511</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

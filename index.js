@@ -30,6 +30,7 @@ var index =
       [ "API", "index.html#api", null ],
       [ "Behavior", "index.html#behavior-1", null ]
     ] ],
+    [ "Keeping screens current across clients", "index.html#keeping-screens-current-across-clients", null ],
     [ "Exact values, units, and schema-driven forms", "index.html#exact-values-units-and-schema-driven-forms", [
       [ "<span class=\"tt\">morph::math::Rational</span> — exact numbers on the wire", "index.html#morphmathrational--exact-numbers-on-the-wire", null ],
       [ "<span class=\"tt\">morph::units::Quantity&lt;U&gt;</span> — one kind of empty, units as types", "index.html#morphunitsquantityu--one-kind-of-empty-units-as-types", null ],

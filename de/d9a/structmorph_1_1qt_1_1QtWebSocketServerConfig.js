@@ -5,6 +5,7 @@ var structmorph_1_1qt_1_1QtWebSocketServerConfig =
     [ "messagesPerSecond", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#ac3b4213d87c1ab2cc55a38f31b48c37e", null ],
     [ "handshakeTimeout", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#ad4e5d1376e1c4cce8c9d1806dcd789a8", null ],
     [ "idleTimeout", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#a155d5ef7c944cfa8689929275d7d400f", null ],
+    [ "sendTimeout", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#a2c3efd240e512728d71a64ce5f8f1ae7", null ],
     [ "bindAddress", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#a9d7b4c1a0aca4414d4789738389fd0ae", null ],
     [ "allowPlaintextExposure", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834", null ]
 ];

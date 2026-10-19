@@ -7,9 +7,10 @@ var searchData=
   ['always_4',['Always',['../dd/d5f/signal_8hpp.html#a0172f46bc8e1668baa353a56ffaa1b94a68eec46437c384d8dad18d5464ebc35c',1,'Alwaysmorph::reactive'],['../d1/dc0/author_8hpp.html#a5b4a4ba2853d3bfe0ba8aa0a23a526dca68eec46437c384d8dad18d5464ebc35c',1,'Alwaysmorph::ui::author']]],
   ['and_5',['And',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79ac33315685a0cba3ce53be378b3c7874b',1,'morph::forms::RuleExpr']]],
   ['any_6',['Any',['../d1/dd2/filter_8hpp.html#a96046fd74330a53f1e1767abae73d519aed36a1ef76a59ee3f15180e0441188ad',1,'Anymorph::table'],['../d1/dc0/author_8hpp.html#a41c4c2be9ab5803e49a0e828cc594bbeaed36a1ef76a59ee3f15180e0441188ad',1,'Anymorph::ui::author'],['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583aed36a1ef76a59ee3f15180e0441188ad',1,'Anymorph::ui'],['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349aed36a1ef76a59ee3f15180e0441188ad',1,'Anymorph::ui']]],
-  ['array_7',['Array',['../d5/dc9/field__model_8hpp.html#a0ab75baf4b2fd216b784dc38dc98eaeda4410ec34d9e6c1a68100ca0ce033fb17',1,'morph::forms']]],
-  ['ascending_8',['Ascending',['../d4/d54/sort_8hpp.html#a4bf8bff3068017a35668bddb3600b79aacf3fb1ff52ea1eed3347ac5401ee7f0c',1,'morph::table']]],
-  ['atleastoneof_9',['AtLeastOneOf',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79aba8b2aa980a436fb5907b538fb476a63',1,'morph::forms::RuleExpr']]],
-  ['auto_10',['Auto',['../dd/d5f/signal_8hpp.html#a0172f46bc8e1668baa353a56ffaa1b94a06b9281e396db002010bde1de57262eb',1,'morph::reactive']]],
-  ['automatic_11',['Automatic',['../d5/dc9/field__model_8hpp.html#ad7bd075645a4f59f7cf110b0b4fc3510a086247a9b57fde6eefee2a0c4752242d',1,'morph::forms']]]
+  ['applied_7',['Applied',['../db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6a733d43480c8589b1368e5def6b480415',1,'morph::ui']]],
+  ['array_8',['Array',['../d5/dc9/field__model_8hpp.html#a0ab75baf4b2fd216b784dc38dc98eaeda4410ec34d9e6c1a68100ca0ce033fb17',1,'morph::forms']]],
+  ['ascending_9',['Ascending',['../d4/d54/sort_8hpp.html#a4bf8bff3068017a35668bddb3600b79aacf3fb1ff52ea1eed3347ac5401ee7f0c',1,'morph::table']]],
+  ['atleastoneof_10',['AtLeastOneOf',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79aba8b2aa980a436fb5907b538fb476a63',1,'morph::forms::RuleExpr']]],
+  ['auto_11',['Auto',['../dd/d5f/signal_8hpp.html#a0172f46bc8e1668baa353a56ffaa1b94a06b9281e396db002010bde1de57262eb',1,'morph::reactive']]],
+  ['automatic_12',['Automatic',['../d5/dc9/field__model_8hpp.html#ad7bd075645a4f59f7cf110b0b4fc3510a086247a9b57fde6eefee2a0c4752242d',1,'morph::forms']]]
 ];

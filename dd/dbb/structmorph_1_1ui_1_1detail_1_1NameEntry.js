@@ -7,6 +7,7 @@ var structmorph_1_1ui_1_1detail_1_1NameEntry =
     [ "model", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a131f137e5c23700e839de3a53150ddb5", null ],
     [ "derivedFrom", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a6782ef9bb6fd714c0b7ef7fe974542c4", null ],
     [ "query", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#af7164b97f36a3c9d35c5ace09c2f2363", null ],
+    [ "mutation", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a8978e1f67612e2dcd35ffbc487da00e5", null ],
     [ "element", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a1e6a738481e7b484128fd49a3e7a1240", null ],
     [ "visit", "dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a30fdd0b75a558e367ca1f6cd8a0da99f", null ]
 ];

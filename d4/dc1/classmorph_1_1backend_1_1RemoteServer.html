@@ -153,16 +153,28 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a6dc3cbe98d90ff6a39f298f66708310a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the server strand before any other member goes.  <br /></td></tr>
 <tr class="memitem:ae0a8a4b505069b41f9005705e93d4701" id="r_ae0a8a4b505069b41f9005705e93d4701"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply)</td></tr>
 <tr class="memdesc:ae0a8a4b505069b41f9005705e93d4701"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asynchronously processes a JSON <span class="tt">Envelope</span> and calls <code class="param">reply</code> with the response.  <br /></td></tr>
-<tr class="memitem:a73dbbbc8a19d6df1e2d1a8c7353fdb1a" id="r_a73dbbbc8a19d6df1e2d1a8c7353fdb1a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a73dbbbc8a19d6df1e2d1a8c7353fdb1a">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply, ConnectionId cid)</td></tr>
+<tr class="memitem:a73dbbbc8a19d6df1e2d1a8c7353fdb1a" id="r_a73dbbbc8a19d6df1e2d1a8c7353fdb1a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a73dbbbc8a19d6df1e2d1a8c7353fdb1a">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply, <a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid)</td></tr>
 <tr class="memdesc:a73dbbbc8a19d6df1e2d1a8c7353fdb1a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Like <span class="tt">handle(msg, reply)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope.  <br /></td></tr>
 <tr class="memitem:abcdee5e1504ebcbef2415b029eec8818" id="r_abcdee5e1504ebcbef2415b029eec8818"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818">handleInline</a> (const std::string &amp;msg)</td></tr>
 <tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Processes a control <span class="tt">Envelope</span> on the server strand and returns its reply, blocking the caller until it has one.  <br /></td></tr>
-<tr class="memitem:a70db4922eb76217cb1126bd54493f745" id="r_a70db4922eb76217cb1126bd54493f745"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a70db4922eb76217cb1126bd54493f745">handleInline</a> (const std::string &amp;msg, ConnectionId cid)</td></tr>
+<tr class="memitem:a70db4922eb76217cb1126bd54493f745" id="r_a70db4922eb76217cb1126bd54493f745"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a70db4922eb76217cb1126bd54493f745">handleInline</a> (const std::string &amp;msg, <a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid)</td></tr>
 <tr class="memdesc:a70db4922eb76217cb1126bd54493f745"><td class="mdescLeft">&#160;</td><td class="mdescRight">Like <span class="tt">handleInline(msg)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope.  <br /></td></tr>
-<tr class="memitem:adfa3bd5a86b06e05a374be4433bcad0d" id="r_adfa3bd5a86b06e05a374be4433bcad0d"><td class="memItemLeft">ConnectionId&#160;</td><td class="memItemRight"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d">openConnection</a> ()</td></tr>
+<tr class="memitem:adfa3bd5a86b06e05a374be4433bcad0d" id="r_adfa3bd5a86b06e05a374be4433bcad0d"><td class="memItemLeft"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a>&#160;</td><td class="memItemRight"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d">openConnection</a> ()</td></tr>
 <tr class="memdesc:adfa3bd5a86b06e05a374be4433bcad0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a new connection scope and returns its id.  <br /></td></tr>
-<tr class="memitem:a9c30776adb059a937a151eceeccc5875" id="r_a9c30776adb059a937a151eceeccc5875"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9c30776adb059a937a151eceeccc5875">closeConnection</a> (ConnectionId cid)</td></tr>
+<tr class="memitem:a9c30776adb059a937a151eceeccc5875" id="r_a9c30776adb059a937a151eceeccc5875"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9c30776adb059a937a151eceeccc5875">closeConnection</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid)</td></tr>
 <tr class="memdesc:a9c30776adb059a937a151eceeccc5875"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reclaims every model still registered under <code class="param">cid</code>, then drops the scope.  <br /></td></tr>
+<tr class="memitem:a305abde3b2de0e6717c5875f43f62320" id="r_a305abde3b2de0e6717c5875f43f62320"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a305abde3b2de0e6717c5875f43f62320">setConnectionWriter</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid, <a class="el" href="../../dc/d5d/structmorph_1_1backend_1_1ConnectionWriter.html">ConnectionWriter</a> writer)</td></tr>
+<tr class="memdesc:a305abde3b2de0e6717c5875f43f62320"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hands the server the transport's writer for connection <code class="param">cid</code>, through which <span class="tt"><a class="el" href="#a582598adb43df410f7ede122c387cfb0" title="Writes envelope to connection cid, unless its reader has fallen behind.">post</a></span> reaches it.  <br /></td></tr>
+<tr class="memitem:a582598adb43df410f7ede122c387cfb0" id="r_a582598adb43df410f7ede122c387cfb0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a582598adb43df410f7ede122c387cfb0">post</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid, std::string envelope)</td></tr>
+<tr class="memdesc:a582598adb43df410f7ede122c387cfb0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes <code class="param">envelope</code> to connection <code class="param">cid</code>, unless its reader has fallen behind.  <br /></td></tr>
+<tr class="memitem:aace35661b1a8a71a839febc1a4eccaff" id="r_aace35661b1a8a71a839febc1a4eccaff"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aace35661b1a8a71a839febc1a4eccaff">connectionDrained</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid)</td></tr>
+<tr class="memdesc:aace35661b1a8a71a839febc1a4eccaff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the server that connection <code class="param">cid's</code> backlog has fallen below <span class="tt"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#aa482ae7157f35ba17307cb6443e4d2b2" title="Backlog below which a transport reports a connection drained, by calling RemoteServer::connectionDrai...">kEventBacklogLow</a></span>.  <br /></td></tr>
+<tr class="memitem:a2c706aa18ee81d76724034cc84542bcd" id="r_a2c706aa18ee81d76724034cc84542bcd"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a2c706aa18ee81d76724034cc84542bcd">eventsNegotiated</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid) const</td></tr>
+<tr class="memdesc:a2c706aa18ee81d76724034cc84542bcd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether connection <code class="param">cid</code> negotiated server-sent events.  <br /></td></tr>
+<tr class="memitem:a0262f851a662cc7071697f48473bf123" id="r_a0262f851a662cc7071697f48473bf123"><td class="memItemLeft">detail::WatchTable const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a0262f851a662cc7071697f48473bf123">watchTable</a> () const</td></tr>
+<tr class="memdesc:a0262f851a662cc7071697f48473bf123"><td class="mdescLeft">&#160;</td><td class="mdescRight">The topics each open connection watches.  <br /></td></tr>
+<tr class="memitem:a3b8957efc2889fcc7b126ad312cb0567" id="r_a3b8957efc2889fcc7b126ad312cb0567"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3b8957efc2889fcc7b126ad312cb0567">fanOut</a> (<a class="el" href="../../dc/d63/structmorph_1_1effects_1_1Changes.html">::morph::effects::Changes</a> changes, <a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> caller, std::string_view callerPrincipal)</td></tr>
+<tr class="memdesc:a3b8957efc2889fcc7b126ad312cb0567"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells every connection watching what <code class="param">changes</code> names that it changed, as one <span class="tt">changes</span> event per connection.  <br /></td></tr>
 <tr class="memitem:ad197c37d0a3bd9bf562b04419021514d" id="r_ad197c37d0a3bd9bf562b04419021514d"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d">strand</a> () noexcept</td></tr>
 <tr class="memdesc:ad197c37d0a3bd9bf562b04419021514d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The server strand, as an executor.  <br /></td></tr>
 <tr class="memitem:ac422a872a1276a141e0354a27ad31618" id="r_ac422a872a1276a141e0354a27ad31618"><td class="memItemLeft">PayloadCompleteness&#160;</td><td class="memItemRight"><a class="el" href="#ac422a872a1276a141e0354a27ad31618">payloadCompleteness</a> () const noexcept</td></tr>
@@ -181,7 +193,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Heap allocation requirement</dt><dd><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> <b>must</b> be heap-allocated via <span class="tt">std::make_shared</span>. Every task it posts captures <span class="tt">shared_from_this()</span>, so the server outlives its queued work however the last external reference is dropped.</dd></dl>
 <dl class="section user"><dt>Wire format</dt><dd>All requests and replies are encoded as <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> JSON. See <span class="tt"><a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a></span> for the field semantics. The <span class="tt">kind</span> field is the discriminator. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="aa1967f685b6df4553d93c5d3efd448b7" name="aa1967f685b6df4553d93c5d3efd448b7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa1967f685b6df4553d93c5d3efd448b7">&#9670;&#160;</a></span>LogProvider</h2>
@@ -197,7 +209,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias of <span class="tt">morph::backend::LogProvider</span>, the type of <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#aae24a77897333f0291cb44547383843a" title="Consulted whenever an instance is constructed with a non-empty contextKey — every register envelope,...">ServerConfig::logProvider</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -244,8 +256,14 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">morph::model::EffectsRegistrationError</td><td>if the process's record and effects declarations are invalid: the server reads them here, so such a server is never constructed. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -296,8 +314,14 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">morph::model::EffectsRegistrationError</td><td>if the process's record and effects declarations are invalid: the server reads them here, so such a server is never constructed. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00407">407</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -351,11 +375,12 @@ Public Member Functions</h2></td></tr>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
     <tr><td class="paramname">std::invalid_argument</td><td>if <span class="tt">config.minProtocolVersion</span> exceeds <span class="tt">config.maxProtocolVersion</span>, or <span class="tt">config.services</span> holds a null entry. </td></tr>
+    <tr><td class="paramname">morph::model::EffectsRegistrationError</td><td>if the process's record and effects declarations are invalid: the server reads them here, so such a server is never constructed. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -416,11 +441,12 @@ Public Member Functions</h2></td></tr>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
     <tr><td class="paramname">std::invalid_argument</td><td>if <span class="tt">config.minProtocolVersion</span> exceeds <span class="tt">config.maxProtocolVersion</span>, or <span class="tt">config.services</span> holds a null entry. </td></tr>
+    <tr><td class="paramname">morph::model::EffectsRegistrationError</td><td>if the process's record and effects declarations are invalid: the server reads them here, so such a server is never constructed. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -450,7 +476,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the server strand before any other member goes. </p>
 <p>Every task the server posts holds the server, so nothing of it is still queued here; closing waits for a task still running on another thread and returns at once from inside the server's own last task. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,7 +519,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -519,7 +545,7 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">ConnectionId</td>          <td class="paramname"><span class="paramname"><em>cid</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -541,7 +567,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -579,7 +605,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00550">550</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -600,7 +626,7 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">ConnectionId</td>          <td class="paramname"><span class="paramname"><em>cid</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -621,7 +647,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00563">563</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -635,7 +661,7 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">ConnectionId morph::backend::RemoteServer::openConnection </td>
+          <td class="memname"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> morph::backend::RemoteServer::openConnection </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -650,9 +676,9 @@ Public Member Functions</h2></td></tr>
 
 <p>Opens a new connection scope and returns its id. </p>
 <p>Call once per accepted transport connection (e.g. from a WebSocket server's "new connection" callback). The returned id is never <span class="tt">0</span>, so it can always be distinguished from the reserved "unscoped" value. Pass it to the scoped <span class="tt">handle(msg, reply, cid)</span> overload for every message received on that connection, and to <span class="tt">closeConnection(cid)</span> once the connection is gone.</p>
-<p>Callable from any thread. The id is drawn at once; the scope is opened on the server strand, before any <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> the same thread makes next. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt">ConnectionId</span>. </dd></dl>
+<p>Callable from any thread. The id is drawn at once; the scope is opened on the server strand, before any <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> the same thread makes next. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2" title="Opaque id a transport uses to scope model registrations to one connection so RemoteServer::closeConne...">ConnectionId</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00539">539</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -668,7 +694,7 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">void morph::backend::RemoteServer::closeConnection </td>
           <td>(</td>
-          <td class="paramtype">ConnectionId</td>          <td class="paramname"><span class="paramname"><em>cid</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -690,7 +716,241 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a305abde3b2de0e6717c5875f43f62320" name="a305abde3b2de0e6717c5875f43f62320"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a305abde3b2de0e6717c5875f43f62320">&#9670;&#160;</a></span>setConnectionWriter()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::RemoteServer::setConnectionWriter </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dc/d5d/structmorph_1_1backend_1_1ConnectionWriter.html">ConnectionWriter</a></td>          <td class="paramname"><span class="paramname"><em>writer</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Hands the server the transport's writer for connection <code class="param">cid</code>, through which <span class="tt"><a class="el" href="#a582598adb43df410f7ede122c387cfb0" title="Writes envelope to connection cid, unless its reader has fallen behind.">post</a></span> reaches it. </p>
+<p>Replaces any writer <code class="param">cid</code> already has, keeping a <span class="tt">resync</span> the connection is owed. Kept only while the connection is open: a writer for <span class="tt">0</span>, for an unknown <span class="tt">cid</span> or for one already closed is dropped, and <span class="tt">closeConnection(cid)</span> drops it. A writer whose <span class="tt">write</span> is empty removes the connection's writer.</p>
+<p>Callable from any thread; runs on the server strand, after an <span class="tt"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d" title="Opens a new connection scope and returns its id.">openConnection()</a></span> and before any <span class="tt"><a class="el" href="#a582598adb43df410f7ede122c387cfb0" title="Writes envelope to connection cid, unless its reader has fallen behind.">post</a></span> the same thread makes next. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">cid</td><td>Connection, as returned by <span class="tt"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d" title="Opens a new connection scope and returns its id.">openConnection()</a></span>. </td></tr>
+    <tr><td class="paramname">writer</td><td>The connection's writer and its backlog read. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00657">657</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a582598adb43df410f7ede122c387cfb0" name="a582598adb43df410f7ede122c387cfb0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a582598adb43df410f7ede122c387cfb0">&#9670;&#160;</a></span>post()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::RemoteServer::post </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>envelope</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Writes <code class="param">envelope</code> to connection <code class="param">cid</code>, unless its reader has fallen behind. </p>
+<p>On the server strand, while the connection's <span class="tt">backlog()</span> exceeds <span class="tt"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a53e139b138b930e3673fd310ffe41951" title="Backlog above which RemoteServer::post holds a connection&#39;s events back and owes it one resync instea...">kEventBacklogHigh</a></span>, the envelope is dropped and the connection is owed one <span class="tt">resync</span> event, which <span class="tt">connectionDrained(cid)</span> sends. Until then every later envelope is dropped too, so the <span class="tt">resync</span> is the next thing the connection is sent after the hold-back began. Replies do not pass through here and are never held back.</p>
+<p>Dropped as well: an envelope larger than <span class="tt">wire::kMaxEnvelopeBytes</span> (counted as <span class="tt">Metric::eventOversize</span>), and one for a connection with no writer — <span class="tt">0</span>, unknown, or closed. A <span class="tt">write</span> or <span class="tt">backlog</span> that throws is caught on the strand, and the envelope is not written.</p>
+<p>Callable from any thread. Envelopes one thread posts to one connection are written in that order. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">cid</td><td>Connection to write to. </td></tr>
+    <tr><td class="paramname">envelope</td><td>The encoded envelope (via <span class="tt">wire::encode</span>). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00696">696</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aace35661b1a8a71a839febc1a4eccaff" name="aace35661b1a8a71a839febc1a4eccaff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aace35661b1a8a71a839febc1a4eccaff">&#9670;&#160;</a></span>connectionDrained()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::RemoteServer::connectionDrained </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Tells the server that connection <code class="param">cid's</code> backlog has fallen below <span class="tt"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#aa482ae7157f35ba17307cb6443e4d2b2" title="Backlog below which a transport reports a connection drained, by calling RemoteServer::connectionDrai...">kEventBacklogLow</a></span>. </p>
+<p>What a transport calls when it has written enough of what it holds. If <span class="tt"><a class="el" href="#a582598adb43df410f7ede122c387cfb0" title="Writes envelope to connection cid, unless its reader has fallen behind.">post</a></span> held an event back since the last drain, the connection is sent one <span class="tt">resync</span> event (<span class="tt">wire::makeEvent(wire::kResyncTopic, "{}")</span>), meaning everything it watches may have changed, and events flow again. Otherwise nothing is sent. The drain, not a later write, sends it, so a connection that only listens still receives it.</p>
+<p>Callable from any thread, the transport's included; it only posts to the server strand. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">cid</td><td>Connection whose backlog drained. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00721">721</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2c706aa18ee81d76724034cc84542bcd" name="a2c706aa18ee81d76724034cc84542bcd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2c706aa18ee81d76724034cc84542bcd">&#9670;&#160;</a></span>eventsNegotiated()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::backend::RemoteServer::eventsNegotiated </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether connection <code class="param">cid</code> negotiated server-sent events. </p>
+<p>Server strand only: call it from a task on <span class="tt"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d" title="The server strand, as an executor.">strand()</a></span>; a debug build asserts that. The answer is what the UI service recorded when the connection's <span class="tt">ui-hello</span> offered events, and stays until the connection closes; a reconnect is a new connection and negotiates again. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">cid</td><td>Connection, as returned by <span class="tt"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d" title="Opens a new connection scope and returns its id.">openConnection()</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the connection negotiated events; <span class="tt">false</span> for <span class="tt">0</span>, an unknown connection or a closed one. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0262f851a662cc7071697f48473bf123" name="a0262f851a662cc7071697f48473bf123"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0262f851a662cc7071697f48473bf123">&#9670;&#160;</a></span>watchTable()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">detail::WatchTable const  &amp; morph::backend::RemoteServer::watchTable </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The topics each open connection watches. </p>
+<p>Server strand only: call it from a task on <span class="tt"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d" title="The server strand, as an executor.">strand()</a></span>; a debug build asserts that. Filled by the <span class="tt">watch</span> and <span class="tt">unwatch</span> kinds, and emptied for a connection when it closes or a write to it fails. </p><dl class="section return"><dt>Returns</dt><dd>The watch table, valid for the server's life. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00749">749</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3b8957efc2889fcc7b126ad312cb0567" name="a3b8957efc2889fcc7b126ad312cb0567"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3b8957efc2889fcc7b126ad312cb0567">&#9670;&#160;</a></span>fanOut()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::RemoteServer::fanOut </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/d63/structmorph_1_1effects_1_1Changes.html">::morph::effects::Changes</a></td>          <td class="paramname"><span class="paramname"><em>changes</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>caller</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>callerPrincipal</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Tells every connection watching what <code class="param">changes</code> names that it changed, as one <span class="tt">changes</span> event per connection. </p>
+<p>Server strand only: call it from a task on <span class="tt"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d" title="The server strand, as an executor.">strand()</a></span>; a debug build asserts that. A successful <span class="tt">execute</span> posts its changes here.</p>
+<p>A record topic, and the instance topic of a keyed shared instance, go to every connection watching them, <code class="param">caller</code> included: the caller may never see its own reply (it timed out, the client discarded it, or it went to an offline replay). An instance is matched by the directory key it holds now, so one an <span class="tt">assign</span> keyed while its execute ran reaches that key's watchers. A private instance's topic goes to every connection whose scope holds that instance, which needs no watch, and to no other. A connection that has not negotiated events is sent nothing.</p>
+<p>Each recipient's watches are then re-authorised by the rule that admitted them (<span class="tt">reauthorise</span>): a topic whose watch fails is dropped from the table and from the event, and a connection that lost any watch is sent one <span class="tt">resync</span> (<span class="tt">sendResync</span>), after whatever it had queued. A record registered with <span class="tt"><a class="el" href="../../d5/dd1/structmorph_1_1record_1_1privateKeys.html" title="Option for BRIDGE_REGISTER_RECORD: the record&#39;s keys must not reach other principals.">morph::record::privateKeys</a></span> reaches a principal other than <code class="param">callerPrincipal</code> without its keys.</p>
+<p>What is left is queued on the connection (<span class="tt">detail::ChangeCoalescer</span>), not sent: the queue is merged for <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#af49a7940b3ae7345a58bb499dff8c50f" title="How long a connection&#39;s changes are merged before they are sent as one changes event.">ServerConfig::coalesceWindow</a></span> from its first change, or until <span class="tt">detail::kCoalesceKeyLimit</span> keys are queued, and then sent as one <span class="tt">changes</span> event through <span class="tt"><a class="el" href="#a582598adb43df410f7ede122c387cfb0" title="Writes envelope to connection cid, unless its reader has fallen behind.">post</a></span>'s backlog hold-back and size cap. Nothing is queued for a connection with no writer, or one held back behind its backlog, which its drain's <span class="tt">resync</span> covers. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">changes</td><td>What one execute changed, from <span class="tt"><a class="el" href="../../dd/d18/changes_8hpp.html#a679ff44da34495119967d31ec3f53743" title="The changes a successful execute made, from the action&#39;s declared effects and its result.">effects::deriveChanges</a></span>. </td></tr>
+    <tr><td class="paramname">caller</td><td>Connection the execute arrived on; <span class="tt">0</span> for unscoped. </td></tr>
+    <tr><td class="paramname">callerPrincipal</td><td>The execute's verified principal; empty when none was. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00786">786</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -720,7 +980,7 @@ Public Member Functions</h2></td></tr>
 <p>The server strand, as an executor. </p>
 <p>What <span class="tt">runningOn(server.strand())</span> asks about: true inside every task the server runs on its own state, false elsewhere. A task posted to it runs in order with the server's own, never beside one. </p><dl class="section return"><dt>Returns</dt><dd>The strand every envelope, verb and <span class="tt">execute</span> admission runs on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00821">821</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -750,7 +1010,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the configured payload-completeness rule. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a0d1204bec80cf0bc0d0cd96c59c28597" title="Whether an execute body must carry every field the action&#39;s served schema marks required....">ServerConfig::payloadCompleteness</a></span>, as given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -786,7 +1046,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand with <span class="tt">ready</span>, the live model count and the in-flight execute count; its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00838">838</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -817,7 +1077,7 @@ Public Member Functions</h2></td></tr>
 <p>Posted to the server strand: an envelope this thread hands <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> after this call returns is refused. Idempotent. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>.</p>
 <p>Also flips <span class="tt"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092" title="The server&#39;s health, answered on the server strand.">health()</a></span>'s <span class="tt">ready</span> to <span class="tt">false</span> and calls <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a1ce5548f3f49f5349bdeede99ccb300b" title="Called with the server&#39;s health: once from the constructor, and again, on the server&#39;s strand,...">ServerConfig::healthHandler</a></span>, if set, with the post-shutdown status, on the server strand — what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#ad6574a0055fb8bf539dc525e68bac88e" title="Answers whether every in-flight execute delivers its reply within deadline.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00861">861</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -858,7 +1118,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand: <span class="tt">true</span> once the count is zero, <span class="tt">false</span> if <code class="param">deadline</code> elapses first. Its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00657">657</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00892">892</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

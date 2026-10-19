@@ -1,6 +1,8 @@
 var document_8hpp =
 [
     [ "morph::ui::ModelInfo", "d1/de5/structmorph_1_1ui_1_1ModelInfo.html", "d1/de5/structmorph_1_1ui_1_1ModelInfo" ],
+    [ "morph::ui::ActionEffect", "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html", "d9/d0c/structmorph_1_1ui_1_1ActionEffect" ],
+    [ "morph::ui::ActionRecordInfo", "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html", "df/d68/structmorph_1_1ui_1_1ActionRecordInfo" ],
     [ "morph::ui::ActionInfo", "d0/db7/structmorph_1_1ui_1_1ActionInfo.html", "d0/db7/structmorph_1_1ui_1_1ActionInfo" ],
     [ "morph::ui::Catalog", "db/dff/structmorph_1_1ui_1_1Catalog.html", "db/dff/structmorph_1_1ui_1_1Catalog" ],
     [ "morph::ui::LoadOptions", "d8/dc0/structmorph_1_1ui_1_1LoadOptions.html", "d8/dc0/structmorph_1_1ui_1_1LoadOptions" ],
@@ -8,7 +10,7 @@ var document_8hpp =
     [ "morph::ui::StateDecl", "d2/de9/structmorph_1_1ui_1_1StateDecl.html", "d2/de9/structmorph_1_1ui_1_1StateDecl" ],
     [ "morph::ui::LetDecl", "d4/dfe/structmorph_1_1ui_1_1LetDecl.html", "d4/dfe/structmorph_1_1ui_1_1LetDecl" ],
     [ "morph::ui::QueryDecl", "da/db7/structmorph_1_1ui_1_1QueryDecl.html", "da/db7/structmorph_1_1ui_1_1QueryDecl" ],
-    [ "morph::ui::PatchDecl", "d7/db0/structmorph_1_1ui_1_1PatchDecl.html", "d7/db0/structmorph_1_1ui_1_1PatchDecl" ],
+    [ "morph::ui::OptimisticDecl", "dd/d13/structmorph_1_1ui_1_1OptimisticDecl.html", "dd/d13/structmorph_1_1ui_1_1OptimisticDecl" ],
     [ "morph::ui::Command", "d9/d50/structmorph_1_1ui_1_1Command.html", "d9/d50/structmorph_1_1ui_1_1Command" ],
     [ "morph::ui::MutationDecl", "d7/d39/structmorph_1_1ui_1_1MutationDecl.html", "d7/d39/structmorph_1_1ui_1_1MutationDecl" ],
     [ "morph::ui::WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", "da/de0/structmorph_1_1ui_1_1WatchDecl" ],
@@ -17,6 +19,7 @@ var document_8hpp =
     [ "morph::ui::DocNode", "df/d0e/structmorph_1_1ui_1_1DocNode.html", "df/d0e/structmorph_1_1ui_1_1DocNode" ],
     [ "morph::ui::Component", "d1/d28/structmorph_1_1ui_1_1Component.html", "d1/d28/structmorph_1_1ui_1_1Component" ],
     [ "morph::ui::CustomizePoint", "d6/d95/structmorph_1_1ui_1_1CustomizePoint.html", "d6/d95/structmorph_1_1ui_1_1CustomizePoint" ],
+    [ "morph::ui::LoadWarning", "d7/d8c/structmorph_1_1ui_1_1LoadWarning.html", "d7/d8c/structmorph_1_1ui_1_1LoadWarning" ],
     [ "morph::ui::Document", "d4/d02/structmorph_1_1ui_1_1Document.html", "d4/d02/structmorph_1_1ui_1_1Document" ],
     [ "morph::ui::detail::DocumentRefused", "de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused.html", "de/dbf/classmorph_1_1ui_1_1detail_1_1DocumentRefused" ],
     [ "morph::ui::detail::KeySpec", "dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html", "dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec" ],
@@ -70,6 +73,10 @@ var document_8hpp =
     [ "morph::ui::WatchSource", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583", [
       [ "Any", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583aed36a1ef76a59ee3f15180e0441188ad", null ],
       [ "User", "dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075", null ]
+    ] ],
+    [ "morph::ui::LoadWarningKind", "dd/d39/document_8hpp.html#ad9b88841273b122201d7ac0cc0075dab", [
+      [ "WatchFeedback", "dd/d39/document_8hpp.html#ad9b88841273b122201d7ac0cc0075dabaa43be0fbaff22c5173abc81b67755497", null ],
+      [ "Uncovered", "dd/d39/document_8hpp.html#ad9b88841273b122201d7ac0cc0075daba665a1851d3961696eeb2f3a21c1e1ad6", null ]
     ] ],
     [ "morph::ui::detail::Shape", "dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1", [
       [ "Expr", "dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff", null ],

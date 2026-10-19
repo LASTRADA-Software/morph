@@ -13,10 +13,11 @@ var searchData=
   ['literalof_3c_20std_3a_3astring_5fview_20_3e_10',['LiteralOf&lt; std::string_view &gt;',['../d6/db2/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf_3_01std_1_1string__view_01_4.html',1,'morph::ui::author::detail']]],
   ['loadedbundle_11',['LoadedBundle',['../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html',1,'morph::ui']]],
   ['loadoptions_12',['LoadOptions',['../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html',1,'morph::ui']]],
-  ['localbackend_13',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
-  ['logentry_14',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
-  ['loggedcommand_15',['LoggedCommand',['../d8/d58/structmorph_1_1ui_1_1LoggedCommand.html',1,'morph::ui']]],
-  ['loopexecutor_16',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
-  ['lowerctx_17',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]],
-  ['lowerednode_18',['LoweredNode',['../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html',1,'morph::ui::detail::ScreenCore']]]
+  ['loadwarning_13',['LoadWarning',['../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html',1,'morph::ui']]],
+  ['localbackend_14',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
+  ['logentry_15',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
+  ['loggedcommand_16',['LoggedCommand',['../d8/d58/structmorph_1_1ui_1_1LoggedCommand.html',1,'morph::ui']]],
+  ['loopexecutor_17',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
+  ['lowerctx_18',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]],
+  ['lowerednode_19',['LoweredNode',['../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html',1,'morph::ui::detail::ScreenCore']]]
 ];

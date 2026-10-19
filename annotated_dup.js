@@ -18,6 +18,8 @@ var annotated_dup =
         [ "BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError" ],
         [ "BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError" ],
         [ "ClientTimeoutError", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError" ],
+        [ "ConnectionFacts", "d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html", "d8/d2f/structmorph_1_1backend_1_1ConnectionFacts" ],
+        [ "ConnectionWriter", "dc/d5d/structmorph_1_1backend_1_1ConnectionWriter.html", "dc/d5d/structmorph_1_1backend_1_1ConnectionWriter" ],
         [ "DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", "d3/d73/structmorph_1_1backend_1_1DisconnectedError" ],
         [ "HandlerDestroyedError", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError" ],
         [ "HealthStatus", "d1/d59/structmorph_1_1backend_1_1HealthStatus.html", "d1/d59/structmorph_1_1backend_1_1HealthStatus" ],
@@ -44,6 +46,22 @@ var annotated_dup =
       ] ],
       [ "detail", null, [
         [ "FixedString", "df/d52/structmorph_1_1detail_1_1FixedString.html", "df/d52/structmorph_1_1detail_1_1FixedString" ]
+      ] ],
+      [ "effects", null, [
+        [ "detail", null, [
+          [ "DeclaredEffect", "d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html", "d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect" ],
+          [ "EffectOf", "dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html", null ],
+          [ "Resolved", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved" ]
+        ] ],
+        [ "ActionRecord", "da/d4f/structmorph_1_1effects_1_1ActionRecord.html", "da/d4f/structmorph_1_1effects_1_1ActionRecord" ],
+        [ "Changes", "dc/d63/structmorph_1_1effects_1_1Changes.html", "dc/d63/structmorph_1_1effects_1_1Changes" ],
+        [ "changes", "d6/d2b/structmorph_1_1effects_1_1changes.html", null ],
+        [ "changesInstance", "dc/de2/structmorph_1_1effects_1_1changesInstance.html", null ],
+        [ "Effect", "da/dae/structmorph_1_1effects_1_1Effect.html", "da/dae/structmorph_1_1effects_1_1Effect" ],
+        [ "InstanceChange", "dd/dbe/structmorph_1_1effects_1_1InstanceChange.html", "dd/dbe/structmorph_1_1effects_1_1InstanceChange" ],
+        [ "none", "d9/d7d/structmorph_1_1effects_1_1none.html", null ],
+        [ "RecordChange", "d2/dd4/structmorph_1_1effects_1_1RecordChange.html", "d2/dd4/structmorph_1_1effects_1_1RecordChange" ],
+        [ "updates", "d5/d2a/structmorph_1_1effects_1_1updates.html", null ]
       ] ],
       [ "exec", null, [
         [ "IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", "d4/d49/structmorph_1_1exec_1_1IExecutor" ],
@@ -162,6 +180,7 @@ var annotated_dup =
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
         [ "DuplicateRegistrationError", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError" ],
+        [ "EffectsRegistrationError", "d6/dea/structmorph_1_1model_1_1EffectsRegistrationError.html", "d6/dea/structmorph_1_1model_1_1EffectsRegistrationError" ],
         [ "HandlerResult", "df/d19/structmorph_1_1model_1_1HandlerResult.html", "df/d19/structmorph_1_1model_1_1HandlerResult" ],
         [ "HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4" ],
         [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
@@ -262,6 +281,18 @@ var annotated_dup =
         [ "Store", "da/dcf/classmorph_1_1reactive_1_1Store.html", "da/dcf/classmorph_1_1reactive_1_1Store" ],
         [ "Subscription", "d5/d13/classmorph_1_1reactive_1_1Subscription.html", "d5/d13/classmorph_1_1reactive_1_1Subscription" ],
         [ "TimerHandle", "de/d18/classmorph_1_1reactive_1_1TimerHandle.html", "de/d18/classmorph_1_1reactive_1_1TimerHandle" ]
+      ] ],
+      [ "record", null, [
+        [ "detail", null, [
+          [ "KeyOption", "d5/d1b/structmorph_1_1record_1_1detail_1_1KeyOption.html", null ],
+          [ "IsDerivedFrom", "df/d42/structmorph_1_1record_1_1detail_1_1IsDerivedFrom.html", null ],
+          [ "MemberType", "d9/dfd/structmorph_1_1record_1_1detail_1_1MemberType.html", null ]
+        ] ],
+        [ "key", "de/d37/structmorph_1_1record_1_1key.html", null ],
+        [ "keyless", "d8/dd2/structmorph_1_1record_1_1keyless.html", null ],
+        [ "derivedFrom", "df/dd5/structmorph_1_1record_1_1derivedFrom.html", null ],
+        [ "privateKeys", "d5/dd1/structmorph_1_1record_1_1privateKeys.html", null ],
+        [ "RecordInfo", "d9/dfd/structmorph_1_1record_1_1RecordInfo.html", "d9/dfd/structmorph_1_1record_1_1RecordInfo" ]
       ] ],
       [ "render", null, [
         [ "detail", null, [
@@ -396,13 +427,12 @@ var annotated_dup =
           [ "MutationHandle", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle" ],
           [ "BodyField", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField.html", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField" ],
           [ "Body", "df/d42/classmorph_1_1ui_1_1author_1_1Body.html", "df/d42/classmorph_1_1ui_1_1author_1_1Body" ],
-          [ "ActionList", "d4/d6f/classmorph_1_1ui_1_1author_1_1ActionList.html", "d4/d6f/classmorph_1_1ui_1_1author_1_1ActionList" ],
           [ "ModelHandle", "d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html", "d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle" ],
           [ "Borrow", "dd/d7e/structmorph_1_1ui_1_1author_1_1Borrow.html", "dd/d7e/structmorph_1_1ui_1_1author_1_1Borrow" ],
           [ "InstanceSpec", "dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html", "dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec" ],
           [ "ModelOptions", "d8/df1/structmorph_1_1ui_1_1author_1_1ModelOptions.html", "d8/df1/structmorph_1_1ui_1_1author_1_1ModelOptions" ],
           [ "QueryOptions", "d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html", "d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions" ],
-          [ "Patch", "d9/d89/structmorph_1_1ui_1_1author_1_1Patch.html", "d9/d89/structmorph_1_1ui_1_1author_1_1Patch" ],
+          [ "Optimistic", "d7/d41/structmorph_1_1ui_1_1author_1_1Optimistic.html", "d7/d41/structmorph_1_1ui_1_1author_1_1Optimistic" ],
           [ "Commands", "dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html", "dd/de0/classmorph_1_1ui_1_1author_1_1Commands" ],
           [ "Command", "df/ddf/classmorph_1_1ui_1_1author_1_1Command.html", "df/ddf/classmorph_1_1ui_1_1author_1_1Command" ],
           [ "MutationOptions", "d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions.html", "d1/df1/structmorph_1_1ui_1_1author_1_1MutationOptions" ],
@@ -479,6 +509,7 @@ var annotated_dup =
           [ "KeySpec", "dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html", "dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec" ],
           [ "KindSpec", "df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html", "df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec" ],
           [ "LowerCtx", "d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html", "d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx" ],
+          [ "Marks", "d3/d93/structmorph_1_1ui_1_1detail_1_1Marks.html", "d3/d93/structmorph_1_1ui_1_1detail_1_1Marks" ],
           [ "MessageReader", "d8/dcf/classmorph_1_1ui_1_1detail_1_1MessageReader.html", "d8/dcf/classmorph_1_1ui_1_1detail_1_1MessageReader" ],
           [ "ModelAlias", "d7/d28/structmorph_1_1ui_1_1detail_1_1ModelAlias.html", "d7/d28/structmorph_1_1ui_1_1detail_1_1ModelAlias" ],
           [ "Mounter", "dd/d93/classmorph_1_1ui_1_1detail_1_1Mounter.html", "dd/d93/classmorph_1_1ui_1_1detail_1_1Mounter" ],
@@ -548,8 +579,10 @@ var annotated_dup =
         ] ],
         [ "Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", "d9/d03/structmorph_1_1ui_1_1Accessibility" ],
         [ "ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", "da/d14/structmorph_1_1ui_1_1ActionButton" ],
+        [ "ActionEffect", "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html", "d9/d0c/structmorph_1_1ui_1_1ActionEffect" ],
         [ "ActionField", "d2/d20/structmorph_1_1ui_1_1ActionField.html", "d2/d20/structmorph_1_1ui_1_1ActionField" ],
         [ "ActionInfo", "d0/db7/structmorph_1_1ui_1_1ActionInfo.html", "d0/db7/structmorph_1_1ui_1_1ActionInfo" ],
+        [ "ActionRecordInfo", "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html", "df/d68/structmorph_1_1ui_1_1ActionRecordInfo" ],
         [ "ActionRef", "dd/d95/structmorph_1_1ui_1_1ActionRef.html", "dd/d95/structmorph_1_1ui_1_1ActionRef" ],
         [ "ActionUse", "df/de4/structmorph_1_1ui_1_1ActionUse.html", "df/de4/structmorph_1_1ui_1_1ActionUse" ],
         [ "AppContext", "dd/db8/classmorph_1_1ui_1_1AppContext.html", "dd/db8/classmorph_1_1ui_1_1AppContext" ],
@@ -659,9 +692,12 @@ var annotated_dup =
         [ "LetDecl", "d4/dfe/structmorph_1_1ui_1_1LetDecl.html", "d4/dfe/structmorph_1_1ui_1_1LetDecl" ],
         [ "LoadedBundle", "db/d4f/structmorph_1_1ui_1_1LoadedBundle.html", "db/d4f/structmorph_1_1ui_1_1LoadedBundle" ],
         [ "LoadOptions", "d8/dc0/structmorph_1_1ui_1_1LoadOptions.html", "d8/dc0/structmorph_1_1ui_1_1LoadOptions" ],
+        [ "LoadWarning", "d7/d8c/structmorph_1_1ui_1_1LoadWarning.html", "d7/d8c/structmorph_1_1ui_1_1LoadWarning" ],
         [ "LoggedCommand", "d8/d58/structmorph_1_1ui_1_1LoggedCommand.html", "d8/d58/structmorph_1_1ui_1_1LoggedCommand" ],
         [ "Manifest", "dd/dd5/structmorph_1_1ui_1_1Manifest.html", "dd/dd5/structmorph_1_1ui_1_1Manifest" ],
         [ "ManifestFile", "d8/d93/structmorph_1_1ui_1_1ManifestFile.html", "d8/d93/structmorph_1_1ui_1_1ManifestFile" ],
+        [ "McpAdapter", "d7/d79/classmorph_1_1ui_1_1McpAdapter.html", "d7/d79/classmorph_1_1ui_1_1McpAdapter" ],
+        [ "McpOptions", "d5/de3/structmorph_1_1ui_1_1McpOptions.html", "d5/de3/structmorph_1_1ui_1_1McpOptions" ],
         [ "MemoryBundleStore", "dc/ddf/classmorph_1_1ui_1_1MemoryBundleStore.html", "dc/ddf/classmorph_1_1ui_1_1MemoryBundleStore" ],
         [ "MemoryFileStore", "d3/d4d/classmorph_1_1ui_1_1MemoryFileStore.html", "d3/d4d/classmorph_1_1ui_1_1MemoryFileStore" ],
         [ "MemoryFileStoreOptions", "d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html", "d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions" ],
@@ -689,9 +725,9 @@ var annotated_dup =
         [ "Navigator", "d6/d15/classmorph_1_1ui_1_1Navigator.html", "d6/d15/classmorph_1_1ui_1_1Navigator" ],
         [ "NavigatorOptions", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions" ],
         [ "NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", "d9/d5b/structmorph_1_1ui_1_1NodeData" ],
+        [ "OptimisticDecl", "dd/d13/structmorph_1_1ui_1_1OptimisticDecl.html", "dd/d13/structmorph_1_1ui_1_1OptimisticDecl" ],
         [ "Panel", "d4/d64/structmorph_1_1ui_1_1Panel.html", "d4/d64/structmorph_1_1ui_1_1Panel" ],
         [ "PanelWidget", "df/d1c/classmorph_1_1ui_1_1PanelWidget.html", "df/d1c/classmorph_1_1ui_1_1PanelWidget" ],
-        [ "PatchDecl", "d7/db0/structmorph_1_1ui_1_1PatchDecl.html", "d7/db0/structmorph_1_1ui_1_1PatchDecl" ],
         [ "PermissiveResolver", "d5/d72/classmorph_1_1ui_1_1PermissiveResolver.html", "d5/d72/classmorph_1_1ui_1_1PermissiveResolver" ],
         [ "PreferencesLoaded", "de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html", "de/dea/structmorph_1_1ui_1_1PreferencesLoaded" ],
         [ "PreferencesModel", "d0/daf/classmorph_1_1ui_1_1PreferencesModel.html", "d0/daf/classmorph_1_1ui_1_1PreferencesModel" ],
@@ -813,6 +849,11 @@ var annotated_dup =
         ] ],
         [ "Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", "d5/d77/structmorph_1_1wire_1_1Envelope" ],
         [ "ProtocolRange", "da/d37/structmorph_1_1wire_1_1ProtocolRange.html", "da/d37/structmorph_1_1wire_1_1ProtocolRange" ],
+        [ "EventBody", "d7/db7/structmorph_1_1wire_1_1EventBody.html", "d7/db7/structmorph_1_1wire_1_1EventBody" ],
+        [ "InstanceTopic", "d7/d27/structmorph_1_1wire_1_1InstanceTopic.html", "d7/d27/structmorph_1_1wire_1_1InstanceTopic" ],
+        [ "WatchBody", "d6/d4f/structmorph_1_1wire_1_1WatchBody.html", "d6/d4f/structmorph_1_1wire_1_1WatchBody" ],
+        [ "WatchReply", "dd/da3/structmorph_1_1wire_1_1WatchReply.html", "dd/da3/structmorph_1_1wire_1_1WatchReply" ],
+        [ "ChangesBody", "d4/de9/structmorph_1_1wire_1_1ChangesBody.html", "d4/de9/structmorph_1_1wire_1_1ChangesBody" ],
         [ "WireCodecOps", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps" ]
       ] ]
     ] ]

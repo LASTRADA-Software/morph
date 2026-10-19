@@ -3,7 +3,7 @@ var searchData=
   ['b_0',['b',['../d9/d7c/structmorph_1_1ui_1_1Rgba.html#ae5a8bf7062bc74178d578444c605ffb4',1,'morph::ui::Rgba']]],
   ['backend_1',['backend',['../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html#ae1785304d650e042d7df93d66041438e',1,'morph::ui::DocumentScreenHostOptions']]],
   ['backlabel_2',['backLabel',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a344bcb7777464532114edfb4d9994a82',1,'morph::forms::WizardViewOptions']]],
-  ['backlog_3',['backlog',['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#aee4ba6011ddc2be1f5da9b9861108ea2',1,'morph::net::SocketServerConfig']]],
+  ['backlog_3',['backlog',['../dc/d5d/structmorph_1_1backend_1_1ConnectionWriter.html#a53ca1e982728c9f4f655357eea741318',1,'morph::backend::ConnectionWriter::backlog'],['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#aee4ba6011ddc2be1f5da9b9861108ea2',1,'morph::net::SocketServerConfig::backlog']]],
   ['backoffmultiplier_4',['backoffMultiplier',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a86d877007461559a660f5e0183a76e75',1,'morph::net::SocketBackendConfig::backoffMultiplier'],['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a3eb7d1ba338774ed582fe26de164a4b9',1,'morph::qt::QtWebSocketBackendConfig::backoffMultiplier']]],
   ['base_5',['base',['../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html#a387ba03b46b1f0271c6a5118ac108c5e',1,'morph::ui::ThemeIndex']]],
   ['batch_6',['batch',['../d7/db0/structmorph_1_1ui_1_1CommandLogEntry.html#a9697551b5e726e713e94245f830d9504',1,'morph::ui::CommandLogEntry']]],

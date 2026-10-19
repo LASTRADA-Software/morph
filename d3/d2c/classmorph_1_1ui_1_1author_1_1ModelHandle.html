@@ -132,10 +132,6 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a574ff901a6a6d54475d478481b392507"><td class="mdescLeft">&#160;</td><td class="mdescRight">An alias.  <br /></td></tr>
 <tr class="memitem:a77f295240fd935f7783c3aea021d66ec" id="r_a77f295240fd935f7783c3aea021d66ec"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a77f295240fd935f7783c3aea021d66ec">alias</a> () const noexcept</td></tr>
 <tr class="memdesc:a77f295240fd935f7783c3aea021d66ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">The alias.  <br /></td></tr>
-<tr class="memitem:a279d04d5082cbcdfafae0fbbfdd63bef" id="r_a279d04d5082cbcdfafae0fbbfdd63bef"><td class="memTemplParams" colspan="2">template&lt;typename... Actions&gt; <br />
-requires (Runs&lt;Model, Actions&gt; &amp;&amp; ...)</td></tr>
-<tr class="memitem:a279d04d5082cbcdfafae0fbbfdd63bef template"><td class="memItemLeft"><a class="el" href="../../d4/d6f/classmorph_1_1ui_1_1author_1_1ActionList.html">ActionList</a>&#160;</td><td class="memItemRight"><a class="el" href="#a279d04d5082cbcdfafae0fbbfdd63bef">actions</a> () const</td></tr>
-<tr class="memdesc:a279d04d5082cbcdfafae0fbbfdd63bef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Actions of this model type, for a query's <span class="tt">refreshOn</span>: an action the model does not run is a compile error.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
@@ -147,7 +143,7 @@ class morph::ui::author::ModelHandle&lt; Model &gt;</div><p>A model alias of a s
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01388">1388</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01426">1426</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a574ff901a6a6d54475d478481b392507" name="a574ff901a6a6d54475d478481b392507"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a574ff901a6a6d54475d478481b392507">&#9670;&#160;</a></span>ModelHandle()</h2>
@@ -182,7 +178,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01392">1392</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01430">1430</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -215,48 +211,7 @@ template&lt;typename Model&gt; </div>
 <p>The alias. </p>
 <dl class="section return"><dt>Returns</dt><dd>The alias. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01396">1396</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a279d04d5082cbcdfafae0fbbfdd63bef" name="a279d04d5082cbcdfafae0fbbfdd63bef"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a279d04d5082cbcdfafae0fbbfdd63bef">&#9670;&#160;</a></span>actions()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Model&gt; </div>
-<div class="memtemplate">
-template&lt;typename... Actions&gt; <br />
-requires (Runs&lt;Model, Actions&gt; &amp;&amp; ...)</div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname"><a class="el" href="../../d4/d6f/classmorph_1_1ui_1_1author_1_1ActionList.html">ActionList</a> <a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">morph::ui::author::ModelHandle</a>&lt; Model &gt;::actions </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td> const</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Actions of this model type, for a query's <span class="tt">refreshOn</span>: an action the model does not run is a compile error. </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Actions</td><td>The actions. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The list. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01404">1404</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01434">1434</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

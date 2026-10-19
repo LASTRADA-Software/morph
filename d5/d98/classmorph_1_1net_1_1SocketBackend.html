@@ -184,6 +184,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0d389a1f727cd538d2366d620eb304d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every pending call's <span class="tt">Completion</span> with <code class="param">exc</code>.  <br /></td></tr>
 <tr class="memitem:a7d71bd27960963577df9ff8490fb2f03" id="r_a7d71bd27960963577df9ff8490fb2f03"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7d71bd27960963577df9ff8490fb2f03">setReconnectHandler</a> (std::function&lt; void()&gt; handler, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *exec) override</td></tr>
 <tr class="memdesc:a7d71bd27960963577df9ff8490fb2f03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler posted to <code class="param">exec</code> after each <em>subsequent</em> successful (re)connect.  <br /></td></tr>
+<tr class="memitem:ac813770a36bdfb356eb81e8ad17cc78c" id="r_ac813770a36bdfb356eb81e8ad17cc78c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac813770a36bdfb356eb81e8ad17cc78c">setConnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
+<tr class="memdesc:ac813770a36bdfb356eb81e8ad17cc78c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler run after every successful connect, the first included.  <br /></td></tr>
+<tr class="memitem:a4e742423f4c6180184a8522e59fb56b6" id="r_a4e742423f4c6180184a8522e59fb56b6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e742423f4c6180184a8522e59fb56b6">setEventHandler</a> (std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">::morph::wire::EventBody</a>)&gt; handler, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *exec) override</td></tr>
+<tr class="memdesc:a4e742423f4c6180184a8522e59fb56b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler each server-initiated event is posted to. See <span class="tt">IBackend::setEventHandler</span>.  <br /></td></tr>
 <tr class="memitem:a80e37124e8a3792b6b07541f64d0e690" id="r_a80e37124e8a3792b6b07541f64d0e690"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690">setSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) override</td></tr>
 <tr class="memdesc:a80e37124e8a3792b6b07541f64d0e690"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the session stamped onto every control envelope this backend subsequently builds (<span class="tt">register</span>, <span class="tt">registerShared</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">deregister</span>, <span class="tt">instances</span>). See <span class="tt">IBackend::setSession</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1backend_1_1IEnvelopeTransport"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">morph::backend::IEnvelopeTransport</a></td></tr>
@@ -198,11 +202,11 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IBackend</span> implementation that communicates with a <span class="tt">RemoteServer</span> over a raw-socket RFC 6455 WebSocket connection — no Qt, no GUI event loop required. </p>
-<p>Mirrors <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">morph::qt::QtWebSocketBackend</a></span>'s observable behavior (<span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span> fire-and-forget, <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> and <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> asynchronous and callId-multiplexed, <span class="tt">DisconnectedError</span>/reconnect semantics). Its socket, its pending calls, its session, its reconnect handler and its reconnect state machine live on an <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, for IoLoopDriver::OwnThread natively, the one thread that runs it...">exec::IoLoop</a></span>, which it shares with every other socket, timer and probe the application builds on that loop.</p>
-<p>Cross-thread surface: <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span>, <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>, <span class="tt"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b" title="Files an already-live server-side instance under a key, without blocking the calling thread.">promoteModel</a></span>, <span class="tt"><a class="el" href="#aef17a873379873c4eaee0cf8cf0e7ba1" title="Sends one request envelope of a kind the other verbs do not build (IEnvelopeTransport::request),...">request</a></span>, <span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span>, <span class="tt"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5" title="Resolves every pending call&#39;s Completion with exc.">cancelPending</a></span>, <span class="tt"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690" title="Installs the session stamped onto every control envelope this backend subsequently builds (register,...">setSession</a></span> and <span class="tt"><a class="el" href="#a7d71bd27960963577df9ff8490fb2f03" title="Installs the handler posted to exec after each subsequent successful (re)connect.">setReconnectHandler</a></span> post to the loop and return, so calls from one thread take effect in the order they were made; <span class="tt"><a class="el" href="#a870c4edbdf1b6d0e9bfdceab0eeba2ac" title="Blocks the calling thread until connected or timeout elapses.">waitForConnected</a></span> posts a waiter and blocks the caller, never the loop; the synchronous control verbs (<span class="tt"><a class="el" href="#a5702aa3a4c63c5ed991124a15579822a" title="Registers a private instance and waits for the reply.">registerModel</a></span>, <span class="tt"><a class="el" href="#aecb66ba53780b9762d8fd8caa489dad2" title="Registers a private instance carrying contextKey and waits for the reply.">registerModelWithContext</a></span>, <span class="tt"><a class="el" href="#a4e873f2e34acf90020418052004dc563" title="Files a live server-side instance under primary and waits for the reply.">assignPrimary</a></span>, <span class="tt"><a class="el" href="#aa8b1294c215041aadde4f2345237c074" title="Asks the server for the live shared primary keys of typeId and waits for the reply,...">listInstances</a></span>) issue the same posted request and wait for its reply, never on the loop's own thread. Every field is touched only on the loop, except the <span class="tt">connected</span> flag.</p>
+<p>Mirrors <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">morph::qt::QtWebSocketBackend</a></span>'s observable behavior (<span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span> fire-and-forget, <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> and <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> asynchronous and callId-multiplexed, <span class="tt">DisconnectedError</span>/reconnect semantics). Its socket, its pending calls, its session, its handlers and its reconnect state machine live on an <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, for IoLoopDriver::OwnThread natively, the one thread that runs it...">exec::IoLoop</a></span>, which it shares with every other socket, timer and probe the application builds on that loop.</p>
+<p>Cross-thread surface: <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span>, <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>, <span class="tt"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b" title="Files an already-live server-side instance under a key, without blocking the calling thread.">promoteModel</a></span>, <span class="tt"><a class="el" href="#aef17a873379873c4eaee0cf8cf0e7ba1" title="Sends one request envelope of a kind the other verbs do not build (IEnvelopeTransport::request),...">request</a></span>, <span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span>, <span class="tt"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5" title="Resolves every pending call&#39;s Completion with exc.">cancelPending</a></span>, <span class="tt"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690" title="Installs the session stamped onto every control envelope this backend subsequently builds (register,...">setSession</a></span>, <span class="tt"><a class="el" href="#a7d71bd27960963577df9ff8490fb2f03" title="Installs the handler posted to exec after each subsequent successful (re)connect.">setReconnectHandler</a></span>, <span class="tt"><a class="el" href="#ac813770a36bdfb356eb81e8ad17cc78c" title="Installs the handler run after every successful connect, the first included.">setConnectHandler</a></span> and <span class="tt"><a class="el" href="#a4e742423f4c6180184a8522e59fb56b6" title="Installs the handler each server-initiated event is posted to. See IBackend::setEventHandler.">setEventHandler</a></span> post to the loop and return, so calls from one thread take effect in the order they were made; <span class="tt"><a class="el" href="#a870c4edbdf1b6d0e9bfdceab0eeba2ac" title="Blocks the calling thread until connected or timeout elapses.">waitForConnected</a></span> posts a waiter and blocks the caller, never the loop; the synchronous control verbs (<span class="tt"><a class="el" href="#a5702aa3a4c63c5ed991124a15579822a" title="Registers a private instance and waits for the reply.">registerModel</a></span>, <span class="tt"><a class="el" href="#aecb66ba53780b9762d8fd8caa489dad2" title="Registers a private instance carrying contextKey and waits for the reply.">registerModelWithContext</a></span>, <span class="tt"><a class="el" href="#a4e873f2e34acf90020418052004dc563" title="Files a live server-side instance under primary and waits for the reply.">assignPrimary</a></span>, <span class="tt"><a class="el" href="#aa8b1294c215041aadde4f2345237c074" title="Asks the server for the live shared primary keys of typeId and waits for the reply,...">listInstances</a></span>) issue the same posted request and wait for its reply, never on the loop's own thread. Every field is touched only on the loop, except the <span class="tt">connected</span> flag.</p>
 <dl class="section user"><dt>TLS</dt><dd>Not supported. <span class="tt">serverUrl</span> must be <span class="tt">ws://</span>; <span class="tt">wss://</span> throws from the constructor. See <span class="tt">docs/spec/core/backend.md</span>'s <span class="tt">morph::net</span> section. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a755c2c6460ac094c256a5910c2776c7e" name="a755c2c6460ac094c256a5910c2776c7e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a755c2c6460ac094c256a5910c2776c7e">&#9670;&#160;</a></span>Config</h2>
@@ -218,7 +222,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +275,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +321,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -347,7 +351,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 <p>Closes the connection and rejects every pending call with <span class="tt">DisconnectedError</span>. </p>
 <p>The close runs on the loop: inline when this runs on the loop's own thread (from a callback), posted and waited for otherwise. It never waits for a connect in progress: a dial that completes afterwards finds the backend closed and drops its socket. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +390,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if connected before the timeout, <span class="tt">false</span> otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -433,7 +437,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -486,7 +490,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -532,7 +536,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -576,7 +580,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the bound <span class="tt">ModelId</span>; rejected with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> if a keyed bind finds the socket down, if the socket drops before the reply, or if a queued bind is cancelled; or with a <span class="tt">std::runtime_error</span> carrying the server's own error message. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -618,7 +622,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">request.mid</span>, or rejected as <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> documents. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -660,7 +664,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,7 +707,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 <p>Implements <a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">morph::backend::IEnvelopeTransport</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00341">341</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -739,7 +743,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">Negotiated</span> or <span class="tt">LegacyPeer</span>; rejected with a <span class="tt">std::runtime_error</span> if the server refuses the version, and with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> if the socket is down or drops before the reply. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00372">372</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -776,7 +780,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00394">394</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -823,7 +827,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolved asynchronously when the server's reply arrives, or with <span class="tt">DisconnectedError</span> if the backend is not connected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00412">412</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -852,7 +856,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -887,7 +891,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -927,7 +931,82 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00477">477</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac813770a36bdfb356eb81e8ad17cc78c" name="ac813770a36bdfb356eb81e8ad17cc78c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac813770a36bdfb356eb81e8ad17cc78c">&#9670;&#160;</a></span>setConnectHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::net::SocketBackend::setConnectHandler </td>
+          <td>(</td>
+          <td class="paramtype">const std::function&lt; void()&gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the handler run after every successful connect, the first included. </p>
+<p>Stored on the loop, and run there: after the requests held while the socket was down have been sent, and before the reconnect handler is posted. A handler that throws is logged; the connection carries on. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable run on the backend's I/O loop. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4e742423f4c6180184a8522e59fb56b6" name="a4e742423f4c6180184a8522e59fb56b6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4e742423f4c6180184a8522e59fb56b6">&#9670;&#160;</a></span>setEventHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::net::SocketBackend::setEventHandler </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">::morph::wire::EventBody</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>exec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the handler each server-initiated event is posted to. See <span class="tt">IBackend::setEventHandler</span>. </p>
+<p>Stored on the loop. An <span class="tt">event</span> envelope is recognised by its kind before any reply matching, so whatever its <span class="tt">callId</span>, it never settles a call. Events are posted to <code class="param">exec</code> in the order they arrived. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable posted to <code class="param">exec</code> once per event. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+    <tr><td class="paramname">exec</td><td>Executor the handler is posted to. Borrowed: it must outlive the installation. May be null only when <code class="param">handler</code> is. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -962,7 +1041,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00530">530</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
