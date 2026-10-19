@@ -311,6 +311,15 @@ applies to the width.
   `bool` as a bool and `number` as a double. An event runs the node's `on.<event>` commands with its payload read as
   the declared type: `i:<int>`, `s:<text>`, or JSON text. The fallback is lowered too, with `props` bound, for a
   backend that loads nothing.
+- **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
+  form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
+  `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:
+  `value` (the field's wire value, its JSON text for a `json` prop, `null` while blank or invalid), `errors`
+  (the messages, as a JSON list), `readonly`, `required` and `label`; the overlay's `props` give the rest,
+  evaluated in the form's scope. A `change` payload is read as the `value` prop's type and written with
+  `FieldState::edit`, a user's edit; one that does not decode, or does not fit the field (an object field takes
+  an object, a list field an array), changes nothing and is reported (`field <name>: the component's change does
+  not decode: <reason>`).
 - **`form`** is the forms engine's (`docs/spec/forms/engine.md`). Its element is declared like an
   input's, with or without an `id`, and builds a `forms::FormSession` when the scope is declared, so
   its values can be read before it is drawn: the schema comes from `Catalog::schema(action)`; the
@@ -379,8 +388,9 @@ Reported when met, and shown as a muted text naming the kind:
 - The chrome of a `collection` or `wizard` (its header, rows, confirm, editor and navigation drawn
   by the host's own kit): C++ code replaces them through `forms::CollectionChrome` and
   `forms::WizardChrome`.
-- A `form` node's `overrides` (spec 2 §7): document subtrees or components replacing a field's
-  control. C++ code replaces controls through `forms::Overrides`.
+- A `form` node's subtree overrides (spec 2 §7): document subtrees replacing a field's control. A host
+  component replaces one through the field overlay's `component`; C++ code replaces controls through
+  `forms::Overrides`.
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
   encode.
 - A `table` declared from a model's list action: the table engine (spec 7).

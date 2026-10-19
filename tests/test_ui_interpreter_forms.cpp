@@ -427,3 +427,70 @@ TEST_CASE("an input shows its label as a caption only when the document asks; a 
     CHECK(caption("TextInput", "field_sampleId") == "Sample|false");
     CHECK(h.text("label_sampleId") == "Sample");
 }
+
+namespace {
+
+/// A form whose list field is drawn by the host component `ReadingsGrid`, given a prop of the document's beside the
+/// field's own.
+constexpr std::string_view kReadings = R"({
+  "vocab": "ui/1", "id": "readings",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "components": { "ReadingsGrid": { "host": "ReadingsGrid", "version": 1,
+    "props": { "value": "json", "label": "string", "required": "bool", "errors": "json", "columns": "int" },
+    "events": { "change": "any" }, "fallback": { "kind": "text", "text": "no grid" } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "form", "id": "rec", "model": "sample", "action": "Lims_RecordReadings", "submit": "explicit",
+      "prefill": { "lit": { "sampleId": 7, "readings": [ { "at": "a", "value": 1 } ] } },
+      "fields": { "readings": { "component": "ReadingsGrid", "props": { "columns": 2 } } } },
+    { "kind": "text", "testId": "rows", "text": { "fn": "count", "args": [ { "ref": "rec.readings.value" } ] } } ] }
+})";
+
+}  // namespace
+
+// Mutation: skip the override (the field keeps its built-in rows, and no component is asked for).
+TEST_CASE("form node: a field drawn by a host component gets its value and writes it back as a user edit",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    h.backend.loadsComponents({"ReadingsGrid"});
+    auto const screen = h.mount(kReadings);
+    h.settle();
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    std::optional<int> const grid = h.backend.find("Custom", "component", "ReadingsGrid");
+    REQUIRE(grid.has_value());
+    CHECK(h.backend.prop(*grid, "prop.value") == R"([{"at":"a","value":1}])");
+    CHECK(h.backend.prop(*grid, "prop.label") == "Readings");
+    CHECK(h.backend.prop(*grid, "prop.columns") == "2");
+    CHECK(h.text("rows") == "1");
+
+    h.backend.raiseEvent(*grid, "change", R"([{"at":"a","value":1},{"at":"b","value":2}])");
+    h.settle();
+    CHECK(h.text("rows") == "2");
+    CHECK(h.backend.prop(*grid, "prop.value") == R"([{"at":"a","value":1},{"at":"b","value":2}])");
+
+    std::size_t const reported = h.diagnostics.size();
+    h.backend.raiseEvent(*grid, "change", R"({"at":"c"})");
+    h.backend.raiseEvent(*grid, "change", "not json");
+    h.settle();
+    CHECK(h.text("rows") == "2");
+    REQUIRE(h.diagnostics.size() == reported + 2);
+    CHECK(h.diagnostics.at(reported).reason ==
+          "field readings: the component's change does not decode: a list field takes a JSON array");
+    CHECK(h.diagnostics.at(reported + 1).reason ==
+          "field readings: the component's change does not decode: it is "
+          "not JSON");
+
+    h.backend.click(h.byTestId("Button", "form_submit"));
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_RecordReadings") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_RecordReadings")).body ==
+          R"({"sampleId":7,"readings":[{"at":"a","value":1},{"at":"b","value":2}]})");
+}
+
+TEST_CASE("form node: without the component loaded, the field's built-in control is drawn",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(kReadings);
+    h.settle();
+    CHECK_FALSE(h.backend.find("Custom", "component", "ReadingsGrid").has_value());
+    CHECK(h.backend.find("Button", "testId", "add_readings").has_value());
+}

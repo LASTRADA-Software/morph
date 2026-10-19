@@ -1898,7 +1898,26 @@ private:
                 part->id = field;
                 part->path = where;
                 for (auto const& [key, value] : settings) {
-                    part->props.emplace(key, expr(value, pointerAppend(where, key)));
+                    std::string const at = pointerAppend(where, key);
+                    if (key == "component") {
+                        // The host component that draws the field, and the props it is given beside the field's.
+                        auto const* const name = std::get_if<std::string>(&value.data);
+                        if (name == nullptr || !isName(*name)) {
+                            refuse(at, "`component` is a name");
+                        }
+                        part->names.emplace(key, *name);
+                    } else if (key == "props") {
+                        auto record = std::make_shared<DocNode>();
+                        record->kind = "props";
+                        record->path = at;
+                        for (auto const& [prop, propValue] :
+                             objectOf(value, at, "`props` is a record of expressions")) {
+                            record->props.emplace(prop, expr(propValue, pointerAppend(at, prop)));
+                        }
+                        part->parts["props"].push_back(std::move(record));
+                    } else {
+                        part->props.emplace(key, expr(value, at));
+                    }
                 }
                 made.parts["fields"].push_back(std::move(part));
             }
@@ -2844,6 +2863,9 @@ private:
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
             checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
+            if (node.kind == "form") {
+                checkFieldComponents(node);
+            }
         }
         std::string_view const model = node.name("model");
         if (!model.empty()) {
@@ -2853,6 +2875,40 @@ private:
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+    }
+
+    // A form field drawn by a host component: a declared one with a `value` prop and a `change` event, given only
+    // props it declares, and not beside a `widget`, which would choose the control too.
+    void checkFieldComponents(DocNode const& form) const {
+        for (DocNodePtr const& record : form.partList("fields")) {
+            for (DocNodePtr const& field : record->partList("fields")) {
+                std::string_view const name = field->name("component");
+                if (name.empty()) {
+                    continue;
+                }
+                std::string const at = pointerAppend(field->path, "component");
+                auto const found = _doc->components.find(name);
+                if (found == _doc->components.end()) {
+                    refuse(at, "`" + std::string{name} + "` is not a component of this document");
+                }
+                Component const& component = found->second;
+                if (!component.props.contains("value") || !component.events.contains("change")) {
+                    refuse(at, "the component `" + component.name +
+                                   "` draws a form field, so it declares a prop `value` and an event `change`");
+                }
+                if (field->prop("widget") != nullptr) {
+                    refuse(at, "`component` and `widget` both choose the field's control; give one");
+                }
+                for (DocNodePtr const& props : field->partList("props")) {
+                    for (auto const& [prop, value] : props->props) {
+                        if (!component.props.contains(prop)) {
+                            refuse(value->path,
+                                   "the component `" + component.name + "` declares no prop `" + prop + "`");
+                        }
+                    }
+                }
+            }
         }
     }
 

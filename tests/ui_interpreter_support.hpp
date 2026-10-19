@@ -346,6 +346,14 @@ inline Catalog corpusCatalog() {
             return std::string{R"({"type":"object","title":"Confirm","properties":{
               "sampleId":{"type":"integer","title":"Sample","x-order":0}},"required":["sampleId"]})"};
         }
+        if (action == "Lims_RecordReadings") {
+            return std::string{R"({"type":"object","title":"Readings","properties":{
+              "sampleId":{"type":"integer","title":"Sample","x-order":0},
+              "readings":{"type":"array","title":"Readings","x-order":1,"items":{"type":"object","properties":{
+                "at":{"type":"string","title":"At","x-order":0},
+                "value":{"type":"integer","title":"Value","x-order":1}},"required":["value"]}}},
+              "required":["sampleId"]})"};
+        }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
         }

@@ -396,7 +396,10 @@ overlay actions), `ui/host.md` (the contract table: `head()`, `ScreenHead`), `ui
   - the fallback: the field's built-in control (`FieldView::defaultControl()`).
   A `change` event's payload is read as the `value` prop's declared type and written with the new
   `FieldState::edit(Json const&)` (a `load` that counts as a user edit: the field is touched, dirty, and validated),
-  so the form keeps owning the draft, validation and submit. A payload that does not decode for the field is reported
+  so the form keeps owning the draft, validation and submit. A forms session has no dirty flag of its own: the edit
+  shows in the field's value, the form's `body`, and an automatic form's submit. `edit` refuses an object field given
+  anything but a JSON object and a list field given anything but an array, and the payload decoding refuses text
+  that is not JSON or not of the prop's type. A payload that does not decode for the field is reported
   (`field <name>: the component's change does not decode: <reason>`) and changes nothing.
 - The cell around the control (caption, help, visibility) is drawn as for every override. Only top-level fields take
   a component, as every overlay does.
@@ -687,7 +690,7 @@ Each test names the change that must make it fail, and is run once against that 
   the buttons are under `MorphDialog.footer`; Enter still runs `default`; an `ActionBar` outside an overlay throws; a
   dialog restyle without `footer` is refused. *Mutation: mount the bar in place.*
 - **#1002-3.** A form whose ObjectArray field names a host component: the component receives the rows as JSON, a
-  `change` with two rows makes the form's `body` hold two rows and marks the form dirty, a `change` that does not
+  `change` with two rows makes the form's `body` hold two rows, a `change` that does not
   decode is reported and changes nothing, submit sends the component's rows; on the terminal the field's row panels
   show. Load refuses a component without `value`. *Mutation: skip the override.*
 - **#1002-13.** A download of 3 bytes of base64 reaches `saveFile` with the decoded bytes, name and type; one over the

@@ -2494,6 +2494,9 @@ private:
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
+    /// A form field's control drawn by the host component its overlay names, with the built-in control as the
+    /// fallback.
+    Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
     [[nodiscard]] std::string arrangedBy(std::string const& elementId) const;
     Node lowerArranged(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::string const& point,
@@ -6096,9 +6099,141 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
             runtime().untracked([&] { runEvent(onError, attached(held), Value{failureText(error)}); });
         });
     }
-    Column column{.children = {forms::formView(*form, forms::FormViewOptions{.showTitle = false})}};
+    forms::FormViewOptions options{.showTitle = false};
+    // A field whose overlay names a component is drawn by it; only top-level fields take one, as every overlay.
+    for (DocNodePtr const& record : node.partList("fields")) {
+        for (DocNodePtr const& overlay : record->partList("fields")) {
+            if (!overlay->name("component").empty()) {
+                options.overrides.byField(overlay->id,
+                                          [this, ctx, field = overlay.get()](forms::FieldView const& view) {
+                                              return fieldComponent(view, *field, ctx);
+                                          });
+            }
+        }
+    }
+    Column column{.children = {forms::formView(*form, std::move(options))}};
     commonOf(node, ctx, element, column.common);
     return ui::column(std::move(column));
+}
+
+/// @brief A component's `change` payload as the wire value of the field it draws, read as the `value` prop's
+///        declared type.
+/// @param payload The payload, as the backend reports it.
+/// @param type    The `value` prop's type.
+/// @return The wire value, or why the payload is not one.
+[[nodiscard]] inline std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,
+                                                                                        std::string_view type) {
+    std::string_view text{payload};
+    if (type == "string") {
+        if (text.starts_with("s:")) {
+            text.remove_prefix(2);
+        }
+        return forms::detail::engine::Json{std::string{text}};
+    }
+    if (text.starts_with("i:")) {
+        text.remove_prefix(2);
+    }
+    std::optional<forms::detail::engine::Json> json = forms::detail::engine::parseJson(text);
+    if (!json) {
+        return std::unexpected(std::string{"it is not JSON"});
+    }
+    bool const fits = type == "json" || json->is_null() || (type == "bool" && json->is_boolean()) ||
+                      ((type == "int" || type == "number") && json->is_number()) ||
+                      (type == "exact" && (json->is_number() || json->is_string()));
+    if (!fits) {
+        return std::unexpected("it is not " + std::string{type == "int" ? "an " : "a "} + std::string{type});
+    }
+    return *std::move(json);
+}
+
+inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx) {
+    std::string const name{overlay.name("component")};
+    // A loaded document's field component is declared, with a `value` prop and a `change` event.
+    Component const& component = _doc->components.at(name);
+    forms::FieldState* const state = &view.state();
+    Custom spec{.name = name,
+                .fallback = view.defaultControl(),
+                .props = {},
+                .minVersion =
+                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+                .onEvent = {}};
+    // What the form fills: the field's value, errors, read-only and required state, and label.
+    auto filled = [state](std::string const& prop) -> std::function<Value()> {
+        if (prop == "value") {
+            return [state] {
+                forms::Encoding const& encoding = state->encoded().get();
+                if (!encoding.has_value() || !encoding->has_value()) {
+                    return Value{};
+                }
+                return (*encoding)->value.isNull() ? jsonTextValue((*encoding)->json) : (*encoding)->value;
+            };
+        }
+        if (prop == "errors") {
+            return [state] {
+                std::optional<forms::FieldError> const& error = state->error().get();
+                return error.has_value() ? Value{ValueList{Value{error->message}}} : Value{ValueList{}};
+            };
+        }
+        if (prop == "readonly") {
+            return [state] { return Value{state->readonly().get()}; };
+        }
+        if (prop == "required") {
+            return [state] { return Value{state->required().get()}; };
+        }
+        if (prop == "label") {
+            return [state] { return Value{state->label()}; };
+        }
+        return {};
+    };
+    for (auto const& [prop, type] : component.props) {
+        std::function<Value()> read = filled(prop);
+        if (!read) {
+            ExprPtr given;
+            for (DocNodePtr const& record : overlay.partList("props")) {
+                if (ExprPtr const expr = record->prop(prop)) {
+                    given = expr;
+                }
+            }
+            read = [scope = ctx.scope, bindings = ctx.bindings, given] {
+                return given ? evalIn(*scope, bindings.get(), given) : Value{};
+            };
+        }
+        if (prop == "value" && type == "json") {
+            // The wire JSON itself, so an object's or a collection's every digit reaches the component.
+            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([state] {
+                                                              forms::Encoding const& encoding = state->encoded().get();
+                                                              return encoding.has_value() && encoding->has_value()
+                                                                         ? (*encoding)->json
+                                                                         : std::string{"null"};
+                                                          })});
+        } else if (type == "bool") {
+            spec.props.push_back(CustomProp{
+                .name = prop, .value = slotProp<bool>([this, read] { return boolOf(read(), session.formatting()); })});
+        } else if (type == "number") {
+            spec.props.push_back(
+                CustomProp{.name = prop, .value = slotProp<double>([read] { return componentNumber(read()); })});
+        } else {
+            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([this, read, type] {
+                                                              return componentText(read(), type, session.formatting());
+                                                          })});
+        }
+    }
+    spec.onEvent = [this, state, path = overlay.path, field = view.spec().name,
+                    valueType = component.props.at("value")](std::string const& event, std::string const& payload) {
+        if (event != "change") {
+            return;
+        }
+        auto wire = changeWire(payload, valueType);
+        if (wire) {
+            if (auto edited = state->edit(*wire); !edited) {
+                wire = std::unexpected(edited.error());
+            }
+        }
+        if (!wire) {
+            report(path, "field " + field + ": the component's change does not decode: " + wire.error());
+        }
+    };
+    return ui::custom(std::move(spec));
 }
 
 // Every call goes through the alias's channel, bound for its current instance when the call is made.

@@ -167,7 +167,9 @@ every digit.
 sense of `docs/spec/reactive/control.md`. Non-copyable and non-movable: fields and in-flight replies point into
 it. A view mounted on it is destroyed first.
 
-- **Fields.** `FieldState`: the `text`, `unit` and `engaged` signals (a write to `text` is a user edit); the
+- **Fields.** `FieldState`: the `text`, `unit` and `engaged` signals (a write to `text` is a user edit, as is
+  `edit(json)`, a load of a wire value the session does not mark programmatic, refused for an object field given
+  anything but an object and a list field given anything but an array); the
   `encoded`, `error`, `visible`, `readonly` and `required` computeds; the resolved label, help and placeholder.
   `field(path)` takes `name`, `parent.member` and `rows[i].member`.
 - **Nesting.** An `Object` owns a `FieldState` per member and encodes them with their own encoders; a blank
@@ -273,8 +275,13 @@ before it.
 - **Through a document.** The interpreter lowers a `form` node to `formView` over a session it builds from
   `Catalog::schema`, the node's overlay and its model alias (`docs/spec/ui/interpreter.md`, "Lowering").
 
+- **A host component per field.** A document's field overlay may name a `component` that draws the field
+  (`docs/spec/ui/interpreter.md`, "Lowering"): the interpreter adds it as a field-path override, and the cell
+  around it (caption, help, visibility) is drawn as for every override.
+
 **Not here yet:** the grid widget (`x-widget: grid`, spec 2 §7), whose keyboard model needs a way for the view
-tree to move focus, which it does not have; and a document's `overrides`.
+tree to move focus, which it does not have (a kit's grid is reached through a host component); and a document's
+subtree overrides.
 
 ## Collections
 

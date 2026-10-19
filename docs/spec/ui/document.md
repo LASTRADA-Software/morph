@@ -184,7 +184,7 @@ place a kind is described.
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
-| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
+| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions; an overlay may also name a `component` that draws the field, with `props`, a record of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
 | `collection`, `wizard` | `model`, `action` (required) | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
@@ -253,6 +253,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   all have ids, no other `arrange` point names the same container, and the app document, which has no view,
   may not declare one; `pins` belong to the app document.
 - **Prefetch.** Each name is a screen query whose body reads nothing but the screen's params.
+- **Field components.** A form field overlay's `component` is a name of a declared component that declares a prop
+  `value` and an event `change`; its `props` name only props the component declares, and an overlay with a
+  `component` gives no `widget`, since both choose the field's control.
 
 ## The catalog
 
