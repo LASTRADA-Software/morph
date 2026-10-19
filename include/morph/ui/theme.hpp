@@ -863,10 +863,11 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
 
 /// @brief What a `ui-theme/1` token is read as.
 enum class ThemeTokenKind : std::uint8_t {
-    Color,      ///< A `color` token.
-    Number,     ///< A `number` token.
-    Dimension,  ///< A `dimension` token, read in px (a `rem` is 16 px).
-    Shadow,     ///< A `shadow` token: a colour and four px lengths; of a list of layers, the first.
+    Color,       ///< A `color` token.
+    Number,      ///< A `number` token.
+    Dimension,   ///< A `dimension` token, read in px (a `rem` is 16 px).
+    Shadow,      ///< A `shadow` token: a colour and four px lengths; of a list of layers, the first.
+    FontFamily,  ///< A `fontFamily` token: a family name, or a list of them in order of preference.
 };
 
 /// @brief A `shadow` token's default, in the form a `constexpr` table can hold.
@@ -895,12 +896,14 @@ struct ThemeTokenSpec {
     double number = 0.0;
     /// @brief A shadow's default.
     ThemeShadowSpec shadow{};
+    /// @brief A font family's default; empty for none, which draws in the platform font.
+    std::string_view family;
 };
 
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 38> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 39> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -938,6 +941,7 @@ inline constexpr std::array<ThemeTokenSpec, 38> kThemeTokens = {{
     {.path = "control.height", .kind = ThemeTokenKind::Dimension, .color = "", .number = 32.0},
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     {.path = "elevation.card",
      .kind = ThemeTokenKind::Shadow,
      .color = "",
@@ -969,6 +973,8 @@ struct ThemeValues {
     std::map<std::string, double, std::less<>> dimensions;
     /// @brief Every shadow of the set, by path.
     std::map<std::string, ThemeShadow, std::less<>> shadows;
+    /// @brief Every font family list of the set, by path, in order of preference; empty for none.
+    std::map<std::string, std::vector<std::string>, std::less<>> families;
 };
 
 namespace detail {
@@ -1004,6 +1010,23 @@ namespace detail {
     return ThemeShadow{.color = *rgba, .offsetX = *x, .offsetY = *y, .blur = *blur, .spread = *spread};
 }
 
+/// @brief A checked `fontFamily` value as its names, in order: one name, or a list of them.
+/// @param json The value, checked by `checkFontFamily`.
+/// @return The names; empty when it is neither.
+[[nodiscard]] inline std::vector<std::string> familiesOf(Json const& json) {
+    std::vector<std::string> names;
+    if (auto const* const name = std::get_if<std::string>(&json.data)) {
+        names.push_back(*name);
+    } else if (auto const* const list = std::get_if<Json::array_t>(&json.data)) {
+        for (Json const& entry : *list) {
+            if (auto const* const listed = std::get_if<std::string>(&entry.data)) {
+                names.push_back(*listed);
+            }
+        }
+    }
+    return names;
+}
+
 }  // namespace detail
 
 /// @brief Fills the closed `ui-theme/1` set from a resolved theme.
@@ -1035,6 +1058,14 @@ namespace detail {
                                             .offsetY = spec.shadow.offsetY,
                                             .blur = spec.shadow.blur,
                                             .spread = spec.shadow.spread}));
+        } else if (spec.kind == ThemeTokenKind::FontFamily) {
+            std::vector<std::string> names;
+            if (found != resolved.end() && found->second.type == "fontFamily") {
+                names = detail::familiesOf(found->second.value);
+            } else if (!spec.family.empty()) {
+                names.emplace_back(spec.family);
+            }
+            values.families.insert_or_assign(std::string{spec.path}, std::move(names));
         } else if (spec.kind == ThemeTokenKind::Dimension) {
             std::optional<double> pixels;
             if (found != resolved.end() && found->second.type == "dimension") {

@@ -25,6 +25,7 @@ MorphWidget {
     }
 
     Label {
+        font: Theme.bodyFont
         id: label
         anchors.centerIn: parent
         text: (root.icon !== "" ? root.icon + " " : "") + root.text

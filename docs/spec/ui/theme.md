@@ -125,12 +125,13 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
+| `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
 its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
 (`kPixelsPerRem`): the renderers do not change the root font size. `ThemeValues` keeps colours, numbers and
-dimensions in three maps, and shadows in a fourth.
+dimensions in three maps, shadows in a fourth, and font family lists (`families`) in a fifth.
 
 The six `space` tokens are the spacing scale: `space.<step>` is how far apart a `gap` or `padding` of that step puts
 things (`docs/spec/ui/view_tree.md`, the spacing step). Other `space.*` paths, `control.*`, `font.*` and
@@ -154,9 +155,19 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `background` | `color.background` |
 | `radiusControl`, `radiusCard`, `controlHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `font.size.body`, `font.size.heading` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
+| `fontFamilies` | `font.family` |
 
 `Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
-platform font, the body its size and a heading 1.3 times the body.
+platform font (`Theme.platformMetrics`), the body its size and a heading 1.3 times the body. Every `MorphUi` text and
+control draws in `Theme.bodyFont` (`strongFont` where it is emphasised, `headingFont` for a heading): the theme's
+families at the body size, or the platform font untouched while `fontFamilies` is empty. A family Qt cannot resolve
+falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
+comparing `QFontInfo`'s family against the list.
+
+**Units follow the theme's font, opt-in.** `Theme.metrics`, which the units read, is the theme's families at
+`bodyPixels` while `fontFamilies` is set and the platform font otherwise, so the units and every `fixed(n)` are
+unchanged until a theme names a family. `bodyPixels` derives from the platform metrics rather than from `metrics`, so
+the size never depends on the metrics it feeds.
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
@@ -180,6 +191,6 @@ with them.
 ## Not yet
 
 - `{"pref": "density"}` choosing a density at runtime.
-- Units from the scale tokens rather than from the default font; `control.*`, `font.*` and `elevation.*` in the closed
-  set.
+- Units from the scale tokens rather than from the body font; `control.*` and `elevation.*` beyond those above in the
+  closed set.
 - Icons, the terminal renderer's palette mapping.

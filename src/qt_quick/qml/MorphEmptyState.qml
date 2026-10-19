@@ -28,12 +28,13 @@ MorphWidget {
         }
 
         Label {
+            font: Theme.strongFont
             Layout.alignment: Qt.AlignHCenter
             text: root.title
-            font.bold: true
         }
 
         Label {
+            font: Theme.bodyFont
             Layout.alignment: Qt.AlignHCenter
             visible: root.text !== ""
             text: root.text
@@ -42,6 +43,7 @@ MorphWidget {
         }
 
         Button {
+            font: Theme.bodyFont
             objectName: "action"
             Layout.alignment: Qt.AlignHCenter
             visible: root.actionLabel !== ""

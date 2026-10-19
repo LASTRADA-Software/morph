@@ -69,6 +69,7 @@ MorphWidget {
             model: root.entries
 
             ToolButton {
+                font: Theme.bodyFont
                 id: top
                 required property int index
                 required property var modelData
@@ -96,6 +97,7 @@ MorphWidget {
                 model: root.openEntries
 
                 ItemDelegate {
+                    font: Theme.bodyFont
                     required property int index
                     required property var modelData
                     Layout.fillWidth: true

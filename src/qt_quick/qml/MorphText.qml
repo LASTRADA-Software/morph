@@ -20,8 +20,7 @@ MorphField {
         width: root.controlWidth
         text: root.text
         wrapMode: Text.Wrap
-        font.weight: root.role === 2 ? Font.Bold : Font.Normal
-        font.pixelSize: root.role === 2 ? Math.round(Theme.headingPixels) : Math.round(Theme.bodyPixels)
+        font: root.role === 2 ? Theme.headingFont : Theme.fontOf(Theme.bodyPixels, Font.Normal)
         color: root.textColorOf(root.role)
         Accessible.ignored: true
     }

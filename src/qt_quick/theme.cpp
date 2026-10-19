@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QColor>
+#include <QFont>
+#include <QFontInfo>
 #include <QList>
 #include <QMetaObject>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <array>
 #include <functional>
@@ -118,6 +121,33 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
 }
 
+// The families of `font.family`; one Qt resolves to none of them falls back to Qt's own substitute and is reported, so
+// a theme naming a font the machine lacks says so rather than drawing in another.
+void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    auto const found = values.families.find("font.family");
+    if (found == values.families.end()) {
+        return;
+    }
+    QStringList names;
+    std::string listed;
+    for (std::string const& name : found->second) {
+        names.append(QString::fromStdString(name));
+        listed += (listed.empty() ? "" : ", ") + name;
+    }
+    if (!theme.setProperty("fontFamilies", QVariant::fromValue(names))) {
+        unset.emplace_back("fontFamilies");
+        return;
+    }
+    if (names.isEmpty()) {
+        return;
+    }
+    QFont font;
+    font.setFamilies(names);
+    if (!names.contains(QFontInfo{font}.family(), Qt::CaseInsensitive)) {
+        unset.push_back("font.family: none of " + listed + " is installed");
+    }
+}
+
 // The card's shadow and the spacing steps, which only a complete set of steps replaces.
 void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     if (auto const card = values.shadows.find("elevation.card"); card != values.shadows.end()) {
@@ -184,6 +214,7 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         return unset;
     }
     setPlainTokens(*theme, values, unset);
+    setFamilies(*theme, values, unset);
     setShadowAndSpace(*theme, values, unset);
     setSurfaces(*theme, surfaces, unset);
     return unset;

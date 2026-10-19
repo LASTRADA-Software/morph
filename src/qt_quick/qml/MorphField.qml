@@ -32,6 +32,7 @@ MorphWidget {
     Accessible.description: accessibleDescription
 
     Label {
+        font: Theme.bodyFont
         id: captionLabel
         objectName: "caption"
         width: root.width
@@ -50,6 +51,7 @@ MorphWidget {
     }
 
     Label {
+        font: Theme.bodyFont
         id: marker
         anchors.right: parent.right
         y: root.captionHeight
@@ -59,6 +61,7 @@ MorphWidget {
     }
 
     Label {
+        font: Theme.bodyFont
         id: messages
         y: root.captionHeight + (root.control ? root.control.height : 0)
         width: root.width

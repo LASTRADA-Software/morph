@@ -60,9 +60,9 @@ MorphWidget {
 
         contentItem: ColumnLayout {
             Label {
+                font: Theme.strongFont
                 visible: root.title !== ""
                 text: root.title
-                font.bold: true
             }
 
             ColumnLayout {

@@ -221,8 +221,9 @@ it; a widget out of reach takes none.
 ## Layout and theme
 
 A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size, `fixed(n)` to a preferred size of
-`n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
-horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`).
+`n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the body font's average character width
+horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`): the platform font's, or the
+theme's `font.family` at the body size once a theme names one ([`../ui/theme.md`](../ui/theme.md), "On Qt Quick").
 
 A content-sized dimension fills the container across its axis ([`../ui/backend_contract.md`](../ui/backend_contract.md),
 the cross axis). A QML child cannot see its parent's axis, so the container says: `ContainerCore::adopt` writes the
@@ -351,7 +352,6 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- A runtime density from theme tokens; the units come from the default font, not the
-  scale tokens.
+- A runtime density from theme tokens; the units come from the body font, not the scale tokens.
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

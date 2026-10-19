@@ -32,12 +32,14 @@ MorphWidget {
         anchors.rightMargin: Theme.unitWidth
 
         Label {
+            font: Theme.bodyFont
             Layout.fillWidth: true
             text: root.text
             wrapMode: Text.Wrap
         }
 
         Button {
+            font: Theme.bodyFont
             objectName: "action"
             visible: root.actionLabel !== ""
             text: root.actionLabel
@@ -45,6 +47,7 @@ MorphWidget {
         }
 
         ToolButton {
+            font: Theme.bodyFont
             objectName: "dismiss"
             visible: root.dismissible
             text: "×"

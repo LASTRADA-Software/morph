@@ -24,6 +24,7 @@ MorphWidget {
 
         RowLayout {
             ToolButton {
+                font: Theme.bodyFont
                 id: toggle
                 objectName: "toggle"
                 text: (root.open ? "▾ " : "▸ ") + root.title

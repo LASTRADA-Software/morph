@@ -40,6 +40,7 @@ MorphWidget {
                 visible: root.title !== "" || root.collapsible
 
                 ToolButton {
+                    font: Theme.bodyFont
                     id: toggle
                     visible: root.collapsible
                     text: root.collapsed ? "▸" : "▾"
@@ -50,8 +51,8 @@ MorphWidget {
                 }
 
                 Label {
+                    font: Theme.strongFont
                     text: root.title
-                    font.bold: true
                 }
             }
 

@@ -45,6 +45,7 @@ MorphWidget {
                 model: root.labels
 
                 TabButton {
+                    font: Theme.bodyFont
                     id: tab
                     required property int index
                     required property string modelData

@@ -5,12 +5,17 @@
 
 #include <QColor>
 #include <QFile>
+#include <QFont>
+#include <QFontDatabase>
+#include <QFontInfo>
+#include <QFontMetricsF>
 #include <QObject>
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
 #include <functional>
 #include <map>
 #include <memory>
@@ -20,6 +25,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -249,4 +255,68 @@ TEST_CASE("qt_quick theme: a surface set after its children exist still colours 
     sidebar->setSurface("sidebar");
     scene.settle();
     CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("late")) == QColor{"#c9ccd6"});
+}
+
+namespace {
+
+/// An installed family whose average character width at @p pixels differs from the platform font's, so a test can see
+/// the units follow it; the CI image and a workstation ship different fonts, so it is found rather than named.
+std::optional<QString> otherFamily(QFont const& platform, int pixels) {
+    QFont sized = platform;
+    sized.setPixelSize(pixels);
+    double const platformWidth = QFontMetricsF{sized}.averageCharWidth();
+    for (QString const& family : QFontDatabase::families()) {
+        QFont candidate;
+        candidate.setFamilies({family});
+        candidate.setPixelSize(pixels);
+        if (QFontInfo{candidate}.family().compare(family, Qt::CaseInsensitive) == 0 &&
+            family.compare(platform.family(), Qt::CaseInsensitive) != 0 &&
+            std::abs(QFontMetricsF{candidate}.averageCharWidth() - platformWidth) > 0.5) {
+            return family;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+// Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).
+TEST_CASE("qt_quick theme: font.family sets the body font and the units follow it; an unknown family is reported",
+          "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const platform = theme->property("platformMetrics").value<QObject*>()->property("font").value<QFont>();
+    double const platformUnit = theme->property("unitWidth").toReal();
+    int const pixels = static_cast<int>(std::lround(theme->property("bodyPixels").toReal()));
+    CHECK(theme->property("bodyFont").value<QFont>().family() == platform.family());
+
+    std::optional<QString> const family = otherFamily(platform, pixels);
+    REQUIRE(family.has_value());
+    ui::ThemeValues values = ui::themeValues();
+    values.families.insert_or_assign("font.family", std::vector<std::string>{family->toStdString()});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    CHECK(theme->property("bodyFont").value<QFont>().families() == QStringList{*family});
+    QFont expected;
+    expected.setFamilies({*family});
+    expected.setPixelSize(pixels);
+    CHECK_FALSE(theme->property("unitWidth").toReal() == platformUnit);
+    CHECK(std::abs(theme->property("unitWidth").toReal() - QFontMetricsF{expected}.averageCharWidth()) < 0.01);
+
+    // Back to no family: the platform font and its units.
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("unitWidth").toReal() == platformUnit);
+
+    values.families.insert_or_assign("font.family", std::vector<std::string>{"Nowhere Sans", "Absent Serif"});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values) ==
+          std::vector<std::string>{"font.family: none of Nowhere Sans, Absent Serif is installed"});
+}
+
+TEST_CASE("theme: a fontFamily token is read as its names", "[qt_quick]") {
+    auto const tokens = ui::parseTokens(R"({"font": {"family": {"$type": "fontFamily", "$value": ["A Sans", "B"]}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    CHECK(ui::themeValues(*resolved).families.at("font.family") == std::vector<std::string>{"A Sans", "B"});
+    CHECK(ui::themeValues().families.at("font.family").empty());
 }

@@ -275,6 +275,11 @@ Kinds: "a `BusyIndicator` and a label, both shown only while active". **Misuse:*
   `metrics.font`, `Theme.qml:11-13, 33-34`). A family Qt cannot resolve falls back to Qt's own substitute, and
   `applyTheme` reports it (`font.family: none of <names> is installed`), comparing `QFontInfo(font).family()` against
   the list.
+- **As built.** While `fontFamilies` is empty `bodyFont` is the platform font untouched, so no control changes size;
+  `Theme` also answers `strongFont` (the body font, bold: titles, headers, the current step, a primary button) and
+  `headingFont`, and `fontOf(pixels, weight)`. A font built with `Qt.font` names the first family as `family` beside
+  `families`, which Qt reads for the match. The test picks an installed family whose width differs from the platform
+  font's rather than naming DejaVu Sans, which a workstation need not have.
 - **Terminal.** A terminal draws in its own font; `font.family` has no effect there.
 - **Specs.** `ui/theme.md` (closed set, On Qt Quick, "Not yet" loses "Units from the scale tokens…" for the font),
   `qt_quick/backend.md` Layout and theme ("A unit is the default font's…" gains the theme-font rule; "Not yet" loses the

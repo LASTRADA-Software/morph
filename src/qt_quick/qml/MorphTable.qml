@@ -60,7 +60,7 @@ MorphWidget {
 
     FontMetrics {
         id: headerMetrics
-        font.bold: true
+        font: Theme.strongFont
     }
 
     ColumnLayout {
@@ -74,11 +74,11 @@ MorphWidget {
                 model: root.columns
 
                 Label {
+                    font: Theme.strongFont
                     required property int index
                     required property var modelData
                     width: root.widths[index] !== undefined ? root.widths[index] : 0
                     text: modelData.label
-                    font.bold: true
                     color: root.scheme.muted
                     topPadding: Theme.spaceOf(2)
                     bottomPadding: Theme.spaceOf(2)
