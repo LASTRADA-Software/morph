@@ -2,6 +2,7 @@
 #include "bookmarks/models/auth_model.hpp"
 
 #include <cstdint>
+#include <morph/core/profiler.hpp>
 #include <morph/session/session_auth.hpp>
 
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
@@ -28,6 +29,7 @@ constexpr std::int64_t kTokenExpiresAtMs = 4102444800000;
 }  // namespace
 
 LoginResult AuthModel::execute(const Login& action) {
+    MORPH_ZONE("AuthModel::Login");
     if (!action.validate()) {
         throw ValidationError{"Login: username must be a valid principal"};
     }

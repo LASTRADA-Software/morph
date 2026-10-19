@@ -10,6 +10,7 @@
 #include <chrono>
 #include <memory>
 #include <morph/core/logger.hpp>
+#include <morph/core/profiler.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <string_view>
@@ -166,6 +167,7 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
 }
 
 void QtWebSocketServer::onNewConnection() {
+    MORPH_ZONE("QtWebSocketServer::accept");
     QWebSocket* socket = _wsServer.nextPendingConnection();
     if (socket == nullptr) {
         return;
@@ -213,6 +215,7 @@ void QtWebSocketServer::onNewConnection() {
     }
 
     _clients.emplace(socket, state);
+    MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
 }
 
 bool QtWebSocketServer::consumeToken(ClientState& state) const {
@@ -232,6 +235,7 @@ bool QtWebSocketServer::consumeToken(ClientState& state) const {
 }
 
 void QtWebSocketServer::onTextMessage(const QString& message) {
+    MORPH_ZONE("QtWebSocketServer::onTextMessage");
     auto* socket = qobject_cast<QWebSocket*>(sender());
     if (socket == nullptr) {
         return;
@@ -291,6 +295,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
             QMetaObject::invokeMethod(
                 QCoreApplication::instance(),
                 [weakSocket, reply]() {
+                    MORPH_ZONE("QtWebSocketServer::sendReply");
                     if (weakSocket) {
                         weakSocket->sendTextMessage(QString::fromStdString(reply));
                     }
@@ -301,6 +306,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
 }
 
 void QtWebSocketServer::onDisconnected() {
+    MORPH_ZONE("QtWebSocketServer::disconnect");
     auto* socket = qobject_cast<QWebSocket*>(sender());
     if (socket == nullptr) {
         return;
@@ -320,6 +326,7 @@ void QtWebSocketServer::onDisconnected() {
             iter->second.handshakeTimer->deleteLater();
         }
         _clients.erase(iter);
+        MORPH_PLOT("QtWebSocketServer::connections", _clients.size());
         socket->deleteLater();
     }
 }

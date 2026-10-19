@@ -19,6 +19,25 @@
 
 namespace bookmarks::app {
 
+/// @brief The server's default cap on live model instances.
+///
+/// This rung's `authorizeRegister` is unconditionally permissive by choice
+/// (`bookmarks/auth/bookmarks_authorizer.hpp` — the framework can gate
+/// registration on identity now that `register` envelopes carry the
+/// caller's session, this rung's authorizer just doesn't), so an
+/// unauthenticated client *can* make the server create model instances even
+/// though it can never execute anything on them. `maxLiveModels` is the
+/// framework's own answer to that shape of churn: past the cap a `register`
+/// is answered `err "too many models"` and no instance is constructed. The
+/// value is generous on purpose — the shipped client registers six instances
+/// (the forms controller owns an `AuthModel`, a `BookmarkModel` and a
+/// `TagModel` handler; the three presenters own a `BookmarkModel`, a
+/// `TagModel` and a `SharedFeedModel` handler — see the README's "Six model
+/// instances per client, not four" gap for why they cannot be shared), so
+/// this is ~42 concurrent clients. A deployment that wants more, or a load
+/// test that wants none, passes its own to `App`'s constructor.
+inline constexpr std::size_t kDefaultMaxLiveModels = 256;
+
 /// @brief Owns the server-side pieces every bookmarks deployment shares: the
 /// worker pool, the `RemoteServer` with a real `auth::BookmarksAuthorizer`
 /// installed, the durable `FileActionLog` (installed process-wide via
@@ -78,12 +97,15 @@ public:
     /// @param parent        Optional `QObject` parent.
     /// @param services      Envelope services the server answers besides the models, such as the UI service that
     ///        serves this application's screens; none by default.
+    /// @param maxLiveModels The server's cap on live model instances, past which a `register` is refused;
+    ///        `0` is unbounded. The default is generous for real clients (see `kDefaultMaxLiveModels`).
     explicit App(std::filesystem::path actionLogPath, std::string tokenSecret,
                  std::shared_ptr<IBookmarkMetadataFetcher> fetcher = std::make_shared<NullMetadataFetcher>(),
                  std::chrono::milliseconds fetchInterval = std::chrono::seconds{5},
                  std::chrono::milliseconds relayInterval = std::chrono::seconds{2}, std::size_t workers = 4,
                  QObject* parent = nullptr,
-                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {});
+                 std::vector<std::shared_ptr<::morph::backend::IEnvelopeService>> services = {},
+                 std::size_t maxLiveModels = kDefaultMaxLiveModels);
 
     /// @brief Stops both timers and detaches the process-wide action log and
     ///        token issuer.
