@@ -126,7 +126,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |
-| Busy | `MorphBusy` | a `BusyIndicator` and a label | — |
+| Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
 | Table | `MorphTable`, rows `MorphTableRow` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |

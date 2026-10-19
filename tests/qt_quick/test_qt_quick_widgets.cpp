@@ -402,6 +402,28 @@ TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_q
     CHECK(actions == 1);
 }
 
+// Mutation: leave the label visible while inactive (the label stays visible and the size is the label's).
+TEST_CASE("qt_quick widgets: an inactive busy shows neither its indicator nor its label, and takes no room",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto busy = scene.backend().createBusy(column.get());
+    busy->setLabel("Loading\u2026");
+    busy->setActive(false);
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*busy);
+    auto const* const label = item.findChild<QQuickItem*>(QStringLiteral("label"));
+    REQUIRE(label != nullptr);
+    CHECK_FALSE(label->isVisible());
+    CHECK(item.implicitWidth() == 0.0);
+    CHECK(item.implicitHeight() == 0.0);
+    busy->setActive(true);
+    scene.settle();
+    CHECK(label->isVisible());
+    CHECK(item.implicitWidth() > 0.0);
+    CHECK(item.implicitHeight() > 0.0);
+}
+
 TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handlers", "[qt_quick]") {
     Scene scene;
     auto banner = scene.backend().createBanner(nullptr);

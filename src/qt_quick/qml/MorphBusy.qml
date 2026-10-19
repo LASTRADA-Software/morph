@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// A busy indicator with a label, shown while active.
+// A busy indicator with a label, both shown while active; inactive, it draws nothing and takes no room.
 MorphWidget {
     id: root
 
@@ -25,8 +25,10 @@ MorphWidget {
         }
 
         Label {
+            objectName: "label"
             anchors.verticalCenter: parent.verticalCenter
             text: root.label
+            visible: root.active
         }
     }
 }
