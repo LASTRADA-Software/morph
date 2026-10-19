@@ -12,6 +12,7 @@ the frontend around it is [`frontend.md`](frontend.md).
 ## Contents
 
 - [Shape](#shape)
+- [Several mounts](#several-mounts)
 - [Packaging](#packaging)
 - [Widgets](#widgets)
 - [User actions](#user-actions)
@@ -42,6 +43,24 @@ auto screen = interpreter.mount(document, params, backend);   // or ui::Mounted{
 - `BackendOptions::components` is the restyle map and the custom components; `onWidthClass` is called with the host's
   width class (`widthClassOf`: below 600 logical pixels `compact`, below 1200 `medium`, else `expanded`) once at
   construction and each time the class changes, so the shell can set `{"env": "widthClass"}`.
+
+## Several mounts
+
+An application with a shell of its own (a tab workspace, a split view) shows several screens in one window: each
+page item of its shell is a `host`, with one `Backend` per page, and every root that backend makes is appended to the
+column it adds to that page.
+
+| Shared by every mount | Per mount |
+|---|---|
+| `ui::Session` (cache, locale, translations), `reactive::Runtime`, `Dispatcher`, `QQmlEngine`, `qt_quick::Components` (restyles, host and bundle components), the `Theme` singleton (one per engine) | `qt_quick::Backend` and its context (the per-type component cache), `ui::DocumentScreenHost` (its interpreter, close guard, application host and `diagnostics` callback), the screens and their handles |
+
+- A restyle is resolved per `Backend` when it first makes the type, so a restyle mapped after a backend made that
+  type reaches only backends made later, and that backend keeps the component it made. Restyles are mapped before
+  the first backend makes anything: in `FrontendConfig::onEngine`, or before the application builds its backends.
+- Every `Backend` is destroyed before the engine, and every `DocumentScreenHost` before the `Session`. Destroying one
+  mount (its screens, its host, its backend) leaves the others working.
+- A mutation on one page applies its effects through the shared session, so a query another page shows refreshes.
+- Nothing new is refused: a `DocumentScreenHost` already needs a backend and a document lookup.
 
 ## Packaging
 
@@ -282,6 +301,10 @@ software scene graph:
   moves the fewest rows and keeps the kept rows' items and focus; a table row keyed above 2^53 is reported exactly;
   spec 5 §7's server-calculated values show in their rows, stale and never blank while a newer request is in flight,
   with the row's error on a failure.
+- **Several mounts:** two backends on two items of one window over one engine, one `Components` with a
+  `textInput` restyle and one session: both pages' inputs are the restyle, a mutation on one page refreshes a query
+  the other shows, each host's diagnostics hold only its screen's, and destroying the first page leaves the second's
+  input editable; a restyle mapped after the first page made its input reaches only the second.
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
   and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
   `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a

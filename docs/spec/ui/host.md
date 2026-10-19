@@ -21,6 +21,7 @@ and is its `InterpreterHost` for `navigate`.
 - [The close protocol](#the-close-protocol)
 - [Routes](#routes)
 - [Route history](#route-history)
+- [A shell of its own](#a-shell-of-its-own)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
@@ -212,6 +213,21 @@ bound to C++. `push` and `replace` are skipped while the address holds a move th
 and the next tick reports it. The generic client passes one in its WebAssembly build. An explicit `--screen` there
 wins over the route the history holds. A move made while a sign-in reloads the catalog, and the link the page was
 opened with, are opened once the reload ends, before any navigation the sign-in asked for.
+
+## A shell of its own
+
+An application that keeps its own shell (its tab strip, page header and status bar) mounts each page's screen through
+a `DocumentScreenHost` of its own over that page's view backend: on Qt Quick, one `qt_quick::Backend` per page item,
+as [`../qt_quick/backend.md`](../qt_quick/backend.md#several-mounts) states.
+
+- The hosts share one `Session` and one `Dispatcher`, so the pages share the cache, the locale and the translations,
+  and a mutation's effects on one page refresh the queries another shows.
+- Each host has its own interpreter, close guard, application host and `diagnostics` callback, which hears only the
+  screens that host mounted.
+- Every host is destroyed before the `Session`, and every screen handle before its host. Destroying one page's host
+  and screens leaves the other pages working.
+- The shell compares a mounted screen with the one some params would open by `identityKey`, and titles its tabs with
+  `catalogTitle` (see `DocumentScreenHost` above, and [`catalogue.md`](catalogue.md#catalog-titles)).
 
 ## Design decisions
 

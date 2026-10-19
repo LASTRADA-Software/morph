@@ -5,17 +5,29 @@
 // a dialog dismisses and reopens; lists reconcile with the fewest moves, keep focus across a reorder and carry an
 // int64 key above 2^53; and spec 5 §7's server-calculated values show in the rendered cells, stale while in flight.
 
+#include <QCoreApplication>
+#include <QFile>
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QTemporaryDir>
+#include <QTest>
+#include <QUrl>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
+#include <map>
 #include <memory>
+#include <morph/qt_quick/backend.hpp>
+#include <morph/qt_quick/components.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
+#include <morph/testing/step_executor.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/kinds.hpp"
@@ -657,4 +669,215 @@ TEST_CASE("qt_quick interpreter: a host mounts a document through DocumentScreen
     h.scene.settle();
     CHECK(count->property("text").toString() == QStringLiteral("1"));
     item.setParentItem(original);
+}
+
+namespace {
+
+/// A shell page: a document host over one backend of a window that holds several.
+class PageHost final : public ui::DocumentScreenHost {
+public:
+    using ui::DocumentScreenHost::DocumentScreenHost;
+    using ui::DocumentScreenHost::onNavigate;
+    void onNavigate(std::string_view screenId, ui::ParamMap const& params) override {
+        static_cast<void>(screenId);
+        static_cast<void>(params);
+    }
+};
+
+/// Screen A runs a mutation that changes `T_Row`, and draws a table whose tone is no tone (one diagnostic).
+constexpr char const* kPageA = R"({
+  "vocab": "ui/1", "id": "pageA",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "mutations": { "rename": { "model": "sample", "action": "Push_RenameAll" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "textInput", "testId": "inputA" },
+    { "kind": "button", "testId": "renameA", "label": "rename", "onClick": { "run": "rename" } },
+    { "kind": "table", "rows": { "lit": [ { "id": 1 } ] }, "rowTone": "purple",
+      "columns": [ { "id": "id", "label": "Id" } ] } ] } })";
+
+/// Screen B shows the rows of `T_Row`, and an input echoed in a text.
+constexpr char const* kPageB = R"({
+  "vocab": "ui/1", "id": "pageB",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "queries": { "rows": { "model": "sample", "action": "Push_ListRows" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "textInput", "id": "typed", "testId": "inputB" },
+    { "kind": "text", "testId": "echoB", "text": { "fn": "coalesce", "args": [ { "ref": "typed.draft" }, "" ] } },
+    { "kind": "text", "testId": "countB", "text": { "fn": "format", "args": [ "{0}",
+        { "fn": "count", "args": [ { "fn": "coalesce", "args": [ { "query": "rows" }, { "lit": [] } ] } ] } ] } } ] } })";
+
+/// Two pages of one window, each a `qt_quick::Backend` on an item of its own, over one engine, one `Components`
+/// and one `Session`. Destroyed pages first, then the session, then the backends, then the engine.
+struct TwoPages {
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    QQmlEngine engine;
+    QQuickWindow window;
+    QQuickItem left;
+    QQuickItem right;
+    QTemporaryDir dir;
+    morph::qt_quick::Components components;
+    std::optional<morph::qt_quick::Backend> first;
+    std::optional<morph::qt_quick::Backend> second;
+    morph::reactive::testing::ManualScheduler scheduler;
+    ui::Session session{runtime, ui::SessionOptions{.scheduler = &scheduler,
+                                                    .clock = [this] { return scheduler.now(); },
+                                                    .keepUnused = std::chrono::minutes{5},
+                                                    .catalog = corpusCatalog(),
+                                                    .classify = {}}};
+    ScriptedDispatcher dispatcher{owner};
+    std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> documents{
+        {"pageA", loadOrFail(kPageA, corpusCatalog())}, {"pageB", loadOrFail(kPageB, corpusCatalog())}};
+    std::vector<ui::Refusal> diagnosticsA;
+    std::vector<ui::Refusal> diagnosticsB;
+    std::optional<PageHost> hostA;
+    std::optional<PageHost> hostB;
+    std::unique_ptr<ui::ScreenHandle> screenA;
+    std::unique_ptr<ui::ScreenHandle> screenB;
+
+    TwoPages() {
+        window.resize(800, 600);
+        left.setParentItem(window.contentItem());
+        right.setParentItem(window.contentItem());
+        left.setSize(QSizeF{400, 600});
+        right.setPosition(QPointF{400, 0});
+        right.setSize(QSizeF{400, 600});
+        REQUIRE(dir.isValid());
+        QString const path = dir.filePath(QStringLiteral("BrandInput.qml"));
+        QFile file{path};
+        REQUIRE(file.open(QIODevice::WriteOnly));
+        file.write("import QtQuick\nimport MorphUi\nMorphTextInput { property bool brand: true }\n");
+        file.close();
+        components.addHost("BrandInput", 1, QUrl::fromLocalFile(path));
+        window.show();
+        REQUIRE(QTest::qWaitForWindowExposed(&window));
+    }
+    TwoPages(TwoPages const&) = delete;
+    TwoPages& operator=(TwoPages const&) = delete;
+    TwoPages(TwoPages&&) = delete;
+    TwoPages& operator=(TwoPages&&) = delete;
+    ~TwoPages() {
+        screenB.reset();
+        screenA.reset();
+        hostB.reset();
+        hostA.reset();
+        settle();
+    }
+
+    void restyle() { REQUIRE(components.restyle(engine, "textInput", "BrandInput").has_value()); }
+
+    void makeFirst() {
+        first.emplace(engine, left, morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}});
+        hostA.emplace(session, dispatcher,
+                      ui::DocumentScreenHostOptions{
+                          .documents = lookup(),
+                          .backend = &*first,
+                          .diagnostics = [this](ui::Refusal const& refusal) { diagnosticsA.push_back(refusal); }});
+        auto mounted = hostA->mount("pageA", {});
+        REQUIRE(mounted.has_value());
+        screenA = std::move(*mounted);
+        settle();
+    }
+
+    void makeSecond() {
+        second.emplace(engine, right, morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}});
+        hostB.emplace(session, dispatcher,
+                      ui::DocumentScreenHostOptions{
+                          .documents = lookup(),
+                          .backend = &*second,
+                          .diagnostics = [this](ui::Refusal const& refusal) { diagnosticsB.push_back(refusal); }});
+        auto mounted = hostB->mount("pageB", {});
+        REQUIRE(mounted.has_value());
+        screenB = std::move(*mounted);
+        settle();
+    }
+
+    [[nodiscard]] std::function<std::shared_ptr<ui::Document const>(std::string_view)> lookup() const {
+        return [this](std::string_view id) -> std::shared_ptr<ui::Document const> {
+            auto const found = documents.find(id);
+            return found == documents.end() ? nullptr : found->second;
+        };
+    }
+
+    void settle() {
+        for (int round = 0; round < 20; ++round) {
+            owner.runAll();
+            QCoreApplication::sendPostedEvents();
+            QCoreApplication::processEvents(QEventLoop::AllEvents);
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            if (owner.pending() == 0) {
+                break;
+            }
+        }
+    }
+
+    void click(std::string_view testId) {
+        QQuickItem const* const item = QtHarness::widget(testId).item();
+        REQUIRE(item != nullptr);
+        settle();
+        QTest::mouseClick(&window, Qt::LeftButton, {}, Scene::centreOf(*item));
+        settle();
+    }
+};
+
+[[nodiscard]] bool branded(std::string_view testId) {
+    QQuickItem const* const item = QtHarness::widget(testId).item();
+    REQUIRE(item != nullptr);
+    return item->property("brand").toBool();
+}
+
+}  // namespace
+
+// Mutation (the control below): map the restyle after the first page made its input, and that page is unrestyled.
+TEST_CASE("qt_quick interpreter: several pages of one window share the engine, the restyles and the session",
+          "[qt_quick][interpreter]") {
+    TwoPages pages;
+    pages.restyle();
+    pages.makeFirst();
+    pages.makeSecond();
+    REQUIRE(pages.dispatcher.count("Push_ListRows") == 1);
+    pages.dispatcher.reply(pages.dispatcher.last("Push_ListRows"), R"([{"code":"a","name":"x"}])");
+    pages.settle();
+    CHECK(QtHarness::widget("countB").shownText() == "1");
+    // Both pages' inputs are the restyle, made by their own backends.
+    CHECK(branded("inputA"));
+    CHECK(branded("inputB"));
+    // A mutation on page A refreshes the query page B shows.
+    pages.click("renameA");
+    REQUIRE(pages.dispatcher.count("Push_RenameAll") == 1);
+    pages.dispatcher.reply(pages.dispatcher.last("Push_RenameAll"), "null");
+    pages.settle();
+    CHECK(pages.dispatcher.count("Push_ListRows") == 2);
+    pages.dispatcher.reply(pages.dispatcher.last("Push_ListRows"),
+                           R"([{"code":"a","name":"x"},{"code":"b","name":"y"}])");
+    pages.settle();
+    CHECK(QtHarness::widget("countB").shownText() == "2");
+    // Each page's host hears only its own screen's diagnostics.
+    REQUIRE_FALSE(pages.diagnosticsA.empty());
+    for (ui::Refusal const& refusal : pages.diagnosticsA) {
+        CHECK(refusal.document == "pageA");
+    }
+    CHECK(pages.diagnosticsB.empty());
+    // Destroying page A leaves page B working.
+    pages.screenA.reset();
+    pages.hostA.reset();
+    pages.first.reset();
+    pages.settle();
+    pages.click("inputB");
+    for (char const letter : {'h', 'i'}) {
+        QTest::sendKeyEvent(QTest::Click, &pages.window, static_cast<Qt::Key>(Qt::Key_A + (letter - 'a')),
+                            QString{QChar{letter}}, Qt::NoModifier);
+    }
+    pages.settle();
+    CHECK(QtHarness::widget("echoB").shownText() == "hi");
+}
+
+TEST_CASE("qt_quick interpreter: a restyle mapped after a page made its input reaches only pages made later",
+          "[qt_quick][interpreter]") {
+    TwoPages pages;
+    pages.makeFirst();
+    pages.restyle();
+    pages.makeSecond();
+    CHECK_FALSE(branded("inputA"));
+    CHECK(branded("inputB"));
 }
