@@ -48,7 +48,9 @@ ui::AnyHandle accountOptions(ui::AnyHandle const& accounts) {
 }
 
 // A signed-in screen's content. The client's frame shows the navigator and signing out beside it.
-ui::Node page(std::string_view /*current*/, ui::Nodes const& content) { return ui::column(content, {.gap = 4}); }
+ui::Node page(std::string_view /*current*/, ui::Nodes const& content) {
+    return ui::column(content, {.gap = 4}).maxWidth(80);
+}
 
 // Sign-in: a successful login or registration installs the principal it answered and opens the accounts.
 ui::Screen loginScreen() {
@@ -76,9 +78,6 @@ ui::Screen loginScreen() {
         screen.watch(loggedIn, signedIn(login, loggedIn));
         screen.watch(created, signedIn(registered, created));
         auto const refusal = ui::coalesce({loggedIn.at("message"), created.at("message")});
-        // A centred card, as the bookmarks sign-in is: a stretch spacer either side of a panel of fixed width.
-        auto const stretch = ui::obj({{"stretch", ui::AnyHandle{std::int64_t{1}}}});
-        auto const card = ui::obj({{"fixed", ui::AnyHandle{std::int64_t{44}}}});
         auto const form = ui::column(
             {ui::text({.text = "Morph Bank", .role = std::string{"heading"}}).testId("brand"),
              ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
@@ -98,8 +97,10 @@ ui::Screen loginScreen() {
                  {.text = ui::coalesce({refusal, login.error(), registered.error()}), .role = std::string{"error"}})
                  .testId("loginError")},
             {.gap = 3});
-        return ui::row({ui::spacer().sizing(stretch), ui::panel({form}, {.padding = 5}).sizing(card),
-                        ui::spacer().sizing(stretch)});
+        // A card centred on the page, which shrinks with a narrow window.
+        return ui::column({ui::panel({form}, {.padding = 5}).sizing(ui::stretch()).maxWidth(44)},
+                          {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Center})
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 
@@ -168,6 +169,13 @@ ui::Screen accountsScreen() {
     });
 }
 
+// One of the forms moving money: titled and labelled by what it does, its labels beside its fields, and no status
+// line, since its button says what it does and stays disabled until the form is ready.
+ui::FormPresentation presented(std::string const& action) {
+    return {
+        .title = action, .submitLabel = action, .showStatus = false, .fieldLayout = morph::forms::FieldLayout::Inline};
+}
+
 // Moving money: the account chosen stays chosen across the refetch every deposit, withdrawal and transfer causes.
 ui::Screen moveScreen() {
     return ui::screen(std::string{kMove}, [](ui::Scope& screen) {
@@ -202,7 +210,8 @@ ui::Screen moveScreen() {
                                      .submit = "explicit",
                                      .fields = {{&dto::Deposit::accountId, hidden},
                                                 {&dto::Deposit::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                                                {&dto::Deposit::description, {.blankAs = std::string{"empty"}}}}})
+                                                {&dto::Deposit::description, {.blankAs = std::string{"empty"}}}},
+                                     .presentation = presented("Deposit")})
                  .id(ui::element("depositForm"))
                  .testId("depositForm"),
              ui::form<dto::Withdraw>(
@@ -210,7 +219,8 @@ ui::Screen moveScreen() {
                                 .submit = "explicit",
                                 .fields = {{&dto::Withdraw::accountId, hidden},
                                            {&dto::Withdraw::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                                           {&dto::Withdraw::description, {.blankAs = std::string{"empty"}}}}})
+                                           {&dto::Withdraw::description, {.blankAs = std::string{"empty"}}}},
+                                .presentation = presented("Withdraw")})
                  .id(ui::element("withdrawForm"))
                  .testId("withdrawForm"),
              ui::select({.options = accountOptions(rows), .label = "Transfer to"}).id(target).testId("target"),
@@ -225,7 +235,8 @@ ui::Screen moveScreen() {
                   .fields = {{&dto::Transfer::fromAccountId, hidden},
                              {&dto::Transfer::toAccountId, hidden},
                              {&dto::Transfer::amountMinor, {.label = std::string{"Amount (cents)"}}},
-                             {&dto::Transfer::description, {.blankAs = std::string{"empty"}}}}})
+                             {&dto::Transfer::description, {.blankAs = std::string{"empty"}}}},
+                  .presentation = presented("Transfer")})
                  .id(ui::element("transferForm"))
                  .testId("transferForm"),
              ui::text({.text = accounts.error()}).testId("error")});

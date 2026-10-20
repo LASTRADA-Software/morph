@@ -30,17 +30,8 @@ namespace ui = morph::ui::author;
 
 namespace {
 
-// The width of a centred card, in units.
+// The widest a sign-in card grows, in units.
 constexpr int kCardWidth = 44;
-
-ui::AnyHandle stretch() { return ui::obj({{"stretch", ui::AnyHandle{std::int64_t{1}}}}); }
-
-ui::AnyHandle fixed(std::int64_t units) { return ui::obj({{"fixed", ui::AnyHandle{units}}}); }
-
-// A node centred in its row: a stretch spacer either side of it.
-ui::Node centred(ui::Node const& node) {
-    return ui::row({ui::spacer().sizing(stretch()), node, ui::spacer().sizing(stretch())});
-}
 
 // A bookmark's tags, one badge each.
 ui::Node tagBadges(ui::AnyHandle const& tags) {
@@ -59,20 +50,27 @@ ui::Screen loginScreen() {
             "login", auth,
             {.body = {{&Login::username, username.value()}},
              .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::navigate(std::string{kBookmarks})}});
-        return centred(
-            ui::panel(
-                {ui::column(
-                    {ui::text({.text = "Morph Bookmarks", .role = std::string{"heading"}}).testId("brand"),
-                     ui::text({.text = "Sign in to keep, tag and share your links.", .role = std::string{"muted"}}),
-                     ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
-                     ui::button({.label = "Sign in",
-                                 .emphasis = morph::ui::ButtonEmphasis::Primary,
-                                 .onClick = ui::run(login)})
-                         .testId("signIn"),
-                     ui::text({.text = login.error(), .role = std::string{"error"}}).testId("error")},
-                    {.gap = 3})},
-                {.padding = 5})
-                .sizing(fixed(kCardWidth)));
+        // A card centred on the page, which shrinks with a narrow window.
+        return ui::column(
+                   {ui::panel(
+                        {ui::column(
+                            {ui::text({.text = "Morph Bookmarks", .role = std::string{"heading"}}).testId("brand"),
+                             ui::text(
+                                 {.text = "Sign in to keep, tag and share your links.", .role = std::string{"muted"}}),
+                             ui::textInput({.label = "Username", .placeholder = "Username"})
+                                 .id(username)
+                                 .testId("username"),
+                             ui::button({.label = "Sign in",
+                                         .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                         .onClick = ui::run(login)})
+                                 .testId("signIn"),
+                             ui::text({.text = login.error(), .role = std::string{"error"}}).testId("error")},
+                            {.gap = 3})},
+                        {.padding = 5})
+                        .sizing(ui::stretch())
+                        .maxWidth(kCardWidth)},
+                   {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Center})
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 
@@ -115,78 +113,90 @@ ui::Screen bookmarksScreen() {
             return ui::run(archive, {{&BulkEdit::ids, list.selection()}, {&BulkEdit::archive, ui::AnyHandle{op}}});
         };
         return ui::column(
-            {ui::row(
-                 {ui::textInput({.label = "Search bookmarks", .placeholder = "Search titles, URLs and notes"})
-                      .id(search)
-                      .testId("search")
-                      .sizing(stretch()),
-                  ui::select(
-                      {.options = knownTags, .selected = tag, .label = "Tag", .onChoose = {ui::set(tag, ui::event())}})
-                      .id(tagFilter)
-                      .testId("tagFilter")
-                      .sizing(fixed(20)),
-                  ui::button({.label = "All tags", .onClick = {ui::set(tag, std::string{})}})
-                      .testId("allTags")
-                      .visible(ui::ne(tag, std::string{})),
-                  ui::checkbox({.label = "Show archived"}).id(showArchived).testId("showArchived"),
-                  ui::button({.label = "New bookmark",
-                              .emphasis = morph::ui::ButtonEmphasis::Primary,
-                              .onClick = {ui::open(create)}})
-                      .testId("newBookmark")},
-                 {.gap = 3}),
-             ui::panel(
-                 {ui::table(rows,
-                            {.key = ui::row("id"),
-                             .columns = {{.name = "title",
-                                          .label = "Title",
-                                          .cell = {ui::column(
-                                              {ui::text({.text = ui::coalesce({ui::row("title"), ui::row("url")})}),
-                                               ui::text({.text = ui::row("url"), .role = std::string{"muted"}})})}},
-                                         {.name = "tags", .label = "Tags", .cell = {tagBadges(ui::row("tags"))}},
-                                         {.name = "visibility",
-                                          .label = "Visibility",
-                                          .cell = {ui::badge(
-                                              ui::row("visibility"),
-                                              ui::cond(ui::eq(ui::row("visibility"), "Shared"),
-                                                       ui::Handle<std::string>{std::string{"ok"}},
-                                                       ui::Handle<std::string>{std::string{"neutral"}}))}}},
-                             .selection = ui::Selection::Multiple,
-                             .onActivate = {ui::set(editing, ui::row("id")), ui::open(edit)}})
-                      .id(list)
-                      .a11y("Bookmarks")
-                      .testId("bookmarks")},
-                 {.padding = 0}),
-             ui::row(
-                 {ui::text({.text = ui::format("{0} bookmarks", {ui::count(rows)}), .role = std::string{"muted"}})
-                      .testId("count")
-                      .sizing(stretch()),
-                  ui::button({.label = "Archive selected", .onClick = {bulk("Archive")}}).testId("archiveSelected"),
-                  ui::button({.label = "Unarchive selected", .onClick = {bulk("Unarchive")}})
-                      .testId("unarchiveSelected")},
-                 {.gap = 3}),
-             ui::text({.text = ui::coalesce({bookmarks.error(), tags.error(), archive.error(), remove.error()}),
-                       .role = std::string{"error"}})
-                 .testId("error"),
-             ui::drawer(create,
-                        {ui::form<CreateBookmark>(marks, {.onSuccess = {ui::close(create)}})
-                             .id(ui::element("createForm"))
-                             .testId("createForm")},
-                        {.title = "New bookmark", .side = std::string{"end"}})
-                 .a11y("New bookmark"),
-             ui::drawer(
-                 edit,
-                 {ui::form<EditBookmark>(marks,
-                                         {.prefill = detail.value(), .key = editing, .onSuccess = {ui::close(edit)}})
-                      .id(ui::element("editForm"))
-                      .testId("editForm"),
-                  ui::text({.text = "Every field is saved as shown: a field left empty is cleared.",
-                            .role = std::string{"muted"}}),
-                  ui::button(
-                      {.label = "Delete", .emphasis = morph::ui::ButtonEmphasis::Danger, .onClick = {ui::run(remove)}})
-                      .testId("deleteBookmark")},
-                 {.title = "Edit bookmark", .side = std::string{"end"}})
-                 .a11y("Edit bookmark")},
-            {.gap = 4});
+                   {ui::row(
+                        {ui::textInput({.label = "Search bookmarks", .placeholder = "Search titles, URLs and notes"})
+                             .id(search)
+                             .testId("search")
+                             .sizing(ui::stretch())
+                             .maxWidth(60),
+                         ui::select({.options = knownTags,
+                                     .selected = tag,
+                                     .label = "Tag",
+                                     .onChoose = {ui::set(tag, ui::event())}})
+                             .id(tagFilter)
+                             .testId("tagFilter")
+                             .sizing(ui::fixed(20)),
+                         ui::button({.label = "All tags", .onClick = {ui::set(tag, std::string{})}})
+                             .testId("allTags")
+                             .visible(ui::ne(tag, std::string{})),
+                         ui::checkbox({.label = "Show archived"}).id(showArchived).testId("showArchived"),
+                         ui::button({.label = "New bookmark",
+                                     .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                     .onClick = {ui::open(create)}})
+                             .testId("newBookmark")},
+                        {.gap = 3, .align = morph::ui::Align::Center}),
+                    ui::panel(
+                        {ui::table(
+                             rows,
+                             {.key = ui::row("id"),
+                              .columns = {{.name = "title",
+                                           .label = "Title",
+                                           .cell = {ui::column(
+                                               {ui::text({.text = ui::coalesce({ui::row("title"), ui::row("url")})}),
+                                                ui::text({.text = ui::row("url"), .role = std::string{"muted"}})})}},
+                                          {.name = "tags", .label = "Tags", .cell = {tagBadges(ui::row("tags"))}},
+                                          {.name = "visibility",
+                                           .label = "Visibility",
+                                           .cell = {ui::badge(
+                                               ui::row("visibility"),
+                                               ui::cond(ui::eq(ui::row("visibility"), "Shared"),
+                                                        ui::Handle<std::string>{std::string{"ok"}},
+                                                        ui::Handle<std::string>{std::string{"neutral"}}))}}},
+                              .selection = ui::Selection::Multiple,
+                              .onActivate = {ui::set(editing, ui::row("id")), ui::open(edit)},
+                              .empty = {ui::emptyState({.title = "No bookmarks yet",
+                                                        .text = "Save a link with New bookmark.",
+                                                        .icon = {},
+                                                        .action = ui::ActionPart{.label = "New bookmark",
+                                                                                 .onClick = {ui::open(create)}}})
+                                            .testId("noBookmarks")}})
+                             .id(list)
+                             .a11y("Bookmarks")
+                             .testId("bookmarks")},
+                        {.padding = 0}),
+                    ui::row({ui::text({.text = ui::format("{0} bookmarks", {ui::count(rows)}),
+                                       .role = std::string{"muted"}})
+                                 .testId("count"),
+                             ui::row({ui::button({.label = "Archive selected", .onClick = {bulk("Archive")}})
+                                          .testId("archiveSelected"),
+                                      ui::button({.label = "Unarchive selected", .onClick = {bulk("Unarchive")}})
+                                          .testId("unarchiveSelected")},
+                                     {.gap = 3})},
+                            {.gap = 3, .align = morph::ui::Align::Center, .justify = morph::ui::Justify::Between}),
+                    ui::text({.text = ui::coalesce({bookmarks.error(), tags.error(), archive.error(), remove.error()}),
+                              .role = std::string{"error"}})
+                        .testId("error"),
+                    ui::drawer(create,
+                               {ui::form<CreateBookmark>(marks, {.onSuccess = {ui::close(create)}})
+                                    .id(ui::element("createForm"))
+                                    .testId("createForm")},
+                               {.title = "New bookmark", .side = std::string{"end"}})
+                        .a11y("New bookmark"),
+                    ui::drawer(edit,
+                               {ui::form<EditBookmark>(
+                                    marks, {.prefill = detail.value(), .key = editing, .onSuccess = {ui::close(edit)}})
+                                    .id(ui::element("editForm"))
+                                    .testId("editForm"),
+                                ui::text({.text = "Every field is saved as shown: a field left empty is cleared.",
+                                          .role = std::string{"muted"}}),
+                                ui::button({.label = "Delete",
+                                            .emphasis = morph::ui::ButtonEmphasis::Danger,
+                                            .onClick = {ui::run(remove)}})
+                                    .testId("deleteBookmark")},
+                               {.title = "Edit bookmark", .side = std::string{"end"}})
+                        .a11y("Edit bookmark")},
+                   {.gap = 4})
+            .testId("bookmarksPage");
     });
 }
 
@@ -213,7 +223,7 @@ ui::Screen tagsScreen() {
                       .a11y("Tags")
                       .testId("tags")},
                  {.padding = 0})
-                 .sizing(stretch()),
+                 .sizing(ui::stretch()),
              ui::column(
                  {ui::panel({ui::text({.text = "Every bookmark with the tag gets the new name.",
                                        .role = std::string{"muted"}}),
@@ -234,7 +244,7 @@ ui::Screen tagsScreen() {
                            .testId("mergeForm")},
                       {.title = "Merge the selected tag", .padding = 5})},
                  {.gap = 5})
-                 .sizing(fixed(kCardWidth))},
+                 .sizing(ui::fixed(kCardWidth))},
             {.gap = 5});
     });
 }
@@ -285,7 +295,7 @@ ui::Screen importScreen() {
                             .visible(ui::engaged(imported))
                             .testId("importResult")},
                        {.title = "Import a bookmarks file", .padding = 5})
-                 .sizing(stretch()),
+                 .sizing(ui::stretch()),
              ui::panel(
                  {ui::text({.text = "Every bookmark you own, archived ones included, as a Netscape bookmarks "
                                     "file any browser can import.",
@@ -295,7 +305,7 @@ ui::Screen importScreen() {
                       .visible(ui::engaged(file))
                       .testId("exported")},
                  {.title = "Export", .padding = 5})
-                 .sizing(fixed(kCardWidth))},
+                 .sizing(ui::fixed(kCardWidth))},
             {.gap = 5});
     });
 }

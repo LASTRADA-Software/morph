@@ -35,6 +35,14 @@ application host.
 (exactly one), `--db`, `--user`, `--screen`, `--exit-after-mount` and `--dev`. A value option is `--name value` or
 `--name=value`, the last one given wins, and nothing after `--` is read. A refusal leaves the arguments as they were.
 
+The examples' client takes one more option before `readArgs` sees the rest: `--grab FILE.png` sizes the Qt Quick
+window 1280×900 (from `FrontendConfig::onEngine`), and once the first screen mounted lets the window lay out and draw
+for a second, saves `QQuickWindow::grabWindow()` to the file and quits as `--exit-after-mount` does, with 1 when the
+image is empty, cannot be written, or the frontend is not Qt Quick. A grab in the mount's own turn or the next shows
+the items where they were made, before the scene is polished. `scripts/shoot_screens.sh OUT_DIR [CLIENT]` grabs the
+sign-ins of bank, lims and bookmarks, `bank.move` and `bookmarks.main` on the offscreen platform, each over a fresh
+database.
+
 ## Sources
 
 `client::Source` is a `ui::AppSource` that also hands the shell what it mounts with once it delivered a bundle: the

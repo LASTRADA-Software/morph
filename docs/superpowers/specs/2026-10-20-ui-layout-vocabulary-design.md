@@ -387,13 +387,17 @@ Minimal changes, test ids kept, so the rungs' unit and GUI tests stay green.
 - **Re-shooting.** The repository has no screenshot path today (no `grabWindow` or `screenshot` in `src`,
   `examples`, `tests` or `scripts`; the offscreen runs are smoke tests). `examples/client` gains `--grab <file.png>`:
   it takes the window from `FrontendConfig::onEngine` and sets 1280×900; its `onMounted` posts one task to the
-  executor, and that task, one turn later (after the mount's own posted work), saves `QQuickWindow::grabWindow()`
-  and quits as `--exit-after-mount` does. `scripts/shoot_screens.sh <dir>` runs it with `QT_QPA_PLATFORM=offscreen`
+  executor, and that task starts a one-second timer on the window, after which it saves `QQuickWindow::grabWindow()`
+  and quits as `--exit-after-mount` does. Measured: a grab one turn after the mount draws the items unplaced, where
+  they were made, because the scene had not been polished yet; after the timer it draws the laid-out screen. `scripts/shoot_screens.sh <dir>` runs it with `QT_QPA_PLATFORM=offscreen`
   (the frontend already picks the Software scene graph there, `frontend.cpp:144-148`) for the five screens (`--app bank`, `--app lims`, `--app bookmarks` on their sign-in; `--app bank --user alice --screen
   bank.move`; `--app bookmarks --user alice --screen bookmarks.main`). The sign-in cards are sized
   `{"lit": {"width": {"stretch": 1}}}` with `maxWidth: 44` and the roots `{"lit": {"width": {"stretch": 1}, "height":
-  {"stretch": 1}}}`, through §7.3's helpers. The exact arguments are confirmed when the
-  commit is made; that `grabWindow` returns a drawn image there is inferred, not yet run. The images go in the PR description, not the repository.
+  {"stretch": 1}}}`, through §7.3's helpers; the other bookmarks screens' computed `obj` sizings become the same
+  literal helpers. The script is `scripts/shoot_screens.sh OUT_DIR [CLIENT]`, each shot over a fresh `--db` in a
+  scratch directory. Measured: `grabWindow` on the offscreen platform returns a drawn image. Lims's card has a
+  *Morph LIMS* heading, as the others have their application's name, and bookmarks.main's root gains the test id
+  `bookmarksPage`, which its empty-state test looks from. The images go in the PR description, not the repository.
 
 ## 13. Tests
 
