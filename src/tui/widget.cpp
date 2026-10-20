@@ -589,6 +589,11 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
     if (hints.height.kind == ui::Sizing::Kind::Fixed) {
         size.height = std::max(0, hints.height.amount);
     }
+    auto const clamp = [](int extent, layout::Bounds bounds) {
+        return std::clamp(extent, bounds.minimum, std::max(bounds.minimum, bounds.maximum));
+    };
+    size.width = clamp(size.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+    size.height = clamp(size.height, layout::boundsOf(hints.minHeight, hints.maxHeight));
     return size;
 }
 
@@ -624,19 +629,22 @@ struct Placement {
 /// @p size along the main axis.
 int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.height : size.width; }
 
-/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing decides.
+/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing and bounds decide.
 ::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent) {
     auto const& area = placement.area;
+    ui::LayoutHints const& hints = child.layout();
     if (placement.vertical) {
-        return {.x = area.x,
-                .y = area.y + offset,
-                .width = layout::crossExtent(child.layout().width, area.width),
-                .height = extent};
+        return {
+            .x = area.x,
+            .y = area.y + offset,
+            .width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth)),
+            .height = extent};
     }
-    return {.x = area.x + offset,
-            .y = area.y,
-            .width = extent,
-            .height = layout::crossExtent(child.layout().height, area.height)};
+    return {
+        .x = area.x + offset,
+        .y = area.y,
+        .width = extent,
+        .height = layout::crossExtent(hints.height, area.height, layout::boundsOf(hints.minHeight, hints.maxHeight))};
 }
 
 /// The solver's mode: the shown children share the area; the hidden ones get none of it.
@@ -658,8 +666,13 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
         }
         placed.push_back(child);
         slots.push_back(&area);
-        items.push_back(
-            layout::Item{.sizing = sizing, .natural = mainExtent(child->naturalSize(), placement.vertical)});
+        ui::LayoutHints const& hints = child->layout();
+        layout::Bounds const bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
+                                                         : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        items.push_back(layout::Item{.sizing = sizing,
+                                     .natural = mainExtent(child->naturalSize(), placement.vertical),
+                                     .minimum = bounds.minimum,
+                                     .maximum = bounds.maximum});
     }
     auto const length = placement.vertical ? placement.area.height : placement.area.width;
     auto const extents = layout::distribute(items, layout::Track{.length = length, .gap = spec.gap});

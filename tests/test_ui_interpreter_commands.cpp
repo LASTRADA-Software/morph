@@ -799,3 +799,25 @@ TEST_CASE("table: its empty content shows while the rows are an empty list, the 
     h.settle();
     CHECK(h.backend.focused() == table);
 }
+
+// Mutation: lower `sizing` to the width alone (the record's height is lost); or drop the bounds in commonOf.
+TEST_CASE(
+    "sizing: a record sizes both dimensions, the bounds reach the widget, and a computed sizing of no known "
+    "form is reported once",
+    "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sized", "state": { "w": { "init": "wide" } },
+      "view": { "kind": "column", "testId": "root",
+                "sizing": { "lit": { "width": { "stretch": 1 }, "height": { "stretch": 1 } } },
+                "children": [
+        { "kind": "text", "testId": "tall", "text": "x", "sizing": { "lit": { "height": { "stretch": 2 } } },
+          "maxWidth": 44, "minHeight": 1 },
+        { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [
+          { "kind": "text", "testId": "odd", "text": "y", "sizing": { "ref": "w" } } ] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "layout") == "stretch(1)/stretch(1)");
+    CHECK(h.backend.prop(h.byTestId("Text", "tall"), "layout") == "content max=44/stretch(2) min=1");
+    CHECK(h.backend.prop(h.byTestId("Text", "odd"), "layout").empty());  // content, so no setLayout call
+    REQUIRE(h.diagnostics.size() == 1);  // once for the path, though two rows lowered it
+    CHECK(h.diagnostics.front().reason.starts_with(R"(sizing is "wide"; a sizing is)"));
+}

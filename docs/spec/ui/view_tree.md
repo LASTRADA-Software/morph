@@ -45,7 +45,7 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 |---|---|---|---|
 | `visible` | `Prop<bool>` | `true` | Shown |
 | `enabled` | `Prop<bool>` | `true` | Accepts input |
-| `layout` | `LayoutHints{width, height}` | content × content | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI) |
+| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight}` | content × content, unbounded | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum and a fixed amount outside its bounds |
 | `dragKey` | `Prop<std::optional<Key>>` | `nullopt` | Engaged: the widget can be dragged, and a drop delivers this key |
 | `accepts` | `std::function<bool(Key const&)>` | empty | Which keys a drop target takes; empty takes every key. Used only when `onDrop` is set |
 | `onDrop` | `std::function<void(Key)>` | empty | Set: the widget is a drop target, called with the dropped key |
@@ -139,7 +139,7 @@ Every node but `Custom` also carries `Common`:
 | Field | Meaning |
 |---|---|
 | `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
-| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch), set once |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, and the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`), set once |
 | `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
 | `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
 | `testId` | The stable identifier an automated test finds the widget by, set once |
@@ -239,7 +239,7 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    TextInput's mode, a Select's style, a stack's, scroll area's or splitter's axis, a DateTimeInput's
    mode and zone, a FilePicker's mode, a Drawer's side), and adopted into the scope **first**.
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
-   it is not content × content; `dragKey` only when bound or engaged; the drop handler only when
+   it is not content × content and unbounded; `dragKey` only when bound or engaged; the drop handler only when
    `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
    `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
    the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding

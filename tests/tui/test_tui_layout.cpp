@@ -76,6 +76,43 @@ TEST_CASE("tui::layout::distribute", "[tui][layout]") {
     CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
 }
 
+// Mutation: drop the bounds in distribute (the capped item takes its whole share, the minimum shrinks away).
+TEST_CASE("tui::layout::distribute within bounds", "[tui][layout]") {
+    auto const testCase = GENERATE(values<DistributeCase>({
+        {"a capped share's remainder goes to the stretch item not capped",
+         {{Sizing::stretch(1), 0, 0, 20}, {Sizing::stretch(1), 0}},
+         {.length = 60, .gap = 0},
+         {20, 40}},
+        {"every stretch item capped leaves the rest unused",
+         {{Sizing::stretch(1), 0, 0, 5}, {Sizing::stretch(1), 0, 0, 7}},
+         {.length = 60, .gap = 0},
+         {5, 7}},
+        {"a cap that a second pass reaches",
+         {{Sizing::stretch(1), 0, 0, 10}, {Sizing::stretch(1), 0, 0, 25}, {Sizing::stretch(1), 0}},
+         {.length = 60, .gap = 0},
+         {10, 25, 25}},
+        {"a content item takes at least its minimum", {{Sizing::content(), 2, 30}}, {.length = 60, .gap = 0}, {30}},
+        {"a content item takes at most its maximum", {{Sizing::content(), 50, 0, 8}}, {.length = 60, .gap = 0}, {8}},
+        {"a stretch share below its minimum is raised to it",
+         {{Sizing::stretch(1), 0, 8}, {Sizing::stretch(3), 0}},
+         {.length = 12, .gap = 0},
+         {8, 4}},
+        {"an overflow stops at each item's minimum, and the stack overflows",
+         {{Sizing::fixed(6), 0, 6}, {Sizing::content(), 6, 5}},
+         {.length = 8, .gap = 0},
+         {6, 5}},
+    }));
+    INFO(testCase.name);
+    CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
+}
+
+TEST_CASE("tui::layout::crossExtent within bounds", "[tui][layout]") {
+    CHECK(layout::crossExtent(Sizing::stretch(), 60, {.minimum = 0, .maximum = 44}) == 44);
+    CHECK(layout::crossExtent(Sizing::content(), 60, {.minimum = 0, .maximum = 44}) == 44);
+    CHECK(layout::crossExtent(Sizing::fixed(4), 60, {.minimum = 10, .maximum = 20}) == 10);
+    CHECK(layout::crossExtent(Sizing::stretch(), 30, {.minimum = 40, .maximum = 50}) == 30);  // then the space
+}
+
 TEST_CASE("tui::layout::crossExtent", "[tui][layout]") {
     CHECK(layout::crossExtent(Sizing::fixed(4), 10) == 4);
     CHECK(layout::crossExtent(Sizing::fixed(12), 10) == 10);

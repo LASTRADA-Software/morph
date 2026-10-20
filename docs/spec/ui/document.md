@@ -150,8 +150,11 @@ keys — `props` (expressions), `events` (command lists, a custom node's events 
 place a kind is described.
 
 **Every node** takes `id`, `visible`, `enabled` (conditions), `tooltip`, `sizing`, `span`,
-`autofocus`, `testId`, `surface` (strings), `a11y` (`{name, role}`), `drag` (`{payload}`), `drop`
-(`{accepts, onDrop}`) and `keys`. **Text and the inputs** also take `readonly`, `required`, `stale`
+`minWidth`, `maxWidth`, `minHeight`, `maxHeight` (literal integers of 0 or more, in backend units: the node's extent
+on that axis is clamped into them, whatever its sizing), `autofocus`, `testId`, `surface` (strings), `a11y`
+(`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
+`"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
+left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. **Text and the inputs** also take `readonly`, `required`, `stale`
 (conditions) and `errors`.
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
@@ -229,7 +232,12 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`) take one of their values; chords are
   modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`, once each) and a key name, and are not the workspace
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
-  `true` or `false`, and `showLabel` needs a `label` to show. An `actionButton` has an `id` and a `label`, and its
+  `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
+  minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
+  frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
+  one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
+  bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
+  evaluates to none of the forms is reported once and lowers to content. An `actionButton` has an `id` and a `label`, and its
   id is used once in its list (a screen's `actions`, a dialog's or drawer's); `subtitle`, `status` and `actions` are
   refused on the app document.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's

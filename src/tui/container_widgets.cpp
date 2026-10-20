@@ -93,8 +93,11 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
     std::vector<layout::GridCell> cells;
     cells.reserve(shown.size());
     for (auto const* child : shown) {
-        cells.push_back(layout::GridCell{
-            .span = spanOf(child), .naturalHeight = child->naturalSize().height, .height = child->layout().height});
+        cells.push_back(
+            layout::GridCell{.span = spanOf(child),
+                             .naturalHeight = child->naturalSize().height,
+                             .height = child->layout().height,
+                             .bounds = layout::boundsOf(child->layout().minHeight, child->layout().maxHeight)});
     }
     return cells;
 }
@@ -132,8 +135,10 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
             continue;
         }
         auto area = layout::slotArea(plan, *slot);
-        area.width = layout::crossExtent(child->layout().width, area.width);
-        area.height = layout::crossExtent(child->layout().height, area.height);
+        ui::LayoutHints const& hints = child->layout();
+        area.width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+        area.height =
+            layout::crossExtent(hints.height, area.height, layout::boundsOf(hints.minHeight, hints.maxHeight));
         areas.push_back(area);
         ++slot;
     }

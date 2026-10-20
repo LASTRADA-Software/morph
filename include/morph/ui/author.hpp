@@ -510,6 +510,23 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     return json;
 }
 
+/// @brief The value of a constant expression, as `constant` writes one.
+/// @param expression The expression's JSON.
+/// @return A scalar as itself, the inside of `{"lit": v}`; `nullopt` for an expression that is not a constant.
+[[nodiscard]] inline std::optional<Json> literalOf(Json const& expression) {
+    if (auto const* const object = std::get_if<Json::object_t>(&expression.data)) {
+        auto const found = object->find("lit");
+        if (object->size() == 1 && found != object->end()) {
+            return found->second;
+        }
+        return std::nullopt;
+    }
+    if (std::holds_alternative<Json::array_t>(expression.data)) {
+        return std::nullopt;
+    }
+    return expression;
+}
+
 /// @brief A call of an `expr/1` library function.
 /// @param function The function's name.
 /// @param args     The argument expressions.
@@ -1061,6 +1078,24 @@ template <typename T>
         detail::put(record, name, value.json());
     }
     return AnyHandle::raw(detail::single("obj", std::move(record)));
+}
+
+/// @brief The content sizing, `"content"`: as much as the content needs.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle content() { return AnyHandle{std::string{"content"}}; }
+
+/// @brief A fixed sizing, `{"lit": {"fixed": units}}`.
+/// @param units The size in backend units, 0 or more.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle fixed(int units) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{{"fixed", Value{std::int64_t{units}}}}}));
+}
+
+/// @brief A stretch sizing, `{"lit": {"stretch": weight}}`: a share of the leftover space.
+/// @param weight The share's weight, 1 or more.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle stretch(int weight = 1) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{{"stretch", Value{std::int64_t{weight}}}}}));
 }
 
 /// @brief `{"list": [...]}`: a list built from expressions.
@@ -1778,10 +1813,59 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node tooltip(AnyHandle const& text) const { return with("tooltip", text); }
 
-    /// @brief The sizing: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+    /// @brief The width's sizing: `"content"`, `{"fixed": n}` or `{"stretch": w}`, such as `content()`, `fixed(n)`
+    ///        or `stretch()` give.
     /// @param sizing The sizing.
     /// @return The node with it.
     [[nodiscard]] Node sizing(AnyHandle const& sizing) const { return with("sizing", sizing); }
+
+    /// @brief The sizing of both dimensions, as a `{width, height}` record; an absent one is content. Literal
+    ///        sizings (`content()`, `fixed(n)`, `stretch(w)`) make a literal record, which the loader checks; another
+    ///        is evaluated at mount.
+    /// @param width  The width's sizing.
+    /// @param height The height's sizing.
+    /// @return The node with it.
+    [[nodiscard]] Node sizing(AnyHandle const& width, AnyHandle const& height) const {
+        std::optional<Json> const literalWidth = width.present() ? detail::literalOf(width.json()) : Json{};
+        std::optional<Json> const literalHeight = height.present() ? detail::literalOf(height.json()) : Json{};
+        Json record = Json::object_t{};
+        if (literalWidth && literalHeight) {
+            if (width.present()) {
+                detail::put(record, "width", *literalWidth);
+            }
+            if (height.present()) {
+                detail::put(record, "height", *literalHeight);
+            }
+            return with("sizing", AnyHandle::raw(detail::single("lit", std::move(record))));
+        }
+        if (width.present()) {
+            detail::put(record, "width", width.json());
+        }
+        if (height.present()) {
+            detail::put(record, "height", height.json());
+        }
+        return with("sizing", AnyHandle::raw(detail::single("obj", std::move(record))));
+    }
+
+    /// @brief The least width, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node minWidth(int units) const { return with("minWidth", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The most width, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node maxWidth(int units) const { return with("maxWidth", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The least height, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node minHeight(int units) const { return with("minHeight", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The most height, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node maxHeight(int units) const { return with("maxHeight", AnyHandle{std::int64_t{units}}); }
 
     /// @brief The grid columns the node spans.
     /// @param columns The span.

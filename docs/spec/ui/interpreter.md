@@ -274,7 +274,9 @@ its target does not resolve, and when the host does not support it.
 Each node kind lowers to its `view.hpp` kind; every bound property is a numbered slot
 (`ui::slot`), a literal a constant. Properties the view tree sets once (`gap`, a grid's `columns`, a
 slider's range, a table's columns, `sizing`, `autofocus`) are evaluated once, untracked. `sizing`
-applies to the width.
+sizes the width, or both dimensions from a `{width, height}` record (one left out is content); a computed
+sizing that evaluates to none of its forms is reported once for its path and lowers to content. The size bounds,
+literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`, `minHeight` and `maxHeight`.
 
 - **Scoped content.** A dialog's, drawer's or switch case's content is lowered behind a one-row
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts

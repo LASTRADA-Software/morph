@@ -118,14 +118,20 @@ refuse the drop whole.
 
 ## Layout
 
-A cell-based solver. A stack gives Fixed children their amount, Content children their natural extent, and shares
-what is left among Stretch children by weight; an overflow is taken from the last child first. A grid places cells
+A cell-based solver. A stack gives Fixed children their amount, Content children their natural extent, each clamped
+into its bounds, and shares what is left among Stretch children by weight (`layout::distribute`). A share stops at
+its child's maximum, and what a capped child leaves goes to the Stretch children not capped, at most one pass per
+Stretch child; a share below its minimum is raised to it. An overflow is taken from the last child first, down to
+each child's minimum, and then the stack overflows and clips. A grid places cells
 row-major in equal columns. Several roots share the screen as a column, in the order they were made: each takes the
 height it asks for, and the last shown one what is left; a single root takes the whole screen.
 
-Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, at most
-the space there is (`layout::crossExtent`): in a column every content child is as wide as the column, in a row as tall
-as the row. A grid cell, and the one child of a panel, slot or scroll area, fills its width the same way.
+Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, clamped
+into its bounds and then into the space there is (`layout::crossExtent`): in a column every content child is as wide
+as the column, in a row as tall as the row, and one its maximum stops sits at the start. A grid cell, and the one child
+of a panel, slot or scroll area, fills its width the same way, and a grid row is as tall as its tallest cell's
+requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
+is its natural size clamped into its bounds.
 
 **Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
 cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many

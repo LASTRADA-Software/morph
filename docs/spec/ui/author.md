@@ -148,8 +148,11 @@ options second. `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its 
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
 `id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface`,
-`a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, and the
-input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)` and
+`a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
+`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
+`sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
+`content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
+`{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
 - **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,

@@ -134,6 +134,17 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
     write("widthAmount", hints.width.amount);
     write("heightKind", static_cast<int>(hints.height.kind));
     write("heightAmount", hints.height.amount);
+    // A bound given must reach the item, and one it cannot take is reported; an unbounded one is offered, so a
+    // component that declares no bounds is not reported for a node that has none.
+    for (auto const& [name, bound] :
+         {std::pair{"minWidthUnits", hints.minWidth}, std::pair{"maxWidthUnits", hints.maxWidth},
+          std::pair{"minHeightUnits", hints.minHeight}, std::pair{"maxHeightUnits", hints.maxHeight}}) {
+        if (bound) {
+            write(name, *bound);
+        } else {
+            offer(name, -1);
+        }
+    }
 }
 
 void ItemBase::showDragKey(std::optional<ui::Key> const& key) const {

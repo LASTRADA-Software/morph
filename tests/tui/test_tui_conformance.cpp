@@ -253,6 +253,16 @@ public:
         settle();
     }
 
+    // In cells, where the widget was last drawn on the screen.
+    std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
+        settle();
+        auto const bounds = WidgetBase::of(widget).view().screenBounds();
+        return ui::testing::WidgetBounds{.x = static_cast<double>(bounds.x),
+                                         .y = static_cast<double>(bounds.y),
+                                         .width = static_cast<double>(bounds.width),
+                                         .height = static_cast<double>(bounds.height)};
+    }
+
 private:
     static WidgetBase const& containerBase(ui::ContainerWidget const& container) {
         return WidgetBase::of(static_cast<ui::Widget const&>(container));
@@ -336,6 +346,15 @@ std::set<std::string_view> failingCases(Fault fault) {
 // Mutation: report every case as passed from the probe's own run (the fault cases below then fail).
 TEST_CASE("tui conformance: the terminal backend passes every case", "[tui][conformance]") {
     for (auto const& testCase : ui::testing::conformanceCases()) {
+        TuiProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
+        CHECK_FALSE(failure.has_value());
+    }
+}
+
+TEST_CASE("tui conformance: the terminal backend passes every layout case", "[tui][conformance]") {
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
         TuiProbe probe;
         std::optional<std::string> const failure = testCase.run(probe);
         INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));

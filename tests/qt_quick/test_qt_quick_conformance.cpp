@@ -5,6 +5,7 @@
 // presses, moves and releases sent to the window at a widget's place, and keys sent to the item with focus. A menu
 // entry and a file drop go through the component's own entry point, which the menu's items and the drop area call.
 
+#include <QPointF>
 #include <QQuickItem>
 #include <QTest>
 #include <catch2/catch_test_macros.hpp>
@@ -217,6 +218,24 @@ public:
         settle();
     }
 
+    // In units: pixels over the theme's unit width and height.
+    std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
+        settle();
+        QQuickItem const* const item = base(widget).item();
+        auto* const theme =
+            _scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+        if (item == nullptr || theme == nullptr) {
+            return std::nullopt;
+        }
+        qreal const unitWidth = theme->property("unitWidth").toReal();
+        qreal const unitHeight = theme->property("unitHeight").toReal();
+        QPointF const corner = item->mapToScene(QPointF{0, 0});
+        return ui::testing::WidgetBounds{.x = corner.x() / unitWidth,
+                                         .y = corner.y() / unitHeight,
+                                         .width = item->width() / unitWidth,
+                                         .height = item->height() / unitHeight};
+    }
+
 private:
     using Backend = morph::qt_quick::Backend;
 
@@ -259,6 +278,15 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("qt_quick conformance: the Qt Quick backend passes every case", "[qt_quick][conformance]") {
     for (auto const& testCase : ui::testing::conformanceCases()) {
+        QtProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
+        CHECK_FALSE(failure.has_value());
+    }
+}
+
+TEST_CASE("qt_quick conformance: the Qt Quick backend passes every layout case", "[qt_quick][conformance]") {
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
         QtProbe probe;
         std::optional<std::string> const failure = testCase.run(probe);
         INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));

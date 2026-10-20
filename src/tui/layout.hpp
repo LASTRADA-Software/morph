@@ -2,7 +2,9 @@
 
 #pragma once
 #include <core/tui/Rect.hpp>
+#include <limits>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -20,9 +22,21 @@ namespace morph::tui::layout {
 
 /// One child along a stack's main axis.
 struct Item {
-    ui::Sizing sizing{};  ///< How the child asks for space.
-    int natural = 0;      ///< Its content extent along the axis.
+    ui::Sizing sizing{};                            ///< How the child asks for space.
+    int natural = 0;                                ///< Its content extent along the axis.
+    int minimum = 0;                                ///< The least extent it takes.
+    int maximum = std::numeric_limits<int>::max();  ///< The most extent it takes.
 };
+
+/// The bounds of one dimension: what an `Item` and `crossExtent` clamp into. A maximum below the minimum counts as
+/// the minimum.
+struct Bounds {
+    int minimum = 0;                                ///< The least extent.
+    int maximum = std::numeric_limits<int>::max();  ///< The most extent.
+};
+
+/// A dimension's bounds from a widget's layout hints; none set is unbounded.
+[[nodiscard]] Bounds boundsOf(std::optional<int> minimum, std::optional<int> maximum) noexcept;
 
 /// The space along one axis and the gap between two neighbours on it.
 struct Track {
@@ -31,19 +45,24 @@ struct Track {
 };
 
 /// Extents along a stack's main axis, in item order. Fixed items get their amount and Content items their natural
-/// extent; Stretch items share what is left by weight (a weight below one counts as one), the cells a division
-/// leaves over going one each to the first Stretch items; an overflow is taken from the last item first, down to
-/// zero. Gaps are never shrunk, so items whose gaps alone overflow the track all get zero.
+/// extent, each clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as
+/// one), the cells a division leaves over going one each to the first Stretch items. A share stops at its item's
+/// maximum and what it leaves goes to the Stretch items not capped, at most one pass per Stretch item; a share
+/// below its item's minimum is raised to it. An overflow is taken from the last item first, down to each item's
+/// minimum, and then the stack overflows. Gaps are never shrunk, so items whose gaps alone overflow the track keep
+/// only their minimums.
 [[nodiscard]] std::vector<int> distribute(std::span<Item const> items, Track track);
 
-/// A child's extent across a stack: a Fixed child's amount, at most `space`; Content and Stretch fill `space`.
-[[nodiscard]] int crossExtent(ui::Sizing sizing, int space);
+/// A child's extent across a stack: a Fixed child's amount, while Content and Stretch fill `space`; then clamped
+/// into `bounds`, then into `space`.
+[[nodiscard]] int crossExtent(ui::Sizing sizing, int space, Bounds bounds = {});
 
 /// What one grid cell asks for.
 struct GridCell {
     int span = 1;           ///< Columns it covers; clamped to [1, columns].
     int naturalHeight = 1;  ///< Its content height.
     ui::Sizing height{};    ///< Fixed overrides the natural height; Content and Stretch use it.
+    Bounds bounds{};        ///< The height's bounds, which the requested height is clamped into.
 };
 
 /// Where one cell lands.

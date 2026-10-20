@@ -155,9 +155,21 @@ template <typename Special>
 
 /// @brief Formats a size request.
 /// @param hints The request.
-/// @return `width/height`, each as `formatSizing` gives it.
+/// @return `width/height`, each as `formatSizing` gives it and followed by ` min=<n>` and ` max=<n>` for the bounds
+///         it has, such as `stretch(1) max=44/content`.
 [[nodiscard]] inline std::string formatLayout(LayoutHints const& hints) {
-    return formatSizing(hints.width) + "/" + formatSizing(hints.height);
+    auto const bounds = [](std::optional<int> minimum, std::optional<int> maximum) {
+        std::string text;
+        if (minimum) {
+            text += " min=" + std::to_string(*minimum);
+        }
+        if (maximum) {
+            text += " max=" + std::to_string(*maximum);
+        }
+        return text;
+    };
+    return formatSizing(hints.width) + bounds(hints.minWidth, hints.maxWidth) + "/" + formatSizing(hints.height) +
+           bounds(hints.minHeight, hints.maxHeight);
 }
 
 /// @brief Formats a date-time value.

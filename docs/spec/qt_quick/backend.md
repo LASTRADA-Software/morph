@@ -225,7 +225,12 @@ it; a widget out of reach takes none.
 ## Layout and theme
 
 A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size, `fixed(n)` to a preferred size of
-`n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the body font's average character width
+`n` units, `stretch(w)` to fill with stretch factor `w`. The bounds map to `Layout.minimumWidth`, `maximumWidth`,
+`minimumHeight` and `maximumHeight` of `n` units (`MorphWidget`'s `minWidthUnits`, `maxWidthUnits`,
+`minHeightUnits`, `maxHeightUnits`; −1 for none, which resets the layout's default): `QtQuick.Layouts` shares the
+length a capped item leaves among the others, and places a fill item its maximum stops at the start. `showLayout`
+writes a bound given and offers an absent one, so a component that declares no bounds is reported only for a node
+that has one. A unit is the body font's average character width
 horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`): the platform font's, or the
 theme's `font.family` at the body size once a theme names one ([`../ui/theme.md`](../ui/theme.md), "On Qt Quick").
 

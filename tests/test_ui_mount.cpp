@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -140,6 +141,33 @@ TEST_CASE("ui::Mounted: a button's emphasis reaches the backend only when it is 
           "  Button#2 label=Plain\n"
           "  Button#3 emphasis=Primary label=Go\n"
           "  Button#4 emphasis=Danger label=Drop\n");
+}
+
+// Mutation: skip checkLayout (every node below mounts).
+TEST_CASE("ui::Mounted: bounds reach the backend, and the loader's bound rules hold for a C++ tree", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const sized = [](ui::LayoutHints layout) {
+        ui::Text text{.text = "x"};
+        text.common.layout = layout;
+        text.common.testId = "sized";
+        return ui::text(std::move(text));
+    };
+    {
+        ui::Mounted const view{runtime, backend,
+                               sized({.width = ui::Sizing::stretch(), .maxWidth = 44, .minHeight = 1})};
+        CHECK(backend.prop(backend.find("Text", "testId", "sized").value(), "layout") ==
+              "stretch(1) max=44/content min=1");
+    }
+    for (ui::LayoutHints const& refused :
+         {ui::LayoutHints{.minWidth = -1}, ui::LayoutHints{.maxHeight = -2},
+          ui::LayoutHints{.minWidth = 50, .maxWidth = 40}, ui::LayoutHints{.minHeight = 5, .maxHeight = 4},
+          ui::LayoutHints{.width = ui::Sizing::fixed(50), .maxWidth = 40},
+          ui::LayoutHints{.height = ui::Sizing::fixed(2), .minHeight = 3}}) {
+        CHECK_THROWS_WITH((ui::Mounted{runtime, backend, sized(refused)}),
+                          Catch::Matchers::ContainsSubstring("on the node `sized`"));
+    }
 }
 
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {

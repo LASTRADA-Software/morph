@@ -200,6 +200,7 @@ struct LayoutHints {
   unbounded node still costs no call. It throws `std::logic_error` for a negative bound, a minimum above its maximum
   and a `Fixed` amount outside its bounds, naming the node's test id: the same rules as the loader, for C++ authors.
 - `Sizing` is unchanged, so a table column's width takes no bound it could not honour.
+- `alignSelf` joins `LayoutHints` with §8's commit; this commit adds the four bounds only.
 
 ### 7.3 Backends
 
@@ -210,7 +211,8 @@ struct LayoutHints {
   places it at the start): a card sized stretch with `maxWidth: 44`, centred, is 44 units wide and centred, on both
   backends.
 - **Qt Quick.** `MorphWidget` gains `minWidthUnits`, `maxWidthUnits`, `minHeightUnits`, `maxHeightUnits` (−1: none),
-  written by `showLayout`, and binds `Layout.minimumWidth`/`maximumWidth`/`minimumHeight`/`maximumHeight` to
+  written by `showLayout` when given and offered when absent (so a custom component that declares no bounds is not
+  reported for a node without one), and binds `Layout.minimumWidth`/`maximumWidth`/`minimumHeight`/`maximumHeight` to
   `n * Theme.unitWidth` (`unitHeight`). `QtQuick.Layouts` already shares spare length past a maximum, and places a
   fill item stopped at its maximum by its `Layout.alignment`.
 - **Terminal.** `layout::Item` gains `minimum` and `maximum`; `distribute` clamps every request into them, caps each
@@ -412,9 +414,15 @@ Each test is run once against its named mutation before its commit, and must fai
 - **§7 bounds.** Conformance (both backends, through a new probe read `boundsOf(widget)` in the backend's own
   units): a stretch child with `maxWidth: 20` in a 60-unit row is 20 wide and its stretch sibling takes the rest; a
   content text of natural width under 30 with `minWidth: 30`, in a row (where content does not fill along the axis),
-  is 30 wide; a column child capped below the column's width with `alignSelf:
-  center` has equal space either side (±1 unit); a stretch child with `maxWidth: 44` in a 100-unit column with
-  `align: center` is 44 wide and centred (the sign-in card). Terminal `test_tui_layout.cpp`: `distribute` hands a capped share's
+  is 30 wide; a stretch child with `maxWidth: 44` in a 70-unit column is 44 wide at the start; a stretch child with
+  `maxHeight: 5` in a 20-unit column is 5 tall and its sibling 15. §8's commit adds the centred cases: a column
+  child capped below the column's width with `alignSelf: center` has equal space either side (±1 unit), and the
+  sign-in card centred by the column's `align: center`. As built, these are a second list,
+  `layoutConformanceCases()`, run by the Qt Quick and terminal suites only: `RecordingBackend` lays nothing out, so
+  `boundsOf` defaults to none and a layout case run on a probe without geometry fails (a test checks that it does)
+  rather than passing unmeasured. Each case mounts the measured container inside another, since the terminal's root
+  fills the screen whatever its own sizing, and the column is 70 units, not 100, so it fits the terminal probe's
+  80-column screen. Terminal `test_tui_layout.cpp`: `distribute` hands a capped share's
   remainder to the uncapped child. A document `sizing` record stretches the height: the root fills the page.
   Corpus: `minWidth > maxWidth`, a negative bound, a bound on a `dialog`, `{"lit": {"fixed": 50}}` with
   `maxWidth: 40`, `sizing: "wide"` refused; `sizing: {"lit": {"height": {"stretch": 1}}}` loads. Mount: the same through the view tree throws. *Mutation: drop the bounds in

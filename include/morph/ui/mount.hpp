@@ -430,6 +430,31 @@ private:
         };
     }
 
+    // The loader's rules for bounds, for a view tree built in C++: no negative bound, no minimum above its maximum,
+    // and no fixed amount outside its bounds, which would leave it no room.
+    static void checkLayout(Common const& common) {
+        LayoutHints const& hints = common.layout;
+        auto const refuse = [&common](std::string const& what) {
+            throw std::logic_error{"morph::ui::mount: " + what + " on the node" +
+                                   (common.testId.empty() ? std::string{} : " `" + common.testId + "`")};
+        };
+        auto const check = [&refuse](Sizing sizing, std::optional<int> minimum, std::optional<int> maximum,
+                                     std::string const& axis) {
+            if (minimum.value_or(0) < 0 || maximum.value_or(0) < 0) {
+                refuse("a negative " + axis + " bound");
+            }
+            if (minimum && maximum && *minimum > *maximum) {
+                refuse("a minimum " + axis + " above its maximum");
+            }
+            if (sizing.kind == Sizing::Kind::Fixed &&
+                (sizing.amount < minimum.value_or(sizing.amount) || sizing.amount > maximum.value_or(sizing.amount))) {
+                refuse("a fixed " + axis + " outside its bounds");
+            }
+        };
+        check(hints.width, hints.minWidth, hints.maxWidth, "width");
+        check(hints.height, hints.minHeight, hints.maxHeight, "height");
+    }
+
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         if (common.visible.isBound() || !common.visible.constant()) {
             bind(scope, common.visible, [&widget](bool shown) { widget.setVisible(shown); });
@@ -438,6 +463,7 @@ private:
             bind(scope, common.enabled, [&widget](bool enabled) { widget.setEnabled(enabled); });
         }
         if (common.layout != LayoutHints{}) {
+            checkLayout(common);
             widget.setLayout(common.layout);
         }
         if (common.dragKey.isBound() || common.dragKey.constant().has_value()) {

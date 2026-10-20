@@ -660,12 +660,16 @@ struct KindSpec {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
-inline constexpr std::array<KeySpec, 13> kCommonKeys = {{
+inline constexpr std::array<KeySpec, 17> kCommonKeys = {{
     {"id", Shape::Name},
     {"visible", Shape::Condition},
     {"enabled", Shape::Condition},
     {"tooltip", Shape::Expr},
     {"sizing", Shape::Expr},
+    {"minWidth", Shape::Expr},
+    {"maxWidth", Shape::Expr},
+    {"minHeight", Shape::Expr},
+    {"maxHeight", Shape::Expr},
     {"span", Shape::Expr},
     {"testId", Shape::Text},
     {"surface", Shape::Text},
@@ -2861,6 +2865,7 @@ private:
         }
         if (!part) {
             checkFlags(node);
+            checkLayoutKeys(node);
             checkKindRules(node, outer);
             // An overlay's footer actions; a form's field components.
             checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
@@ -2987,6 +2992,94 @@ private:
                        "the action id `" + button->id + "` is used twice in " + path + "; each action has its own");
             }
             checkChoice(*button, "emphasis", kEmphasis);
+        }
+    }
+
+    // A literal sizing of one dimension: `"content"`, `{"fixed": n}` (n of 0 or more) or `{"stretch": w}` (w of 1 or
+    // more). Answers the fixed amount, if it is one.
+    static std::optional<std::int64_t> sizingDimension(Value const& value, std::string const& path) {
+        static constexpr std::string_view kForms =
+            "`sizing` is `\"content\"`, `{\"fixed\": n}`, `{\"stretch\": w}`, or a record of `width` and `height` "
+            "of them";
+        if (std::string const* const text = value.asString(); text != nullptr && *text == "content") {
+            return std::nullopt;
+        }
+        ValueRecord const* const record = value.asRecord();
+        if (record != nullptr && record->size() == 1) {
+            auto const& [form, amount] = *record->begin();
+            std::int64_t const* const units = amount.asInt();
+            if (form == "fixed" && units != nullptr && *units >= 0) {
+                return *units;
+            }
+            if (form == "stretch" && units != nullptr && *units >= 1) {
+                return std::nullopt;
+            }
+        }
+        refuse(path, std::string{kForms});
+    }
+
+    // A node's size keys: each bound a literal integer of 0 or more, a minimum no more than its maximum, no bound on
+    // an overlay or a custom node; and a literal `sizing` one of the forms the interpreter reads, with a fixed amount
+    // inside its dimension's bounds. A sizing that is not literal is read at mount.
+    static void checkLayoutKeys(DocNode const& node) {
+        static constexpr std::array<std::string_view, 4> kBounds = {"minWidth", "maxWidth", "minHeight", "maxHeight"};
+        std::array<std::optional<std::int64_t>, 4> bounds{};
+        for (std::size_t index = 0; index < kBounds.size(); ++index) {
+            std::string_view const key = kBounds.at(index);
+            ExprPtr const bound = node.prop(key);
+            if (bound == nullptr) {
+                continue;
+            }
+            if (node.kind == "dialog" || node.kind == "drawer") {
+                refuse(bound->path, "an overlay is sized by the frontend, not by its container");
+            }
+            if (node.kind == "custom") {
+                refuse(bound->path,
+                       "a custom node carries no common properties, so it takes no `" + std::string{key} + "`");
+            }
+            std::int64_t const* const units =
+                bound->kind == ExprKind::Literal ? bound->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+            if (units == nullptr || *units < 0) {
+                refuse(bound->path, "`" + std::string{key} + "` is a literal integer of 0 or more, in backend units");
+            }
+            bounds.at(index) = *units;
+        }
+        for (std::size_t axis = 0; axis < 2; ++axis) {
+            auto const& minimum = bounds.at(2 * axis);
+            auto const& maximum = bounds.at((2 * axis) + 1);
+            if (minimum && maximum && *minimum > *maximum) {
+                refuse(pointerAppend(node.path, kBounds.at(2 * axis)),
+                       "`" + std::string{kBounds.at(2 * axis)} + "` is more than `" +
+                           std::string{kBounds.at((2 * axis) + 1)} + "`");
+            }
+        }
+        ExprPtr const sizing = node.prop("sizing");
+        if (sizing == nullptr || sizing->kind != ExprKind::Literal) {
+            return;
+        }
+        std::optional<std::int64_t> width;
+        std::optional<std::int64_t> height;
+        ValueRecord const* const record = sizing->literal.asRecord();
+        if (record != nullptr && (record->contains("width") || record->contains("height"))) {
+            for (auto const& [dimension, value] : *record) {
+                if (dimension == "width") {
+                    width = sizingDimension(value, sizing->path);
+                } else if (dimension == "height") {
+                    height = sizingDimension(value, sizing->path);
+                } else {
+                    refuse(sizing->path, "a `sizing` record has `width` and `height`; `" + dimension + "` is neither");
+                }
+            }
+        } else {
+            width = sizingDimension(sizing->literal, sizing->path);
+        }
+        for (auto const& [fixed, axis] : {std::pair{width, std::size_t{0}}, std::pair{height, std::size_t{1}}}) {
+            auto const& minimum = bounds.at(2 * axis);
+            auto const& maximum = bounds.at((2 * axis) + 1);
+            if (fixed && (*fixed < minimum.value_or(*fixed) || *fixed > maximum.value_or(*fixed))) {
+                refuse(sizing->path, std::string{"a fixed size has no room to bound: the "} +
+                                         (axis == 0 ? "width" : "height") + " is fixed outside its bounds");
+            }
         }
     }
 

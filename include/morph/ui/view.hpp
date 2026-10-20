@@ -297,15 +297,27 @@ struct Sizing {
     bool operator==(Sizing const&) const = default;
 };
 
-/// @brief A widget's size request in both dimensions.
+/// @brief A widget's size request in both dimensions, and the bounds its extent is clamped into.
+///
+/// A bound clamps the extent the sizing gives, whatever the sizing: a stretch child's share stops at its maximum
+/// and a content or fixed child takes at least its minimum. A negative bound, a minimum above its maximum and a
+/// fixed amount outside its bounds are refused at mount (`std::logic_error`).
 struct LayoutHints {
     /// @brief Along the horizontal axis.
     Sizing width{};
     /// @brief Along the vertical axis.
     Sizing height{};
+    /// @brief The least width, in backend units; `nullopt` for none.
+    std::optional<int> minWidth;
+    /// @brief The most width, in backend units; `nullopt` for none.
+    std::optional<int> maxWidth;
+    /// @brief The least height, in backend units; `nullopt` for none.
+    std::optional<int> minHeight;
+    /// @brief The most height, in backend units; `nullopt` for none.
+    std::optional<int> maxHeight;
 
     /// @brief Memberwise equality.
-    /// @return Whether both dimensions match.
+    /// @return Whether the sizings and the bounds match.
     bool operator==(LayoutHints const&) const = default;
 };
 

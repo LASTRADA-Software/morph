@@ -5521,6 +5521,18 @@ namespace detail {
     return Sizing::content();
 }
 
+/// @brief Whether a value is a sizing of one dimension: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+/// @param value The value.
+/// @return Whether `sizingOf` reads it as written rather than as content by default.
+[[nodiscard]] inline bool isSizing(Value const& value) {
+    if (std::string const* const text = value.asString()) {
+        return *text == "content";
+    }
+    ValueRecord const* const record = value.asRecord();
+    return record != nullptr && record->size() == 1 && (record->contains("fixed") || record->contains("stretch")) &&
+           record->begin()->second.asInt() != nullptr;
+}
+
 /// @brief An axis by name: `horizontal`, or vertical for anything else.
 /// @param value The value.
 /// @return The axis.
@@ -5598,7 +5610,32 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
     common.enabled = bindProp<bool>(ctx, node.prop("enabled"), true, boolOf);
     common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
     if (ExprPtr const sizing = node.prop("sizing")) {
-        common.layout.width = sizingOf(once(ctx, sizing));
+        // The width, or both dimensions from a `{width, height}` record, one left out being content. The loader
+        // refuses a literal of another form; a computed one that is none is reported and lowers to content.
+        Value const value = once(ctx, sizing);
+        Value const* const width = value.field("width");
+        Value const* const height = value.field("height");
+        bool const record = width != nullptr || height != nullptr;
+        bool const valid = record ? (width == nullptr || isSizing(*width)) && (height == nullptr || isSizing(*height))
+                                  : isSizing(value);
+        if (!valid) {
+            report(sizing->path, "sizing is " + canonicalJson(value) +
+                                     "; a sizing is \"content\", {\"fixed\": n}, {\"stretch\": w}, or a record of "
+                                     "width and height of them");
+        } else if (record) {
+            common.layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
+            common.layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
+        } else {
+            common.layout.width = sizingOf(value);
+        }
+    }
+    // Literal integers, checked at load.
+    for (auto const& [key, bound] :
+         {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
+          std::pair{"minHeight", &LayoutHints::minHeight}, std::pair{"maxHeight", &LayoutHints::maxHeight}}) {
+        if (ExprPtr const expr = node.prop(key); expr != nullptr && expr->literal.asInt() != nullptr) {
+            common.layout.*bound = static_cast<int>(*expr->literal.asInt());
+        }
     }
     common.testId = std::string{node.name("testId")};
     common.focusId = node.id;

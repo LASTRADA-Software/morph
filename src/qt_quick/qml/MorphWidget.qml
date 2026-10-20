@@ -16,6 +16,11 @@ Item {
     property int widthAmount: 0
     property int heightKind: 0
     property int heightAmount: 0
+    // The bounds the extent is clamped into, in units; -1 for none.
+    property int minWidthUnits: -1
+    property int maxWidthUnits: -1
+    property int minHeightUnits: -1
+    property int maxHeightUnits: -1
     property int columnSpan: 1
     // Whether a content-sized dimension fills the container: the container sets them, from its kind and axis.
     property bool fillsWidth: false
@@ -142,6 +147,10 @@ Item {
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
     Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
+    Layout.minimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth : -1
+    Layout.maximumWidth: maxWidthUnits >= 0 ? maxWidthUnits * Theme.unitWidth : -1
+    Layout.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : -1
+    Layout.maximumHeight: maxHeightUnits >= 0 ? maxHeightUnits * Theme.unitHeight : -1
     Layout.columnSpan: columnSpan
 
     Accessible.name: accessibleName

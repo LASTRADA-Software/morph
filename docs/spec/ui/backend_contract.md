@@ -147,6 +147,12 @@ natural width at the line's start, on Qt Quick as on the terminal. Along the axi
 start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
 size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
 
+**Bounds.** A bound clamps the extent the sizing rule gives, in backend units. Along a stack's axis a `stretch`
+child's share stops at its maximum and the rest goes to the other `stretch` children; a content or fixed child takes
+at least its minimum and at most its maximum; a stack whose minimums do not fit overflows and clips, as a fixed
+child does. Across, a child its maximum stops from filling is placed at the start: a card sized `stretch` with
+`maxWidth: 44` in a 70-unit column is 44 units wide, on both backends.
+
 ## Interfaces
 
 | Interface | Setters | Handlers |
@@ -229,7 +235,8 @@ The headless reference backend and the test double for everything above the cont
 - **Golden dump** (`dump()`): one line per live widget, `Kind#id name=value …`, properties in name
   order, children indented two spaces per depth, every line ending in a newline. A child whose
   parent was destroyed first becomes a root.
-- **Properties.** Every kind records `visible`, `enabled`, `layout`, `dragKey`, `drop`, `a11yName`,
+- **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
+  and ` max=<n>` for its bounds), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
   inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
@@ -315,6 +322,18 @@ The headless reference backend and the test double for everything above the cont
 backend's test suite runs every case on a fresh probe. `RecordingBackend` passes them in
 `tests/test_ui_conformance.cpp`.
 
+`layoutConformanceCases()` are the cases of where a backend that lays widgets out draws them, read through the
+probe's `boundsOf(widget)`: the widget's bounds in the backend's own units (a cell on the terminal, the theme's unit
+width and height on Qt Quick), a `WidgetBounds{x, y, width, height}` from the top left of the window or screen,
+compared within one unit. A probe that reads no geometry answers none, and every layout case run on it fails rather
+than passing unmeasured; `RecordingBackend` lays nothing out and runs only `conformanceCases()`. Each case mounts
+the container it measures inside another, since a root fills the window or screen whatever its own sizing:
+
+1. Along a row, a `stretch` child's share stops at its maximum and its `stretch` sibling takes the rest.
+2. Along a row, a content child is at least its minimum wide.
+3. Across a column, a `stretch` child stops at its maximum, at the start.
+4. Down a column, a `stretch` child's height stops at its maximum and its sibling takes the rest.
+
 ### The probe
 
 A backend author implements one `ConformanceProbe`. Its driving operations act as a user would,
@@ -344,6 +363,7 @@ after it; its reading operations report what the widget shows now.
 | `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening each submenu on the way |
 | `expand(section, open)` | Opens or closes a collapsible section with its own control |
 | `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
+| `boundsOf(widget)` | Where the widget is drawn, in the backend's units, for the layout cases; none by default, for a probe that reads no geometry |
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.
