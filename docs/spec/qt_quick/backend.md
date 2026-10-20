@@ -152,6 +152,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Tabs | `MorphTabs` | a `TabBar` over the page slots, `Theme.spaceOf(3)` above them; `barShown` false hides the bar and gives its height to the pages, and its `focusTarget` is then the pages, so a hidden bar never holds the keyboard focus | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
+| Toast | `MorphToast` | a non-modal, non-dimming `Popup` near a corner of `Overlay.overlay`, `closePolicy: Popup.NoAutoClose`; `show(text, tone)` is a QML function call, not a property write, so a repeated call with the same text and tone still restarts the dismiss `Timer` and reopens the popup if it closed | — |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
 | Table | `MorphTable`, a header over a `MorphTableHeaderBackground`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |

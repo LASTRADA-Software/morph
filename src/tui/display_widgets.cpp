@@ -167,6 +167,21 @@ void BannerImpl::click(::core::tui::Point cell) {
     }
 }
 
+void ToastImpl::show(std::string_view text, ui::Tone tone) {
+    _text = std::string{text};
+    _tone = tone;
+    setVisible(true);
+    refresh();
+}
+
+::core::tui::Size ToastImpl::naturalSize() const { return {.width = displayWidth(_text), .height = 1}; }
+
+void ToastImpl::paint(::core::tui::Canvas& canvas) {
+    auto const& style = toneStyle(canvas.theme(), _tone);
+    canvas.fill({.x = 0, .y = 0, .width = canvas.width(), .height = 1}, ' ', style);
+    canvas.putString(0, 0, _text, style);
+}
+
 void BadgeImpl::setTone(ui::Tone tone) {
     _tone = tone;
     refresh();

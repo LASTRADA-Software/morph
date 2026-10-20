@@ -100,6 +100,10 @@ std::unique_ptr<ui::DialogWidget> Backend::createDialog(ui::ContainerWidget* par
     return make<detail::DialogImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
+    return make<detail::ToastImpl>(_impl->context, parent);
+}
+
 std::unique_ptr<ui::BusyWidget> Backend::createBusy(ui::ContainerWidget* parent) {
     return make<detail::BusyImpl>(_impl->context, parent);
 }

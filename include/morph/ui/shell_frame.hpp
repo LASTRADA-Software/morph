@@ -46,7 +46,8 @@ public:
     /// @param parent  The container it is appended to; null makes it a backend root.
     /// @param options What it shows and reports.
     ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidget* parent, ShellFrameOptions options)
-        : _root{backend.createStack(parent, Axis::Horizontal)},
+        : _backend{backend},
+          _root{backend.createStack(parent, Axis::Horizontal)},
           _sidebar{backend.createStack(_root.get(), Axis::Horizontal)},
           _sideStart{backend.createSpacer(_sidebar.get())},
           _side{backend.createStack(_sidebar.get(), Axis::Vertical)},
@@ -145,8 +146,21 @@ public:
         _topBar->setVisible(signedIn);
     }
 
+    /// @brief Shows a passive, transient message over the frame's main content area. Made the first time it is
+    ///        asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not
+    ///        it is still showing.
+    /// @param text The message, UTF-8.
+    /// @param tone The tone, mapped to the backend's theme.
+    void showToast(std::string_view text, Tone tone) {
+        if (_toast == nullptr) {
+            _toast = _backend.createToast(_main.get());
+        }
+        _toast->show(text, tone);
+    }
+
 private:
     // Declared parent before child, so destruction takes the children first.
+    IViewBackend& _backend;
     std::unique_ptr<StackWidget> _root;
     std::unique_ptr<StackWidget> _sidebar;
     std::unique_ptr<SpacerWidget> _sideStart;
@@ -156,6 +170,8 @@ private:
     std::unique_ptr<Navigator> _navigator;
     std::unique_ptr<SpacerWidget> _sideEnd;
     std::unique_ptr<StackWidget> _main;
+    // Lazily made, the first time showToast is called.
+    std::unique_ptr<ToastWidget> _toast;
     std::unique_ptr<StackWidget> _topBar;
     std::unique_ptr<SpacerWidget> _topStart;
     std::unique_ptr<TextWidget> _title;

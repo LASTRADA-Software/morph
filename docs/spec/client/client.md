@@ -110,6 +110,11 @@ there itself. An empty mapper is `std::invalid_argument`.
 - `readFile` reads a picked file a document moves inline: its size first, refusing one over the cap without
   reading it. `saveFile` saves inline bytes in the downloads directory, as `download` saves a fetched file.
 - A preview, by reference or inline, is not supported: the shell has no viewer.
+- `setNotifySink(sink)` sets what `notify(text, role)` calls; empty falls through to `InterpreterHost::notify`'s
+  base, safe no-op. The generic shell wires the sink to its `ShellFrame::showToast` (`shell_frame.md`#toast) inside
+  `buildFrame()`, re-wired on every rebuild (sign-in, sign-out, a catalog reload all replace the frame), mapping
+  `notify`'s role (`"info"`, `"success"`, `"warning"`, `"error"`; empty or unknown default to `Tone::Info`) to a
+  `Tone`.
 
 ## Tests
 

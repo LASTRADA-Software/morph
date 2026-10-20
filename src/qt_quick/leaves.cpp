@@ -159,6 +159,15 @@ void BusyImpl::setActive(bool active) { write("active", active); }
 
 void BusyImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 
+ToastImpl::ToastImpl(Context& context, ui::ContainerWidget* parent)
+    : ItemWidget{context, QStringLiteral("MorphToast"), parent} {}
+
+// A QML function call, not property writes: write() skips a value equal to the item's current one, which would
+// leave the dismiss timer untouched on a second show() with the same text and tone.
+void ToastImpl::show(std::string_view text, ui::Tone tone) {
+    call("show", toQString(text), static_cast<int>(tone));
+}
+
 // ── Banner ────────────────────────────────────────────────────────────────
 
 BannerImpl::BannerImpl(Context& context, ui::ContainerWidget* parent)

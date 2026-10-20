@@ -7,6 +7,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 
 - [Shape](#shape)
 - [Signed in and signed out](#signed-in-and-signed-out)
+- [Toast](#toast)
 - [Design decisions](#design-decisions)
 
 ## Shape
@@ -34,6 +35,18 @@ sign-in. `showSignedIn(true)` shows them again. The frame does not decide which:
 session is signed in, and the principal to show with it (none while signed out). The generic client's rule is in
 [`client/client.md`](../client/client.md#the-shell).
 
+## Toast
+
+`showToast(text, tone)` shows a passive, transient message over the frame's main content area (under `_main`, the
+column holding the top bar and the page — not the sidebar, which is a chrome column beside it, and not the page
+itself, since the toast must stay reachable regardless of which screen is mounted there). The toast widget is made
+the first time `showToast` is called, not at construction, and lives as long as the frame.
+
+A later call always replaces the shown text and tone and restarts the dismiss interval, whether or not the toast is
+currently on-screen — it is one call, `ToastWidget::show(text, tone)`, not separate setters plus a visibility toggle,
+since a `setVisible(true)` while already visible would silently no-op and leave a stale dismiss timer running. The
+toast is non-modal, dims nothing, and never takes keyboard focus.
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -41,3 +54,5 @@ session is signed in, and the principal to show with it (none while signed out).
 | Built from widgets | Backend widgets, not a document | The frame is the client's, not an application's, and every frontend has the widgets. |
 | The padding | Zero-sized spacers a gap away | A stack has a gap and no padding; spacers say it in the vocabulary that exists, and step 4 is 16 px on Qt Quick and a row and two columns on the terminal. |
 | The width of the sidebar | 28 units, fixed | Wide enough for a navigator entry's title, and a unit on the terminal is a column. |
+| The toast's one `show(text, tone)` call | Not separate setters plus `setVisible` | A widget's `setVisible` skips a write when the value already matches, so a second `setVisible(true)` while the toast is still showing would be silently dropped and its dismiss timer would not restart. |
+| The toast's parent | `_main`, not `_root` or the page | `_root` is a row holding the sidebar and `_main` side by side; parenting there would make a floating widget compete for horizontal space as a third column. The page is replaced per screen, so parenting there would lose the toast on every navigation. |
