@@ -356,8 +356,8 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
   or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
   carries the node's common properties. `title` (a heading over the fields) and `submitLabel` (the explicit-mode
   button, and the status line's `ready: press <label>`) are bound in the node's scope, so a `t` re-resolves on
-  `setLocale`; `showStatus` and `columns` are read at load, `columns` setting every group's grid and the implicit
-  group's. `onSubmit`, `onSuccess` and `onError` run once per attempt,
+  `setLocale`; `showStatus`, `columns` and `fieldLayout` are read at load, `columns` setting every group's grid and
+  the implicit group's, `fieldLayout` the engine's `FormViewOptions::fieldLayout`. `onSubmit`, `onSuccess` and `onError` run once per attempt,
   success and failure, with the body, the reply and the error text as `event`. Its element values
   are `ready`, `body` (the record it would submit, `null` while not ready), `submitted`, `pending`
   and each field by wire name, a record of `value`, `draft`, `valid`, `required`, `visible`,
@@ -371,8 +371,8 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
   schemas come from `Catalog::schema`. Every call (the list query, the row and collection actions,
   the editor's and every step's submissions) goes through the `model` alias's channel, as a form's
   does. They lower to `forms::collectionView` and `forms::wizardView`, with the forms' own titles
-  left out, inside a column that carries the node's common properties. `submitLabel`, `showStatus` and `columns`
-  reach every form the view draws (`options.form`), as on a `form`; `title`, bound in the node's scope, replaces the
+  left out, inside a column that carries the node's common properties. `submitLabel`, `showStatus`, `columns` and
+  `fieldLayout` reach every form the view draws (`options.form`), as on a `form`; `title`, bound in the node's scope, replaces the
   view's heading (`collection_title`, `wizard_title`). They have no element values
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.

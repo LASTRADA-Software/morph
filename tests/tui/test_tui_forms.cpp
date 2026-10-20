@@ -198,3 +198,30 @@ TEST_CASE("tui forms: a table's empty state is drawn in its place while its rows
     CHECK(client.shows("No rows yet"));
     CHECK_FALSE(client.shows("Heading"));
 }
+
+// Mutation: ignore `fieldLayout` in fieldCell (the label is a row above its control).
+TEST_CASE("tui forms: an inline form draws each label on its control's row", "[tui][forms]") {
+    for (bool const inlined : {true, false}) {
+        TuiClient client;
+        std::string const layout = inlined ? R"("fieldLayout": "inline", )" : "";
+        auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+          "vocab": "ui/1", "id": "capture",
+          "models": { "sample": { "type": "Lims_SampleModel" } },
+          "view": { "kind": "form", )" + layout + R"("model": "sample", "action": "Lims_CaptureConcentration" } })",
+                                                                       ui::testing::corpusCatalog()),
+                                               {}, client.backend);
+        REQUIRE(screen.has_value());
+        client.settle();
+        client.backend.focusFirst();
+        client.settle();
+        client.type("4242");
+        INFO(client.drawn());
+        auto const rows = rowsOf(client.screen);
+        auto const label = std::ranges::find_if(rows, [](std::string const& row) { return row.contains("Sample"); });
+        REQUIRE(label != rows.end());
+        CHECK(label->contains("4242") == inlined);
+        if (inlined) {
+            CHECK(label->find("Sample") < label->find("4242"));
+        }
+    }
+}

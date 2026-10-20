@@ -109,6 +109,17 @@ TEST_CASE("collection<View> and wizard<Wizard> write the presentation keys they 
           R"({"kind":"wizard","model":"rows","action":"Af_AddRow","showStatus":true})");
 }
 
+// Mutation: leave fieldLayout out of detail::present (the key is not written).
+TEST_CASE("a presentation's fieldLayout is written by name", "[ui][author]") {
+    auto const model = ui::ModelHandle<af::Model>{"rows"};
+    ui::Node const inlined = ui::wizard<af::AddWizard>(model, {.fieldLayout = morph::forms::FieldLayout::Inline});
+    CHECK(glz::write_json(inlined.json()).value_or("") ==
+          R"({"kind":"wizard","model":"rows","action":"Af_AddRow","fieldLayout":"inline"})");
+    ui::Node const stacked = ui::collection<af::RowsView>(model, {.fieldLayout = morph::forms::FieldLayout::Stacked});
+    CHECK(glz::write_json(stacked.json()).value_or("") ==
+          R"({"kind":"collection","model":"rows","action":"Af_ListRows","fieldLayout":"stacked"})");
+}
+
 // Mutation: write the two-dimension sizing as an `obj` whatever its handles (the loader cannot check it).
 TEST_CASE("Node::sizing of both dimensions is a literal record of literal sizings, and the bounds are integers",
           "[ui][author]") {

@@ -301,12 +301,15 @@ The cell rule of the host design §4 stands: the cell draws the caption, the con
 - **`inline`**: the cell is a row, `align: center`, gap step 3: the label at `fixed(inlineLabelWidth)` (test id
   `label_<path>`, unchanged) and the control stretching; the help, when there is one, is a second row under the
   control, indented by a spacer of the label's width. A Boolean field, whose checkbox carries its own label, gets an
-  empty label spacer so its box lines up with the controls; an Object field's panel stays stacked and its members
-  follow the form's layout.
+  empty label spacer so its box lines up with the controls; an Object field's panel, and an ObjectArray's rows (a
+  caption centred beside a list of row panels would float in its middle), stay stacked and their members follow the
+  form's layout. With help, the cell is a column of the row and the help's row, and holds `cell_<path>`.
 - **Columns** are `columns` (§5), independent of the caption's place: `inline` in two columns is valid.
 - **Document.** This commit adds `fieldLayout` to the `form`, `collection` and `wizard` kind tables, with its
   `checkChoice`, its corpus refusal, its `document.md` row and `FormPresentation::fieldLayout` (§5 lists the key).
-- **Forms engine.** `enum class FieldLayout : std::uint8_t { Stacked, Inline };` in `form_view.hpp`;
+- **Forms engine.** `enum class FieldLayout : std::uint8_t { Stacked, Inline };` in its own header,
+  `forms/engine/field_layout.hpp`, which `form_view.hpp` and `author.hpp` include, so `FormPresentation` names it
+  without pulling in the engine;
   `FormViewOptions` gains `FieldLayout fieldLayout = FieldLayout::Stacked` and `int inlineLabelWidth = 16` (units;
   a value below 1 is `std::invalid_argument` from `formView`). `fieldCell` builds the row for `Inline`. The input
   API of the host design §4.2 does not change: `showLabel` stays false inside a form.

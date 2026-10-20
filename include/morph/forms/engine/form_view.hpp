@@ -15,6 +15,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "../../util/datetime.hpp"
 #include "../layout.hpp"
 #include "detail/text.hpp"
+#include "field_layout.hpp"
 #include "field_model.hpp"
 #include "form_session.hpp"
 #include "overrides.hpp"
@@ -53,6 +55,11 @@ struct FormViewOptions {
     /// @brief A heading over the fields (test id `form_title`) in place of the schema's title; empty shows none.
     ///        A title given is shown whatever `showTitle` says.
     ui::Prop<std::string> title{};
+    /// @brief Where each cell puts its field's caption: over the control, or beside it.
+    FieldLayout fieldLayout = FieldLayout::Stacked;
+    /// @brief The width of an inline caption, in backend units; at least 1, else `formView` throws
+    ///        `std::invalid_argument`. Read only for `FieldLayout::Inline`.
+    int inlineLabelWidth = 16;
 };
 
 namespace detail::engine {
@@ -383,8 +390,57 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     return textInput(ui::TextInputMode::SingleLine);
 }
 
+/// @brief Space as wide as an inline caption, which lines a Boolean's box or a help text up with the controls.
+/// @param width The caption's width, in backend units.
+/// @return The spacer.
+[[nodiscard]] inline ui::Node captionSpace(int width) {
+    ui::Spacer space{};
+    space.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
+    return ui::spacer(std::move(space));
+}
+
+/// @brief The inline form of a cell's content: a row centred across, the label at the caption's width (a spacer for
+///        a Boolean, whose checkbox carries its label) and the control stretching; the help is a second row under the
+///        control, indented by the caption's width.
+/// @param state   The field.
+/// @param control The control.
+/// @param options The view options.
+/// @param common  The cell's own visibility and test id.
+/// @return The row, or a column of the row and the help's row.
+[[nodiscard]] inline ui::Node inlineCell(FieldState const& state, ui::Node control, ViewOptions const& options,
+                                         ui::Common common) {
+    FieldState const* const field = &state;
+    int const width = options->inlineLabelWidth;
+    ui::Node caption;
+    if (state.spec().kind == FieldKind::Boolean) {
+        caption = captionSpace(width);
+    } else {
+        ui::Text label{.text = [field] { return field->label(); }};
+        label.common.testId = "label_" + state.path();
+        label.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
+        caption = ui::text(std::move(label));
+    }
+    // A column fills its one content child across, so the control takes the width the stretching column is given.
+    ui::Column holder{.children = {std::move(control)}};
+    holder.common.layout = {.width = ui::Sizing::stretch(), .height = {}};
+    ui::Row line{
+        .children = {std::move(caption), ui::column(std::move(holder))}, .gap = 3, .align = ui::Align::Center};
+    if (state.help().empty()) {
+        line.common = std::move(common);
+        return ui::row(std::move(line));
+    }
+    ui::Row help{
+        .children = {captionSpace(width), ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted})},
+        .gap = 3};
+    ui::Column cell{.children = {ui::row(std::move(line)), ui::row(std::move(help))}};
+    cell.common = std::move(common);
+    return ui::column(std::move(cell));
+}
+
 /// @brief One field's cell: the label, the control (an override's, else the built-in) and the help text; shown while
-///        the field is visible. The control marks a required field, so the label carries no mark of its own.
+///        the field is visible. The control marks a required field, so the label carries no mark of its own. The
+///        options' `fieldLayout` puts the label over the control, or beside it (`inlineCell`); an Object's panel and
+///        an ObjectArray's rows are stacked either way, and their members follow the form's layout.
 /// @param session The session.
 /// @param state   The field.
 /// @param options The view options.
@@ -398,6 +454,13 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     } else {
         control = fieldControl(session, state, options);
     }
+    ui::Common common{};
+    common.visible = [field] { return field->visible().get(); };
+    common.testId = "cell_" + state.path();
+    FieldKind const kind = state.spec().kind;
+    if (options->fieldLayout == FieldLayout::Inline && kind != FieldKind::Object && kind != FieldKind::ObjectArray) {
+        return inlineCell(state, std::move(control), options, std::move(common));
+    }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
         ui::Text label{.text = [field] { return field->label(); }};
@@ -408,9 +471,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     if (!state.help().empty()) {
         children.push_back(ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted}));
     }
-    ui::Column cell{.children = std::move(children)};
-    cell.common.visible = [field] { return field->visible().get(); };
-    cell.common.testId = "cell_" + state.path();
+    ui::Column cell{.children = std::move(children), .common = std::move(common)};
     return ui::column(std::move(cell));
 }
 
@@ -446,10 +507,14 @@ inline ui::Node FieldView::defaultControl() const {
 /// The nodes bind to the session and its fields by pointer: mount the result after the session and destroy the
 /// mount before it.
 /// @param session The session.
-/// @param options Overrides, grid columns, the chrome's labels.
+/// @param options Overrides, grid columns, the chrome's labels, the field layout.
 /// @return The view.
+/// @throws std::invalid_argument when `options.inlineLabelWidth` is below 1.
 [[nodiscard]] inline ui::Node formView(FormSession& session, FormViewOptions options = {}) {
     using detail::engine::groupGrid;
+    if (options.inlineLabelWidth < 1) {
+        throw std::invalid_argument{"morph::forms::formView: an inline label is at least one unit wide"};
+    }
     auto const shared = std::make_shared<FormViewOptions const>(std::move(options));
     int const columns = std::max(1, shared->gridColumns);
     int const flatColumns = shared->flatGridColumns.value_or(columns == 2 ? 1 : columns);

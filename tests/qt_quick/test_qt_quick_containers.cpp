@@ -12,11 +12,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <memory>
+#include <morph/core/completion.hpp>
+#include <morph/forms/engine/form_session.hpp>
+#include <morph/forms/engine/form_view.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/theme.hpp>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/kinds.hpp"
@@ -516,4 +522,46 @@ TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-o
     qreal const buttonCentre = button.mapToScene(QPointF{0, button.height() / 2}).y();
     INFO("label centre " << labelCentre << ", button centre " << buttonCentre);
     CHECK(std::abs(labelCentre - buttonCentre) <= 1.0);
+}
+
+// Mutation: ignore `fieldLayout` in fieldCell (the label sits above its control).
+TEST_CASE("qt_quick containers: an inline form field's label sits left of its control, level with it", "[qt_quick]") {
+    Scene scene;
+    auto const model = morph::forms::FormModel::fromSchema(
+        "Probe", R"({"properties":{"name":{"type":"string","title":"Name"}},"required":["name"]})");
+    REQUIRE(model.has_value());
+    morph::forms::FormSession session{
+        scene.runtime(), *model,
+        [&scene](std::string_view, std::string) {
+            return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
+        },
+        [&scene](std::string_view, std::string) {
+            return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
+        }};
+    morph::forms::FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    ui::Mounted const view{scene.runtime(), scene.backend(), morph::forms::formView(session, std::move(options))};
+    scene.settle();
+    auto const itemOf = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    auto const innerOf = [&itemOf](char const* testId, char const* className) -> QQuickItem const& {
+        QList<QQuickItem*> const inner = itemOf(testId).findChildren<QQuickItem*>();
+        auto const found =
+            std::ranges::find_if(inner, [className](QQuickItem const* item) { return item->inherits(className); });
+        REQUIRE(found != inner.end());
+        return **found;
+    };
+    QQuickItem const& label = innerOf("label_name", "QQuickText");
+    QQuickItem const& control = itemOf("field_name");
+    REQUIRE(label.height() > 0.0);
+    REQUIRE(control.height() > label.height());
+    QPointF const labelAt = label.mapToScene(QPointF{0, label.height() / 2});
+    QPointF const controlAt = control.mapToScene(QPointF{0, control.height() / 2});
+    INFO("label at " << labelAt.x() << "," << labelAt.y() << "; control at " << controlAt.x() << "," << controlAt.y());
+    CHECK(labelAt.x() + label.width() <= controlAt.x() + 1.0);
+    CHECK(std::abs(labelAt.y() - controlAt.y()) <= 1.0);
 }

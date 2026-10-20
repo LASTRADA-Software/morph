@@ -458,3 +458,59 @@ TEST_CASE("formView: a date-time control's draft and instant convert in the disp
     CHECK(engine::instantDraft(std::nullopt, false, 0).empty());
     CHECK(engine::instantDraft(morph::time::Timestamp{}, false, 0).empty());
 }
+
+// Mutation: ignore `fieldLayout` in fieldCell (every cell stays a column, label over control).
+TEST_CASE("formView: an inline layout puts the label beside the control; a stacked one keeps it above",
+          "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "name":{"type":"string","x-order":0},
+      "flag":{"type":"boolean","x-order":1},
+      "note":{"type":"string","description":"Shown to the customer","x-order":2},
+      "address":{"type":["object","null"],"title":"Address","x-order":3,
+                 "properties":{"street":{"type":"string","x-order":0}}}}})";
+    FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    Mounted const inlined{kSchema, std::move(options)};
+    RecordingBackend const& backend = inlined.backend;
+    int const cell = inlined.widget("Row", "cell_name");
+    CHECK(backend.prop(cell, "align") == "center");
+    CHECK(backend.prop(cell, "gap") == "3");
+    std::vector<int> const line = backend.children(cell);
+    REQUIRE(line.size() == 2);
+    CHECK(line.at(0) == inlined.widget("Text", "label_name"));
+    CHECK(backend.prop(line.at(0), "layout") == "fixed(16)/content");
+    CHECK(backend.prop(line.at(1), "layout") == "stretch(1)/content");
+    CHECK(backend.children(line.at(1)) == std::vector<int>{inlined.widget("TextInput", "field_name")});
+    // A Boolean's checkbox carries its label, so a spacer of the label's width lines its box up.
+    std::vector<int> const flag = backend.children(inlined.widget("Row", "cell_flag"));
+    REQUIRE(flag.size() == 2);
+    CHECK(backend.kindOf(flag.at(0)) == "Spacer");
+    CHECK(backend.prop(flag.at(0), "layout") == "fixed(16)/content");
+    // The help is a second row, indented by the label's width.
+    std::vector<int> const note = backend.children(inlined.widget("Column", "cell_note"));
+    REQUIRE(note.size() == 2);
+    CHECK(backend.kindOf(note.at(0)) == "Row");
+    std::vector<int> const help = backend.children(note.at(1));
+    REQUIRE(help.size() == 2);
+    CHECK(backend.kindOf(help.at(0)) == "Spacer");
+    CHECK(backend.prop(help.at(1), "text") == "Shown to the customer");
+    // An object's panel stays stacked; its members follow the form's layout.
+    CHECK(inlined.has("Column", "cell_address"));
+    CHECK(inlined.has("Row", "cell_address.street"));
+
+    Mounted const stacked{kSchema};
+    std::vector<int> const column = stacked.backend.children(stacked.widget("Column", "cell_name"));
+    REQUIRE(column.size() == 2);
+    CHECK(column.at(0) == stacked.widget("Text", "label_name"));
+    CHECK(column.at(1) == stacked.widget("TextInput", "field_name"));
+    CHECK_FALSE(stacked.has("Row", "cell_name"));
+}
+
+TEST_CASE("formView: an inline label narrower than one unit is refused", "[forms-engine][view]") {
+    Harness harness;
+    auto const form = harness.session("Probe", R"({"properties":{"name":{"type":"string"}}})");
+    FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    options.inlineLabelWidth = 0;
+    CHECK_THROWS_AS(morph::forms::formView(*form, std::move(options)), std::invalid_argument);
+}

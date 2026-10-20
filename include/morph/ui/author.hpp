@@ -29,6 +29,7 @@
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
 #include "../detail/reflected_member.hpp"
+#include "../forms/engine/field_layout.hpp"
 #include "../ui/document.hpp"
 #include "../ui/value.hpp"
 #include "../util/datetime.hpp"
@@ -4135,6 +4136,8 @@ struct FormPresentation {
     std::optional<bool> showStatus;
     /// @brief The columns of every group's grid, 1 to 12; absent keeps the engine's.
     std::optional<int> columns;
+    /// @brief Where every cell puts its caption; absent stacks it over the control.
+    std::optional<::morph::forms::FieldLayout> fieldLayout;
 };
 
 namespace detail {
@@ -4149,6 +4152,10 @@ inline void present(NodeWriter& node, FormPresentation const& presentation) {
     }
     if (presentation.columns) {
         node.raw("columns", AnyHandle{std::int64_t{*presentation.columns}}.json());
+    }
+    if (presentation.fieldLayout) {
+        node.text("fieldLayout",
+                  *presentation.fieldLayout == ::morph::forms::FieldLayout::Inline ? "inline" : "stacked");
     }
 }
 

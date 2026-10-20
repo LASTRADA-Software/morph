@@ -882,7 +882,7 @@ inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-inline constexpr std::array<KeySpec, 14> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 15> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                        {"action", Shape::Text, {}, kRequired},
                                                        {"prefill", Shape::Expr},
                                                        {"key", Shape::Expr},
@@ -895,15 +895,17 @@ inline constexpr std::array<KeySpec, 14> kFormKeys = {{{"model", Shape::Name, {}
                                                        {"title", Shape::Expr},
                                                        {"submitLabel", Shape::Expr},
                                                        {"showStatus", Shape::Flag},
-                                                       {"columns", Shape::Expr}}};
+                                                       {"columns", Shape::Expr},
+                                                       {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
 ///        form the view draws.
-inline constexpr std::array<KeySpec, 6> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 7> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
                                                             {"action", Shape::Text, {}, kRequired},
                                                             {"title", Shape::Expr},
                                                             {"submitLabel", Shape::Expr},
                                                             {"showStatus", Shape::Flag},
-                                                            {"columns", Shape::Expr}}};
+                                                            {"columns", Shape::Expr},
+                                                            {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `custom`.
 inline constexpr std::array<KeySpec, 3> kCustomKeys = {
     {{"name", Shape::Text, {}, kRequired}, {"props", Shape::ExprRecord}, {"on", Shape::CommandRecord}}};
@@ -2962,6 +2964,8 @@ private:
         }
         if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
             checkFormColumns(node);
+            static constexpr std::array<std::string_view, 2> kFieldLayouts = {"stacked", "inline"};
+            checkChoice(node, "fieldLayout", kFieldLayouts);
         }
         static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
         static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};

@@ -162,7 +162,7 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 **Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;
 default `false`). With `showLabel` the input draws the label as a visible caption above its control; without
 it the caption is drawn elsewhere or not at all. Inside a form the field's cell (the column `formView` draws per
-field) owns the caption, and the input owns the required mark and the unit: `formView` sets `label` to the field's
+field, or a row with the caption beside the control under `FieldLayout::Inline`) owns the caption, and the input owns the required mark and the unit: `formView` sets `label` to the field's
 label and leaves `showLabel` false, so a kit never draws the caption twice.
 
 The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,

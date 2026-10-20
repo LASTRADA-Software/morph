@@ -557,6 +557,7 @@ target_sources(morph
         include/morph/forms/engine/handler_submitter.hpp
         include/morph/forms/engine/typed_form.hpp
         include/morph/forms/engine/overrides.hpp
+        include/morph/forms/engine/field_layout.hpp
         include/morph/forms/engine/form_view.hpp
         include/morph/forms/engine/collection.hpp
         include/morph/forms/engine/wizard.hpp

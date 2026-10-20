@@ -6729,8 +6729,8 @@ inline void ScreenCore::wireComposite(ElementState& element) {
 }
 
 // The presentation keys a form, a collection and a wizard share, but the title: the label of the explicit-mode button
-// and the status line naming it, bound in the node's scope; whether the status line shows, and the grid's columns, as
-// read at load.
+// and the status line naming it, bound in the node's scope; whether the status line shows, the grid's columns and the
+// field layout, as read at load.
 inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options) {
     if (ExprPtr const label = node.prop("submitLabel")) {
         options.submitLabel = bindProp<std::string>(ctx, label, std::string{}, stringOf);
@@ -6741,6 +6741,9 @@ inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, fo
     if (ExprPtr const columns = node.prop("columns"); columns != nullptr && columns->literal.asInt() != nullptr) {
         options.gridColumns = static_cast<int>(*columns->literal.asInt());
         options.flatGridColumns = options.gridColumns;
+    }
+    if (node.name("fieldLayout") == "inline") {
+        options.fieldLayout = forms::FieldLayout::Inline;
     }
 }
 
