@@ -54,7 +54,7 @@ struct FormViewOptions {
     bool showStatus = true;
     /// @brief A heading over the fields (test id `form_title`) in place of the schema's title; empty shows none.
     ///        A title given is shown whatever `showTitle` says.
-    ui::Prop<std::string> title{};
+    ui::Prop<std::string> title;
     /// @brief Where each cell puts its field's caption: over the control, or beside it.
     FieldLayout fieldLayout = FieldLayout::Stacked;
     /// @brief The width of an inline caption, in backend units; at least 1, else `formView` throws

@@ -2930,22 +2930,42 @@ private:
 
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
-            auto const found = _doc->components.find(node.name("name"));
-            if (found == _doc->components.end()) {
-                refuse(pointerAppend(node.path, "name"),
-                       "`" + std::string{node.name("name")} + "` is not a component of this document");
-            }
-            for (DocNodePtr const& props : node.partList("props")) {
-                for (auto const& [prop, value] : props->props) {
-                    if (!found->second.props.contains(prop)) {
-                        refuse(value->path, "the component `" + found->first + "` declares no prop `" + prop + "`");
-                    }
-                }
-            }
+            checkCustomProps(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
-        } else if (node.kind == "button") {
+        }
+        checkKindValues(node);
+        std::string_view const model = node.name("model");
+        if (!model.empty()) {
+            if (node.name("action").empty()) {
+                refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
+            }
+            checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
+        } else if (node.kind == "table" && !node.prop("rows")) {
+            refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+    }
+
+    // A custom node names a component of the document and gives only the props it declares.
+    void checkCustomProps(DocNode const& node) const {
+        auto const found = _doc->components.find(node.name("name"));
+        if (found == _doc->components.end()) {
+            refuse(pointerAppend(node.path, "name"),
+                   "`" + std::string{node.name("name")} + "` is not a component of this document");
+        }
+        for (DocNodePtr const& props : node.partList("props")) {
+            for (auto const& [prop, value] : props->props) {
+                if (!found->second.props.contains(prop)) {
+                    refuse(value->path, "the component `" + found->first + "` declares no prop `" + prop + "`");
+                }
+            }
+        }
+    }
+
+    // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
+    static void checkKindValues(DocNode const& node) {
+        if (node.kind == "button") {
             static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
@@ -2969,29 +2989,19 @@ private:
             // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
+        } else if (node.kind == "text") {
+            checkTextRole(node);
         }
         if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
             checkFormColumns(node);
             static constexpr std::array<std::string_view, 2> kFieldLayouts = {"stacked", "inline"};
             checkChoice(node, "fieldLayout", kFieldLayouts);
         }
-        if (node.kind == "text") {
-            checkTextRole(node);
-        }
         static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
         static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};
         checkChoice(node, "align", kAlign);
         checkChoice(node, "justify", kJustify);
         checkChoice(node, "alignSelf", kAlign);
-        std::string_view const model = node.name("model");
-        if (!model.empty()) {
-            if (node.name("action").empty()) {
-                refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
-            }
-            checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
-        } else if (node.kind == "table" && !node.prop("rows")) {
-            refuse(node.path, "a table takes `rows`, or a `model` and `action`");
-        }
     }
 
     // Each form field drawn by a host component.
@@ -3080,7 +3090,11 @@ private:
     // A node's size keys: each bound a literal integer of 0 or more, a minimum no more than its maximum, no bound on
     // an overlay or a custom node; and a literal `sizing` one of the forms the interpreter reads, with a fixed amount
     // inside its dimension's bounds. A sizing that is not literal is read at mount.
-    static void checkLayoutKeys(DocNode const& node) {
+    static void checkLayoutKeys(DocNode const& node) { checkSizing(node, literalBounds(node)); }
+
+    // The size bounds a node gives, `minWidth`, `maxWidth`, `minHeight` and `maxHeight` in that order: literal
+    // integers of 0 or more, no minimum above its maximum, none on an overlay or a custom node.
+    static std::array<std::optional<std::int64_t>, 4> literalBounds(DocNode const& node) {
         static constexpr std::array<std::string_view, 4> kBounds = {"minWidth", "maxWidth", "minHeight", "maxHeight"};
         std::array<std::optional<std::int64_t>, 4> bounds{};
         for (std::size_t index = 0; index < kBounds.size(); ++index) {
@@ -3112,6 +3126,11 @@ private:
                            std::string{kBounds.at((2 * axis) + 1)} + "`");
             }
         }
+        return bounds;
+    }
+
+    // A literal `sizing` is one of its forms, and a fixed amount lies inside its dimension's @p bounds.
+    static void checkSizing(DocNode const& node, std::array<std::optional<std::int64_t>, 4> const& bounds) {
         ExprPtr const sizing = node.prop("sizing");
         if (sizing == nullptr || sizing->kind != ExprKind::Literal) {
             return;

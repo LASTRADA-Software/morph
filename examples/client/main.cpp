@@ -124,6 +124,30 @@ void afterLayout(Grab const& grab, std::function<void()> then) {
     then();
 }
 
+/// The first mount's handler for `--exit-after-mount` and `--grab`: once the first screen mounted, quits with 0 when
+/// nothing went wrong, after saving the window's image when @p shot names a file.
+std::function<void(std::string const&)> quitOnceMounted(ui::AppContext& context, std::shared_ptr<int> problems,
+                                                        std::shared_ptr<bool> mounted, std::shared_ptr<Grab> shot) {
+    return [&context, problems = std::move(problems), mounted = std::move(mounted),
+            shot = std::move(shot)](std::string const& /*screenId*/) {
+        if (*mounted) {
+            return;
+        }
+        *mounted = true;
+        // Posted, so the mount's own diagnostics are counted, and its own posted work done, first.
+        context.executor().post([&context, problems, shot] {
+            if (shot == nullptr) {
+                context.quit(*problems == 0 ? 0 : 1);
+                return;
+            }
+            afterLayout(*shot, [&context, problems, shot] {
+                bool const saved = saveGrab(*shot);
+                context.quit(*problems == 0 && saved ? 0 : 1);
+            });
+        });
+    };
+}
+
 /// The shell factory both frontends use: the client shell, and with `--exit-after-mount` or `--grab`, a quit once it
 /// mounted.
 struct ShellFactory {
@@ -157,23 +181,7 @@ struct ShellFactory {
         options.history = history;
 #endif
         if (exitAfterMount) {
-            options.onMounted = [&context, problems, mounted, grabbing, shot = grab](std::string const& /*screenId*/) {
-                if (*mounted) {
-                    return;
-                }
-                *mounted = true;
-                // Posted, so the mount's own diagnostics are counted, and its own posted work done, first.
-                context.executor().post([&context, problems, grabbing, shot] {
-                    if (!grabbing) {
-                        context.quit(*problems == 0 ? 0 : 1);
-                        return;
-                    }
-                    afterLayout(*shot, [&context, problems, shot] {
-                        bool const saved = saveGrab(*shot);
-                        context.quit(*problems == 0 && saved ? 0 : 1);
-                    });
-                });
-            };
+            options.onMounted = quitOnceMounted(context, problems, mounted, grabbing ? grab : nullptr);
         }
         bool const failed = !opened.has_value();
         auto shell = morph::client::mountShell(context, backend, std::move(opened), *source, std::move(options));

@@ -534,7 +534,7 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
 /// @return A scalar as itself, the inside of `{"lit": v}`; `nullopt` for an expression that is not a constant.
 [[nodiscard]] inline std::optional<Json> literalOf(Json const& expression) {
     if (auto const* const object = std::get_if<Json::object_t>(&expression.data)) {
-        auto const found = object->find("lit");
+        auto const* const found = object->find("lit");
         if (object->size() == 1 && found != object->end()) {
             return found->second;
         }

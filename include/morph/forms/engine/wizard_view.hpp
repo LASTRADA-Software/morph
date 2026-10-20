@@ -46,7 +46,7 @@ struct WizardViewOptions {
     /// @brief The note shown on the last step, which has no Next.
     std::string lastStepText = "Last step — fill it in to finish";
     /// @brief The built-in header's title (`wizard_title`, before the step's position); empty shows the schema's.
-    ui::Prop<std::string> title{};
+    ui::Prop<std::string> title;
 };
 
 namespace detail::engine {

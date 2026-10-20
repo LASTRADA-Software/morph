@@ -6,13 +6,25 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <ranges>
+#include <stdexcept>
+#include <string>
 
 namespace morph::tui::layout {
 
 namespace {
+
+/// The item at `index`, checked: a span has no `at()` before C++26.
+Item const& itemAt(std::span<Item const> items, std::size_t index) {
+    if (index >= items.size()) {
+        throw std::out_of_range{"morph::tui::layout: item " + std::to_string(index) + " past " +
+                                std::to_string(items.size())};
+    }
+    return *std::next(items.begin(), static_cast<std::ptrdiff_t>(index));
+}
 
 // Sums and products of cell counts run in 64 bits: a weight, a gap or a Fixed amount may be anything an int holds,
 // and the products and sums of several of them do not fit one.
@@ -53,7 +65,7 @@ void shareSpare(std::span<Item const> items, std::vector<bool> const& sharing, s
     for (std::size_t index = 0; index < items.size(); ++index) {
         if (sharing.at(index)) {
             // At most `spare`, which is at most the track's length: it fits an int.
-            sizes.at(index) = static_cast<int>(spare * weightOf(items[index].sizing) / weights);
+            sizes.at(index) = static_cast<int>(spare * weightOf(itemAt(items, index).sizing) / weights);
             given += sizes.at(index);
         }
     }
@@ -73,12 +85,12 @@ void shareSpare(std::span<Item const> items, std::vector<bool> const& sharing, s
 void shareCapped(std::span<Item const> items, std::vector<int>& sizes, Wide spare) {
     std::vector<bool> sharing(items.size());
     for (std::size_t index = 0; index < items.size(); ++index) {
-        sharing.at(index) = isStretch(items[index].sizing);
+        sharing.at(index) = isStretch(itemAt(items, index).sizing);
     }
     for (;;) {
         Wide weights = 0;
         for (std::size_t index = 0; index < items.size(); ++index) {
-            weights += sharing.at(index) ? weightOf(items[index].sizing) : 0;
+            weights += sharing.at(index) ? weightOf(itemAt(items, index).sizing) : 0;
         }
         if (weights == 0 || spare <= 0) {
             return;
@@ -86,7 +98,7 @@ void shareCapped(std::span<Item const> items, std::vector<int>& sizes, Wide spar
         shareSpare(items, sharing, sizes, spare, weights);
         bool capped = false;
         for (std::size_t index = 0; index < items.size(); ++index) {
-            int const maximum = maximumOf(boundsOfItem(items[index]));
+            int const maximum = maximumOf(boundsOfItem(itemAt(items, index)));
             if (sharing.at(index) && sizes.at(index) > maximum) {
                 sizes.at(index) = maximum;
                 sharing.at(index) = false;
@@ -108,7 +120,7 @@ void shareCapped(std::span<Item const> items, std::vector<int>& sizes, Wide spar
 /// Takes `deficit` cells off `sizes`, from the last one towards the first, none below its item's minimum.
 void shrinkFromLast(std::span<Item const> items, std::vector<int>& sizes, Wide deficit) {
     for (std::size_t index = sizes.size(); index-- > 0 && deficit > 0;) {
-        auto const take = std::min(Wide{sizes.at(index)} - std::max(0, items[index].minimum), deficit);
+        auto const take = std::min(Wide{sizes.at(index)} - std::max(0, itemAt(items, index).minimum), deficit);
         if (take > 0) {
             sizes.at(index) -= static_cast<int>(take);
             deficit -= take;
@@ -154,7 +166,7 @@ std::vector<int> distribute(std::span<Item const> items, Track track) {
     // A share below its minimum is raised to it; the overflow that makes is taken back from the last items first.
     Wide total = 0;
     for (std::size_t index = 0; index < items.size(); ++index) {
-        sizes.at(index) = std::max(sizes.at(index), std::max(0, items[index].minimum));
+        sizes.at(index) = std::max({sizes.at(index), itemAt(items, index).minimum, 0});
         total += sizes.at(index);
     }
     if (Wide const deficit = total + gaps - Wide{track.length}; deficit > 0) {

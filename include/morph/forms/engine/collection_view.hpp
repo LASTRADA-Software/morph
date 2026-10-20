@@ -62,7 +62,7 @@ struct CollectionViewOptions {
     /// @brief The confirm dialog's cancel button.
     std::string cancelLabel = "Cancel";
     /// @brief The built-in header's title (`collection_title`); empty shows the schema's.
-    ui::Prop<std::string> title{};
+    ui::Prop<std::string> title;
 };
 
 namespace detail::engine {

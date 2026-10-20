@@ -2578,6 +2578,7 @@ private:
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
+    void layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout);
     void fieldOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, FieldState& field);
     std::vector<MenuItem> menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
     void ownQueries(DocNode const& node, RtScope const& scope, BoundaryRuntime& boundary,
@@ -5667,11 +5668,8 @@ inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& e
     });
 }
 
-inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
-    static_cast<void>(element);
-    common.visible = bindProp<bool>(ctx, node.prop("visible"), true, boolOf);
-    common.enabled = bindProp<bool>(ctx, node.prop("enabled"), true, boolOf);
-    common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
+// The size request: `sizing` (the width, or both dimensions), `alignSelf`, and the bounds.
+inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout) {
     if (ExprPtr const sizing = node.prop("sizing")) {
         // The width, or both dimensions from a `{width, height}` record, one left out being content. The loader
         // refuses a literal of another form; a computed one that is none is reported and lowers to content.
@@ -5686,23 +5684,31 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
                                      "; a sizing is \"content\", {\"fixed\": n}, {\"stretch\": w}, or a record of "
                                      "width and height of them");
         } else if (record) {
-            common.layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
-            common.layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
+            layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
+            layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
         } else {
-            common.layout.width = sizingOf(value);
+            layout.width = sizingOf(value);
         }
     }
     if (std::string_view const placed = node.name("alignSelf"); !placed.empty()) {
-        common.layout.alignSelf = alignOf(placed);
+        layout.alignSelf = alignOf(placed);
     }
     // Literal integers, checked at load.
     for (auto const& [key, bound] :
          {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
           std::pair{"minHeight", &LayoutHints::minHeight}, std::pair{"maxHeight", &LayoutHints::maxHeight}}) {
         if (ExprPtr const expr = node.prop(key); expr != nullptr && expr->literal.asInt() != nullptr) {
-            common.layout.*bound = static_cast<int>(*expr->literal.asInt());
+            layout.*bound = static_cast<int>(*expr->literal.asInt());
         }
     }
+}
+
+inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
+    static_cast<void>(element);
+    common.visible = bindProp<bool>(ctx, node.prop("visible"), true, boolOf);
+    common.enabled = bindProp<bool>(ctx, node.prop("enabled"), true, boolOf);
+    common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
+    layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
     common.focusId = node.id;
     common.surface = std::string{node.name("surface")};

@@ -50,6 +50,18 @@ namespace {
     return focused ? theme.buttonFocused : theme.buttonNormal;
 }
 
+/// A list item's style: disabled while out of the user's reach, else focus first, as a list's cursor row is, then
+/// selection.
+::core::tui::Style const& itemStyle(::core::tui::Theme const& theme, bool reachable, bool focused, bool selected) {
+    if (!reachable) {
+        return theme.buttonDisabled;
+    }
+    if (focused) {
+        return theme.buttonFocused;
+    }
+    return selected ? theme.listItemSelected : theme.textNormal;
+}
+
 /// A checkbox's or a slider's style: muted while out of the user's reach, else by focus.
 ::core::tui::Style const& checkboxStyle(::core::tui::Theme const& theme, bool reachable, bool focused) {
     if (!reachable) {
@@ -142,10 +154,7 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
         // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as
         // a highlighted row. Focus wins over selection, as the cursor row of a list does.
         ::core::tui::Theme const& theme = canvas.theme();
-        ::core::tui::Style line = !actionable() ? theme.buttonDisabled
-                                  : hasFocus()  ? theme.buttonFocused
-                                  : _selected   ? theme.listItemSelected
-                                                : theme.textNormal;
+        ::core::tui::Style const& line = itemStyle(theme, actionable(), hasFocus(), _selected);
         std::string text = " " + caption();
         text.append(static_cast<std::size_t>(std::max(0, canvas.width() - displayWidth(text))), ' ');
         canvas.putString(0, 0, text, line);

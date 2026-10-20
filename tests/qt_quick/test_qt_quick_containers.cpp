@@ -551,10 +551,10 @@ TEST_CASE("qt_quick containers: an inline form field's label sits left of its co
     REQUIRE(model.has_value());
     morph::forms::FormSession session{
         scene.runtime(), *model,
-        [&scene](std::string_view, std::string) {
+        [&scene](std::string_view, std::string const&) {
             return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
         },
-        [&scene](std::string_view, std::string) {
+        [&scene](std::string_view, std::string const&) {
             return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
         }};
     morph::forms::FormViewOptions options;
@@ -634,7 +634,7 @@ TEST_CASE("qt_quick containers: the frame's type scale runs application name, se
     CHECK(section.bold());
     CHECK(section.pixelSize() == text.pixelSize());
     CHECK(name.pixelSize() > section.pixelSize());
-    QColor const color = sectionLabel.property("color").value<QColor>();
+    auto const color = sectionLabel.property("color").value<QColor>();
     // The heading draws in its own scheme, the sidebar's.
     detail::ItemBase const* const heading = detail::findWidget(QStringLiteral("navigator_group_Lab/"));
     auto* const scheme = heading->item()->property("scheme").value<QObject*>();
@@ -650,7 +650,7 @@ TEST_CASE("qt_quick containers: the frame's type scale runs application name, se
 TEST_CASE("qt_quick containers: a row whose width its column gives spreads its children between its ends",
           "[qt_quick]") {
     Scene scene;
-    auto const named = [](std::string text) {
+    auto const named = [](std::string const& text) {
         ui::Text made{.text = text};
         made.common.testId = "spread_" + text;
         return ui::text(std::move(made));
