@@ -13,7 +13,10 @@ MorphWidget {
     property string text: ""
     property string icon: ""
 
-    implicitWidth: label.implicitWidth + Theme.unitWidth * 2
+    // The icon's URL in the theme's set; without one, the icon's name is drawn before the text, as text.
+    readonly property string iconSource: Theme.iconSource(root.icon)
+
+    implicitWidth: content.implicitWidth + Theme.unitWidth * 2
     implicitHeight: label.implicitHeight + 2
 
     Rectangle {
@@ -24,11 +27,26 @@ MorphWidget {
         border.color: root.toneBorderOf(root.tone)
     }
 
-    Label {
-        font: Theme.bodyFont
-        id: label
+    Row {
+        id: content
         anchors.centerIn: parent
-        text: (root.icon !== "" ? root.icon + " " : "") + root.text
-        color: root.toneOf(root.tone)
+        spacing: Theme.spaceOf(1)
+
+        Image {
+            objectName: "icon"
+            visible: root.iconSource !== ""
+            source: root.iconSource
+            sourceSize.height: label.implicitHeight
+            height: label.implicitHeight
+            width: visible ? height : 0
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Label {
+            id: label
+            font: Theme.bodyFont
+            text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text
+            color: root.toneOf(root.tone)
+        }
     }
 }

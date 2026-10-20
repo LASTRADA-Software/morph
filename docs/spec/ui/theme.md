@@ -78,7 +78,8 @@ A theme index is a `theme` bundle file whose top level has a string `vocab`:
 ```
 
 `base` is required; every other string member is a named variant; `density` and `surfaces` map names to files;
-`icons` is accepted and not read. Each list holds at most 16 names. `resolveTheme(index, files, variant, density,
+`icons` maps icon names to `icon` files ([Icons](#icons)). Each list holds at most 16 names, and the icon set at most
+256. `resolveTheme(index, files, variant, density,
 surface)` layers `base`, then the variant, the density and the surface, each optional, and resolves.
 
 ## At registration
@@ -176,6 +177,28 @@ tokens set it there. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` 
 marker in a widget's scheme (neutral: the muted colour, faint for the fill); a badge and a banner fill and outline
 with them.
 
+## Icons
+
+A theme index's `icons` is the bundle's icon set: icon name (`isIconName`: `[a-z][a-z0-9.-]{0,63}`) to the id of an
+`icon` file, SVG text of at most 64 KiB (`kMaxIconBytes`). `UiRegistry::build` refuses an index whose set names a
+file the bundle lacks or one that is not an `icon` file, naming the index and the icon. The client loader fills
+`ui::Bundle::icons` with each named icon's SVG.
+
+- **Framework names.** The built-in components draw `empty` (an empty state without an icon of its own),
+  `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
+  and a panel's chevron) and `close` (a dismissible banner's close button), from the set when it names them, and as
+  today's glyph or nothing otherwise, so a bundle without a set keeps today's look. `nav.back` and `nav.forward` are
+  framework names no built-in component draws yet (`kFrameworkIcons`).
+- **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a
+  `data:image/svg+xml` URL) and sets `Theme.iconSet`; `Theme.iconSource(name)` is the URL, or empty. A button, a
+  badge, an empty state and a menu entry draw a node's icon from the set when it names it, and today's text otherwise
+  (a badge's and a menu entry's name before the label, a button nothing). While the bundle declares a set, a node
+  icon it does not name is reported once per name through the `Components` callback (`icon <name> is not in the
+  theme's icon set`); without a set nothing is reported.
+- **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`
+  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `close` ×) before a badge's or a button's text,
+  and any other name is not drawn.
+
 ## Design decisions
 
 | Decision | Chosen | Why |
@@ -193,4 +216,4 @@ with them.
 - `{"pref": "density"}` choosing a density at runtime.
 - Units from the scale tokens rather than from the body font; `control.*` and `elevation.*` beyond those above in the
   closed set.
-- Icons, the terminal renderer's palette mapping.
+- The terminal renderer's palette mapping.

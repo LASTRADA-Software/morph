@@ -828,13 +828,14 @@ public:
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
-/// @brief A fake `ButtonWidget`: properties `label` and `emphasis`.
+/// @brief A fake `ButtonWidget`: properties `label`, `emphasis` and `icon`.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
     void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
 };
 
 /// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,

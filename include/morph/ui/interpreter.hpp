@@ -5788,6 +5788,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "button") {
         Button spec{.label = textProp("label")};
+        spec.icon = onceText("icon");
         if (node.name("emphasis") == "primary") {
             spec.emphasis = ButtonEmphasis::Primary;
         } else if (node.name("emphasis") == "danger") {

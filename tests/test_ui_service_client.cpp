@@ -16,6 +16,7 @@
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <latch>
+#include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/envelope_transport.hpp>
@@ -28,6 +29,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/theme.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -794,4 +796,59 @@ TEST_CASE("exchangeOver: a request the transport could not deliver is Unreachabl
     REQUIRE_FALSE(opened.has_value());
     CHECK(opened.error().kind == ConnectError::Kind::Unreachable);
     CHECK(opened.error().message == morph::backend::DisconnectedError{}.what());
+}
+
+namespace {
+
+/// An icon: a plain SVG.
+constexpr std::string_view kTick =
+    R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 4l2 2 4-4"/></svg>)";
+
+/// The fixture's registry with a theme index whose icon set names @p file for `tone.ok`, and an icon file `tick`.
+morph::ui::UiRegistry iconRegistry(std::string const& file, std::string_view kind = morph::ui::kIconFile) {
+    morph::ui::UiRegistry made = uiservice::registry();
+    std::string const index = R"({"vocab":"ui-theme/1","base":"default","icons":{"tone.ok":")" + file + R"("}})";
+    REQUIRE(made.addFile(uiservice::file(morph::ui::kThemeFile, "index", index, true)));
+    REQUIRE(made.addFile(uiservice::file(kind, "tick", std::string{kTick}, true)));
+    return made;
+}
+
+}  // namespace
+
+// Mutation: leave the index's `icons` unread (the bundle carries no icon set, and the missing file is not refused).
+TEST_CASE("UiClient fills the bundle's icon set from the theme index, and build refuses an icon it lacks",
+          "[ui-service][client][icons]") {
+    auto built = iconRegistry("tick").build();
+    REQUIRE(built.has_value());
+    Harness harness{true, *built};
+    OpenResult const opened = Harness::open(harness.client(), as("tech"));
+    REQUIRE(opened);
+    CHECK(opened->bundle.icons == std::map<std::string, std::string, std::less<>>{{"tone.ok", std::string{kTick}}});
+
+    auto missing = iconRegistry("nowhere").build();
+    REQUIRE_FALSE(missing.has_value());
+    CHECK(missing.error().document == "index");
+    CHECK(missing.error().reason ==
+          "the theme index names the icon `tone.ok` as `nowhere`, which is not an icon file of the bundle");
+    auto notAnIcon = iconRegistry("default").build();
+    REQUIRE_FALSE(notAnIcon.has_value());
+    CHECK(notAnIcon.error().reason.contains("is not an icon file of the bundle"));
+
+    morph::ui::UiRegistry refusing = uiservice::registry();
+    CHECK_FALSE(refusing.addFile(uiservice::file(morph::ui::kIconFile, "plain", "not svg")).has_value());
+    CHECK_FALSE(refusing
+                    .addFile(uiservice::file(morph::ui::kIconFile, "huge",
+                                             "<svg>" + std::string(morph::ui::kMaxIconBytes, ' ') + "</svg>"))
+                    .has_value());
+}
+
+TEST_CASE("parseThemeIndex reads the icon set and refuses a name that is not an icon name", "[ui][theme][icons]") {
+    auto const index = morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":{"tone.ok":"tick"}})");
+    REQUIRE(index.has_value());
+    CHECK(index->icons.at("tone.ok") == "tick");
+    CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":{"Tone":"tick"}})"));
+    CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":{"tone.ok":""}})"));
+    CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":["tick"]})"));
+    CHECK(morph::ui::iconGlyph("tone.ok") == "✓");
+    CHECK(morph::ui::iconGlyph("mine").empty());
 }

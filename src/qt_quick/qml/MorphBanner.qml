@@ -31,6 +31,17 @@ MorphWidget {
         anchors.leftMargin: Theme.unitWidth
         anchors.rightMargin: Theme.unitWidth
 
+        // The tone's icon, when the theme's icon set names it.
+        Image {
+            objectName: "toneIcon"
+            readonly property string name: ["", "tone.info", "tone.ok", "tone.warn", "tone.err"][root.tone] ?? ""
+            visible: source.toString() !== ""
+            source: Theme.iconSource(name)
+            sourceSize.height: Theme.unitHeight
+            Layout.preferredHeight: Theme.unitHeight
+            Layout.preferredWidth: visible ? Theme.unitHeight : 0
+        }
+
         Label {
             font: Theme.bodyFont
             Layout.fillWidth: true
@@ -50,7 +61,9 @@ MorphWidget {
             font: Theme.bodyFont
             objectName: "dismiss"
             visible: root.dismissible
-            text: "×"
+            icon.source: Theme.iconSource("close")
+            icon.color: "transparent"
+            text: icon.source.toString() !== "" ? "" : "×"
             onClicked: root.fire("dismiss", undefined)
         }
     }

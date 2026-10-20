@@ -135,6 +135,7 @@ public:
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
+    void setIcon(std::string_view icon) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -147,6 +148,8 @@ public:
     void choose(std::vector<std::size_t> const& path) const;
 
 private:
+    // Reports each entry's icon the bundle's declared icon set does not name.
+    void checkIcons(std::vector<ui::MenuEntry> const& entries) const;
     std::vector<ui::MenuEntry> _entries;
 };
 

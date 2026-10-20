@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -97,7 +98,17 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
     refresh();
 }
 
-::core::tui::Size ButtonImpl::naturalSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
+void ButtonImpl::setIcon(std::string_view icon) {
+    _icon = std::string{icon};
+    refresh();
+}
+
+std::string ButtonImpl::caption() const {
+    std::string_view const glyph = ui::iconGlyph(_icon);
+    return glyph.empty() ? _label : std::string{glyph} + " " + _label;
+}
+
+::core::tui::Size ButtonImpl::naturalSize() const { return {.width = displayWidth(caption()) + 4, .height = 1}; }
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     // Primary is bold, danger bold in the error colour; neither changes a disabled button's look.
@@ -108,7 +119,7 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
             style.fg = canvas.theme().error.fg;
         }
     }
-    canvas.putString(0, 0, "[ " + _label + " ]", style);
+    canvas.putString(0, 0, "[ " + caption() + " ]", style);
 }
 
 ::core::tui::EventResult ButtonImpl::key(::core::tui::KeyEvent const& key) {

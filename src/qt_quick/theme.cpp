@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QByteArray>
 #include <QColor>
 #include <QFont>
 #include <QFontInfo>
@@ -10,6 +11,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 #include <array>
 #include <functional>
 #include <map>
@@ -220,8 +222,32 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
     return unset;
 }
 
-std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
-                                          std::map<std::string, std::string, std::less<>> const& themes) {
+namespace {
+
+// The bundle's icon set on `Theme.icons`, each icon a `data:` URL of its SVG, and whether there is one.
+std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std::string, std::less<>> const& icons) {
+    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr) {
+        return {"Theme"};
+    }
+    QVariantMap urls;
+    for (auto const& [name, svg] : icons) {
+        urls.insert(QString::fromStdString(name), QStringLiteral("data:image/svg+xml;base64,") +
+                                                      QString::fromLatin1(QByteArray::fromStdString(svg).toBase64()));
+    }
+    std::vector<std::string> unset;
+    if (!theme->setProperty("icons", QVariant::fromValue(urls))) {
+        unset.emplace_back("icons");
+    }
+    if (!theme->setProperty("iconSet", !icons.empty())) {
+        unset.emplace_back("iconSet");
+    }
+    return unset;
+}
+
+// The theme index's base and surfaces, or the defaults without an index.
+std::vector<std::string> applyIndex(QQmlEngine& engine,
+                                    std::map<std::string, std::string, std::less<>> const& themes) {
     std::optional<ui::ThemeIndex> index;
     std::map<std::string, ui::TokenSet, std::less<>> files;
     for (auto const& [fileId, text] : themes) {
@@ -258,6 +284,17 @@ std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
         surfaces.insert_or_assign(name, ui::themeValues(*layered));
     }
     return applyTheme(engine, ui::themeValues(*base), surfaces);
+}
+
+}  // namespace
+
+std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
+                                          std::map<std::string, std::string, std::less<>> const& themes,
+                                          std::map<std::string, std::string, std::less<>> const& icons) {
+    std::vector<std::string> problems = setIcons(engine, icons);
+    auto applied = applyIndex(engine, themes);
+    problems.insert(problems.end(), applied.begin(), applied.end());
+    return problems;
 }
 
 }  // namespace morph::qt_quick

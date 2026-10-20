@@ -89,6 +89,15 @@ TEST_CASE("tui badge: the text in brackets", "[tui][display]") {
     CHECK(badge->probeText() == "paid");
 }
 
+// Mutation: leave the framework names undrawn (the badge shows `[paid]`).
+TEST_CASE("tui badge: a framework icon is its glyph before the text", "[tui][display]") {
+    Harness harness{20, 2};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setText("paid");
+    badge->setIcon("tone.ok");
+    CHECK(harness.draw() == Rows{"[✓ paid]"});
+}
+
 // Mutation: leave the value unclamped (1.7 then fills past the bar).
 TEST_CASE("tui progress: a bar and the percentage, clamped to its ends; none for an indeterminate one",
           "[tui][display]") {

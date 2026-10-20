@@ -159,6 +159,10 @@ public:
     /// @brief Sets how much the button stands out. The mount calls it only for another value than `Normal`.
     /// @param emphasis The emphasis.
     virtual void setEmphasis(ButtonEmphasis emphasis) = 0;
+
+    /// @brief Sets the icon drawn beside the caption; called once, and only for a button that has one.
+    /// @param icon The name of an icon in the theme's icon set.
+    virtual void setIcon(std::string_view icon) = 0;
 };
 
 /// @brief An editable text field.

@@ -136,9 +136,26 @@ void Context::undeclared(QObject const& item, char const* name) {
     if (!_undeclared.emplace(type, name).second) {
         return;
     }
-    std::string reason = type + " does not declare the property `" + name + "`; the write is refused";
+    report(type, type + " does not declare the property `" + name + "`; the write is refused");
+}
+
+void Context::checkIcon(std::string_view icon) {
+    if (icon.empty() || _missingIcons.contains(icon)) {
+        return;
+    }
+    QObject const* const theme =
+        _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr || !theme->property("iconSet").toBool() ||
+        theme->property("icons").toMap().contains(toQString(icon))) {
+        return;
+    }
+    _missingIcons.emplace(icon);
+    report(std::string{icon}, "icon " + std::string{icon} + " is not in the theme's icon set");
+}
+
+void Context::report(std::string name, std::string reason) {
     if (_options.components != nullptr) {
-        _options.components->report(ComponentFailure{.name = type, .reason = std::move(reason)});
+        _options.components->report(ComponentFailure{.name = std::move(name), .reason = std::move(reason)});
         return;
     }
     std::cerr << "morph::qt_quick: " << reason << '\n';

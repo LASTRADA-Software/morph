@@ -43,7 +43,9 @@ MorphWidget {
                     font: Theme.bodyFont
                     id: toggle
                     visible: root.collapsible
-                    text: root.collapsed ? "▸" : "▾"
+                    icon.source: Theme.iconSource(root.collapsed ? "nav.expand" : "nav.collapse")
+                    icon.color: "transparent"
+                    text: icon.source.toString() !== "" ? "" : root.collapsed ? "▸" : "▾"
                     onClicked: {
                         root.collapsed = !root.collapsed
                         root.fire("toggle", root.collapsed)

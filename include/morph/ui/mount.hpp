@@ -616,6 +616,9 @@ private:
         if (spec.emphasis != ButtonEmphasis::Normal) {
             widget.setEmphasis(spec.emphasis);
         }
+        if (!spec.icon.empty()) {
+            widget.setIcon(spec.icon);
+        }
         widget.setOnClick(event(spec.onClick));
         return widget;
     }

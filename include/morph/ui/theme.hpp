@@ -38,6 +38,50 @@ inline constexpr std::size_t kMaxThemeTokens = 16384;
 /// @brief The most variants, densities or surfaces a theme index may list, each.
 inline constexpr std::size_t kMaxThemeVariants = 16;
 
+/// @brief The most names a theme index's icon set may hold.
+inline constexpr std::size_t kMaxThemeIcons = 256;
+
+/// @brief The icon names the built-in components draw: an empty state without an icon of its own, a banner's tone,
+///        a chevron that opens and closes, and a close button. A bundle's icon set replaces any of them by name.
+inline constexpr std::array<std::string_view, 10> kFrameworkIcons = {
+    "empty",    "tone.info",   "tone.ok",    "tone.warn",    "tone.err",
+    "nav.back", "nav.forward", "nav.expand", "nav.collapse", "close"};
+
+/// @brief Whether @p name is an icon name: `[a-z][a-z0-9.-]{0,63}`.
+/// @param name The name.
+/// @return It.
+[[nodiscard]] inline bool isIconName(std::string_view name) {
+    if (name.empty() || name.size() > 64 || name.front() < 'a' || name.front() > 'z') {
+        return false;
+    }
+    return std::ranges::all_of(name, [](char const chr) {
+        return (chr >= 'a' && chr <= 'z') || (chr >= '0' && chr <= '9') || chr == '.' || chr == '-';
+    });
+}
+
+/// @brief The glyph a text renderer draws for a framework icon name.
+/// @param name The icon name.
+/// @return The glyph, or empty for a name that has none (`empty`, which a text renderer draws as nothing).
+[[nodiscard]] inline std::string_view iconGlyph(std::string_view name) {
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 9> kGlyphs = {{
+        {"tone.ok", "✓"},
+        {"tone.warn", "!"},
+        {"tone.err", "✗"},
+        {"tone.info", "i"},
+        {"nav.expand", "▸"},
+        {"nav.collapse", "▾"},
+        {"nav.back", "‹"},
+        {"nav.forward", "›"},
+        {"close", "×"},
+    }};
+    for (auto const& [icon, glyph] : kGlyphs) {
+        if (icon == name) {
+            return glyph;
+        }
+    }
+    return {};
+}
+
 /// @brief The longest chain of aliases a token may resolve through.
 inline constexpr std::size_t kMaxAliasChain = 64;
 
@@ -96,6 +140,8 @@ struct ThemeIndex {
     std::map<std::string, std::string, std::less<>> densities;
     /// @brief Named surfaces, such as `sidebar`, each one file that overrides the variant for a subtree.
     std::map<std::string, std::string, std::less<>> surfaces;
+    /// @brief The icon set: icon name to the bundle's `icon` file that draws it; empty for none.
+    std::map<std::string, std::string, std::less<>> icons;
 };
 
 namespace detail {
@@ -713,7 +759,8 @@ private:
 ///
 /// Refused: not a JSON object, a `vocab` other than `ui-theme/1`, no `base`, a must-understand (`!`) key, a variant
 /// that is not a file id, a `density` or `surfaces` that is not a map of name to file id, and more than
-/// `kMaxThemeVariants` variants, densities or surfaces. `icons` is accepted and not read.
+/// `kMaxThemeVariants` variants, densities or surfaces, and an `icons` that is not an object of icon name
+/// (`isIconName`) to file id or holds more than `kMaxThemeIcons` names.
 /// @param text The index.
 /// @return The index, or why it is refused.
 [[nodiscard]] inline std::expected<ThemeIndex, std::string> parseThemeIndex(std::string_view text) {
@@ -756,6 +803,25 @@ private:
     }
     if (auto reason = detail::readThemeMap(*object, "surfaces", index.surfaces)) {
         return std::unexpected(std::move(*reason));
+    }
+    if (Json const* const icons = detail::memberOf(*object, "icons")) {
+        auto const* const set = std::get_if<Json::object_t>(&icons->data);
+        if (set == nullptr) {
+            return std::unexpected(std::string{"`icons` is an object of icon name to icon file"});
+        }
+        if (set->size() > kMaxThemeIcons) {
+            return std::unexpected("an icon set holds at most " + std::to_string(kMaxThemeIcons) + " names");
+        }
+        for (auto const& [name, file] : *set) {
+            if (!isIconName(name)) {
+                return std::unexpected("`" + name + "` is not an icon name: icon names match [a-z][a-z0-9.-]{0,63}");
+            }
+            auto const* const fileId = std::get_if<std::string>(&file.data);
+            if (fileId == nullptr || fileId->empty()) {
+                return std::unexpected("`icons." + name + "` names an icon file");
+            }
+            index.icons.insert_or_assign(name, *fileId);
+        }
     }
     if (index.variants.size() > kMaxThemeVariants || index.densities.size() > kMaxThemeVariants ||
         index.surfaces.size() > kMaxThemeVariants) {

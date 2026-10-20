@@ -10,6 +10,8 @@ MorphWidget {
     fillsAcross: false
 
     property string label: ""
+    // An icon of the theme's icon set, drawn beside the label when the set names it; set once.
+    property string icon: ""
     // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled); set once.
     property int emphasis: 0
     readonly property color fill: emphasis === 1 ? root.scheme.accent : emphasis === 2 ? root.scheme.error
@@ -33,6 +35,8 @@ MorphWidget {
         rightPadding: Theme.spaceOf(4)
         palette.buttonText: root.emphasis === 0 ? root.scheme.text : "white"
         font: root.emphasis === 0 ? Theme.bodyFont : Theme.strongFont
+        icon.source: Theme.iconSource(root.icon)
+        icon.color: "transparent"
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.fill

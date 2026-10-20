@@ -88,6 +88,10 @@ inline constexpr std::string_view kThemeFile = "theme";
 inline constexpr std::string_view kMessagesFile = "messages";
 /// @brief A delivered custom component (spec 5 §10).
 inline constexpr std::string_view kComponentFile = "component";
+/// @brief An icon of a theme's icon set: SVG text.
+inline constexpr std::string_view kIconFile = "icon";
+/// @brief The largest icon file a bundle may hold.
+inline constexpr std::size_t kMaxIconBytes = std::size_t{64} * 1024;
 
 /// @brief The content hash of @p bytes: `sha256:` and the SHA-256 digest in 64 lower-case hexadecimal digits.
 /// @param bytes The bytes.
@@ -121,7 +125,7 @@ inline constexpr std::string_view kComponentFile = "component";
 struct ManifestFile {
     /// @brief The file's id: a screen's document id, `app`, a theme's, a catalogue's or a component's name.
     std::string id;
-    /// @brief `screen`, `app`, `theme`, `messages` or `component`; a client fetches no kind it does not know.
+    /// @brief `screen`, `app`, `theme`, `messages`, `component` or `icon`; a client fetches no kind it does not know.
     std::string kind;
     /// @brief The file's content hash.
     std::string hash;

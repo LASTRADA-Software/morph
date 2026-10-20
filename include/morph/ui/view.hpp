@@ -406,6 +406,8 @@ struct Button {
     Action onClick;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The name of an icon in the theme's icon set, drawn beside the caption; empty shows none. Set once.
+    std::string icon;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.

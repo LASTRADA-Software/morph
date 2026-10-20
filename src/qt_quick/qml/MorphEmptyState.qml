@@ -13,6 +13,9 @@ MorphWidget {
     property string icon: ""
     property string actionLabel: ""
 
+    // The icon's URL in the theme's set: the node's own, else the set's `empty`.
+    readonly property string iconSource: Theme.iconSource(root.icon !== "" ? root.icon : "empty")
+
     implicitWidth: column.implicitWidth
     implicitHeight: column.implicitHeight
 
@@ -20,9 +23,19 @@ MorphWidget {
         id: column
         anchors.fill: parent
 
+        Image {
+            objectName: "icon"
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.iconSource !== ""
+            source: root.iconSource
+            sourceSize.height: Theme.unitHeight * 2
+            Layout.preferredHeight: Theme.unitHeight * 2
+            Layout.preferredWidth: Theme.unitHeight * 2
+        }
+
         Label {
             Layout.alignment: Qt.AlignHCenter
-            visible: root.icon !== ""
+            visible: root.icon !== "" && root.iconSource === ""
             text: root.icon
             font.pixelSize: Theme.unitHeight * 2
         }

@@ -33,6 +33,7 @@ public:
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
+    void setIcon(std::string_view icon) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
@@ -41,7 +42,10 @@ public:
     void activate() override;
 
 private:
+    // The caption drawn: a framework icon's glyph before the label; any other icon stays undrawn, as text.
+    [[nodiscard]] std::string caption() const;
     std::string _label;
+    std::string _icon;
     ui::Action _onClick;
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
 };

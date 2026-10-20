@@ -53,7 +53,9 @@ MorphWidget {
     function entryText(entry: var): string {
         const mark = entry.checked === true ? "✓ " : entry.checked === false ? "  " : ""
         const more = entry.items && entry.items.length > 0 ? " ›" : ""
-        return mark + (entry.icon ? entry.icon + " " : "") + entry.label + more
+        // An icon the theme's set names is drawn as the entry's icon; another is its name, as text.
+        const named = entry.icon && Theme.iconSource(entry.icon) === "" ? entry.icon + " " : ""
+        return mark + named + entry.label + more
     }
 
     focusTarget: bar
@@ -74,6 +76,8 @@ MorphWidget {
                 required property int index
                 required property var modelData
                 text: root.entryText(modelData)
+                icon.source: Theme.iconSource(modelData.icon ? modelData.icon : "")
+                icon.color: "transparent"
                 enabled: modelData.enabled
                 onClicked: {
                     if (modelData.items && modelData.items.length > 0)
@@ -102,6 +106,8 @@ MorphWidget {
                     required property var modelData
                     Layout.fillWidth: true
                     text: root.entryText(modelData) + (modelData.keys ? "    " + modelData.keys : "")
+                    icon.source: Theme.iconSource(modelData.icon ? modelData.icon : "")
+                    icon.color: "transparent"
                     enabled: modelData.enabled
                     onClicked: {
                         const path = root.openPath.concat([index])

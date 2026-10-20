@@ -9,6 +9,17 @@ import QtQuick
 QtObject {
     id: theme
 
+    // The bundle's icon set: icon name to the URL of its SVG; empty while the theme declares none.
+    property var icons: ({})
+    // Whether the bundle's theme declares an icon set: a node icon it does not name is then reported.
+    property bool iconSet: false
+
+    // The URL an icon draws from: the bundle's set's, or empty, for which a component draws today's text or glyph.
+    function iconSource(name: string): string {
+        const source = name !== "" ? theme.icons[name] : undefined
+        return source !== undefined ? source : ""
+    }
+
     // The families `font.family` names, in order of preference; empty draws in the platform font.
     property list<string> fontFamilies: []
     // The platform font: what the sizes derive from when the theme gives none, and the font while it names no family.

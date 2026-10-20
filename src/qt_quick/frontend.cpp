@@ -189,7 +189,7 @@ int Frontend::run(ui::AppSource& source) {
                     std::cerr << "morph::qt_quick: the theme onEngine applied is replaced by the bundle's; set "
                                  "FrontendConfig::bundleTheme to Ignore to keep it\n";
                 }
-                for (std::string const& problem : applyBundleTheme(engine, result->themes)) {
+                for (std::string const& problem : applyBundleTheme(engine, result->themes, result->icons)) {
                     std::cerr << "morph::qt_quick: " << problem << '\n';
                 }
             } else if (result && carriesTheme(*result)) {

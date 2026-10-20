@@ -3,6 +3,7 @@
 // Theme tokens on Qt Quick (spec 6 §12 "Design package"): a token set reaches a generated screen's widget and a host
 // component through the one `Theme` singleton, and a token the theme lacks takes the default.
 
+#include <QByteArray>
 #include <QColor>
 #include <QFile>
 #include <QFont>
@@ -28,6 +29,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "qt_quick_harness.hpp"
 
@@ -319,4 +321,54 @@ TEST_CASE("theme: a fontFamily token is read as its names", "[qt_quick]") {
     REQUIRE(resolved);
     CHECK(ui::themeValues(*resolved).families.at("font.family") == std::vector<std::string>{"A Sans", "B"});
     CHECK(ui::themeValues().families.at("font.family").empty());
+}
+
+// Mutation: leave Theme.icons unset (the banner draws no icon, and the badge's icon stays its name as text).
+TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a node icon outside it is reported once",
+          "[qt_quick]") {
+    std::vector<morph::qt_quick::ComponentFailure> reported;
+    morph::qt_quick::Components components{
+        [&reported](morph::qt_quick::ComponentFailure const& failure) { reported.push_back(failure); }};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    std::string const tick =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 4l2 2 4-4"/></svg>)";
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"tone.ok", tick}}).empty());
+    QString const url =
+        QStringLiteral("data:image/svg+xml;base64,") + QString::fromLatin1(QByteArray::fromStdString(tick).toBase64());
+
+    auto ok = scene.backend().createBanner(nullptr);
+    ok->setTone(ui::Tone::Ok);
+    ok->setText("Saved");
+    auto info = scene.backend().createBanner(nullptr);
+    info->setTone(ui::Tone::Info);
+    info->setText("Note");
+    auto named = scene.backend().createBadge(nullptr);
+    named->setText("Done");
+    named->setIcon("tone.ok");
+    auto missing = scene.backend().createBadge(nullptr);
+    missing->setText("Odd");
+    missing->setIcon("sparkle");
+    auto again = scene.backend().createBadge(nullptr);
+    again->setIcon("sparkle");
+    scene.settle();
+
+    auto iconOf = [](ui::Widget const& widget, char const* name) {
+        auto* const icon = Scene::itemOf(widget).findChild<QQuickItem*>(QString::fromLatin1(name));
+        REQUIRE(icon != nullptr);
+        return icon;
+    };
+    CHECK(iconOf(*ok, "toneIcon")->property("source").toUrl().toString() == url);
+    CHECK(iconOf(*ok, "toneIcon")->isVisible());
+    CHECK_FALSE(iconOf(*info, "toneIcon")->isVisible());
+    CHECK(iconOf(*named, "icon")->property("source").toUrl().toString() == url);
+    CHECK_FALSE(iconOf(*missing, "icon")->isVisible());
+    CHECK(reported == std::vector<morph::qt_quick::ComponentFailure>{
+                          {.name = "sparkle", .reason = "icon sparkle is not in the theme's icon set"}});
+
+    // Without a declared set nothing is reported: every icon is drawn as text.
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    auto plain = scene.backend().createBadge(nullptr);
+    plain->setIcon("glow");
+    scene.settle();
+    CHECK(reported.size() == 1);
 }

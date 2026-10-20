@@ -303,6 +303,13 @@ Kinds: "a `BusyIndicator` and a label, both shown only while active". **Misuse:*
   as text; without a set, nothing is reported.
 - **Terminal.** Icons stay text; the framework names map to fixed glyphs (`tone.ok` ✓, `tone.warn` !, `tone.err` ✗,
   `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `close` ×).
+- **As built.** MorphUi ships no SVG of its own: a framework name the set does not name is drawn as today's glyph
+  (or nothing), which is what keeps a bundle without a set looking as it did. The components that draw framework
+  names are the ones with that chrome today: banners (tone, close), collapsibles and panels (chevrons), empty states
+  (`empty`); the navigator and drawers have no chevron or close button to draw. A button gains `icon` in the view
+  tree and `ButtonWidget::setIcon` in the backend contract, lowered from the document's `button.icon`. There is no
+  `MorphIcon` type: each component draws an `Image` or a control's `icon.source` from `Theme.iconSource`. On the
+  terminal, a badge and a button draw a framework name's glyph before their text.
 - **Specs.** `ui/theme.md` (the index, a new section *Icons*), `ui/service.md` (the `icon` file kind, `build`'s
   refusal), `ui/frontend.md` (`Bundle::icons`), `qt_quick/backend.md`, `tui/frontend.md`.
 

@@ -73,7 +73,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Widget | Shows | Input |
 |---|---|---|
 | Text | one row per line, styled by role | — |
-| Button | `[ label ]` | Enter, Space, click |
+| Button | `[ label ]`, a framework icon's glyph before the label | Enter, Space, click |
 | TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Enter, Space, click |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
@@ -92,7 +92,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
 | Banner | its text in its tone, `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
-| Badge | `[text]` in its tone | — |
+| Badge | `[text]` in its tone, a framework icon's glyph before the text | — |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
 | KeyValue | captions, then the values lined up after the widest | — |

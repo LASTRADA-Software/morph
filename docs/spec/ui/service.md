@@ -73,7 +73,8 @@ saw before, and an old client reading a new reply ignores the key.
   vectors, so no dependency is added.
 - The **manifest** is `{application, version, files: [{id, kind, hash, size, public}]}`, its files sorted by kind
   then id, written by glaze. Equal bundles therefore have equal manifests and equal digests. The kinds are
-  `screen`, `app` (the app document), `theme`, `messages` and `component`.
+  `screen`, `app` (the app document), `theme`, `messages`, `component` and `icon` (SVG text of a theme's icon set, at
+  most `kMaxIconBytes`).
 - The **digest** is the content hash of the manifest's text, and travels in the `ui-hello` reply.
 - The client hashes what it received: a `ui-fetch` reply's `body` is the file's bytes, not a re-encoding of
   them. It checks the manifest against the digest, and each file against its manifest entry, before it keeps or
@@ -187,8 +188,9 @@ server, never a surprise on a client.
   ([`catalogue.md`](catalogue.md)). A theme file is a theme index or a DTCG token file, refused when it does not
   parse; `build` refuses a theme some combination of which does not resolve ([`theme.md`](theme.md)).
 - `requireVocabulary(v)` adds a vocabulary the bundle needs.
-- `build()` refuses a screen that names a delivered component (`qml`) whose hash no `component` file has, and a
-  bundle over the bounds. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
+- `build()` refuses a screen that names a delivered component (`qml`) whose hash no `component` file has, a theme
+  index whose icon set names a file that is not an `icon` file of the bundle ([`theme.md`](theme.md#icons)), and a
+  bundle over the bounds. `addFile` refuses an `icon` that is not SVG text or is larger than `kMaxIconBytes`. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
   by hash, the screens with their top-level queries and named actions, and the facts.
 
 `UiService(bundle)` serves one built bundle and never changes it, so it needs no lock on the server strand.

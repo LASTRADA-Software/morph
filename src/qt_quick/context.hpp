@@ -13,6 +13,7 @@
 #include <morph/qt_quick/backend.hpp>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace morph::qt_quick::detail {
@@ -64,8 +65,14 @@ public:
     /// signal handlers and from a table's restriping while a row is destroyed, where an exception cannot pass.
     void undeclared(QObject const& item, char const* name);
 
+    /// Reports, once per name, a node's icon that the bundle's declared icon set does not name; it is drawn as text.
+    /// Without a declared set nothing is reported: every icon is drawn as text or as MorphUi's own.
+    void checkIcon(std::string_view icon);
+
 private:
     void widthChanged();
+    // A problem of a widget: through the components' failure callback, or on `std::cerr` without components.
+    void report(std::string name, std::string reason);
 
     QQmlEngine* _engine;
     BackendOptions _options;
@@ -74,6 +81,7 @@ private:
     std::map<QString, std::unique_ptr<QQmlComponent>> _components;
     std::string _widthClass;
     std::set<std::pair<std::string, std::string>> _undeclared;
+    std::set<std::string, std::less<>> _missingIcons;
 };
 
 }  // namespace morph::qt_quick::detail

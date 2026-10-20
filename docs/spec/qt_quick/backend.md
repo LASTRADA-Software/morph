@@ -137,7 +137,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Kind | Component | Shows | Reports |
 |---|---|---|---|
 | Text | `MorphText` | a label in a text role | — |
-| Button | `MorphButton` | a `Button` | click, Space or Enter |
+| Button | `MorphButton` | a `Button`; its `icon` drawn as the control's icon when the theme's icon set names it ([`../ui/theme.md`](../ui/theme.md#icons)) | click, Space or Enter |
 | TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
 | Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |
@@ -168,6 +168,10 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 - **Controlled inputs** behave as the contract says: the control shows the user's action at once, as Qt Quick does,
   and the mount re-asserts the document's value in a later turn. A read-only check box, select or slider takes
   focus and puts its own state back when the user acts; a read-only text field reports no edit, commit or submit.
+- **Icons.** A badge, an empty state, a menu entry and a button draw a node's icon from `Theme.iconSource` when the
+  bundle's icon set names it, and today's text otherwise; a banner draws its tone's framework icon and its close
+  button's, and a collapsible and a panel their chevrons, from the set when it names them. While the bundle declares
+  a set, a node icon outside it is reported once per name (`Context::checkIcon`).
 - **Dialogs and drawers** open and close without a transition, so what the document says is what the window shows.
   `footer` is part of their restyle API: a kit's dialog places the footer item where it wants, and a restyle that
   does not declare it is refused.
