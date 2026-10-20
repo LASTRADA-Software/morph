@@ -665,3 +665,48 @@ TEST_CASE("qt_quick widgets: a primary button is accent-filled, a danger one err
     CHECK(background(*primary) == QColor{"#1565c0"});
     CHECK(background(*danger) == QColor{"#c62828"});
 }
+
+// Whether an Item-style button already composes with a trailing Badge inside a row, or whether the button's own
+// fill consumes the row's width first and squeezes or displaces the badge. #1013's premise, checked empirically.
+TEST_CASE("qt_quick widgets: an Item-style button composes with a trailing Badge in a stretched row", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(50), .height = ui::Sizing::content()});
+    auto item = scene.backend().createButton(row.get());
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setLabel("A fairly long sidebar entry label");
+    item->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    auto badge = scene.backend().createBadge(row.get());
+    badge->setText("12");
+    scene.settle();
+    QQuickItem const& rowItem = Scene::itemOf(*row);
+    QQuickItem const& itemItem = Scene::itemOf(*item);
+    QQuickItem const& badgeItem = Scene::itemOf(*badge);
+    INFO("row " << rowItem.width() << " wide; item at x=" << itemItem.x() << " w=" << itemItem.width()
+                << "; badge at x=" << badgeItem.x() << " w=" << badgeItem.width());
+    // The badge keeps its own width and is fully inside the row, after the item.
+    CHECK(badgeItem.width() > 0.0);
+    CHECK(badgeItem.x() >= itemItem.x() + itemItem.width() - 1.0);
+    CHECK(badgeItem.x() + badgeItem.width() <= rowItem.width() + 1.0);
+    // The item does not consume the row's full width itself: there is room left for the badge beside it.
+    CHECK(itemItem.width() < rowItem.width());
+}
+
+// The narrower case: an Item-style button given no stretch sizing (content-sized) still composes with a trailing
+// Badge — less realistic for a nav rail, but recorded since it behaves differently from the stretched case.
+TEST_CASE("qt_quick widgets: a content-sized Item-style button also composes with a trailing Badge", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto item = scene.backend().createButton(row.get());
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setLabel("Short");
+    auto badge = scene.backend().createBadge(row.get());
+    badge->setText("3");
+    scene.settle();
+    QQuickItem const& itemItem = Scene::itemOf(*item);
+    QQuickItem const& badgeItem = Scene::itemOf(*badge);
+    INFO("item at x=" << itemItem.x() << " w=" << itemItem.width() << "; badge at x=" << badgeItem.x()
+                      << " w=" << badgeItem.width());
+    CHECK(badgeItem.width() > 0.0);
+    CHECK(badgeItem.x() >= itemItem.x() + itemItem.width() - 1.0);
+}
