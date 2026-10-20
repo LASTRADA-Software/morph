@@ -194,8 +194,11 @@ order) — and each of those is one operation on the Qt side. Nothing re-creates
 **Tables.** A horizontal stack the mount makes inside a table is one of its rows (`MorphTableRow`). A row places its
 cells by column index at the table's column widths — fixed units, the widest of the header and the column's shown cells
 for content (as the terminal backend sizes it), a share of the rest for stretch — so a hidden cell keeps its column
-and the cells after it stay under their headers; a cell's implicit size changing widens its content column and places
-the rows again. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
+and the cells after it stay under their headers. A content column's width is cached per column rather than recomputed
+by rescanning every row on every change: a cell growing only raises its column's cached width; a cell shrinking, a row
+leaving, or a cell's visibility flipping rescans that one column, since the cache alone cannot tell whether the row
+that set its current maximum is still contributing. Either way, every row still places its cells again once a
+column's width actually changes, since a widened column's cells all need their new x/width. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
 click or Enter activates it without toggling the selection. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.

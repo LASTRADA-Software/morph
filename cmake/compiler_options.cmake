@@ -135,6 +135,8 @@ if(MORPH_COMPILER_FAMILY STREQUAL "MSVC")
         /w14906     # string literal cast to LPWSTR
         /w14928     # illegal copy-initialization
         /wd4068     # suppress: unknown pragma (e.g. clang pragmas in shared headers)
+        /wd4702     # suppress: unreachable code (a false positive inside Qt's qvariant.h
+                    # QVariant::fromValue, whose if constexpr chain's branches all return)
     )
 
 # ═══════════════════════════════════════════════════════════════════════════

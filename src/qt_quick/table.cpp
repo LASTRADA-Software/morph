@@ -58,11 +58,32 @@ void TableImpl::adopted(ItemBase& child) {
     static_cast<void>(child);
     mark();
     stripe(nullptr);
+    // A newly-adopted row may be the table's first with columns already set (columns usually arrive before any
+    // row), or `setColumns` may not yet have run for every column at mount time -- either way, make sure the cache
+    // covers every column before anything reads `widths`. This is an explicit, outside-any-binding call: seeding
+    // lazily from inside the `widths` binding's own evaluation (cachedWidth) previously caused `widths` to be
+    // marked dirty and re-entered while still computing itself, as each row's adoption retriggered a seed.
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "seedMissingColumns", Qt::DirectConnection);
+    }
 }
 
 void TableImpl::moved() { stripe(nullptr); }
 
-void TableImpl::releasing(ItemBase& child) noexcept { stripe(&child); }
+void TableImpl::releasing(ItemBase& child) noexcept {
+    stripe(&child);
+    // `child`'s item is still parented into the QML body (ItemBase's own destructor calls release() -- which calls
+    // this -- before it hides and reparents the item away), so a QML-side rescan of body.children would still see
+    // it unless its own item is hidden first. Doing that here, directly, is simpler and safer than teaching the
+    // QML-side scan a second way to exclude a row, and a row headed for destruction needing no visible state is a
+    // narrower assumption than inventing a new cross-language exclusion parameter.
+    if (QQuickItem* const leavingItem = child.item(); leavingItem != nullptr) {
+        leavingItem->setVisible(false);
+    }
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "invalidateAllColumns", Qt::DirectConnection);
+    }
+}
 
 void TableImpl::stripe(ItemBase const* leaving) const noexcept {
     // Every child is a row, and one being adopted is still being made, so its type is not asked.
@@ -156,7 +177,7 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
 }
 
 void TableRowImpl::adopted(ItemBase& child) {
-    QQuickItem const* const cell = child.item();
+    QQuickItem* const cell = child.item();
     if (cell == nullptr || item() == nullptr) {
         return;
     }
@@ -170,6 +191,35 @@ void TableRowImpl::adopted(ItemBase& child) {
     };
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(), place);
     QObject::connect(cell, &QQuickItem::implicitHeightChanged, item(), place);
+
+    // ContainerCore::adopt appends before calling adopted(), so this cell's index in the row is the column its
+    // content is bound to -- cells are always adopted in column order. Reported to the table's own QML item, the
+    // same safe idiom `place` uses above -- a QPointer to the item, never a pointer to the C++ TableImpl/TableRowImpl
+    // wrapper, which may already be destroyed while Qt still holds the items.
+    auto const* const table = dynamic_cast<TableImpl const*>(container());
+    QQuickItem* const tableItem = table != nullptr ? table->item() : nullptr;
+    if (tableItem == nullptr) {
+        return;
+    }
+    int const columnIndex = static_cast<int>(children().size()) - 1;
+    QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(),
+                      [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex, cellRef = QPointer<QQuickItem>{cell}] {
+                          if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
+                              QMetaObject::invokeMethod(tableRef, "reportCellWidth", Qt::DirectConnection,
+                                                        Q_ARG(int, columnIndex), Q_ARG(qreal, cellRef->implicitWidth()));
+                          }
+                      });
+    // A cell's visibility flipping can only be resolved by rescanning its own column: becoming hidden may drop
+    // today's widest cell, becoming visible may introduce a wider one. Rescans only this one column, not every
+    // column via invalidateAllColumns: every cell in the table carries this connection, so a full-table sweep here
+    // costs O(rows) per cell whose visibility ever changes during mount, compounding into O(rows^2) overall.
+    QObject::connect(cell, &QQuickItem::visibleChanged, item(),
+                      [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex] {
+                          if (tableRef != nullptr) {
+                              QMetaObject::invokeMethod(tableRef, "rescanColumn", Qt::DirectConnection,
+                                                        Q_ARG(int, columnIndex));
+                          }
+                      });
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }

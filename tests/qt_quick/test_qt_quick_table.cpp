@@ -11,6 +11,7 @@
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -141,6 +142,180 @@ TEST_CASE("qt_quick table: Enter on a focused row activates it", "[qt_quick]") {
     Scene::itemOf(*table.rows.at(0)).forceActiveFocus();
     scene.key(Qt::Key_Return);
     CHECK(activated == std::vector<ui::Key>{ui::Key{std::int64_t{4}}});
+}
+
+// Mutation: never update the cache in `reportCellWidth` (growing a cell's text then shows the same `rowScans`
+// delta as a no-op, and the column's reported width stays at its pre-growth value).
+TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and the column still widens",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}, {.label = "B"}, {.label = "C"}});
+    constexpr int kRows = 300;
+    std::vector<std::unique_ptr<ui::StackWidget>> rows;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (int r = 0; r < kRows; ++r) {
+        auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*row, ui::Key{static_cast<std::int64_t>(r)});
+        for (int column = 0; column < 3; ++column) {
+            cells.push_back(scene.backend().createText(row.get()));
+            cells.back()->setText("cell");
+        }
+        rows.push_back(std::move(row));
+    }
+    scene.settle();
+
+    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& firstCell = Scene::itemOf(*cells.at(0));
+    qreal const widthBefore = firstCell.implicitWidth();
+    // Sanity: the column's width already fits its widest cell after the initial mount (the cache seeded correctly).
+    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthBefore + 2 * 8);
+
+    // `rowScans` is a test-only counter the fix adds to MorphTable.qml, incremented once per row visited inside the
+    // full-rescan path. Its absence on unfixed code must fail loudly here, not silently read back 0 for both the
+    // baseline and the post-change reading (which would make the delta trivially 0 and this test vacuously pass).
+    QVariant const baselineVariant = tableItem.property("rowScans");
+    REQUIRE(baselineVariant.isValid());
+    int const baseline = baselineVariant.toInt();
+
+    cells.at(0)->setText("a very very very very very long cell text");
+    scene.settle();
+
+    QVariant const afterVariant = tableItem.property("rowScans");
+    REQUIRE(afterVariant.isValid());
+    int const delta = afterVariant.toInt() - baseline;
+    CHECK(delta == 0);  // the grow path never rescans every row
+    qreal const widthAfter = firstCell.implicitWidth();
+    CHECK(widthAfter > widthBefore);
+    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthAfter + 2 * 8);
+}
+
+// Mutation: skip the invalidateColumn/reportCellWidth wiring from TableRowImpl::adopted entirely (a cell's width
+// changing then never reaches the table, so this never observes the rescan it measures).
+// Mutation: never update the cache in `reportCellWidth`, forcing every grow through the shrink/full-rescan path.
+TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick]") {
+    // What this measures: the number of rows `widestCell` visits for a single-row grow, not wall-clock time. A
+    // grown column's cells still all need their x/width updated once the column widens (MorphTableRow.qml's
+    // onWidthsChanged: place(), one call per row) -- that O(rows) placement cost is real, necessary, and not what
+    // this fix addresses (virtualizing which rows exist at all is #1016's separate, larger concern). What the fix
+    // does address is the O(rows) *scan* needed merely to compute the new width, which this isolates by reading
+    // `rowScans`'s delta instead of timing the whole settle.
+    auto const buildAndGrow = [](int rowCount) -> int {
+        Scene scene;
+        auto table = scene.backend().createTable(nullptr);
+        table->setColumns({{.label = "A"}, {.label = "B"}, {.label = "C"}});
+        std::vector<std::unique_ptr<ui::StackWidget>> rows;
+        std::vector<std::unique_ptr<ui::TextWidget>> cells;
+        for (int r = 0; r < rowCount; ++r) {
+            auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+            table->setRowKey(*row, ui::Key{static_cast<std::int64_t>(r)});
+            for (int column = 0; column < 3; ++column) {
+                cells.push_back(scene.backend().createText(row.get()));
+                cells.back()->setText("cell");
+            }
+            rows.push_back(std::move(row));
+        }
+        scene.settle();
+        QQuickItem& tableItem = Scene::itemOf(*table);
+        int const baseline = tableItem.property("rowScans").toInt();
+        cells.at(0)->setText("a very very very very very long cell text, toggled");
+        scene.settle();
+        return tableItem.property("rowScans").toInt() - baseline;
+    };
+
+    int const small = buildAndGrow(40);
+    int const large = buildAndGrow(420);
+    std::ostringstream message;
+    message << "40 rows: " << small << " scans, 420 rows: " << large << " scans";
+    INFO(message.str());
+    CHECK(small == 0);
+    CHECK(large == 0);
+}
+
+TEST_CASE("qt_quick table: an empty table resolves a content column to its header's width, without throwing",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}, {.label = "B"}});
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table);
+    QVariantList const widths = tableItem.property("widths").toList();
+    REQUIRE(widths.size() == 2);
+    CHECK(widths.at(0).toReal() > 0);
+    CHECK(widths.at(1).toReal() > 0);
+}
+
+TEST_CASE("qt_quick table: a cell's text shrinking rescans its column and keeps the correct width", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}});
+    auto row1 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row1, ui::Key{std::int64_t{1}});
+    auto cell1 = scene.backend().createText(row1.get());
+    cell1->setText("a very very very very very long cell text");
+    auto row2 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row2, ui::Key{std::int64_t{2}});
+    auto cell2 = scene.backend().createText(row2.get());
+    cell2->setText("short");
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table);
+    qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
+
+    cell1->setText("short too");
+    scene.settle();
+    qreal const widthAfter = tableItem.property("widths").toList().at(0).toReal();
+    CHECK(widthAfter < widthBefore);
+    CHECK(widthAfter >= Scene::itemOf(*cell1).implicitWidth() + 2 * 8);
+}
+
+TEST_CASE("qt_quick table: removing a row drops its cell's contribution to the column width", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}});
+    auto row1 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row1, ui::Key{std::int64_t{1}});
+    auto cell1 = scene.backend().createText(row1.get());
+    cell1->setText("a very very very very very long cell text");
+    auto row2 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row2, ui::Key{std::int64_t{2}});
+    auto cell2 = scene.backend().createText(row2.get());
+    cell2->setText("short");
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table);
+    qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
+
+    row1.reset();
+    scene.settle();
+    qreal const widthAfter = tableItem.property("widths").toList().at(0).toReal();
+    CHECK(widthAfter < widthBefore);
+}
+
+TEST_CASE("qt_quick table: a hidden cell does not count toward the column width, and shows again when shown",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}});
+    auto row1 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row1, ui::Key{std::int64_t{1}});
+    auto cell1 = scene.backend().createText(row1.get());
+    cell1->setText("a very very very very very long cell text");
+    auto row2 = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row2, ui::Key{std::int64_t{2}});
+    auto cell2 = scene.backend().createText(row2.get());
+    cell2->setText("short");
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table);
+    qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
+
+    cell1->setVisible(false);
+    scene.settle();
+    qreal const widthHidden = tableItem.property("widths").toList().at(0).toReal();
+    CHECK(widthHidden < widthBefore);
+
+    cell1->setVisible(true);
+    scene.settle();
+    qreal const widthShown = tableItem.property("widths").toList().at(0).toReal();
+    CHECK(widthShown == widthBefore);
 }
 
 // Mutation: write no tone on the row (the backgrounds stay clear).
