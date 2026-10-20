@@ -288,8 +288,8 @@ TEST_CASE("FormSession: booleans are bare literals; a required one answers false
 
 TEST_CASE("FormSession: an integer through anyOf keeps every digit and refuses text", "[forms-engine][session]") {
     Harness harness;
-    auto const form =
-        harness.session("T_AnyOf", R"({"$defs":{"int64_t":{"type":"integer"},"TagId":{"type":"integer"}},"properties":{
+    auto const form = harness.session(
+        "T_AnyOf", R"({"$defs":{"int64_t":{"type":"integer"},"TagId":{"type":"integer"}},"properties":{
       "optI64":{"anyOf":[{"$ref":"#/$defs/int64_t"},{"type":"null"}],"x-order":0},
       "refI64":{"$ref":"#/$defs/TagId","x-order":1}},"required":[]})");
     harness.type(*form, "optI64", "9007199254740993");

@@ -157,9 +157,9 @@ TEST_CASE("formView: labels fall back to the wire key, follow x-order and come f
     Mounted const mounted{kSchema, {}, std::move(options)};
     int const zeta = mounted.widget("Text", "label_zeta");
     int const alpha = mounted.widget("Text", "label_alpha");
-    CHECK(mounted.backend.prop(zeta, "text") == "zeta");    // the wire key; the control marks it required
-    CHECK(mounted.backend.prop(alpha, "text") == "Alfa");   // the translation beats the schema's title
-    CHECK(zeta < alpha);                                    // drawn in x-order
+    CHECK(mounted.backend.prop(zeta, "text") == "zeta");   // the wire key; the control marks it required
+    CHECK(mounted.backend.prop(alpha, "text") == "Alfa");  // the translation beats the schema's title
+    CHECK(zeta < alpha);                                   // drawn in x-order
     CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_alpha"), "a11yName") == "Alfa");
 }
 
