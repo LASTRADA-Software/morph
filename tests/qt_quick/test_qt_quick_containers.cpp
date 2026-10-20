@@ -641,3 +641,36 @@ TEST_CASE("qt_quick containers: the frame's type scale runs application name, se
     CHECK(color == scheme->property("muted").value<QColor>());
     CHECK_FALSE(color == scheme->property("text").value<QColor>());
 }
+
+// The stack's length comes from its parent here: a `between` spacing taken from that length must not feed the
+// stack's implicit length back to the parent, or each layout pass widens the row and the window never settles.
+// Mutation: make MorphStack's implicit length its layout's (the row grows past the window, and its siblings are not
+// laid out).
+TEST_CASE("qt_quick containers: a row whose width its column gives spreads its children between its ends",
+          "[qt_quick]") {
+    Scene scene;
+    auto const named = [](std::string text) {
+        ui::Text made{.text = text};
+        made.common.testId = "spread_" + text;
+        return ui::text(std::move(made));
+    };
+    ui::Row row{.children = {named("count"), named("a"), named("b")}, .justify = ui::Justify::Between};
+    row.common.testId = "spread";
+    ui::Text below{.text = "below"};
+    below.common.testId = "below";
+    ui::Mounted const view{scene.runtime(), scene.backend(),
+                           ui::column({.children = {ui::row(std::move(row)), ui::text(std::move(below))}})};
+    scene.settle();
+    detail::ItemBase const* const widget = detail::findWidget(QStringLiteral("spread"));
+    REQUIRE(widget != nullptr);
+    QQuickItem const& spread = *widget->item();
+    QQuickItem const& last = textItemOf("spread_b", QStringLiteral("b"));
+    QQuickItem const& first = textItemOf("spread_count", QStringLiteral("count"));
+    qreal const end = last.mapToScene(QPointF{last.width(), 0}).x();
+    INFO("row " << spread.width() << " wide in a window " << scene.window().width() << " wide; its last child ends at "
+                << end << ", its first starts at " << first.mapToScene(QPointF{0, 0}).x());
+    CHECK(std::abs(spread.width() - scene.window().width()) < 1.0);
+    CHECK(std::abs(first.mapToScene(QPointF{0, 0}).x()) < 1.0);
+    CHECK(end <= scene.window().width() + 1.0);
+    CHECK(end >= scene.window().width() - 4.0);
+}

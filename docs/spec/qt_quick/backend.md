@@ -253,7 +253,9 @@ maximum places it. Along the axis, while no shown child stretches, `MorphStack` 
 and offsets it by `justify`: none, half the spare length or all of it. For `between` the layout keeps the full length
 and its spacing is `max(gap, spare / (shown − 1))`, the spare computed from each shown child's preferred (else
 implicit) length clamped into its `Layout` minimum and maximum, because a `GridLayout` given more length gives it to
-its cells, not its gaps.
+its cells, not its gaps. Its implicit length along the axis is then those lengths and the gaps, not the layout's:
+the layout's includes the spacing taken from the stack's length, which a parent that sizes the stack from its
+implicit length would feed back, widening the stack on every pass.
 
 **Surfaces.** `Theme.scheme(name)` is the colour scheme of a surface (`MorphScheme`: the colour roles, each the
 theme's unless the surface sets it), and the theme itself for the empty name. Every `MorphWidget` draws with

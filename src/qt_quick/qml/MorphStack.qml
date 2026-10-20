@@ -16,8 +16,11 @@ MorphWidget {
     property int justify: 0
     readonly property Item content: layout
 
-    implicitWidth: layout.implicitWidth
-    implicitHeight: layout.implicitHeight
+    // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
+    // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
+    // length is the children's and the gaps' instead.
+    implicitWidth: root.axis === 1 && root.between ? root.naturalLength : layout.implicitWidth
+    implicitHeight: root.axis === 0 && root.between ? root.naturalLength : layout.implicitHeight
 
     // Whether a shown child stretches along the axis. Without one, the layout keeps its natural length on the axis
     // and packs the children at the start: given more, a layout would hand the spare length to the gaps between
@@ -50,6 +53,8 @@ MorphWidget {
         return lengths
     }
     readonly property real gapLength: Theme.spaceOf(root.gap)
+    readonly property real naturalLength: root.shownLengths.reduce((sum, length) => sum + length, 0)
+                                          + root.gapLength * Math.max(0, root.shownLengths.length - 1)
     readonly property real betweenSpacing: {
         const count = root.shownLengths.length
         if (count < 2)
