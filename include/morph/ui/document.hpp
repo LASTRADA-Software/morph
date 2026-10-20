@@ -785,7 +785,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 15> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -798,7 +798,8 @@ inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
-                                                        {"onActivate", Shape::Commands, {}, kInner}}};
+                                                        {"onActivate", Shape::Commands, {}, kInner},
+                                                        {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
 inline constexpr std::array<KeySpec, 4> kColumnKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};

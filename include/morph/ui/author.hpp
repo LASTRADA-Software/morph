@@ -3562,6 +3562,9 @@ struct TableOptions {
     AnyHandle highlightKey;
     /// @brief Commands run when a row is activated, in its row scope.
     Commands onActivate;
+    /// @brief Shown instead of the table while its rows are an empty list, in the table's scope; empty shows the
+    ///        table always.
+    Nodes empty;
 };
 
 namespace detail {
@@ -3606,6 +3609,7 @@ namespace detail {
         .put("rowTone", options.rowTone)
         .put("highlightKey", options.highlightKey)
         .put("onActivate", options.onActivate)
+        .put("empty", options.empty)
         .scope(scope)
         .done();
 }

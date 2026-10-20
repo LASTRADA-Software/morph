@@ -181,3 +181,20 @@ TEST_CASE("tui forms: a wizard document steps on to its second step with the pre
     CHECK(client.dispatcher.calls.at(client.dispatcher.last("Lims_ConfirmSample")).body ==
           R"({"sampleId":9007199254740993})");
 }
+
+// Mutation: lower `table` without `empty` (the header bar draws over nothing, and no title).
+TEST_CASE("tui forms: a table's empty state is drawn in its place while its rows are an empty list", "[tui][forms]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "empty", "state": { "rows": { "init": { "lit": [] } } },
+      "view": { "kind": "table", "testId": "list", "rows": { "ref": "rows" },
+                "columns": [ { "id": "name", "label": "Heading" } ],
+                "empty": [ { "kind": "emptyState", "title": "No rows yet" } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("No rows yet"));
+    CHECK_FALSE(client.shows("Heading"));
+}

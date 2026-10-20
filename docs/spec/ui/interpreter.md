@@ -301,7 +301,14 @@ applies to the width.
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
-  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered.
+  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered. With `empty`,
+  the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
+  while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
+  list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
+  so it is placed as the table would be, and has no test id; every other common property stays on the table
+  (`testId`, the element id `focus` finds, `enabled`, `tooltip`, `a11y`, `keys`, drag and drop). A hidden table
+  keeps its element values. No view-tree kind is added, so both backends draw it with what they have. A
+  model-backed table's `empty` waits for the table engine, as the table does.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

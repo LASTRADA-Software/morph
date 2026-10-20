@@ -735,3 +735,67 @@ TEST_CASE("interpreter commands: the session's inline cap is 1 to kMaxInlineFile
                     std::invalid_argument);
     CHECK_NOTHROW(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = ui::kMaxInlineFileBytes}));
 }
+
+namespace {
+
+/// A table whose rows a button empties, fills and nulls, with an empty state in its place while they are an empty
+/// list.
+constexpr std::string_view kEmptyTable = R"({
+  "vocab": "ui/1", "id": "empty",
+  "state": { "rows": { "init": { "lit": [] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "table", "id": "list", "testId": "list", "rows": { "ref": "rows" },
+      "columns": [ { "id": "name", "label": "Name" } ],
+      "empty": [ { "kind": "emptyState", "testId": "nothing", "title": "No rows yet" } ] },
+    { "kind": "button", "testId": "fill", "label": "fill", "onClick": { "set": "rows", "value": { "lit": [ { "id": 1, "name": "a" } ] } } },
+    { "kind": "button", "testId": "none", "label": "none", "onClick": { "set": "rows", "value": null } },
+    { "kind": "button", "testId": "focus", "label": "focus", "onClick": { "focus": "list" } } ] }
+})";
+
+/// Whether @p widget shows: it and every column around it are visible.
+bool shownThroughColumns(morph::ui::testing::RecordingBackend const& backend, int widget) {
+    for (std::optional<int> current = widget; current;) {
+        if (backend.prop(*current, "visible") == "false") {
+            return false;
+        }
+        std::optional<int> parent;
+        for (int const column : backend.all("Column")) {
+            if (std::ranges::contains(backend.children(column), *current)) {
+                parent = column;
+            }
+        }
+        current = parent;
+    }
+    return true;
+}
+
+}  // namespace
+
+// Mutation: lower `table` without `empty` (no empty state is drawn, and the table shows with no rows).
+TEST_CASE("table: its empty content shows while the rows are an empty list, the table otherwise",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kEmptyTable);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    REQUIRE(h.diagnostics.empty());
+    int const table = h.byTestId("Table", "list");
+    int const nothing = h.byTestId("EmptyState", "nothing");
+    CHECK_FALSE(shownThroughColumns(h.backend, table));
+    CHECK(shownThroughColumns(h.backend, nothing));
+    CHECK(h.backend.prop(nothing, "title") == "No rows yet");
+
+    h.backend.click(h.byTestId("Button", "fill"));
+    h.settle();
+    CHECK(shownThroughColumns(h.backend, table));
+    CHECK_FALSE(shownThroughColumns(h.backend, nothing));
+
+    h.backend.click(h.byTestId("Button", "none"));
+    h.settle();
+    CHECK(shownThroughColumns(h.backend, table));  // not answered yet: the table, not the empty state
+    CHECK_FALSE(shownThroughColumns(h.backend, nothing));
+
+    // The table, not the column around it, is the element `focus` finds.
+    h.backend.click(h.byTestId("Button", "focus"));
+    h.settle();
+    CHECK(h.backend.focused() == table);
+}

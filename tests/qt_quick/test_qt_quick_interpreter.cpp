@@ -883,3 +883,21 @@ TEST_CASE("qt_quick interpreter: a restyle mapped after a page made its input re
     CHECK_FALSE(branded("inputA"));
     CHECK(branded("inputB"));
 }
+
+// Mutation: lower `table` without `empty` (no empty state is mounted).
+TEST_CASE("qt_quick interpreter: a table's empty state is drawn while its rows are an empty list",
+          "[qt_quick][interpreter]") {
+    QtHarness harness;
+    auto const screen = harness.mount(R"({
+      "vocab": "ui/1", "id": "empty", "state": { "rows": { "init": { "lit": [] } } },
+      "view": { "kind": "table", "testId": "list", "rows": { "ref": "rows" },
+                "columns": [ { "id": "name", "label": "Name" } ],
+                "empty": [ { "kind": "emptyState", "testId": "nothing", "title": "No rows yet" } ] } })");
+    QQuickItem const* const nothing = QtHarness::widget("nothing").item();
+    REQUIRE(nothing != nullptr);
+    CHECK(nothing->isVisible());
+    CHECK(nothing->property("title").toString() == QStringLiteral("No rows yet"));
+    QQuickItem const* const table = QtHarness::widget("list").item();
+    REQUIRE(table != nullptr);
+    CHECK_FALSE(table->isVisible());
+}

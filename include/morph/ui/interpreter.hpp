@@ -6962,8 +6962,29 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         runEvent(commands, rowCtx, activated);
     };
     commonOf(node, ctx, element, options.common);
-    return ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn), std::move(cellsOf),
-                            std::move(options));
+    std::span<DocNodePtr const> const empty = node.nodes("empty");
+    if (empty.empty()) {
+        return ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn), std::move(cellsOf),
+                                std::move(options));
+    }
+    // With `empty`, a column holds the table and the content shown in its place while `rows` is an empty list; a
+    // `null` (a query not answered yet) shows the table. The column is placed as the table would be: it takes the
+    // node's visibility and layout, and every other common property stays on the table, so its test id and the
+    // element id `focus` finds name the table.
+    auto const listed = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
+        ValueList const* const items = evalIn(*scope, bindings.get(), rowsExpr).asList();
+        return items == nullptr || !items->empty();
+    };
+    Column wrapper;
+    wrapper.common.visible = std::move(options.common.visible);
+    wrapper.common.layout = options.common.layout;
+    options.common.visible = slotProp<bool>(listed);
+    Column content{.children = {lowerAll(empty, ctx)}};
+    content.common.visible = slotProp<bool>([listed] { return !listed(); });
+    wrapper.children.push_back(ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn),
+                                                std::move(cellsOf), std::move(options)));
+    wrapper.children.push_back(ui::column(std::move(content)));
+    return ui::column(std::move(wrapper));
 }
 
 inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
