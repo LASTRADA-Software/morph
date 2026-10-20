@@ -64,7 +64,8 @@ std::vector<std::string> laidOut(Scene& scene, std::vector<std::unique_ptr<ui::T
 
 // The text item inside a widget that shows @p text: a field's root also holds its caption and its message, so the
 // first text item found need not be the one drawn.
-QQuickItem const& textItemOf(char const* testId, QString const& text) {
+// A pointer, not a reference: GCC reads a reference returned from a call given a temporary as possibly dangling.
+QQuickItem const* textItemOf(char const* testId, QString const& text) {
     detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
     REQUIRE(widget != nullptr);
     REQUIRE(widget->item() != nullptr);
@@ -73,7 +74,7 @@ QQuickItem const& textItemOf(char const* testId, QString const& text) {
         return item->inherits("QQuickText") && item->property("text").toString() == text;
     });
     REQUIRE(found != inner.end());
-    return **found;
+    return *found;
 }
 
 }  // namespace
@@ -532,7 +533,7 @@ TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-o
         REQUIRE(found != inner.end());
         return **found;
     };
-    QQuickItem const& label = textItemOf("shell_principal", QStringLiteral("alice"));
+    QQuickItem const& label = *textItemOf("shell_principal", QStringLiteral("alice"));
     QQuickItem const& button = innerOf("shell_signOut", "QQuickAbstractButton");
     REQUIRE(label.height() > 0.0);
     REQUIRE(button.height() > label.height());
@@ -566,7 +567,7 @@ TEST_CASE("qt_quick containers: an inline form field's label sits left of its co
         REQUIRE(widget->item() != nullptr);
         return *widget->item();
     };
-    QQuickItem const& label = textItemOf("label_name", QStringLiteral("Name"));
+    QQuickItem const& label = *textItemOf("label_name", QStringLiteral("Name"));
     QQuickItem const& control = itemOf("field_name");
     REQUIRE(label.height() > 0.0);
     REQUIRE(control.height() > label.height());
@@ -624,10 +625,10 @@ TEST_CASE("qt_quick containers: the frame's type scale runs application name, se
     scene.settle();
     body->setTestId("body");
     scene.settle();
-    QQuickItem const& sectionLabel = textItemOf("navigator_group_Lab/", QStringLiteral("Lab"));
+    QQuickItem const& sectionLabel = *textItemOf("navigator_group_Lab/", QStringLiteral("Lab"));
     QFontInfo const section{sectionLabel.property("font").value<QFont>()};
-    QFontInfo const name{textItemOf("shell_application", QStringLiteral("App")).property("font").value<QFont>()};
-    QFontInfo const text{textItemOf("body", QStringLiteral("body")).property("font").value<QFont>()};
+    QFontInfo const name{textItemOf("shell_application", QStringLiteral("App"))->property("font").value<QFont>()};
+    QFontInfo const text{textItemOf("body", QStringLiteral("body"))->property("font").value<QFont>()};
     INFO("section " << section.pixelSize() << " bold " << section.bold() << ", name " << name.pixelSize() << ", body "
                     << text.pixelSize());
     CHECK(section.bold());
@@ -664,8 +665,8 @@ TEST_CASE("qt_quick containers: a row whose width its column gives spreads its c
     detail::ItemBase const* const widget = detail::findWidget(QStringLiteral("spread"));
     REQUIRE(widget != nullptr);
     QQuickItem const& spread = *widget->item();
-    QQuickItem const& last = textItemOf("spread_b", QStringLiteral("b"));
-    QQuickItem const& first = textItemOf("spread_count", QStringLiteral("count"));
+    QQuickItem const& last = *textItemOf("spread_b", QStringLiteral("b"));
+    QQuickItem const& first = *textItemOf("spread_count", QStringLiteral("count"));
     qreal const end = last.mapToScene(QPointF{last.width(), 0}).x();
     INFO("row " << spread.width() << " wide in a window " << scene.window().width() << " wide; its last child ends at "
                 << end << ", its first starts at " << first.mapToScene(QPointF{0, 0}).x());
