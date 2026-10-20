@@ -621,6 +621,8 @@ struct Spacer {
 struct Panel {
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief Shown beside the title, collapsed or not; may be null.
+    Node header;
     /// @brief Space between frame and child: a spacing step, 0 to `kMaxSpacingStep`.
     int padding = 0;
     /// @brief The content; may be null.

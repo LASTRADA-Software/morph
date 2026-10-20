@@ -110,7 +110,7 @@ lowers them to the kinds below.
 | `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
 | `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
 | `Spacer` | `spacer` | none |
-| `Panel` | `panel` | `title`, `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
+| `Panel` | `panel` | `title`, `header` (shown beside the title, usable while collapsed), `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
 | `Scroll` | `scroll` | `child`, `axis` (`Axis{Vertical, Horizontal}`, set once) |
 | `Switch` | `switchOf`, `switchOn<E>` | `selector` (`Prop<Key>`), `cases` (`SwitchCase{key, node}`; the first case with the key wins), `fallback` |
 | `Tabs` | `tabs` | `tabs` (`Tab{label, node}`, set once), `selected` (`Prop<std::size_t>`), `onSelect` |

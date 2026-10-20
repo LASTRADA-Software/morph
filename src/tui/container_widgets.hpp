@@ -95,6 +95,7 @@ class PanelImpl final : public TuiContainer<ui::PanelWidget> {
 public:
     explicit PanelImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setTitle(std::string_view title) override;
+    void setHeader(ui::Widget& header) override;
     void setPadding(int padding) override;
     void setCollapsible(bool collapsible) override;
     void setCollapsed(bool collapsed) override;
@@ -104,6 +105,7 @@ public:
     [[nodiscard]] bool focusesOnPress() const override { return false; }
     [[nodiscard]] std::string probeText() const override { return _title; }
     [[nodiscard]] bool letsChildrenAct() const override { return !_collapsed; }
+    [[nodiscard]] bool letsChildAct(WidgetBase const& child) const override { return !_collapsed || &child == _header; }
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
@@ -112,12 +114,17 @@ public:
 
 protected:
     void childAttached(WidgetBase& child) override;
+    void childForgotten(WidgetBase& child) override;
 
 private:
     [[nodiscard]] std::string heading() const;
+    // The children other than the header, in stacking order.
+    [[nodiscard]] std::vector<WidgetBase*> body() const;
     void syncChildren();
 
     std::string _title;
+    // Placed in-flow above the body, since the terminal has no floating/area concept to draw it beside the title.
+    WidgetBase* _header = nullptr;
     int _paddingRows = 0;
     int _paddingColumns = 0;
     bool _collapsible = false;

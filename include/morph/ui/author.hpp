@@ -3419,6 +3419,8 @@ namespace detail {
 struct PanelOptions {
     /// @brief The title.
     AnyHandle title;
+    /// @brief Nodes shown beside the title.
+    Nodes header;
     /// @brief The padding.
     AnyHandle padding;
     /// @brief Whether the user may collapse it.
@@ -3429,11 +3431,12 @@ struct PanelOptions {
 
 /// @brief A `panel` node.
 /// @param children The children.
-/// @param options  The title and collapsing.
+/// @param options  The title, header and collapsing.
 /// @return The node.
 [[nodiscard]] inline Node panel(Nodes const& children, PanelOptions const& options = {}) {
     return detail::NodeWriter{"panel"}
         .put("title", options.title)
+        .put("header", options.header)
         .put("padding", options.padding)
         .put("collapsible", options.collapsible)
         .put("collapsed", options.collapsed)

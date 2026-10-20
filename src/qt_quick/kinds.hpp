@@ -269,6 +269,7 @@ class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {
 public:
     PanelImpl(Context& context, ui::ContainerWidget* parent);
     void setTitle(std::string_view title) override;
+    void setHeader(ui::Widget& header) override;
     void setPadding(int padding) override;
     void setCollapsible(bool collapsible) override;
     void setCollapsed(bool collapsed) override;

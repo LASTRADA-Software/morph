@@ -280,6 +280,43 @@ TEST_CASE("qt_quick containers: a collapsible section keeps its header usable wh
     CHECK(Scene::itemOf(*content).isVisible());
 }
 
+TEST_CASE("qt_quick containers: a panel's header sits beside its title and stays visible while collapsed",
+          "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("More");
+    panel->setCollapsible(true);
+    auto header = scene.backend().createButton(panel.get());
+    panel->setHeader(*header);
+    auto content = scene.backend().createButton(panel.get());
+    panel->setCollapsed(true);
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*content).isVisible());
+    CHECK(Scene::itemOf(*header).isVisible());
+}
+
+TEST_CASE("qt_quick containers: a panel with no title, no header and no collapse control shows no divider",
+          "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
+    REQUIRE(divider != nullptr);
+    CHECK_FALSE(divider->isVisible());
+}
+
+TEST_CASE("qt_quick containers: a panel with only a title shows its header row and a divider", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("More");
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
+    REQUIRE(divider != nullptr);
+    CHECK(divider->isVisible());
+}
+
 TEST_CASE("qt_quick containers: a drop zone takes a drop whole or refuses it whole", "[qt_quick]") {
     Scene scene;
     auto zone = scene.backend().createDropZone(nullptr);

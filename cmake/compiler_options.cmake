@@ -112,6 +112,9 @@ if(MORPH_COMPILER_FAMILY STREQUAL "MSVC")
         /bigobj     # heavy template instantiation (BRIDGE_REGISTER_ACTION chains,
                     # examples/forms/main.cpp) exceeds the default object-file
                     # section limit (C1128) without this
+        /utf-8      # source files are UTF-8 without a BOM; without this, MSVC reads them
+                    # as the active code page and a universal-character-name a narrow
+                    # string literal cannot represent there (C4566) becomes an error under /WX
         /W4
         /permissive-
         /w14062     # enumerator not handled in switch

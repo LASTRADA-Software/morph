@@ -1069,13 +1069,24 @@ public:
     }
 };
 
-/// @brief A fake `PanelWidget`: properties `title`, `padding`, `collapsible`, `collapsed`.
+/// @brief A fake `PanelWidget`: properties `title`, `header` (the child's id), `padding`, `collapsible`, `collapsed`.
 class FakePanel final : public FakeContainer<PanelWidget> {
 public:
     using FakeContainer<PanelWidget>::FakeContainer;
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setPadding(int padding) override { set("padding", std::to_string(padding)); }
     void setCollapsible(bool collapsible) override { set("collapsible", formatBool(collapsible)); }
+
+    /// @brief Records property `header`, the child's id.
+    /// @param header One of this widget's children.
+    /// @throws std::logic_error when @p header is not this widget's child.
+    void setHeader(Widget& header) override {
+        int const headerId = store().idOf(header);
+        if (store().at(headerId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setHeader with a widget that is not this panel's child"};
+        }
+        set("header", std::to_string(headerId));
+    }
     void setCollapsed(bool collapsed) override { set("collapsed", formatBool(collapsed)); }
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };

@@ -123,7 +123,7 @@ reorders children, and only through this.
 |---|---|
 | `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
 | `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
-| `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input |
+| `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
@@ -188,7 +188,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
-| `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
+| `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
 | `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |

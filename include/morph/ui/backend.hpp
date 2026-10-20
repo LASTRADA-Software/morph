@@ -357,8 +357,14 @@ public:
     /// @param collapsible Whether a collapse control is shown.
     virtual void setCollapsible(bool collapsible) = 0;
 
+    /// @brief Shows one of its children beside the title; called at most once. The header stays visible and usable
+    ///        while the panel is collapsed.
+    /// @param header A child of this widget.
+    virtual void setHeader(Widget& header) = 0;
+
     /// @brief Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own
-    ///        collapse control still works. Never calls the `onToggle` handler.
+    ///        collapse control still works. The header is not part of "its content" for this purpose: it stays
+    ///        shown and usable while collapsed. Never calls the `onToggle` handler.
     /// @param collapsed Whether the content is hidden.
     virtual void setCollapsed(bool collapsed) = 0;
 
