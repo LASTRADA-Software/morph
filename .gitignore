@@ -2,6 +2,7 @@
 /build-bank/
 /build-wasm/
 /out/
+/.worktrees/
 *.db
 # Every ladder rung's server writes its FileActionLog into the *current
 # directory* -- `std::filesystem::current_path() / "<rung>_actions.jsonl"`, see
