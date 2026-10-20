@@ -19,6 +19,8 @@ var forms_8hpp =
     [ "morph::forms::Not&lt; A, Cond &gt;", "d1/db1/structmorph_1_1forms_1_1Not.html", "d1/db1/structmorph_1_1forms_1_1Not" ],
     [ "morph::forms::RuleList&lt; Rules &gt;", "d3/d8b/structmorph_1_1forms_1_1RuleList.html", "d3/d8b/structmorph_1_1forms_1_1RuleList" ],
     [ "morph::forms::UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError" ],
+    [ "morph::forms::ConflictingOptionsError", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError.html", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError" ],
+    [ "morph::forms::IncompleteOptionsError", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError.html", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError" ],
     [ "morph::forms::QuantityDecodeError", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError" ],
     [ "morph::forms::EmptyCapableField", "d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html", null ],
     [ "morph::forms::EngageableField", "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html", null ],

@@ -3,6 +3,7 @@ var classmorph_1_1ui_1_1Workspace =
     [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb", null ],
     [ "~Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255", null ],
     [ "root", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a4dc7cee5793b4171dae5c385e6cd1983", null ],
+    [ "model", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a7e33472efabd86a9aa0c10513b0c8218", null ],
     [ "open", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a275a2594b0c3c45b75133aaf576e8083", null ],
     [ "start", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ac38b96b3172d2c11ccab5df5fa3df267", null ],
     [ "flushRecord", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a7611398d3d5f52041ebb516038d673e7", null ],
@@ -16,7 +17,7 @@ var classmorph_1_1ui_1_1Workspace =
     [ "closeSaved", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a20905db6ad9a8347936a52870a23ea6a", null ],
     [ "active", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ae818ab3fa0bd893cba6a6d5485213e7c", null ],
     [ "handleOf", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a0c05abb39feb16f73b579d7632c318d5", null ],
-    [ "activeHandle", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ab30cde461dba11a3a237f59c26c1d7ed", null ],
+    [ "activeHandle", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a83bb553575e38fc48442a7eeba61ffd8", null ],
     [ "forceCloseAll", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a2de906de11c865c7a7cc724bb7235b05", null ],
     [ "tabs", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c", null ]
 ];

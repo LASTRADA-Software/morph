@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['patchmiss_0',['PatchMiss',['../db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3',1,'morph::ui::detail']]],
-  ['pluralcategory_1',['PluralCategory',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7',1,'morph::ui']]],
-  ['proptype_2',['PropType',['../d1/dc0/author_8hpp.html#a95426682ac3c0f37a78cc0d5db6ed9c8',1,'morph::ui::author']]]
+  ['onstale_0',['OnStale',['../d1/dc0/author_8hpp.html#a17a09465aa4891153386ad0b550f6a30',1,'morph::ui::author']]],
+  ['op_1',['Op',['../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ab856c78706c848543886e2d3155bfc5f',1,'morph::table::CompiledFilter']]],
+  ['openas_2',['OpenAs',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6',1,'morph::ui::author']]]
 ];

@@ -147,7 +147,19 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a482f896189b324b675c104049aae767c" id="r_a482f896189b324b675c104049aae767c"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a482f896189b324b675c104049aae767c">tooltip</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;text) const</td></tr>
 <tr class="memdesc:a482f896189b324b675c104049aae767c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A tooltip.  <br /></td></tr>
 <tr class="memitem:aeb0de53da3ef7f26750888c36ea01352" id="r_aeb0de53da3ef7f26750888c36ea01352"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#aeb0de53da3ef7f26750888c36ea01352">sizing</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;sizing) const</td></tr>
-<tr class="memdesc:aeb0de53da3ef7f26750888c36ea01352"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sizing: <span class="tt">"content"</span>, <span class="tt">{"fixed": n}</span> or <span class="tt">{"stretch": w}</span>.  <br /></td></tr>
+<tr class="memdesc:aeb0de53da3ef7f26750888c36ea01352"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> give.  <br /></td></tr>
+<tr class="memitem:abb74dfe29cbf7308b8adbce0875a0f4d" id="r_abb74dfe29cbf7308b8adbce0875a0f4d"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#abb74dfe29cbf7308b8adbce0875a0f4d">sizing</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;width, <a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;height) const</td></tr>
+<tr class="memdesc:abb74dfe29cbf7308b8adbce0875a0f4d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sizing of both dimensions, as a <span class="tt">{width, height}</span> record; an absent one is content. Literal sizings (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span>, <span class="tt">stretch(w)</span>) make a literal record, which the loader checks; another is evaluated at mount.  <br /></td></tr>
+<tr class="memitem:a548e5c654a230539f8fece6c6a81cc51" id="r_a548e5c654a230539f8fece6c6a81cc51"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a548e5c654a230539f8fece6c6a81cc51">alignSelf</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align) const</td></tr>
+<tr class="memdesc:a548e5c654a230539f8fece6c6a81cc51"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the node sits in its row, column or grid, in place of the container's <span class="tt">align</span>.  <br /></td></tr>
+<tr class="memitem:ad065d9c605a31d185a65d64f235e4997" id="r_ad065d9c605a31d185a65d64f235e4997"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad065d9c605a31d185a65d64f235e4997">minWidth</a> (int units) const</td></tr>
+<tr class="memdesc:ad065d9c605a31d185a65d64f235e4997"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least width, in backend units.  <br /></td></tr>
+<tr class="memitem:a7e766e966e424b80a6b1c1118d63173d" id="r_a7e766e966e424b80a6b1c1118d63173d"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7e766e966e424b80a6b1c1118d63173d">maxWidth</a> (int units) const</td></tr>
+<tr class="memdesc:a7e766e966e424b80a6b1c1118d63173d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most width, in backend units.  <br /></td></tr>
+<tr class="memitem:abdc4d77a985adc194e85c29bb1e8b1fa" id="r_abdc4d77a985adc194e85c29bb1e8b1fa"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#abdc4d77a985adc194e85c29bb1e8b1fa">minHeight</a> (int units) const</td></tr>
+<tr class="memdesc:abdc4d77a985adc194e85c29bb1e8b1fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least height, in backend units.  <br /></td></tr>
+<tr class="memitem:ac1243915b32a5334d9b2076874a5c323" id="r_ac1243915b32a5334d9b2076874a5c323"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac1243915b32a5334d9b2076874a5c323">maxHeight</a> (int units) const</td></tr>
+<tr class="memdesc:ac1243915b32a5334d9b2076874a5c323"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most height, in backend units.  <br /></td></tr>
 <tr class="memitem:a3ea96ab8655e916c7a53f2e652a73c34" id="r_a3ea96ab8655e916c7a53f2e652a73c34"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3ea96ab8655e916c7a53f2e652a73c34">span</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;columns) const</td></tr>
 <tr class="memdesc:a3ea96ab8655e916c7a53f2e652a73c34"><td class="mdescLeft">&#160;</td><td class="mdescRight">The grid columns the node spans.  <br /></td></tr>
 <tr class="memitem:a4ea7f300181586c0bd8747b28e84ebfb" id="r_a4ea7f300181586c0bd8747b28e84ebfb"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4ea7f300181586c0bd8747b28e84ebfb">autofocus</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;focus) const</td></tr>
@@ -176,7 +188,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A view node (spec 5 §9). The kind's own properties come from its builder's options; the properties every node takes come from the member functions, each of which returns a copy with the property set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01673">1673</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01778">1778</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab4fdc36d9af74cf3d98e27c1121e658c" name="ab4fdc36d9af74cf3d98e27c1121e658c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab4fdc36d9af74cf3d98e27c1121e658c">&#9670;&#160;</a></span>Node()</h2>
@@ -214,7 +226,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01678">1678</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01783">1783</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +257,7 @@ Public Member Functions</h2></td></tr>
 <p>The node's JSON. </p>
 <dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01682">1682</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01787">1787</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +287,7 @@ Public Member Functions</h2></td></tr>
 <p>The catalog facts of the models and actions the node names. </p>
 <dl class="section return"><dt>Returns</dt><dd>The facts. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01686">1686</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01791">1791</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -316,7 +328,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01692">1692</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01797">1797</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -357,7 +369,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01704">1704</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01809">1809</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -393,7 +405,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01713">1713</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01818">1818</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +441,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01718">1718</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01823">1823</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +477,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01723">1723</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01828">1828</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -501,12 +513,12 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01728">1728</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01833">1833</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
 <a id="aeb0de53da3ef7f26750888c36ea01352" name="aeb0de53da3ef7f26750888c36ea01352"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeb0de53da3ef7f26750888c36ea01352">&#9670;&#160;</a></span>sizing()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#aeb0de53da3ef7f26750888c36ea01352">&#9670;&#160;</a></span>sizing() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -528,7 +540,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The sizing: <span class="tt">"content"</span>, <span class="tt">{"fixed": n}</span> or <span class="tt">{"stretch": w}</span>. </p>
+<p>The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> give. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sizing</td><td>The sizing. </td></tr>
@@ -537,7 +549,228 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01733">1733</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01839">1839</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abb74dfe29cbf7308b8adbce0875a0f4d" name="abb74dfe29cbf7308b8adbce0875a0f4d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb74dfe29cbf7308b8adbce0875a0f4d">&#9670;&#160;</a></span>sizing() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::sizing </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>width</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>height</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The sizing of both dimensions, as a <span class="tt">{width, height}</span> record; an absent one is content. Literal sizings (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span>, <span class="tt">stretch(w)</span>) make a literal record, which the loader checks; another is evaluated at mount. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">width</td><td>The width's sizing. </td></tr>
+    <tr><td class="paramname">height</td><td>The height's sizing. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01847">1847</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a548e5c654a230539f8fece6c6a81cc51" name="a548e5c654a230539f8fece6c6a81cc51"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a548e5c654a230539f8fece6c6a81cc51">&#9670;&#160;</a></span>alignSelf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::alignSelf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a></td>          <td class="paramname"><span class="paramname"><em>align</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where the node sits in its row, column or grid, in place of the container's <span class="tt">align</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">align</td><td>The alignment. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01872">1872</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad065d9c605a31d185a65d64f235e4997" name="ad065d9c605a31d185a65d64f235e4997"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad065d9c605a31d185a65d64f235e4997">&#9670;&#160;</a></span>minWidth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::minWidth </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The least width, in backend units. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The bound, 0 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01877">1877</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7e766e966e424b80a6b1c1118d63173d" name="a7e766e966e424b80a6b1c1118d63173d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e766e966e424b80a6b1c1118d63173d">&#9670;&#160;</a></span>maxWidth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::maxWidth </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The most width, in backend units. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The bound, 0 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01882">1882</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abdc4d77a985adc194e85c29bb1e8b1fa" name="abdc4d77a985adc194e85c29bb1e8b1fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abdc4d77a985adc194e85c29bb1e8b1fa">&#9670;&#160;</a></span>minHeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::minHeight </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The least height, in backend units. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The bound, 0 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01887">1887</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac1243915b32a5334d9b2076874a5c323" name="ac1243915b32a5334d9b2076874a5c323"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac1243915b32a5334d9b2076874a5c323">&#9670;&#160;</a></span>maxHeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::maxHeight </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The most height, in backend units. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The bound, 0 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01892">1892</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -573,7 +806,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01738">1738</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01897">1897</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -609,7 +842,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01743">1743</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01902">1902</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -645,7 +878,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01748">1748</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01907">1907</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -681,7 +914,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01753">1753</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01912">1912</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -722,7 +955,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01759">1759</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01918">1918</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -758,7 +991,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01775">1775</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01934">1934</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -799,7 +1032,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01785">1785</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01944">1944</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -840,7 +1073,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01800">1800</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01959">1959</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -876,7 +1109,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01810">1810</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01969">1969</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -912,7 +1145,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01815">1815</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01974">1974</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -948,7 +1181,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01820">1820</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01979">1979</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -984,7 +1217,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01825">1825</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01984">1984</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

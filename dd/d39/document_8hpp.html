@@ -291,6 +291,8 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1ac42f2bbf64f720d182fbc5339a743281">ExprRecord</a>
 , <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a92953e2d74617c5ae861005df8136920">CommandRecord</a>
 , <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1aa73e6bf278578e09d2351ee2ec7a7908">Keys</a>
+, <br />
+&#160;&#160;<a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1ac5836008c1649301e29351a55db8f65c">Flag</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a4c5b3506a04505322a0ee00f85be53e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">What shape a node key's value takes.  <a href="#a4c5b3506a04505322a0ee00f85be53e1">More...</a><br /></td></tr>
@@ -355,8 +357,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:aad5b4fbcadf5a1f4c85d5154c2aac744"><td class="mdescLeft">&#160;</td><td class="mdescRight">A command may write its draft with <span class="tt">set</span>.  <br /></td></tr>
 <tr class="memitem:ac898b5963a0fab63ad5a992c5f345567" id="r_ac898b5963a0fab63ad5a992c5f345567"><td class="memItemLeft">constexpr std::uint8_t&#160;</td><td class="memItemRight"><a class="el" href="#ac898b5963a0fab63ad5a992c5f345567">morph::ui::detail::kOpenValues</a> = 32U</td></tr>
 <tr class="memdesc:ac898b5963a0fab63ad5a992c5f345567"><td class="mdescLeft">&#160;</td><td class="mdescRight">Any path below its id is an element value (a form's fields).  <br /></td></tr>
-<tr class="memitem:ad38fd134350f435a3ea7284aba1f584f" id="r_ad38fd134350f435a3ea7284aba1f584f"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 13 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad38fd134350f435a3ea7284aba1f584f">morph::ui::detail::kCommonKeys</a></td></tr>
-<tr class="memdesc:ad38fd134350f435a3ea7284aba1f584f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys every node takes.  <br /></td></tr>
+<tr class="memitem:afb6fac55865f73add71d70463aeec60d" id="r_afb6fac55865f73add71d70463aeec60d"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 18 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afb6fac55865f73add71d70463aeec60d">morph::ui::detail::kCommonKeys</a></td></tr>
+<tr class="memdesc:afb6fac55865f73add71d70463aeec60d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys every node takes.  <br /></td></tr>
 <tr class="memitem:a506071ab2ae822f4a84efb18cdf16f18" id="r_a506071ab2ae822f4a84efb18cdf16f18"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 4 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a506071ab2ae822f4a84efb18cdf16f18">morph::ui::detail::kFieldKeys</a></td></tr>
 <tr class="memdesc:a506071ab2ae822f4a84efb18cdf16f18"><td class="mdescLeft">&#160;</td><td class="mdescRight">The input decorations text and the inputs take.  <br /></td></tr>
 <tr class="memitem:ac494eb12b04871f75f2f4cce96be9831" id="r_ac494eb12b04871f75f2f4cce96be9831"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac494eb12b04871f75f2f4cce96be9831">morph::ui::detail::kAnyValues</a> = {&quot;visible&quot;, &quot;enabled&quot;, &quot;valid&quot;, &quot;errors&quot;, &quot;shownErrors&quot;}</td></tr>
@@ -377,22 +379,22 @@ Variables</h2></td></tr>
 <tr class="memdesc:aac6821b3120184c765e7c0e6e298d999"><td class="mdescLeft">&#160;</td><td class="mdescRight">The values of a transfer id.  <br /></td></tr>
 <tr class="memitem:a1671229a8263a5b6744c405b482cbb6d" id="r_a1671229a8263a5b6744c405b482cbb6d"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1671229a8263a5b6744c405b482cbb6d">morph::ui::detail::kTextKeys</a> = {{{&quot;text&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;role&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}}}</td></tr>
 <tr class="memdesc:a1671229a8263a5b6744c405b482cbb6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>.  <br /></td></tr>
-<tr class="memitem:a0aedf5fd3491ccddd89ba96ff857758e" id="r_a0aedf5fd3491ccddd89ba96ff857758e"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0aedf5fd3491ccddd89ba96ff857758e">morph::ui::detail::kButtonKeys</a></td></tr>
-<tr class="memdesc:a0aedf5fd3491ccddd89ba96ff857758e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183" title="A push button.">button</a></span>.  <br /></td></tr>
-<tr class="memitem:a489c3e53e3d875c978e6186d3d95fdaf" id="r_a489c3e53e3d875c978e6186d3d95fdaf"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 8 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a489c3e53e3d875c978e6186d3d95fdaf">morph::ui::detail::kTextInputKeys</a></td></tr>
-<tr class="memdesc:a489c3e53e3d875c978e6186d3d95fdaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2c8c9dbe2077ddffbb7285e93497ccc4" title="An editable text field.">textInput</a></span>.  <br /></td></tr>
+<tr class="memitem:a24eaf8029371e8db26ab9af7801679b6" id="r_a24eaf8029371e8db26ab9af7801679b6"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a24eaf8029371e8db26ab9af7801679b6">morph::ui::detail::kButtonKeys</a></td></tr>
+<tr class="memdesc:a24eaf8029371e8db26ab9af7801679b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183" title="A push button.">button</a></span>.  <br /></td></tr>
+<tr class="memitem:a897be803c5ce4778454e481d2d27814f" id="r_a897be803c5ce4778454e481d2d27814f"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 9 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a897be803c5ce4778454e481d2d27814f">morph::ui::detail::kTextInputKeys</a></td></tr>
+<tr class="memdesc:a897be803c5ce4778454e481d2d27814f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2c8c9dbe2077ddffbb7285e93497ccc4" title="An editable text field.">textInput</a></span>.  <br /></td></tr>
 <tr class="memitem:aa69ae5fee55f582e5341cbe1bf804d37" id="r_aa69ae5fee55f582e5341cbe1bf804d37"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 4 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa69ae5fee55f582e5341cbe1bf804d37">morph::ui::detail::kCheckboxKeys</a></td></tr>
 <tr class="memdesc:aa69ae5fee55f582e5341cbe1bf804d37"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a7f9d9ce6c01bc040f0bd007afede9e7e" title="A labelled check box.">checkbox</a></span>.  <br /></td></tr>
-<tr class="memitem:a4dbd7706934ced611e4444b370746115" id="r_a4dbd7706934ced611e4444b370746115"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4dbd7706934ced611e4444b370746115">morph::ui::detail::kSelectKeys</a></td></tr>
-<tr class="memdesc:a4dbd7706934ced611e4444b370746115"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aaf82685dbbc3fafd71f27d328e593f38" title="A choice of one option.">select</a></span>.  <br /></td></tr>
+<tr class="memitem:a92ecde7fc572fe67e874d43e9d6336c2" id="r_a92ecde7fc572fe67e874d43e9d6336c2"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 8 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a92ecde7fc572fe67e874d43e9d6336c2">morph::ui::detail::kSelectKeys</a></td></tr>
+<tr class="memdesc:a92ecde7fc572fe67e874d43e9d6336c2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aaf82685dbbc3fafd71f27d328e593f38" title="A choice of one option.">select</a></span>.  <br /></td></tr>
 <tr class="memitem:a263ce25cf7c4b1303ae55fb7bda94b5f" id="r_a263ce25cf7c4b1303ae55fb7bda94b5f"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 1 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a263ce25cf7c4b1303ae55fb7bda94b5f">morph::ui::detail::kMenuKeys</a> = {{{&quot;items&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a9ce2d07469b39a72159ed8b0e0e597ca">Shape::Parts</a>, &quot;menuItem&quot;}}}</td></tr>
 <tr class="memdesc:a263ce25cf7c4b1303ae55fb7bda94b5f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a7604d06fa5802c96e31050ee7ec2a1e3" title="A list of commands.">menu</a></span>.  <br /></td></tr>
 <tr class="memitem:a29b3581abdce60e5aa2937c128e299c5" id="r_a29b3581abdce60e5aa2937c128e299c5"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a29b3581abdce60e5aa2937c128e299c5">morph::ui::detail::kMenuItemKeys</a></td></tr>
 <tr class="memdesc:a29b3581abdce60e5aa2937c128e299c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a menu item part.  <br /></td></tr>
-<tr class="memitem:ad63efce2cbeb77f89fd7d3adc54e10ce" id="r_ad63efce2cbeb77f89fd7d3adc54e10ce"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad63efce2cbeb77f89fd7d3adc54e10ce">morph::ui::detail::kContainerKeys</a> = {{{&quot;children&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>}, {&quot;gap&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}}}</td></tr>
-<tr class="memdesc:ad63efce2cbeb77f89fd7d3adc54e10ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808" title="Children stacked top to bottom.">column</a></span> and <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e" title="Children laid out left to right.">row</a></span>.  <br /></td></tr>
-<tr class="memitem:ad112493e5c7c2dfe71a0d209ca63b1aa" id="r_ad112493e5c7c2dfe71a0d209ca63b1aa"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 3 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad112493e5c7c2dfe71a0d209ca63b1aa">morph::ui::detail::kGridKeys</a></td></tr>
-<tr class="memdesc:ad112493e5c7c2dfe71a0d209ca63b1aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1b3c921ce2a6f18f482f6022a88ef42d" title="Cells in a fixed number of columns.">grid</a></span>.  <br /></td></tr>
+<tr class="memitem:aa8712bc309281b95acb903d991ec229f" id="r_aa8712bc309281b95acb903d991ec229f"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 4 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa8712bc309281b95acb903d991ec229f">morph::ui::detail::kContainerKeys</a></td></tr>
+<tr class="memdesc:aa8712bc309281b95acb903d991ec229f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808" title="Children stacked top to bottom.">column</a></span> and <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e" title="Children laid out left to right.">row</a></span>.  <br /></td></tr>
+<tr class="memitem:af286f24ca1751469249ebb08c3e74783" id="r_af286f24ca1751469249ebb08c3e74783"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af286f24ca1751469249ebb08c3e74783">morph::ui::detail::kGridKeys</a></td></tr>
+<tr class="memdesc:af286f24ca1751469249ebb08c3e74783"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1b3c921ce2a6f18f482f6022a88ef42d" title="Cells in a fixed number of columns.">grid</a></span>; <span class="tt">justify</span> is read only to refuse it.  <br /></td></tr>
 <tr class="memitem:acabe571ecf1065fb8ec047a4284d48c2" id="r_acabe571ecf1065fb8ec047a4284d48c2"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acabe571ecf1065fb8ec047a4284d48c2">morph::ui::detail::kPanelKeys</a></td></tr>
 <tr class="memdesc:acabe571ecf1065fb8ec047a4284d48c2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a06d107b6801ff68d2ada2d60d478318d" title="A titled frame, optionally collapsible.">panel</a></span>.  <br /></td></tr>
 <tr class="memitem:a01ef736ee78c99bd5cccf54dd64ba889" id="r_a01ef736ee78c99bd5cccf54dd64ba889"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a01ef736ee78c99bd5cccf54dd64ba889">morph::ui::detail::kScrollKeys</a> = {{{&quot;axis&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;children&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>}}}</td></tr>
@@ -405,18 +407,18 @@ Variables</h2></td></tr>
 <tr class="memdesc:a18a1b3baecdd3d09161ddca569a91f46"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad8fe6a646863660b9d373f46ed7854f8" title="A tab bar over pages.">tabs</a></span>.  <br /></td></tr>
 <tr class="memitem:a19b3ab568314049d6bf6fae7b2a17852" id="r_a19b3ab568314049d6bf6fae7b2a17852"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a19b3ab568314049d6bf6fae7b2a17852">morph::ui::detail::kTabKeys</a> = {{{&quot;label&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;children&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>}}}</td></tr>
 <tr class="memdesc:a19b3ab568314049d6bf6fae7b2a17852"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad8fe6a646863660b9d373f46ed7854f8" title="A tab bar over pages.">tabs</a></span> page part.  <br /></td></tr>
-<tr class="memitem:a7294ef50d830327911b58aa5ad1045b6" id="r_a7294ef50d830327911b58aa5ad1045b6"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 8 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7294ef50d830327911b58aa5ad1045b6">morph::ui::detail::kDialogKeys</a></td></tr>
-<tr class="memdesc:a7294ef50d830327911b58aa5ad1045b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span> and <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>.  <br /></td></tr>
+<tr class="memitem:a145dc02762f69685d250d3342df1564c" id="r_a145dc02762f69685d250d3342df1564c"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 9 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a145dc02762f69685d250d3342df1564c">morph::ui::detail::kDialogKeys</a></td></tr>
+<tr class="memdesc:a145dc02762f69685d250d3342df1564c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span> and <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>.  <br /></td></tr>
 <tr class="memitem:a02488fa60e73da25e21e8d02e39b1ac1" id="r_a02488fa60e73da25e21e8d02e39b1ac1"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a02488fa60e73da25e21e8d02e39b1ac1">morph::ui::detail::kBusyKeys</a> = {{{&quot;active&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde">Shape::Condition</a>}, {&quot;label&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}}}</td></tr>
 <tr class="memdesc:a02488fa60e73da25e21e8d02e39b1ac1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a7326bd262393a4ca783785918f744a02" title="A progress indicator.">busy</a></span>.  <br /></td></tr>
 <tr class="memitem:acbcb92e592d0c1d5b3a04c16e69b5e0c" id="r_acbcb92e592d0c1d5b3a04c16e69b5e0c"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acbcb92e592d0c1d5b3a04c16e69b5e0c">morph::ui::detail::kForEachKeys</a></td></tr>
 <tr class="memdesc:acbcb92e592d0c1d5b3a04c16e69b5e0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span>.  <br /></td></tr>
-<tr class="memitem:a6cce6962b563f55bae9a5163df9f968e" id="r_a6cce6962b563f55bae9a5163df9f968e"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 14 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6cce6962b563f55bae9a5163df9f968e">morph::ui::detail::kTableKeys</a></td></tr>
-<tr class="memdesc:a6cce6962b563f55bae9a5163df9f968e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span>.  <br /></td></tr>
+<tr class="memitem:a484be44212491473937ff3d338e79d71" id="r_a484be44212491473937ff3d338e79d71"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 15 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a484be44212491473937ff3d338e79d71">morph::ui::detail::kTableKeys</a></td></tr>
+<tr class="memdesc:a484be44212491473937ff3d338e79d71"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span>.  <br /></td></tr>
 <tr class="memitem:aea4261de0d0e7ff8ff77a026212ef244" id="r_aea4261de0d0e7ff8ff77a026212ef244"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 4 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aea4261de0d0e7ff8ff77a026212ef244">morph::ui::detail::kColumnKeys</a></td></tr>
 <tr class="memdesc:aea4261de0d0e7ff8ff77a026212ef244"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> column part.  <br /></td></tr>
-<tr class="memitem:acee573e2f81d055cc6332909491c4348" id="r_acee573e2f81d055cc6332909491c4348"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acee573e2f81d055cc6332909491c4348">morph::ui::detail::kDateTimeKeys</a></td></tr>
-<tr class="memdesc:acee573e2f81d055cc6332909491c4348"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>.  <br /></td></tr>
+<tr class="memitem:a30d537141a330bd568d3da7a6ddaad57" id="r_a30d537141a330bd568d3da7a6ddaad57"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a30d537141a330bd568d3da7a6ddaad57">morph::ui::detail::kDateTimeKeys</a></td></tr>
+<tr class="memdesc:a30d537141a330bd568d3da7a6ddaad57"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>.  <br /></td></tr>
 <tr class="memitem:a3c61f1235fde539d1888fbcb1a75c02f" id="r_a3c61f1235fde539d1888fbcb1a75c02f"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3c61f1235fde539d1888fbcb1a75c02f">morph::ui::detail::kSliderKeys</a></td></tr>
 <tr class="memdesc:a3c61f1235fde539d1888fbcb1a75c02f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1fb4cd9745144090739a2c3090317869" title="An integer on a range.">slider</a></span>.  <br /></td></tr>
 <tr class="memitem:a49844366e9a3d8e138285fa830157748" id="r_a49844366e9a3d8e138285fa830157748"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a49844366e9a3d8e138285fa830157748">morph::ui::detail::kFilePickerKeys</a></td></tr>
@@ -425,6 +427,10 @@ Variables</h2></td></tr>
 <tr class="memdesc:a6410246531b3cb58d7da645990737b7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2c7ee7ece22895a24c60e16d70b3c402" title="A message across the top of a region.">banner</a></span>.  <br /></td></tr>
 <tr class="memitem:aed1ea2a8b86af26ea90422ba573bb783" id="r_aed1ea2a8b86af26ea90422ba573bb783"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aed1ea2a8b86af26ea90422ba573bb783">morph::ui::detail::kActionKeys</a> = {{{&quot;label&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;onClick&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1ac441ee50c88f6e5e3a7c69fc69dad8b8">Shape::Commands</a>}}}</td></tr>
 <tr class="memdesc:aed1ea2a8b86af26ea90422ba573bb783"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of an <span class="tt">action</span> part.  <br /></td></tr>
+<tr class="memitem:ae102310862b3ea7d5eb7011de1629f19" id="r_ae102310862b3ea7d5eb7011de1629f19"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae102310862b3ea7d5eb7011de1629f19">morph::ui::detail::kActionButtonKeys</a></td></tr>
+<tr class="memdesc:ae102310862b3ea7d5eb7011de1629f19"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of an <span class="tt">actionButton</span> part: a button a screen's head or an overlay's footer shows.  <br /></td></tr>
+<tr class="memitem:a7e2ef4edd22b314672e66061a90d3093" id="r_a7e2ef4edd22b314672e66061a90d3093"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 4 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7e2ef4edd22b314672e66061a90d3093">morph::ui::detail::kHeadBadgeKeys</a></td></tr>
+<tr class="memdesc:a7e2ef4edd22b314672e66061a90d3093"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a <span class="tt">headBadge</span> part: a status badge of a screen's head.  <br /></td></tr>
 <tr class="memitem:a8f08cb93f528ab9660a1be7a08d9bc5b" id="r_a8f08cb93f528ab9660a1be7a08d9bc5b"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 3 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f08cb93f528ab9660a1be7a08d9bc5b">morph::ui::detail::kBadgeKeys</a></td></tr>
 <tr class="memdesc:a8f08cb93f528ab9660a1be7a08d9bc5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a22956b2dabf60d44db940378bc46d1f7" title="A short label marking a state.">badge</a></span>.  <br /></td></tr>
 <tr class="memitem:aafa409dd2ee793df49b03ddecd8080bb" id="r_aafa409dd2ee793df49b03ddecd8080bb"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aafa409dd2ee793df49b03ddecd8080bb">morph::ui::detail::kProgressKeys</a> = {{{&quot;value&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;label&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}}}</td></tr>
@@ -445,10 +451,10 @@ Variables</h2></td></tr>
 <tr class="memdesc:a4b0d38585d5b54a815a73cdde431bd06"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">customize</span>.  <br /></td></tr>
 <tr class="memitem:a62af1fe51271442ca72fbdd496554da9" id="r_a62af1fe51271442ca72fbdd496554da9"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 3 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a62af1fe51271442ca72fbdd496554da9">morph::ui::detail::kBoundaryKeys</a></td></tr>
 <tr class="memdesc:a62af1fe51271442ca72fbdd496554da9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">boundary</span>.  <br /></td></tr>
-<tr class="memitem:aeb5befbf40d23bc03ad57cb229d9c028" id="r_aeb5befbf40d23bc03ad57cb229d9c028"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 10 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aeb5befbf40d23bc03ad57cb229d9c028">morph::ui::detail::kFormKeys</a></td></tr>
-<tr class="memdesc:aeb5befbf40d23bc03ad57cb229d9c028"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">form</span>.  <br /></td></tr>
-<tr class="memitem:afdb6cf950d25027bdb28378efb38bdfb" id="r_afdb6cf950d25027bdb28378efb38bdfb"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afdb6cf950d25027bdb28378efb38bdfb">morph::ui::detail::kCollectionKeys</a></td></tr>
-<tr class="memdesc:afdb6cf950d25027bdb28378efb38bdfb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">collection</span> and <span class="tt">wizard</span>.  <br /></td></tr>
+<tr class="memitem:a7a1ae41f8523a24a5caf57ee8d59eef9" id="r_a7a1ae41f8523a24a5caf57ee8d59eef9"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 15 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7a1ae41f8523a24a5caf57ee8d59eef9">morph::ui::detail::kFormKeys</a></td></tr>
+<tr class="memdesc:a7a1ae41f8523a24a5caf57ee8d59eef9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">form</span>.  <br /></td></tr>
+<tr class="memitem:a0ea9bf343838e0b27236a66d96339afe" id="r_a0ea9bf343838e0b27236a66d96339afe"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 7 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0ea9bf343838e0b27236a66d96339afe">morph::ui::detail::kCollectionKeys</a></td></tr>
+<tr class="memdesc:a0ea9bf343838e0b27236a66d96339afe"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt">collection</span> and <span class="tt">wizard</span>: the model and action, and the presentation keys that reach every form the view draws.  <br /></td></tr>
 <tr class="memitem:a5f06f039a370c5c1e7111596883750af" id="r_a5f06f039a370c5c1e7111596883750af"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 3 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5f06f039a370c5c1e7111596883750af">morph::ui::detail::kCustomKeys</a></td></tr>
 <tr class="memdesc:a5f06f039a370c5c1e7111596883750af"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a></span>.  <br /></td></tr>
 <tr class="memitem:a4018daf7b8111ea95f6332a8e80bb4e8" id="r_a4018daf7b8111ea95f6332a8e80bb4e8"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4018daf7b8111ea95f6332a8e80bb4e8">morph::ui::detail::kA11yKeys</a> = {{{&quot;name&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;role&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675">Shape::Text</a>}}}</td></tr>
@@ -457,8 +463,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:ac1e8670fc1f5553cb83cd37affb0d161"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a <span class="tt">drag</span> part.  <br /></td></tr>
 <tr class="memitem:a21544c2122ed5ec2f8e15f4d86a583d3" id="r_a21544c2122ed5ec2f8e15f4d86a583d3"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">KeySpec</a>, 2 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a21544c2122ed5ec2f8e15f4d86a583d3">morph::ui::detail::kDropKeys</a> = {{{&quot;accepts&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {&quot;onDrop&quot;, <a class="el" href="#a4c5b3506a04505322a0ee00f85be53e1ac441ee50c88f6e5e3a7c69fc69dad8b8">Shape::Commands</a>}}}</td></tr>
 <tr class="memdesc:a21544c2122ed5ec2f8e15f4d86a583d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of a <span class="tt">drop</span> part.  <br /></td></tr>
-<tr class="memitem:a210e8482c2dee611d2cd28ab3b7e6375" id="r_a210e8482c2dee611d2cd28ab3b7e6375"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html">KindSpec</a>, 46 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a210e8482c2dee611d2cd28ab3b7e6375">morph::ui::detail::kKinds</a></td></tr>
-<tr class="memdesc:a210e8482c2dee611d2cd28ab3b7e6375"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view node kinds of <span class="tt">ui/1</span> and the part kinds inside them.  <br /></td></tr>
+<tr class="memitem:a155b06e010b48a2d03c4ef89892f223b" id="r_a155b06e010b48a2d03c4ef89892f223b"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html">KindSpec</a>, 48 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a155b06e010b48a2d03c4ef89892f223b">morph::ui::detail::kKinds</a></td></tr>
+<tr class="memdesc:a155b06e010b48a2d03c4ef89892f223b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view node kinds of <span class="tt">ui/1</span> and the part kinds inside them.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The UI document (spec 5 §3): its model — declarations, commands, view nodes, components and customization points — and <span class="tt">loadDocument</span>, which parses a document and runs its load-time validation. </p>
@@ -498,7 +504,7 @@ Variables</h2></td></tr>
 
 <p>A shared, immutable view node. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -641,9 +647,9 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ac0d7e4d139a4fa323e9fb63d9428cf0eaac6b9023adebb96a676db84198d3a48f" name="ac0d7e4d139a4fa323e9fb63d9428cf0eaac6b9023adebb96a676db84198d3a48f"></a>SignOut&#160;</td><td class="fielddoc"><p><span class="tt">{"signOut": true}</span> </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99" name="ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99"></a>Upload&#160;</td><td class="fielddoc"><p><span class="tt">{"upload": e, "to": "m", "as": "x"?, "id": "t"?}</span> </p>
+<tr><td class="fieldname"><a id="ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99" name="ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99"></a>Upload&#160;</td><td class="fielddoc"><p><span class="tt">{"upload": e, "to": "m", "as": "x"?, "id": "t"?, "into": "bytes"?, "nameAs"?, "typeAs"?}</span> </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d" name="ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d"></a>Download&#160;</td><td class="fielddoc"><p><span class="tt">{"download": e, "save": "<a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a>", "name": e?}</span> or <span class="tt">{"download": e, "to": "preview", "as": "url"}</span> </p>
+<tr><td class="fieldname"><a id="ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d" name="ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d"></a>Download&#160;</td><td class="fielddoc"><p><span class="tt">{"download": e, "save": "<a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a>", "name": e?}</span> or <span class="tt">{"download": e, "to": "preview", "as": "url"}</span>, either with <span class="tt">"from": "bytes"</span>, a <span class="tt">name</span> and a <span class="tt">type</span> </p>
 </td></tr>
 </table>
 
@@ -679,7 +685,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -711,7 +717,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -761,9 +767,11 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="a4c5b3506a04505322a0ee00f85be53e1aa73e6bf278578e09d2351ee2ec7a7908" name="a4c5b3506a04505322a0ee00f85be53e1aa73e6bf278578e09d2351ee2ec7a7908"></a>Keys&#160;</td><td class="fielddoc"><p><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2" title="The identity of a Switch case, a Select option, a ForEach or Table row and a drag payload.">Key</a> bindings: chord to command list. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="a4c5b3506a04505322a0ee00f85be53e1ac5836008c1649301e29351a55db8f65c" name="a4c5b3506a04505322a0ee00f85be53e1ac5836008c1649301e29351a55db8f65c"></a>Flag&#160;</td><td class="fielddoc"><p>A literal <span class="tt">true</span> or <span class="tt">false</span>, set once. </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00575">575</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00601">601</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -807,7 +815,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l01939">1939</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02094">2094</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -884,7 +892,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00596">596</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -925,7 +933,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The spec, or <span class="tt">nullptr</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00911">911</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00978">978</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -966,7 +974,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">name</code> is in <code class="param">names</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00924">924</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00991">991</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1006,7 +1014,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00931">931</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00998">998</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1046,7 +1054,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00944">944</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l01011">1011</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1082,7 +1090,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its type. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02046">2046</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02201">2201</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1123,7 +1131,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether they are compatible: equal kinds, <span class="tt">any</span> on either side, an <span class="tt">int</span> for a <span class="tt">decimal</span> or <span class="tt">key</span>, a <span class="tt">string</span> for a <span class="tt">key</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02070">2070</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l02225">2225</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1164,7 +1172,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The document, with what validation found that does not refuse it in <span class="tt">Document::warnings</span>, or the first refusal, naming the document id, the JSON Pointer and the reason. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03302">3302</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03735">3735</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1205,7 +1213,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The document, or the refusal; text that is not JSON is refused at the root. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03329">3329</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03762">3762</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1235,7 +1243,7 @@ Variables</h2></td></tr>
 <p>The view node kinds of <span class="tt">ui/1</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Their <span class="tt">kind</span> spellings. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03340">3340</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l03773">3773</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1288,7 +1296,7 @@ Variables</h2></td></tr>
 
 <p>The key is evaluated in the node's own scope (a dialog's, a row's), not the scope around it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1314,7 +1322,7 @@ Variables</h2></td></tr>
 
 <p>The key is required. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00620">620</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1340,7 +1348,7 @@ Variables</h2></td></tr>
 
 <p>The key's content is a boundary's <span class="tt">error</span>, where <span class="tt">boundary.error</span> and <span class="tt">retry</span> are valid. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00622">622</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1366,7 +1374,7 @@ Variables</h2></td></tr>
 
 <p>The node or part creates a scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1392,7 +1400,7 @@ Variables</h2></td></tr>
 
 <p>The scope it creates is a row scope, where <span class="tt">row</span> is valid. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00612">612</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00639">639</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1418,7 +1426,7 @@ Variables</h2></td></tr>
 
 <p>It carries the input decorations <span class="tt">readonly</span>, <span class="tt">required</span>, <span class="tt">errors</span> and <span class="tt">stale</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00614">614</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00641">641</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1444,7 +1452,7 @@ Variables</h2></td></tr>
 
 <p>It is a part, not a node: it has no common properties. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00643">643</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1470,7 +1478,7 @@ Variables</h2></td></tr>
 
 <p>A command may write its draft with <span class="tt">set</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1496,12 +1504,12 @@ Variables</h2></td></tr>
 
 <p>Any path below its id is an element value (a form's fields). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00620">620</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00647">647</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ad38fd134350f435a3ea7284aba1f584f" name="ad38fd134350f435a3ea7284aba1f584f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad38fd134350f435a3ea7284aba1f584f">&#9670;&#160;</a></span>kCommonKeys</h2>
+<a id="afb6fac55865f73add71d70463aeec60d" name="afb6fac55865f73add71d70463aeec60d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afb6fac55865f73add71d70463aeec60d">&#9670;&#160;</a></span>kCommonKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1510,7 +1518,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 13&gt; morph::ui::detail::kCommonKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 18&gt; morph::ui::detail::kCommonKeys</td>
         </tr>
       </table>
   </td>
@@ -1525,6 +1533,11 @@ Variables</h2></td></tr>
 <div class="line">    {<span class="stringliteral">&quot;enabled&quot;</span>, Shape::Condition},</div>
 <div class="line">    {<span class="stringliteral">&quot;tooltip&quot;</span>, Shape::Expr},</div>
 <div class="line">    {<span class="stringliteral">&quot;sizing&quot;</span>, Shape::Expr},</div>
+<div class="line">    {<span class="stringliteral">&quot;minWidth&quot;</span>, Shape::Expr},</div>
+<div class="line">    {<span class="stringliteral">&quot;maxWidth&quot;</span>, Shape::Expr},</div>
+<div class="line">    {<span class="stringliteral">&quot;minHeight&quot;</span>, Shape::Expr},</div>
+<div class="line">    {<span class="stringliteral">&quot;maxHeight&quot;</span>, Shape::Expr},</div>
+<div class="line">    {<span class="stringliteral">&quot;alignSelf&quot;</span>, Shape::Text},</div>
 <div class="line">    {<span class="stringliteral">&quot;span&quot;</span>, Shape::Expr},</div>
 <div class="line">    {<span class="stringliteral">&quot;testId&quot;</span>, Shape::Text},</div>
 <div class="line">    {<span class="stringliteral">&quot;surface&quot;</span>, Shape::Text},</div>
@@ -1534,12 +1547,12 @@ Variables</h2></td></tr>
 <div class="line">    {<span class="stringliteral">&quot;drop&quot;</span>, Shape::Part, <span class="stringliteral">&quot;drop&quot;</span>},</div>
 <div class="line">    {<span class="stringliteral">&quot;keys&quot;</span>, Shape::Keys},</div>
 <div class="line">}}</div>
-<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987">morph::ui::detail::Shape::Name</a></div><div class="ttdeci">@ Name</div><div class="ttdoc">A plain string that is a name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00581">document.hpp:581</a></div></div>
-<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde">morph::ui::detail::Shape::Condition</a></div><div class="ttdeci">@ Condition</div><div class="ttdoc">An expression checked as a bool.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00577">document.hpp:577</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987">morph::ui::detail::Shape::Name</a></div><div class="ttdeci">@ Name</div><div class="ttdoc">A plain string that is a name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00607">document.hpp:607</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde">morph::ui::detail::Shape::Condition</a></div><div class="ttdeci">@ Condition</div><div class="ttdoc">An expression checked as a bool.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00603">document.hpp:603</a></div></div>
 </div><!-- fragment -->
 <p>The keys every node takes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00636">636</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1571,7 +1584,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The input decorations text and the inputs take. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00653">653</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00685">685</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1597,7 +1610,7 @@ Variables</h2></td></tr>
 
 <p>The element values every element has. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00661">661</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00693">693</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1623,7 +1636,7 @@ Variables</h2></td></tr>
 
 <p>The element values of a text, date-time or slider input. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00695">695</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1649,7 +1662,7 @@ Variables</h2></td></tr>
 
 <p>The element values of a checkbox. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00665">665</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00697">697</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1675,7 +1688,7 @@ Variables</h2></td></tr>
 
 <p>The element values of a select. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00667">667</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1704,7 +1717,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The element values of a table. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00669">669</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00701">701</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1730,7 +1743,7 @@ Variables</h2></td></tr>
 
 <p>The element values of a dialog or drawer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00673">673</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00705">705</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1756,7 +1769,7 @@ Variables</h2></td></tr>
 
 <p>The element values of a form, beside its fields. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00675">675</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00707">707</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1782,7 +1795,7 @@ Variables</h2></td></tr>
 
 <p>The values of a transfer id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00677">677</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00709">709</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1808,12 +1821,12 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">text</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00680">680</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a0aedf5fd3491ccddd89ba96ff857758e" name="a0aedf5fd3491ccddd89ba96ff857758e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0aedf5fd3491ccddd89ba96ff857758e">&#9670;&#160;</a></span>kButtonKeys</h2>
+<a id="a24eaf8029371e8db26ab9af7801679b6" name="a24eaf8029371e8db26ab9af7801679b6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a24eaf8029371e8db26ab9af7801679b6">&#9670;&#160;</a></span>kButtonKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1822,7 +1835,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 5&gt; morph::ui::detail::kButtonKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 7&gt; morph::ui::detail::kButtonKeys</td>
         </tr>
       </table>
   </td>
@@ -1834,18 +1847,20 @@ Variables</h2></td></tr>
 <b>Initial value:</b><div class="fragment"><div class="line">= {{{<span class="stringliteral">&quot;label&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;icon&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;emphasis&quot;</span>, Shape::Text},</div>
+<div class="line">                {<span class="stringliteral">&quot;style&quot;</span>, Shape::Text},</div>
+<div class="line">                {<span class="stringliteral">&quot;selected&quot;</span>, Shape::Condition},</div>
 <div class="line">                {<span class="stringliteral">&quot;onClick&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;onActivate&quot;</span>, Shape::Commands}}}</div>
-<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">morph::ui::detail::Shape::Expr</a></div><div class="ttdeci">@ Expr</div><div class="ttdoc">An expression.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00576">document.hpp:576</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">morph::ui::detail::Shape::Expr</a></div><div class="ttdeci">@ Expr</div><div class="ttdoc">An expression.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00602">document.hpp:602</a></div></div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">button</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00682">682</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00714">714</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a489c3e53e3d875c978e6186d3d95fdaf" name="a489c3e53e3d875c978e6186d3d95fdaf"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a489c3e53e3d875c978e6186d3d95fdaf">&#9670;&#160;</a></span>kTextInputKeys</h2>
+<a id="a897be803c5ce4778454e481d2d27814f" name="a897be803c5ce4778454e481d2d27814f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a897be803c5ce4778454e481d2d27814f">&#9670;&#160;</a></span>kTextInputKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1854,7 +1869,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 8&gt; morph::ui::detail::kTextInputKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 9&gt; morph::ui::detail::kTextInputKeys</td>
         </tr>
       </table>
   </td>
@@ -1868,13 +1883,14 @@ Variables</h2></td></tr>
 <div class="line">                {<span class="stringliteral">&quot;mode&quot;</span>, Shape::Expr},</div>
 <div class="line">                {<span class="stringliteral">&quot;commitOn&quot;</span>, Shape::Text},</div>
 <div class="line">                {<span class="stringliteral">&quot;label&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;showLabel&quot;</span>, Shape::Flag},</div>
 <div class="line">                {<span class="stringliteral">&quot;onChange&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;onCommit&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;onSubmit&quot;</span>, Shape::Commands}}}</div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">textInput</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00688">688</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00722">722</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1902,12 +1918,12 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">checkbox</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00697">697</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a4dbd7706934ced611e4444b370746115" name="a4dbd7706934ced611e4444b370746115"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4dbd7706934ced611e4444b370746115">&#9670;&#160;</a></span>kSelectKeys</h2>
+<a id="a92ecde7fc572fe67e874d43e9d6336c2" name="a92ecde7fc572fe67e874d43e9d6336c2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a92ecde7fc572fe67e874d43e9d6336c2">&#9670;&#160;</a></span>kSelectKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1916,7 +1932,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 7&gt; morph::ui::detail::kSelectKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 8&gt; morph::ui::detail::kSelectKeys</td>
         </tr>
       </table>
   </td>
@@ -1929,13 +1945,14 @@ Variables</h2></td></tr>
 <div class="line">                {<span class="stringliteral">&quot;selected&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;style&quot;</span>, Shape::Expr},</div>
 <div class="line">                {<span class="stringliteral">&quot;label&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;showLabel&quot;</span>, Shape::Flag},</div>
 <div class="line">                {<span class="stringliteral">&quot;onStale&quot;</span>, Shape::Text},</div>
 <div class="line">                {<span class="stringliteral">&quot;onChoose&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;onChange&quot;</span>, Shape::Commands}}}</div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">select</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00700">700</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00735">735</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1961,7 +1978,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">menu</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00744">744</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1994,12 +2011,12 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of a menu item part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00710">710</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00746">746</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ad63efce2cbeb77f89fd7d3adc54e10ce" name="ad63efce2cbeb77f89fd7d3adc54e10ce"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad63efce2cbeb77f89fd7d3adc54e10ce">&#9670;&#160;</a></span>kContainerKeys</h2>
+<a id="aa8712bc309281b95acb903d991ec229f" name="aa8712bc309281b95acb903d991ec229f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa8712bc309281b95acb903d991ec229f">&#9670;&#160;</a></span>kContainerKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2008,7 +2025,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 2&gt; morph::ui::detail::kContainerKeys = {{{&quot;children&quot;, Shape::Nodes}, {&quot;gap&quot;, Shape::Expr}}}</td>
+          <td class="memname">std::array&lt;KeySpec, 4&gt; morph::ui::detail::kContainerKeys</td>
         </tr>
       </table>
   </td>
@@ -2017,15 +2034,18 @@ Variables</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-
+<b>Initial value:</b><div class="fragment"><div class="line">                                       = {</div>
+<div class="line">{{<span class="stringliteral">&quot;children&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>}, {<span class="stringliteral">&quot;gap&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {<span class="stringliteral">&quot;align&quot;</span>, Shape::Text}, {<span class="stringliteral">&quot;justify&quot;</span>, Shape::Text}}}</div>
+<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">morph::ui::detail::Shape::Nodes</a></div><div class="ttdeci">@ Nodes</div><div class="ttdoc">A node or a list of nodes.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00605">document.hpp:605</a></div></div>
+</div><!-- fragment -->
 <p>The keys of <span class="tt">column</span> and <span class="tt">row</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00718">718</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00754">754</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ad112493e5c7c2dfe71a0d209ca63b1aa" name="ad112493e5c7c2dfe71a0d209ca63b1aa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad112493e5c7c2dfe71a0d209ca63b1aa">&#9670;&#160;</a></span>kGridKeys</h2>
+<a id="af286f24ca1751469249ebb08c3e74783" name="af286f24ca1751469249ebb08c3e74783"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af286f24ca1751469249ebb08c3e74783">&#9670;&#160;</a></span>kGridKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2034,7 +2054,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 3&gt; morph::ui::detail::kGridKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 5&gt; morph::ui::detail::kGridKeys</td>
         </tr>
       </table>
   </td>
@@ -2043,13 +2063,15 @@ Variables</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">                                  = {</div>
-<div class="line">{{<span class="stringliteral">&quot;children&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>}, {<span class="stringliteral">&quot;gap&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {<span class="stringliteral">&quot;columns&quot;</span>, Shape::Expr}}}</div>
-<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">morph::ui::detail::Shape::Nodes</a></div><div class="ttdeci">@ Nodes</div><div class="ttdoc">A node or a list of nodes.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00579">document.hpp:579</a></div></div>
+<b>Initial value:</b><div class="fragment"><div class="line">= {{{<span class="stringliteral">&quot;children&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a187c6ad3a74cc93ac6c2229d398e383e">Shape::Nodes</a>},</div>
+<div class="line">                {<span class="stringliteral">&quot;gap&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
+<div class="line">                {<span class="stringliteral">&quot;columns&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;align&quot;</span>, Shape::Text},</div>
+<div class="line">                {<span class="stringliteral">&quot;justify&quot;</span>, Shape::Text}}}</div>
 </div><!-- fragment -->
-<p>The keys of <span class="tt">grid</span>. </p>
+<p>The keys of <span class="tt">grid</span>; <span class="tt">justify</span> is read only to refuse it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00720">720</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00757">757</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2080,7 +2102,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">panel</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00723">723</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00763">763</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2106,7 +2128,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">scroll</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00729">729</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00769">769</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2131,11 +2153,11 @@ Variables</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">                                    = {</div>
 <div class="line">{{<span class="stringliteral">&quot;on&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>, {}, <a class="code hl_variable" href="#ae45f8af84d5bf653404e5b226dee105f">kRequired</a>}, {<span class="stringliteral">&quot;cases&quot;</span>, Shape::Parts, <span class="stringliteral">&quot;case&quot;</span>}, {<span class="stringliteral">&quot;default&quot;</span>, Shape::Nodes}}}</div>
-<div class="ttc" id="adocument_8hpp_html_ae45f8af84d5bf653404e5b226dee105f"><div class="ttname"><a href="#ae45f8af84d5bf653404e5b226dee105f">morph::ui::detail::kRequired</a></div><div class="ttdeci">constexpr std::uint8_t kRequired</div><div class="ttdoc">The key is required.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00593">document.hpp:593</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_ae45f8af84d5bf653404e5b226dee105f"><div class="ttname"><a href="#ae45f8af84d5bf653404e5b226dee105f">morph::ui::detail::kRequired</a></div><div class="ttdeci">constexpr std::uint8_t kRequired</div><div class="ttdoc">The key is required.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00620">document.hpp:620</a></div></div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">switch</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00731">731</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00771">771</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2163,7 +2185,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of a <span class="tt">switch</span> case part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00774">774</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2189,7 +2211,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">tabs</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00777">777</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2215,12 +2237,12 @@ Variables</h2></td></tr>
 
 <p>The keys of a <span class="tt">tabs</span> page part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a7294ef50d830327911b58aa5ad1045b6" name="a7294ef50d830327911b58aa5ad1045b6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7294ef50d830327911b58aa5ad1045b6">&#9670;&#160;</a></span>kDialogKeys</h2>
+<a id="a145dc02762f69685d250d3342df1564c" name="a145dc02762f69685d250d3342df1564c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a145dc02762f69685d250d3342df1564c">&#9670;&#160;</a></span>kDialogKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2229,7 +2251,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 8&gt; morph::ui::detail::kDialogKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 9&gt; morph::ui::detail::kDialogKeys</td>
         </tr>
       </table>
   </td>
@@ -2245,12 +2267,13 @@ Variables</h2></td></tr>
 <div class="line">                {<span class="stringliteral">&quot;onDismiss&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;default&quot;</span>, Shape::Commands, {}, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;cancel&quot;</span>, Shape::Commands, {}, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>},</div>
+<div class="line">                {<span class="stringliteral">&quot;actions&quot;</span>, Shape::Parts, <span class="stringliteral">&quot;actionButton&quot;</span>, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;side&quot;</span>, Shape::Expr}}}</div>
-<div class="ttc" id="adocument_8hpp_html_ad41f9407453271cdbf6f401957387c74"><div class="ttname"><a href="#ad41f9407453271cdbf6f401957387c74">morph::ui::detail::kInner</a></div><div class="ttdeci">constexpr std::uint8_t kInner</div><div class="ttdoc">The key is evaluated in the node&#39;s own scope (a dialog&#39;s, a row&#39;s), not the scope around it.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00591">document.hpp:591</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_ad41f9407453271cdbf6f401957387c74"><div class="ttname"><a href="#ad41f9407453271cdbf6f401957387c74">morph::ui::detail::kInner</a></div><div class="ttdeci">constexpr std::uint8_t kInner</div><div class="ttdoc">The key is evaluated in the node&#39;s own scope (a dialog&#39;s, a row&#39;s), not the scope around it.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00618">document.hpp:618</a></div></div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">dialog</span> and <span class="tt">drawer</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00741">741</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00781">781</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2276,7 +2299,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">busy</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00750">750</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00791">791</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2307,12 +2330,12 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">forEach</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00752">752</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00793">793</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a6cce6962b563f55bae9a5163df9f968e" name="a6cce6962b563f55bae9a5163df9f968e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6cce6962b563f55bae9a5163df9f968e">&#9670;&#160;</a></span>kTableKeys</h2>
+<a id="a484be44212491473937ff3d338e79d71" name="a484be44212491473937ff3d338e79d71"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a484be44212491473937ff3d338e79d71">&#9670;&#160;</a></span>kTableKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2321,7 +2344,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 14&gt; morph::ui::detail::kTableKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 15&gt; morph::ui::detail::kTableKeys</td>
         </tr>
       </table>
   </td>
@@ -2343,11 +2366,12 @@ Variables</h2></td></tr>
 <div class="line">                 {<span class="stringliteral">&quot;filters&quot;</span>, Shape::Expr},</div>
 <div class="line">                 {<span class="stringliteral">&quot;rowTone&quot;</span>, Shape::Expr, {}, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>},</div>
 <div class="line">                 {<span class="stringliteral">&quot;highlightKey&quot;</span>, Shape::Expr},</div>
-<div class="line">                 {<span class="stringliteral">&quot;onActivate&quot;</span>, Shape::Commands, {}, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>}}}</div>
+<div class="line">                 {<span class="stringliteral">&quot;onActivate&quot;</span>, Shape::Commands, {}, <a class="code hl_variable" href="#ad41f9407453271cdbf6f401957387c74">kInner</a>},</div>
+<div class="line">                 {<span class="stringliteral">&quot;empty&quot;</span>, Shape::Nodes}}}</div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">table</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00799">799</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2375,12 +2399,12 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of a <span class="tt">table</span> column part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00773">773</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="acee573e2f81d055cc6332909491c4348" name="acee573e2f81d055cc6332909491c4348"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acee573e2f81d055cc6332909491c4348">&#9670;&#160;</a></span>kDateTimeKeys</h2>
+<a id="a30d537141a330bd568d3da7a6ddaad57" name="a30d537141a330bd568d3da7a6ddaad57"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a30d537141a330bd568d3da7a6ddaad57">&#9670;&#160;</a></span>kDateTimeKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2389,7 +2413,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 5&gt; morph::ui::detail::kDateTimeKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 6&gt; morph::ui::detail::kDateTimeKeys</td>
         </tr>
       </table>
   </td>
@@ -2401,12 +2425,13 @@ Variables</h2></td></tr>
 <b>Initial value:</b><div class="fragment"><div class="line">= {{{<span class="stringliteral">&quot;value&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;mode&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>},</div>
 <div class="line">                {<span class="stringliteral">&quot;label&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;showLabel&quot;</span>, Shape::Flag},</div>
 <div class="line">                {<span class="stringliteral">&quot;onChange&quot;</span>, Shape::Commands},</div>
 <div class="line">                {<span class="stringliteral">&quot;onCommit&quot;</span>, Shape::Commands}}}</div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">dateTimeInput</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00776">776</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00818">818</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2439,7 +2464,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">slider</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00782">782</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2470,7 +2495,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">filePicker</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00790">790</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00833">833</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2501,7 +2526,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">banner</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00839">839</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2527,7 +2552,68 @@ Variables</h2></td></tr>
 
 <p>The keys of an <span class="tt">action</span> part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00802">802</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00845">845</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae102310862b3ea7d5eb7011de1629f19" name="ae102310862b3ea7d5eb7011de1629f19"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae102310862b3ea7d5eb7011de1629f19">&#9670;&#160;</a></span>kActionButtonKeys</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::array&lt;KeySpec, 7&gt; morph::ui::detail::kActionButtonKeys</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">= {{{<span class="stringliteral">&quot;id&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987">Shape::Name</a>, {}, <a class="code hl_variable" href="#ae45f8af84d5bf653404e5b226dee105f">kRequired</a>},</div>
+<div class="line">                {<span class="stringliteral">&quot;label&quot;</span>, Shape::Expr, {}, kRequired},</div>
+<div class="line">                {<span class="stringliteral">&quot;icon&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;emphasis&quot;</span>, Shape::Text},</div>
+<div class="line">                {<span class="stringliteral">&quot;enabled&quot;</span>, Shape::Condition},</div>
+<div class="line">                {<span class="stringliteral">&quot;visible&quot;</span>, Shape::Condition},</div>
+<div class="line">                {<span class="stringliteral">&quot;onClick&quot;</span>, Shape::Commands}}}</div>
+</div><!-- fragment -->
+<p>The keys of an <span class="tt">actionButton</span> part: a button a screen's head or an overlay's footer shows. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7e2ef4edd22b314672e66061a90d3093" name="a7e2ef4edd22b314672e66061a90d3093"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e2ef4edd22b314672e66061a90d3093">&#9670;&#160;</a></span>kHeadBadgeKeys</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::array&lt;KeySpec, 4&gt; morph::ui::detail::kHeadBadgeKeys</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">                                       = {</div>
+<div class="line">{{<span class="stringliteral">&quot;tone&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {<span class="stringliteral">&quot;text&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff">Shape::Expr</a>}, {<span class="stringliteral">&quot;icon&quot;</span>, Shape::Expr}, {<span class="stringliteral">&quot;visible&quot;</span>, Shape::Condition}}}</div>
+</div><!-- fragment -->
+<p>The keys of a <span class="tt">headBadge</span> part: a status badge of a screen's head. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00855">855</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2555,7 +2641,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">badge</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00804">804</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00858">858</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2581,7 +2667,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">progress</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00807">807</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00861">861</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2607,7 +2693,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">steps</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00809">809</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00863">863</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2633,7 +2719,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">keyValue</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00811">811</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00865">865</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2661,7 +2747,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">emptyState</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00813">813</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00867">867</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2689,7 +2775,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">splitter</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00816">816</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00870">870</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2720,7 +2806,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">collapsible</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00819">819</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00873">873</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2748,7 +2834,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">dropZone</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00879">879</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2774,7 +2860,7 @@ Variables</h2></td></tr>
 
 <p>The keys of <span class="tt">customize</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00828">828</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00882">882</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2802,12 +2888,12 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">boundary</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00830">830</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00884">884</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aeb5befbf40d23bc03ad57cb229d9c028" name="aeb5befbf40d23bc03ad57cb229d9c028"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeb5befbf40d23bc03ad57cb229d9c028">&#9670;&#160;</a></span>kFormKeys</h2>
+<a id="a7a1ae41f8523a24a5caf57ee8d59eef9" name="a7a1ae41f8523a24a5caf57ee8d59eef9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7a1ae41f8523a24a5caf57ee8d59eef9">&#9670;&#160;</a></span>kFormKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2816,7 +2902,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 10&gt; morph::ui::detail::kFormKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 15&gt; morph::ui::detail::kFormKeys</td>
         </tr>
       </table>
   </td>
@@ -2834,16 +2920,21 @@ Variables</h2></td></tr>
 <div class="line">                 {<span class="stringliteral">&quot;fields&quot;</span>, Shape::ExprRecord, <span class="stringliteral">&quot;fields&quot;</span>},</div>
 <div class="line">                 {<span class="stringliteral">&quot;onSubmit&quot;</span>, Shape::Commands},</div>
 <div class="line">                 {<span class="stringliteral">&quot;onSuccess&quot;</span>, Shape::Commands},</div>
-<div class="line">                 {<span class="stringliteral">&quot;onError&quot;</span>, Shape::Commands}}}</div>
+<div class="line">                 {<span class="stringliteral">&quot;onError&quot;</span>, Shape::Commands},</div>
+<div class="line">                 {<span class="stringliteral">&quot;title&quot;</span>, Shape::Expr},</div>
+<div class="line">                 {<span class="stringliteral">&quot;submitLabel&quot;</span>, Shape::Expr},</div>
+<div class="line">                 {<span class="stringliteral">&quot;showStatus&quot;</span>, Shape::Flag},</div>
+<div class="line">                 {<span class="stringliteral">&quot;columns&quot;</span>, Shape::Expr},</div>
+<div class="line">                 {<span class="stringliteral">&quot;fieldLayout&quot;</span>, Shape::Text}}}</div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">form</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00833">833</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00887">887</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="afdb6cf950d25027bdb28378efb38bdfb" name="afdb6cf950d25027bdb28378efb38bdfb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#afdb6cf950d25027bdb28378efb38bdfb">&#9670;&#160;</a></span>kCollectionKeys</h2>
+<a id="a0ea9bf343838e0b27236a66d96339afe" name="a0ea9bf343838e0b27236a66d96339afe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0ea9bf343838e0b27236a66d96339afe">&#9670;&#160;</a></span>kCollectionKeys</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2852,7 +2943,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KeySpec, 2&gt; morph::ui::detail::kCollectionKeys</td>
+          <td class="memname">std::array&lt;KeySpec, 7&gt; morph::ui::detail::kCollectionKeys</td>
         </tr>
       </table>
   </td>
@@ -2861,12 +2952,17 @@ Variables</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">                                        = {</div>
-<div class="line">{{<span class="stringliteral">&quot;model&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987">Shape::Name</a>, {}, <a class="code hl_variable" href="#ae45f8af84d5bf653404e5b226dee105f">kRequired</a>}, {<span class="stringliteral">&quot;action&quot;</span>, Shape::Text, {}, kRequired}}}</div>
+<b>Initial value:</b><div class="fragment"><div class="line">= {{{<span class="stringliteral">&quot;model&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a49ee3087348e8d44e1feda1917443987">Shape::Name</a>, {}, <a class="code hl_variable" href="#ae45f8af84d5bf653404e5b226dee105f">kRequired</a>},</div>
+<div class="line">                {<span class="stringliteral">&quot;action&quot;</span>, Shape::Text, {}, kRequired},</div>
+<div class="line">                {<span class="stringliteral">&quot;title&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;submitLabel&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;showStatus&quot;</span>, Shape::Flag},</div>
+<div class="line">                {<span class="stringliteral">&quot;columns&quot;</span>, Shape::Expr},</div>
+<div class="line">                {<span class="stringliteral">&quot;fieldLayout&quot;</span>, Shape::Text}}}</div>
 </div><!-- fragment -->
-<p>The keys of <span class="tt">collection</span> and <span class="tt">wizard</span>. </p>
+<p>The keys of <span class="tt">collection</span> and <span class="tt">wizard</span>: the model and action, and the presentation keys that reach every form the view draws. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00844">844</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00904">904</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2891,11 +2987,11 @@ Variables</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">                                    = {</div>
 <div class="line">{{<span class="stringliteral">&quot;name&quot;</span>, <a class="code hl_enumvalue" href="#a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675">Shape::Text</a>, {}, <a class="code hl_variable" href="#ae45f8af84d5bf653404e5b226dee105f">kRequired</a>}, {<span class="stringliteral">&quot;props&quot;</span>, Shape::ExprRecord}, {<span class="stringliteral">&quot;on&quot;</span>, Shape::CommandRecord}}}</div>
-<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675">morph::ui::detail::Shape::Text</a></div><div class="ttdeci">@ Text</div><div class="ttdoc">A plain string.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00580">document.hpp:580</a></div></div>
+<div class="ttc" id="adocument_8hpp_html_a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675"><div class="ttname"><a href="#a4c5b3506a04505322a0ee00f85be53e1a9dffbf69ffba8bc38bc4e01abf4b1675">morph::ui::detail::Shape::Text</a></div><div class="ttdeci">@ Text</div><div class="ttdoc">A plain string.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l00606">document.hpp:606</a></div></div>
 </div><!-- fragment -->
 <p>The keys of <span class="tt">custom</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00912">912</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2921,7 +3017,7 @@ Variables</h2></td></tr>
 
 <p>The keys of an <span class="tt">a11y</span> part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00915">915</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2947,7 +3043,7 @@ Variables</h2></td></tr>
 
 <p>The keys of a <span class="tt">drag</span> part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00852">852</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00917">917</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -2973,12 +3069,12 @@ Variables</h2></td></tr>
 
 <p>The keys of a <span class="tt">drop</span> part. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00854">854</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00919">919</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a210e8482c2dee611d2cd28ab3b7e6375" name="a210e8482c2dee611d2cd28ab3b7e6375"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a210e8482c2dee611d2cd28ab3b7e6375">&#9670;&#160;</a></span>kKinds</h2>
+<a id="a155b06e010b48a2d03c4ef89892f223b" name="a155b06e010b48a2d03c4ef89892f223b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a155b06e010b48a2d03c4ef89892f223b">&#9670;&#160;</a></span>kKinds</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2987,7 +3083,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;KindSpec, 46&gt; morph::ui::detail::kKinds</td>
+          <td class="memname">std::array&lt;KindSpec, 48&gt; morph::ui::detail::kKinds</td>
         </tr>
       </table>
   </td>
@@ -2999,7 +3095,7 @@ Variables</h2></td></tr>
 
 <p>The view node kinds of <span class="tt">ui/1</span> and the part kinds inside them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00857">857</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00922">922</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

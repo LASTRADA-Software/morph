@@ -41,6 +41,18 @@ var annotated_dup =
         [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ],
         [ "RawHandler", "d8/d3a/classmorph_1_1bridge_1_1RawHandler.html", "d8/d3a/classmorph_1_1bridge_1_1RawHandler" ]
       ] ],
+      [ "client", null, [
+        [ "ApplicationHost", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html", "d4/d77/classmorph_1_1client_1_1ApplicationHost" ],
+        [ "Args", "dd/dc3/structmorph_1_1client_1_1Args.html", "dd/dc3/structmorph_1_1client_1_1Args" ],
+        [ "LocalApp", "dd/dd4/structmorph_1_1client_1_1LocalApp.html", "dd/dd4/structmorph_1_1client_1_1LocalApp" ],
+        [ "LocalSetup", "d8/d04/structmorph_1_1client_1_1LocalSetup.html", "d8/d04/structmorph_1_1client_1_1LocalSetup" ],
+        [ "LocalSource", "d1/d98/classmorph_1_1client_1_1LocalSource.html", "d1/d98/classmorph_1_1client_1_1LocalSource" ],
+        [ "RemoteSource", "d2/d13/classmorph_1_1client_1_1RemoteSource.html", "d2/d13/classmorph_1_1client_1_1RemoteSource" ],
+        [ "RemoteTransport", "d5/db6/structmorph_1_1client_1_1RemoteTransport.html", "d5/db6/structmorph_1_1client_1_1RemoteTransport" ],
+        [ "ShellOptions", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html", "d6/d9c/structmorph_1_1client_1_1ShellOptions" ],
+        [ "SignedIn", "d9/d37/structmorph_1_1client_1_1SignedIn.html", "d9/d37/structmorph_1_1client_1_1SignedIn" ],
+        [ "Source", "d3/de2/classmorph_1_1client_1_1Source.html", "d3/de2/classmorph_1_1client_1_1Source" ]
+      ] ],
       [ "core", null, [
         [ "FileIoOps", "db/d00/structmorph_1_1core_1_1FileIoOps.html", "db/d00/structmorph_1_1core_1_1FileIoOps" ]
       ] ],
@@ -90,6 +102,7 @@ var annotated_dup =
         [ "CollectionRow", "d2/d81/structmorph_1_1forms_1_1CollectionRow.html", "d2/d81/structmorph_1_1forms_1_1CollectionRow" ],
         [ "CollectionSession", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html", "df/d8a/classmorph_1_1forms_1_1CollectionSession" ],
         [ "CollectionViewOptions", "dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html", "dc/d53/structmorph_1_1forms_1_1CollectionViewOptions" ],
+        [ "ConflictingOptionsError", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError.html", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError" ],
         [ "ConstraintViolation", "d4/d51/structmorph_1_1forms_1_1ConstraintViolation.html", "d4/d51/structmorph_1_1forms_1_1ConstraintViolation" ],
         [ "Engaged", "dd/d6b/structmorph_1_1forms_1_1Engaged.html", "dd/d6b/structmorph_1_1forms_1_1Engaged" ],
         [ "Equals", "db/ddd/structmorph_1_1forms_1_1Equals.html", "db/ddd/structmorph_1_1forms_1_1Equals" ],
@@ -111,6 +124,7 @@ var annotated_dup =
         [ "FormViewOptions", "de/d99/structmorph_1_1forms_1_1FormViewOptions.html", "de/d99/structmorph_1_1forms_1_1FormViewOptions" ],
         [ "Greater", "d1/d59/structmorph_1_1forms_1_1Greater.html", "d1/d59/structmorph_1_1forms_1_1Greater" ],
         [ "GreaterOrEqual", "d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html", "d1/df3/structmorph_1_1forms_1_1GreaterOrEqual" ],
+        [ "IncompleteOptionsError", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError.html", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError" ],
         [ "InstanceConstraints", "d7/dc5/classmorph_1_1forms_1_1InstanceConstraints.html", "d7/dc5/classmorph_1_1forms_1_1InstanceConstraints" ],
         [ "Less", "dd/da0/structmorph_1_1forms_1_1Less.html", "dd/da0/structmorph_1_1forms_1_1Less" ],
         [ "LessOrEqual", "d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html", "d3/d3c/structmorph_1_1forms_1_1LessOrEqual" ],
@@ -424,6 +438,7 @@ var annotated_dup =
           [ "QueryRef", "de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html", "de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef" ],
           [ "MutationRef", "d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef.html", "d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef" ],
           [ "QueryHandle", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html", "d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle" ],
+          [ "ResultHandle", "df/d32/classmorph_1_1ui_1_1author_1_1ResultHandle.html", "df/d32/classmorph_1_1ui_1_1author_1_1ResultHandle" ],
           [ "MutationHandle", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle" ],
           [ "BodyField", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField.html", "d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField" ],
           [ "Body", "df/d42/classmorph_1_1ui_1_1author_1_1Body.html", "df/d42/classmorph_1_1ui_1_1author_1_1Body" ],
@@ -443,6 +458,8 @@ var annotated_dup =
           [ "ComponentOptions", "d0/df2/structmorph_1_1ui_1_1author_1_1ComponentOptions.html", "d0/df2/structmorph_1_1ui_1_1author_1_1ComponentOptions" ],
           [ "ComponentRef", "da/dee/classmorph_1_1ui_1_1author_1_1ComponentRef.html", "da/dee/classmorph_1_1ui_1_1author_1_1ComponentRef" ],
           [ "Point", "df/d11/classmorph_1_1ui_1_1author_1_1Point.html", "df/d11/classmorph_1_1ui_1_1author_1_1Point" ],
+          [ "HeadBadgeOptions", "d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html", "d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions" ],
+          [ "ActionButtonOptions", "d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html", "d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions" ],
           [ "Scope", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope" ],
           [ "RunOptions", "d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html", "d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions" ],
           [ "NavigateOptions", "d7/dfe/structmorph_1_1ui_1_1author_1_1NavigateOptions.html", "d7/dfe/structmorph_1_1ui_1_1author_1_1NavigateOptions" ],
@@ -470,6 +487,7 @@ var annotated_dup =
           [ "DropZoneOptions", "d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html", "d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions" ],
           [ "FieldSettings", "d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html", "d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings" ],
           [ "FieldOverlay", "d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay.html", "d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay" ],
+          [ "FormPresentation", "d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html", "d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation" ],
           [ "FormOptions", "d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html", "d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions" ],
           [ "CustomOptions", "d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html", "d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions" ],
           [ "Emitted", "df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html", "df/dd2/structmorph_1_1ui_1_1author_1_1Emitted" ],
@@ -478,11 +496,16 @@ var annotated_dup =
           [ "ScreenRegistry", "dc/d7c/classmorph_1_1ui_1_1author_1_1ScreenRegistry.html", "dc/d7c/classmorph_1_1ui_1_1author_1_1ScreenRegistry" ]
         ] ],
         [ "detail", null, [
+          [ "catalogue", null, [
+            [ "TitleParts", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts" ]
+          ] ],
           [ "host", null, [
             [ "ParamsEnv", "d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html", "d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv" ]
           ] ],
+          [ "ActionModel", "d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel.html", "d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel" ],
           [ "AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver" ],
           [ "ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild" ],
+          [ "BadgeModel", "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html", "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel" ],
           [ "Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding" ],
           [ "BoundaryRuntime", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime" ],
           [ "CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry" ],
@@ -556,6 +579,7 @@ var annotated_dup =
             [ "FakeKeyValue", "da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html", "da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue" ],
             [ "FakeLeaf", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" ],
             [ "FakeMenu", "de/db8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeMenu.html", "de/db8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeMenu" ],
+            [ "FakeOverlay", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay" ],
             [ "FakePanel", "db/de8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePanel.html", "db/de8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePanel" ],
             [ "FakeProgress", "db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress.html", "db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress" ],
             [ "FakeSelect", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect" ],
@@ -567,17 +591,21 @@ var annotated_dup =
             [ "FakeTabs", "d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html", "d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs" ],
             [ "FakeText", "d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html", "d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText" ],
             [ "FakeTextInput", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput" ],
+            [ "Geometry", "d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry.html", "d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry" ],
             [ "HandlerLife", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife.html", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife" ],
             [ "LifeSentinel", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel" ],
+            [ "Measured", "d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html", "d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured" ],
             [ "Record", "d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html", "d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record" ],
             [ "RecordStore", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore" ]
           ] ],
           [ "ConformanceCase", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase" ],
           [ "ConformanceProbe", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe" ],
           [ "MemoryHistory", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory.html", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory" ],
-          [ "RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend" ]
+          [ "RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend" ],
+          [ "WidgetBounds", "d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html", "d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds" ]
         ] ],
         [ "Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", "d9/d03/structmorph_1_1ui_1_1Accessibility" ],
+        [ "ActionBar", "d6/dda/structmorph_1_1ui_1_1ActionBar.html", "d6/dda/structmorph_1_1ui_1_1ActionBar" ],
         [ "ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", "da/d14/structmorph_1_1ui_1_1ActionButton" ],
         [ "ActionEffect", "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html", "d9/d0c/structmorph_1_1ui_1_1ActionEffect" ],
         [ "ActionField", "d2/d20/structmorph_1_1ui_1_1ActionField.html", "d2/d20/structmorph_1_1ui_1_1ActionField" ],
@@ -665,6 +693,8 @@ var annotated_dup =
         [ "Grid", "de/d85/structmorph_1_1ui_1_1Grid.html", "de/d85/structmorph_1_1ui_1_1Grid" ],
         [ "GridCell", "df/d66/structmorph_1_1ui_1_1GridCell.html", "df/d66/structmorph_1_1ui_1_1GridCell" ],
         [ "GridWidget", "d1/d51/classmorph_1_1ui_1_1GridWidget.html", "d1/d51/classmorph_1_1ui_1_1GridWidget" ],
+        [ "HeadAction", "d3/d86/structmorph_1_1ui_1_1HeadAction.html", "d3/d86/structmorph_1_1ui_1_1HeadAction" ],
+        [ "HeadBadge", "dd/d2f/structmorph_1_1ui_1_1HeadBadge.html", "dd/d2f/structmorph_1_1ui_1_1HeadBadge" ],
         [ "HelloReply", "d3/d85/structmorph_1_1ui_1_1HelloReply.html", "d3/d85/structmorph_1_1ui_1_1HelloReply" ],
         [ "HelloRequest", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html", "db/dbe/structmorph_1_1ui_1_1HelloRequest" ],
         [ "HostArg", "dd/d5b/structmorph_1_1ui_1_1HostArg.html", "dd/d5b/structmorph_1_1ui_1_1HostArg" ],
@@ -676,6 +706,7 @@ var annotated_dup =
         [ "IBundleStore", "d2/df7/classmorph_1_1ui_1_1IBundleStore.html", "d2/df7/classmorph_1_1ui_1_1IBundleStore" ],
         [ "IFileStore", "d6/d37/classmorph_1_1ui_1_1IFileStore.html", "d6/d37/classmorph_1_1ui_1_1IFileStore" ],
         [ "IHistory", "d6/d55/classmorph_1_1ui_1_1IHistory.html", "d6/d55/classmorph_1_1ui_1_1IHistory" ],
+        [ "InlineFile", "dd/dc7/structmorph_1_1ui_1_1InlineFile.html", "dd/dc7/structmorph_1_1ui_1_1InlineFile" ],
         [ "InspectedNode", "da/de6/structmorph_1_1ui_1_1InspectedNode.html", "da/de6/structmorph_1_1ui_1_1InspectedNode" ],
         [ "InspectedQuery", "d4/d2f/structmorph_1_1ui_1_1InspectedQuery.html", "d4/d2f/structmorph_1_1ui_1_1InspectedQuery" ],
         [ "Inspector", "dd/db3/classmorph_1_1ui_1_1Inspector.html", "dd/db3/classmorph_1_1ui_1_1Inspector" ],
@@ -755,6 +786,7 @@ var annotated_dup =
         [ "ScopeDecl", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl" ],
         [ "Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],
         [ "ScreenHandle", "da/de8/classmorph_1_1ui_1_1ScreenHandle.html", "da/de8/classmorph_1_1ui_1_1ScreenHandle" ],
+        [ "ScreenHead", "d6/db2/classmorph_1_1ui_1_1ScreenHead.html", "d6/db2/classmorph_1_1ui_1_1ScreenHead" ],
         [ "ScreenHost", "de/d1a/classmorph_1_1ui_1_1ScreenHost.html", "de/d1a/classmorph_1_1ui_1_1ScreenHost" ],
         [ "ScreenHostRegistry", "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html", "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry" ],
         [ "Scroll", "dc/dae/structmorph_1_1ui_1_1Scroll.html", "dc/dae/structmorph_1_1ui_1_1Scroll" ],
@@ -790,6 +822,7 @@ var annotated_dup =
         [ "Table", "de/de3/structmorph_1_1ui_1_1Table.html", "de/de3/structmorph_1_1ui_1_1Table" ],
         [ "TableColumn", "df/ddf/structmorph_1_1ui_1_1TableColumn.html", "df/ddf/structmorph_1_1ui_1_1TableColumn" ],
         [ "TableOptions", "d7/d25/structmorph_1_1ui_1_1TableOptions.html", "d7/d25/structmorph_1_1ui_1_1TableOptions" ],
+        [ "TableRowView", "da/d6d/structmorph_1_1ui_1_1TableRowView.html", "da/d6d/structmorph_1_1ui_1_1TableRowView" ],
         [ "TableWidget", "d7/d70/classmorph_1_1ui_1_1TableWidget.html", "d7/d70/classmorph_1_1ui_1_1TableWidget" ],
         [ "Tabs", "d0/d49/structmorph_1_1ui_1_1Tabs.html", "d0/d49/structmorph_1_1ui_1_1Tabs" ],
         [ "TabsWidget", "de/d86/classmorph_1_1ui_1_1TabsWidget.html", "de/d86/classmorph_1_1ui_1_1TabsWidget" ],
@@ -814,10 +847,14 @@ var annotated_dup =
         [ "WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", "da/de0/structmorph_1_1ui_1_1WatchDecl" ],
         [ "Widget", "dc/dcb/classmorph_1_1ui_1_1Widget.html", "dc/dcb/classmorph_1_1ui_1_1Widget" ],
         [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", "d6/d77/classmorph_1_1ui_1_1Workspace" ],
+        [ "WorkspaceModel", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel" ],
+        [ "WorkspaceModelOptions", "d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions.html", "d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions" ],
         [ "WorkspaceOptions", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions" ],
         [ "WorkspaceScreen", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen" ],
         [ "WorkspaceStart", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart" ],
-        [ "WorkspaceTab", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab" ]
+        [ "WorkspaceTab", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab" ],
+        [ "WorkspaceTabId", "d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html", "d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId" ],
+        [ "WorkspaceTabState", "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html", "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState" ]
       ] ],
       [ "units", null, [
         [ "UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", "d8/dab/structmorph_1_1units_1_1UnitMeta" ],

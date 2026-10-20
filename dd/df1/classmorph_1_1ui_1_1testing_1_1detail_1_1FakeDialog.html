@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/df1/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html" title="A modal overlay around its children, with a focus trap while open. A new dialog is closed.">DialogWidget</a></span>: properties <span class="tt">open</span>, <span class="tt">title</span>.  
+<p>A fake <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html" title="A modal overlay around its children, with a focus trap while open. A new dialog is closed.">DialogWidget</a></span>: properties <span class="tt">open</span>, <span class="tt">title</span>; a <span class="tt">Footer</span> child once its footer is asked for.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -131,6 +131,7 @@ Inheritance diagram for morph::ui::testing::detail::FakeDialog:</div>
  <div class="center">
   <img src="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.png" usemap="#morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDialog_map" alt=""/>
   <map id="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDialog_map" name="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDialog_map">
+<area href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html" alt="morph::ui::testing::detail::FakeOverlay&lt; DialogWidget &gt;" shape="rect" coords="0,280,328,304"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; DialogWidget &gt;" shape="rect" coords="0,224,328,248"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; DialogWidget &gt;" shape="rect" coords="0,168,328,192"/>
 <area href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html" title="A modal overlay around its children, with a focus trap while open. A new dialog is closed." alt="morph::ui::DialogWidget" shape="rect" coords="0,112,328,136"/>
@@ -147,6 +148,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab29cc0ab227eb7d41235f8c4f0a3cd2a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the title.  <br /></td></tr>
 <tr class="memitem:a12573c88b2fa5394a06f7dc96e22a04d" id="r_a12573c88b2fa5394a06f7dc96e22a04d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a12573c88b2fa5394a06f7dc96e22a04d">setOnDismiss</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onDismiss) override</td></tr>
 <tr class="memdesc:a12573c88b2fa5394a06f7dc96e22a04d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user dismissal (Esc on the TUI) of the open dialog calls.  <br /></td></tr>
+<tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html">morph::ui::testing::detail::FakeOverlay&lt; DialogWidget &gt;</a></td></tr>
+<tr class="memitem:a53f06774350e0dc15870fbbffe896f2c pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay" id="r_a53f06774350e0dc15870fbbffe896f2c"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html#a53f06774350e0dc15870fbbffe896f2c">footer</a> () override</td></tr>
+<tr class="memdesc:a53f06774350e0dc15870fbbffe896f2c pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay"><td class="mdescLeft">&#160;</td><td class="mdescRight">The footer, a <span class="tt">Footer</span> container child of the overlay.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html">morph::ui::testing::detail::FakeContainer&lt; DialogWidget &gt;</a></td></tr>
 <tr class="memitem:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer" id="r_a96362e9a2facaf22cde143bce7b4a777"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html#a96362e9a2facaf22cde143bce7b4a777">moveChild</a> (Widget &amp;child, std::size_t index) override</td></tr>
 <tr class="memdesc:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves a child among its siblings and logs it.  <br /></td></tr>
@@ -202,13 +206,15 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:adcfb5e450c81840f3a19af86dc108b54 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's handlers.  <br /></td></tr>
 <tr class="memitem:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a479e91548e0d21291aed6622fcf21e5b"><td class="memItemLeft"><a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a479e91548e0d21291aed6622fcf21e5b">store</a> () const noexcept</td></tr>
 <tr class="memdesc:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store this widget records into.  <br /></td></tr>
+<tr class="memitem:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a1fe343ba61e3430d4bf3d64c87ad2d65"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a1fe343ba61e3430d4bf3d64c87ad2d65">sharedStore</a> () const noexcept</td></tr>
+<tr class="memdesc:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store, shared: what a part this widget makes (an overlay's footer) records into.  <br /></td></tr>
 <tr class="memitem:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a7e1dc5da8d400e819d73832cdad60580"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a7e1dc5da8d400e819d73832cdad60580">id</a> () const noexcept</td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html" title="A modal overlay around its children, with a focus trap while open. A new dialog is closed.">DialogWidget</a></span>: properties <span class="tt">open</span>, <span class="tt">title</span>. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html" title="A modal overlay around its children, with a focus trap while open. A new dialog is closed.">DialogWidget</a></span>: properties <span class="tt">open</span>, <span class="tt">title</span>; a <span class="tt">Footer</span> child once its footer is asked for. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01059">1059</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01160">1160</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a8bddd7d4a33e1f7be6e28f199b070351" name="a8bddd7d4a33e1f7be6e28f199b070351"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8bddd7d4a33e1f7be6e28f199b070351">&#9670;&#160;</a></span>setOpen()</h2>
@@ -243,7 +249,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ab5694053ad981a7aae63777bf3cd29d4">morph::ui::DialogWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01062">1062</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +286,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a999a1b024aefd6119e09f60a38917fba">morph::ui::DialogWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01063">1063</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01164">1164</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +323,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3">morph::ui::DialogWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01064">1064</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01165">1165</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

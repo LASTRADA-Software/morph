@@ -189,6 +189,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab7110f054fa59416b20873acb5b5f9db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes a collection row by key. A user action. A holder of the row's <span class="tt">shared_ptr</span> (a mounted view) keeps its state alive until it lets go.  <br /></td></tr>
 <tr class="memitem:a6afea3f8a2b3d67adae3ce5461f20d63" id="r_a6afea3f8a2b3d67adae3ce5461f20d63"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a6afea3f8a2b3d67adae3ce5461f20d63">snapshot</a> () const</td></tr>
 <tr class="memdesc:a6afea3f8a2b3d67adae3ce5461f20d63"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the field holds, as one string: two snapshots are equal exactly when the field holds the same entry (draft, unit and engagement, and every member's and row's). Untracked.  <br /></td></tr>
+<tr class="memitem:a1f68cd19e65acef2f9753761c79c83b1" id="r_a1f68cd19e65acef2f9753761c79c83b1"><td class="memItemLeft">std::expected&lt; void, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f68cd19e65acef2f9753761c79c83b1">edit</a> (detail::engine::Json const &amp;value)</td></tr>
+<tr class="memdesc:a1f68cd19e65acef2f9753761c79c83b1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the draft with a wire value as the user's own edit, in one batch: a <span class="tt"><a class="el" href="#a4106fb400b0a55f2238086fdb4f5202b" title="Replaces the draft with the decoded wire value; null or absent is blank. Does not mark the change pro...">load</a></span> the session does not mark programmatic, so the field counts as changed and is validated as an edit is.  <br /></td></tr>
 <tr class="memitem:a4106fb400b0a55f2238086fdb4f5202b" id="r_a4106fb400b0a55f2238086fdb4f5202b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4106fb400b0a55f2238086fdb4f5202b">load</a> (detail::engine::Json const *value)</td></tr>
 <tr class="memdesc:a4106fb400b0a55f2238086fdb4f5202b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the draft with the decoded wire value; null or absent is blank. Does not mark the change programmatic — the caller does, in the same batch.  <br /></td></tr>
 <tr class="memitem:a86ce70ebf447bb108613a635eb0f4012" id="r_a86ce70ebf447bb108613a635eb0f4012"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a86ce70ebf447bb108613a635eb0f4012">clear</a> ()</td></tr>
@@ -1053,6 +1055,42 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a1f68cd19e65acef2f9753761c79c83b1" name="a1f68cd19e65acef2f9753761c79c83b1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f68cd19e65acef2f9753761c79c83b1">&#9670;&#160;</a></span>edit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, std::string &gt; morph::forms::FieldState::edit </td>
+          <td>(</td>
+          <td class="paramtype">detail::engine::Json const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces the draft with a wire value as the user's own edit, in one batch: a <span class="tt"><a class="el" href="#a4106fb400b0a55f2238086fdb4f5202b" title="Replaces the draft with the decoded wire value; null or absent is blank. Does not mark the change pro...">load</a></span> the session does not mark programmatic, so the field counts as changed and is validated as an edit is. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">value</td><td>The wire value; null is blank. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why the value does not fit the field: an Object takes a JSON object, a collection a JSON array. Then nothing changes. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a4106fb400b0a55f2238086fdb4f5202b" name="a4106fb400b0a55f2238086fdb4f5202b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4106fb400b0a55f2238086fdb4f5202b">&#9670;&#160;</a></span>load()</h2>
 
@@ -1084,7 +1122,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00461">461</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -1113,7 +1151,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Blanks the draft, the unit, the engagement, the members and the rows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00505">505</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -1142,7 +1180,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Starts what needs every sibling to exist: an <span class="tt">x-blankAs</span> field's engagement, a <a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>'s options query, and every member's own. Called once, after the owner built all its fields. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>

@@ -8,5 +8,6 @@ var structmorph_1_1ui_1_1author_1_1TableOptions =
     [ "filters", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#aec6bffe718f7f14270331bca86727982", null ],
     [ "rowTone", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a51d7ed04c85645a4f116a3559c993d2b", null ],
     [ "highlightKey", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#afc75273effb10cb7ab64f209e3e20376", null ],
-    [ "onActivate", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#abcf24462992abddbc74374e2c4b3b950", null ]
+    [ "onActivate", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#abcf24462992abddbc74374e2c4b3b950", null ],
+    [ "empty", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#afcc54ab0c6fa176bb6f28a831e1cdf73", null ]
 ];

@@ -146,6 +146,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a58721df888b8f90c421a16de0a90bc9e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's identity: two screens with equal identities are one.  <br /></td></tr>
 <tr class="memitem:ab7b631fb0652ccb70b040bfc7d94e0e2" id="r_ab7b631fb0652ccb70b040bfc7d94e0e2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab7b631fb0652ccb70b040bfc7d94e0e2">dirty</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;dirty)</td></tr>
 <tr class="memdesc:ab7b631fb0652ccb70b040bfc7d94e0e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen has unsaved changes.  <br /></td></tr>
+<tr class="memitem:aa78b3b1a7162c37b4ca7e28a9f180837" id="r_aa78b3b1a7162c37b4ca7e28a9f180837"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa78b3b1a7162c37b4ca7e28a9f180837">subtitle</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;subtitle)</td></tr>
+<tr class="memdesc:aa78b3b1a7162c37b4ca7e28a9f180837"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's line under the title.  <br /></td></tr>
+<tr class="memitem:a453aba2b54141ec72be866e0842f9fa2" id="r_a453aba2b54141ec72be866e0842f9fa2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a453aba2b54141ec72be866e0842f9fa2">status</a> (<a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">HeadBadgeOptions</a> const &amp;badge)</td></tr>
+<tr class="memdesc:a453aba2b54141ec72be866e0842f9fa2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a status badge to the head.  <br /></td></tr>
+<tr class="memitem:a539d81a38501516765111c1c73d70581" id="r_a539d81a38501516765111c1c73d70581"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a539d81a38501516765111c1c73d70581">action</a> (<a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">ActionButtonOptions</a> const &amp;action)</td></tr>
+<tr class="memdesc:a539d81a38501516765111c1c73d70581"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends an action to the head, run in the screen scope.  <br /></td></tr>
 <tr class="memitem:a2b911c5d070cd7b8944718bfc33b2626" id="r_a2b911c5d070cd7b8944718bfc33b2626"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2b911c5d070cd7b8944718bfc33b2626">onMount</a> (<a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a> const &amp;commands)</td></tr>
 <tr class="memdesc:a2b911c5d070cd7b8944718bfc33b2626"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run when the screen mounts.  <br /></td></tr>
 <tr class="memitem:a1bd4f0bb5e8882d4736df72406fefc7e" id="r_a1bd4f0bb5e8882d4736df72406fefc7e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1bd4f0bb5e8882d4736df72406fefc7e">onUnmount</a> (<a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a> const &amp;commands)</td></tr>
@@ -229,7 +235,7 @@ Additional Inherited Members</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The screen's own scope: its declarations, params, lifecycle keys, components and customization points. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02242">2242</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02492">2492</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a32d3de83437ffba0967c7e86e6c00010" name="a32d3de83437ffba0967c7e86e6c00010"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a32d3de83437ffba0967c7e86e6c00010">&#9670;&#160;</a></span>param()</h2>
@@ -271,7 +277,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read of the param. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02249">2249</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02499">2499</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +312,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02256">2256</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02506">2506</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -341,7 +347,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02260">2260</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02510">2510</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +382,112 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02264">2264</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02514">2514</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa78b3b1a7162c37b4ca7e28a9f180837" name="aa78b3b1a7162c37b4ca7e28a9f180837"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa78b3b1a7162c37b4ca7e28a9f180837">&#9670;&#160;</a></span>subtitle()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::subtitle </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>subtitle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's line under the title. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">subtitle</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02518">2518</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a453aba2b54141ec72be866e0842f9fa2" name="a453aba2b54141ec72be866e0842f9fa2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a453aba2b54141ec72be866e0842f9fa2">&#9670;&#160;</a></span>status()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::status </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">HeadBadgeOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>badge</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends a status badge to the head. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">badge</td><td>The badge. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02522">2522</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a539d81a38501516765111c1c73d70581" name="a539d81a38501516765111c1c73d70581"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a539d81a38501516765111c1c73d70581">&#9670;&#160;</a></span>action()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::action </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">ActionButtonOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>action</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends an action to the head, run in the screen scope. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">action</td><td>The action; its id is unique among the head's actions. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02526">2526</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -411,7 +522,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02268">2268</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02530">2530</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -446,7 +557,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02272">2272</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02534">2534</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -481,7 +592,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02276">2276</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02538">2538</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -516,7 +627,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02280">2280</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02542">2542</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -551,7 +662,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02284">2284</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02546">2546</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -591,7 +702,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02289">2289</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02551">2551</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -626,7 +737,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02293">2293</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02555">2555</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -661,7 +772,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02297">2297</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02559">2559</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -702,7 +813,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reference <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ac93e3947a3cefa2b9125d623d0f1293a" title="A custom node: a declared component with its props and events.">custom</a></span> nodes name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02303">2303</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02565">2565</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -743,7 +854,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02337">2337</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02599">2599</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -784,7 +895,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02349">2349</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02611">2611</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -831,7 +942,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02361">2361</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02623">2623</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -880,7 +991,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02378">2378</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02640">2640</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -921,7 +1032,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02390">2390</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02652">2652</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -962,7 +1073,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The document. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02400">2400</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02662">2662</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

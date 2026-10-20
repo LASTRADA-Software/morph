@@ -1,11 +1,14 @@
 var backend__conformance_8hpp =
 [
+    [ "morph::ui::testing::WidgetBounds", "d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html", "d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds" ],
     [ "morph::ui::testing::ConformanceProbe", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe" ],
     [ "morph::ui::testing::ConformanceCase", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase" ],
     [ "morph::ui::testing::detail::Checks", "d0/d7d/classmorph_1_1ui_1_1testing_1_1detail_1_1Checks.html", "d0/d7d/classmorph_1_1ui_1_1testing_1_1detail_1_1Checks" ],
     [ "morph::ui::testing::detail::Entry", "db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html", "db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry" ],
     [ "morph::ui::testing::detail::HandlerLife", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife.html", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife" ],
     [ "morph::ui::testing::detail::LifeSentinel", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel" ],
+    [ "morph::ui::testing::detail::Geometry", "d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry.html", "d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry" ],
+    [ "morph::ui::testing::detail::Measured", "d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html", "d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured" ],
     [ "morph::ui::testing::detail::entryList", "d8/d3e/backend__conformance_8hpp.html#a4e390d7e0927c30af11e3f566f255561", null ],
     [ "morph::ui::testing::detail::entryTable", "d8/d3e/backend__conformance_8hpp.html#ad4066b5d51297a232fe0328200aee18c", null ],
     [ "morph::ui::testing::detail::asContainer", "d8/d3e/backend__conformance_8hpp.html#a84345f35b82cf8ba3ac2620266a36017", null ],
@@ -49,5 +52,17 @@ var backend__conformance_8hpp =
     [ "morph::ui::testing::detail::dismissedBannerStays", "d8/d3e/backend__conformance_8hpp.html#a3db1e706e55f51fe4abb39d0c9d31063", null ],
     [ "morph::ui::testing::detail::closedCollapsibleKeepsItsHeader", "d8/d3e/backend__conformance_8hpp.html#a4257249ddc9ffb36ed7799f9f6bdca47", null ],
     [ "morph::ui::testing::detail::dropZoneTakesWholeDrops", "d8/d3e/backend__conformance_8hpp.html#aacdc29891eeb6afa21068e646c93256e", null ],
+    [ "morph::ui::testing::detail::sizedText", "d8/d3e/backend__conformance_8hpp.html#a45dc348de0ce06af7ed91a7b6d28928f", null ],
+    [ "morph::ui::testing::detail::insideColumn", "d8/d3e/backend__conformance_8hpp.html#add4587cc9e67e5d735d43f102e05bd75", null ],
+    [ "morph::ui::testing::detail::insideRow", "d8/d3e/backend__conformance_8hpp.html#ae5ff554f704b25e8cbadfa241a126ae8", null ],
+    [ "morph::ui::testing::detail::measured", "d8/d3e/backend__conformance_8hpp.html#ab6a235095ff58116003bb4fa38430f4a", null ],
+    [ "morph::ui::testing::detail::maximumCapsStretchShare", "d8/d3e/backend__conformance_8hpp.html#a39276c9c9c8973cecc8609275b519a03", null ],
+    [ "morph::ui::testing::detail::minimumWidensContent", "d8/d3e/backend__conformance_8hpp.html#a9c9d81f127d030e2d84889c1fe8bf7e6", null ],
+    [ "morph::ui::testing::detail::maximumCapsAcross", "d8/d3e/backend__conformance_8hpp.html#a0458e430abc47912051e616739f22646", null ],
+    [ "morph::ui::testing::detail::maximumCapsStretchHeight", "d8/d3e/backend__conformance_8hpp.html#a1664acc54ebdc803d2a6df06329db07b", null ],
+    [ "morph::ui::testing::detail::rowCentresAcross", "d8/d3e/backend__conformance_8hpp.html#a86f465edce8c0b1434d771d979e63c4c", null ],
+    [ "morph::ui::testing::detail::columnJustifies", "d8/d3e/backend__conformance_8hpp.html#af80d48a68ccc17fc2a2cbc007c6142ff", null ],
+    [ "morph::ui::testing::detail::cappedChildCentres", "d8/d3e/backend__conformance_8hpp.html#a82562963785c417318177b92d66677ba", null ],
+    [ "morph::ui::testing::layoutConformanceCases", "d8/d3e/backend__conformance_8hpp.html#aecf398a21dce6aeb7feecf89f6d25313", null ],
     [ "morph::ui::testing::conformanceCases", "d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46", null ]
 ];

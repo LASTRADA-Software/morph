@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d04/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html" title="A choice of one keyed option.">SelectWidget</a></span>: properties <span class="tt">style</span>, <span class="tt">options</span>, <span class="tt">selected</span>.  
+<p>A fake <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html" title="A choice of one keyed option.">SelectWidget</a></span>: properties <span class="tt">style</span>, <span class="tt">options</span>, <span class="tt">selected</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -149,6 +149,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a579401144f4d4acdd73b82f5e8f164f1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a58eadd769f03327745bef42e4deef666" title="Chooses an option of a select: it marks the option, then onSelect gets the key.">RecordingBackend::choose</a></span> calls.  <br /></td></tr>
 <tr class="memitem:a8f72fac72ef3e061e57fa7f9f096fde7" id="r_a8f72fac72ef3e061e57fa7f9f096fde7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8f72fac72ef3e061e57fa7f9f096fde7">setOnOpen</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onOpen) override</td></tr>
 <tr class="memdesc:a8f72fac72ef3e061e57fa7f9f096fde7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a9ae423bc5ba2a88cd08fab65b5e54f3b" title="Opens a dropdown select, as a user would, whether or not it has options: onOpen runs....">RecordingBackend::open</a></span> calls.  <br /></td></tr>
+<tr class="memitem:ae258833a0188999ff78b0ee3754d9a28" id="r_ae258833a0188999ff78b0ee3754d9a28"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae258833a0188999ff78b0ee3754d9a28">setCaption</a> (std::string_view label, bool shown) override</td></tr>
+<tr class="memdesc:ae258833a0188999ff78b0ee3754d9a28"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="memitem:a5bbe4af05f2aea87e2a9030d1cedddaa" id="r_a5bbe4af05f2aea87e2a9030d1cedddaa"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a5bbe4af05f2aea87e2a9030d1cedddaa">offers</a> (<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key) const</td></tr>
 <tr class="memdesc:a5bbe4af05f2aea87e2a9030d1cedddaa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether one of the current options has <code class="param">key</code>.  <br /></td></tr>
 <tr class="memitem:a0d1fda5d53c354d2b4892745fbffab6a" id="r_a0d1fda5d53c354d2b4892745fbffab6a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0d1fda5d53c354d2b4892745fbffab6a">chooseByUser</a> (<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key)</td></tr>
@@ -214,14 +216,16 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:adcfb5e450c81840f3a19af86dc108b54 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's handlers.  <br /></td></tr>
 <tr class="memitem:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a479e91548e0d21291aed6622fcf21e5b"><td class="memItemLeft"><a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a479e91548e0d21291aed6622fcf21e5b">store</a> () const noexcept</td></tr>
 <tr class="memdesc:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store this widget records into.  <br /></td></tr>
+<tr class="memitem:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a1fe343ba61e3430d4bf3d64c87ad2d65"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a1fe343ba61e3430d4bf3d64c87ad2d65">sharedStore</a> () const noexcept</td></tr>
+<tr class="memdesc:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store, shared: what a part this widget makes (an overlay's footer) records into.  <br /></td></tr>
 <tr class="memitem:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a7e1dc5da8d400e819d73832cdad60580"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a7e1dc5da8d400e819d73832cdad60580">id</a> () const noexcept</td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html" title="A choice of one keyed option.">SelectWidget</a></span>: properties <span class="tt">style</span>, <span class="tt">options</span>, <span class="tt">selected</span>. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html" title="A choice of one keyed option.">SelectWidget</a></span>: properties <span class="tt">style</span>, <span class="tt">options</span>, <span class="tt">selected</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>. </p>
 <p><span class="tt">selected</span> shows the option the widget marks: the requested key while the options contain it, else <span class="tt">none</span>. The requested key is kept, so options that bring it back mark it again; that re-marking is the widget's own doing and is not logged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00899">899</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00967">967</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aa9fe8a2d9acf4419bb6f1017e799dbad" name="aa9fe8a2d9acf4419bb6f1017e799dbad"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa9fe8a2d9acf4419bb6f1017e799dbad">&#9670;&#160;</a></span>setOptions()</h2>
@@ -256,7 +260,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a0d34e0a47dcf6c6b88476cd5fa3f4eec">morph::ui::SelectWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00973">973</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,7 +297,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a301feb38ab667c29ff68a534e4fd9486">morph::ui::SelectWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00917">917</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00985">985</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +334,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a0cc32a4a1806655cba232495dbc20218">morph::ui::SelectWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00924">924</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00992">992</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,7 +371,49 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#a3cab8ab9d264cbf24746b154df0afcfe">morph::ui::SelectWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00928">928</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00996">996</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae258833a0188999ff78b0ee3754d9a28" name="ae258833a0188999ff78b0ee3754d9a28"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae258833a0188999ff78b0ee3754d9a28">&#9670;&#160;</a></span>setCaption()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeSelect::setCaption </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
+    <tr><td class="paramname">shown</td><td>Whether the input shows it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html#ad40c88b8b06a82a2be2edbe8522eea8b">morph::ui::SelectWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00997">997</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,7 +449,7 @@ Additional Inherited Members</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when an option has it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00933">933</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01005">1005</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -438,7 +484,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01011">1011</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

@@ -20,5 +20,6 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "hasFocus", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a4c6798cff77a66f110f083b3b15312b8", null ],
     [ "chooseMenuEntry", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a5158ffa2f6eaa9d22bc022ee0d1eed0a", null ],
     [ "expand", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#acd96cdee9dbd020cddc43d192bd24600", null ],
-    [ "dropFiles", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac5fc06f5c06036f4aed7c62881e2332e", null ]
+    [ "dropFiles", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac5fc06f5c06036f4aed7c62881e2332e", null ],
+    [ "boundsOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a26efd279f0b1470fd1bbef23b136afe3", null ]
 ];

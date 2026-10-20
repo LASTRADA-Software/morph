@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::StackWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,323,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; StackWidget &gt;" shape="rect" coords="0,168,323,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; StackWidget &gt;" shape="rect" coords="0,224,323,248"/>
-<area href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html" title="A fake StackWidget, of kind Column or Row: property gap." alt="morph::ui::testing::detail::FakeStack" shape="rect" coords="0,280,323,304"/>
+<area href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html" title="A fake StackWidget, of kind Column or Row: properties gap, align, justify." alt="morph::ui::testing::detail::FakeStack" shape="rect" coords="0,280,323,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -143,6 +143,10 @@ Inheritance diagram for morph::ui::StackWidget:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:adcfeff7a2042c634ddb1c929d77e5e12" id="r_adcfeff7a2042c634ddb1c929d77e5e12"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#adcfeff7a2042c634ddb1c929d77e5e12">setGap</a> (int gap)=0</td></tr>
 <tr class="memdesc:adcfeff7a2042c634ddb1c929d77e5e12"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the space between children.  <br /></td></tr>
+<tr class="memitem:aaf8d93e99485a79df927a316123a494c" id="r_aaf8d93e99485a79df927a316123a494c"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aaf8d93e99485a79df927a316123a494c">setAlign</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align)=0</td></tr>
+<tr class="memdesc:aaf8d93e99485a79df927a316123a494c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the children across the axis. A new stack stretches them; a child's own <span class="tt">alignSelf</span> wins.  <br /></td></tr>
+<tr class="memitem:a4181fe206ace369853214060b37285dc" id="r_a4181fe206ace369853214060b37285dc"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4181fe206ace369853214060b37285dc">setJustify</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> justify)=0</td></tr>
+<tr class="memdesc:a4181fe206ace369853214060b37285dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the spare length along the axis while no shown child stretches. A new stack packs at the start.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
 <tr class="memitem:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget" id="r_a0f85cf00d946d0fc63f6d7057310478d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html#a0f85cf00d946d0fc63f6d7057310478d">moveChild</a> (Widget &amp;child, std::size_t index)=0</td></tr>
 <tr class="memdesc:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves <code class="param">child</code> to position <code class="param">index:</code> it is removed, then inserted before the child now at <code class="param">index</code>.  <br /></td></tr>
@@ -185,7 +189,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Children stacked along one axis, fixed at creation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="adcfeff7a2042c634ddb1c929d77e5e12" name="adcfeff7a2042c634ddb1c929d77e5e12"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adcfeff7a2042c634ddb1c929d77e5e12">&#9670;&#160;</a></span>setGap()</h2>
@@ -219,6 +223,76 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a65aeddc7948972c33b643912684f3f5a">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="aaf8d93e99485a79df927a316123a494c" name="aaf8d93e99485a79df927a316123a494c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaf8d93e99485a79df927a316123a494c">&#9670;&#160;</a></span>setAlign()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setAlign </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a></td>          <td class="paramname"><span class="paramname"><em>align</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Places the children across the axis. A new stack stretches them; a child's own <span class="tt">alignSelf</span> wins. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">align</td><td>Where they sit. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a786e2744e6ff09af0c657ef537748da3">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a4181fe206ace369853214060b37285dc" name="a4181fe206ace369853214060b37285dc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4181fe206ace369853214060b37285dc">&#9670;&#160;</a></span>setJustify()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setJustify </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a></td>          <td class="paramname"><span class="paramname"><em>justify</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Places the spare length along the axis while no shown child stretches. A new stack packs at the start. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">justify</td><td>Where it goes. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a74c96538a5cd2b7779dd1ba9c4233786">morph::ui::testing::detail::FakeStack</a>.</p>
 
 </div>
 </div>

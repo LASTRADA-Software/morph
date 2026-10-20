@@ -147,6 +147,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ac200cf43bffd4f746a674f14f54b97fe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets how many rows the user can select.  <br /></td></tr>
 <tr class="memitem:ae3017e5306e3fde63ec0366cca4983ff" id="r_ae3017e5306e3fde63ec0366cca4983ff"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ae3017e5306e3fde63ec0366cca4983ff">setRowKey</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;row, <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key)=0</td></tr>
 <tr class="memdesc:ae3017e5306e3fde63ec0366cca4983ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the table which key a row stands for; called once per row, right after it is built. Marks the row when its key is requested.  <br /></td></tr>
+<tr class="memitem:a017d3b015da5d05d9a24478f9d497346" id="r_a017d3b015da5d05d9a24478f9d497346"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a017d3b015da5d05d9a24478f9d497346">setRowTone</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;row, std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt; tone)=0</td></tr>
+<tr class="memdesc:a017d3b015da5d05d9a24478f9d497346"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a row's tone; called after <span class="tt"><a class="el" href="#ae3017e5306e3fde63ec0366cca4983ff" title="Tells the table which key a row stands for; called once per row, right after it is built....">setRowKey</a></span> for a row given a tone, and on every change.  <br /></td></tr>
 <tr class="memitem:ae52b435d2acdb2e4d9c18594bf90a8c8" id="r_ae52b435d2acdb2e4d9c18594bf90a8c8"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8">setSelection</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys)=0</td></tr>
 <tr class="memdesc:ae52b435d2acdb2e4d9c18594bf90a8c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Requests the rows with these keys, and marks those it has. Never calls the <span class="tt">onSelectionChange</span> handler.  <br /></td></tr>
 <tr class="memitem:a6f26c731e1f73666f5210be99bb3db52" id="r_a6f26c731e1f73666f5210be99bb3db52"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a6f26c731e1f73666f5210be99bb3db52">setOnSelectionChange</a> (std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;)&gt; onSelectionChange)=0</td></tr>
@@ -198,7 +200,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <p>Selection is kept by key. The widget keeps the keys last requested by <span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> or selected by the user, and marks the current rows that have one of them: a key with no row marks nothing and stays requested, so a row that arrives with it later is marked, a row that goes is unmarked, and a reorder keeps the marks. Rows and selection may therefore arrive in either order. The selection mode limits what the user can select, not what <span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> marks.</p>
 <p>A user's selection replaces the requested keys, and the widget shows it whether or not the application binds the selection. <span class="tt">onSelectionChange</span> then gets exactly the keys of the existing rows now selected, in any mode: a key still waiting for its row is dropped by a user's change, while <span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> keeps it waiting. It reports the user's selections only: no setter, and no row arriving or going, calls it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a57e44fc23672c4b59cbd608a0f3f6431" name="a57e44fc23672c4b59cbd608a0f3f6431"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a57e44fc23672c4b59cbd608a0f3f6431">&#9670;&#160;</a></span>setColumns()</h2>
@@ -307,6 +309,46 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a1c09d9ee362715a47f6d8965a368cfb0">morph::ui::testing::detail::FakeTable</a>.</p>
+
+</div>
+</div>
+<a id="a017d3b015da5d05d9a24478f9d497346" name="a017d3b015da5d05d9a24478f9d497346"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a017d3b015da5d05d9a24478f9d497346">&#9670;&#160;</a></span>setRowTone()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TableWidget::setRowTone </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>tone</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets a row's tone; called after <span class="tt"><a class="el" href="#ae3017e5306e3fde63ec0366cca4983ff" title="Tells the table which key a row stands for; called once per row, right after it is built....">setRowKey</a></span> for a row given a tone, and on every change. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">row</td><td>One of this table's rows. </td></tr>
+    <tr><td class="paramname">tone</td><td>The tone, or none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a11d5922b80e92b97b59849b1b9361ed2">morph::ui::testing::detail::FakeTable</a>.</p>
 
 </div>
 </div>

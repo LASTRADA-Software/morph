@@ -125,6 +125,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d3d/classmo
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>&gt;</code></p>
+<div class="dynheader">
+Inheritance diagram for morph::ui::AppSource:</div>
+<div class="dyncontent">
+ <div class="center">
+  <img src="../../d5/d3d/classmorph_1_1ui_1_1AppSource.png" usemap="#morph_3A_3Aui_3A_3AAppSource_map" alt=""/>
+  <map id="morph_3A_3Aui_3A_3AAppSource_map" name="morph_3A_3Aui_3A_3AAppSource_map">
+<area href="../../d3/de2/classmorph_1_1client_1_1Source.html" title="An AppSource that also hands the shell what it mounts screens with, once it delivered a bundle." alt="morph::client::Source" shape="rect" coords="90,56,261,80"/>
+<area href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html" title="Runs a linked application in-process (--app): its models over a LocalBackend, its bundle answered by ..." alt="morph::client::LocalSource" shape="rect" coords="0,112,171,136"/>
+<area href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html" title="Fetches the screens from a server (--server), over the transport the frontend calls for." alt="morph::client::RemoteSource" shape="rect" coords="181,112,352,136"/>
+  </map>
+</div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -140,9 +151,8 @@ AppSource &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppSource &
 <tr class="memdesc:a256cfb9a07cf71f77b316c80e159accd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects (or, local, sets up the models), signs the user in natively if the application needs it, and delivers the bundle.  <br /></td></tr>
 <tr class="memitem:a9dadb78904ec6e909160a2fcc205b9bc" id="r_a9dadb78904ec6e909160a2fcc205b9bc"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9dadb78904ec6e909160a2fcc205b9bc">switchBackend</a> (<a class="el" href="../../d3/d00/structmorph_1_1ui_1_1Backend.html">Backend</a> backend, std::function&lt; void(std::expected&lt; void, std::string &gt;)&gt; done)=0</td></tr>
 <tr class="memdesc:a9dadb78904ec6e909160a2fcc205b9bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the dispatch target under the mounted screens: <span class="tt">Bridge::switchBackend</span>, posted to the owner.  <br /></td></tr>
-<tr class="memitem:a8f4a2c24fe518e38108369f4f2258d48" id="r_a8f4a2c24fe518e38108369f4f2258d48"><td class="memItemLeft"><a id="a8f4a2c24fe518e38108369f4f2258d48" name="a8f4a2c24fe518e38108369f4f2258d48"></a>
-virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
-<tr class="memdesc:a8f4a2c24fe518e38108369f4f2258d48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Releases everything <span class="tt"><a class="el" href="#a256cfb9a07cf71f77b316c80e159accd" title="Connects (or, local, sets up the models), signs the user in natively if the application needs it,...">open</a></span> made (connections, bridges, handlers) and drops a <span class="tt">ready</span> not yet delivered. Called by <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span> once the screens are gone and before the frontend's runtime is; the source may be opened again afterwards. <br /></td></tr>
+<tr class="memitem:a8f4a2c24fe518e38108369f4f2258d48" id="r_a8f4a2c24fe518e38108369f4f2258d48"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a8f4a2c24fe518e38108369f4f2258d48">close</a> ()=0</td></tr>
+<tr class="memdesc:a8f4a2c24fe518e38108369f4f2258d48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Releases everything <span class="tt"><a class="el" href="#a256cfb9a07cf71f77b316c80e159accd" title="Connects (or, local, sets up the models), signs the user in natively if the application needs it,...">open</a></span> made (connections, bridges, handlers) and drops a <span class="tt">ready</span> not yet delivered. Called by <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span> once the screens are gone and before the frontend's runtime is; the source may be opened again afterwards.  <br /></td></tr>
 <tr class="memitem:aa8a336acd625c1e9b222d2c890e59acb" id="r_aa8a336acd625c1e9b222d2c890e59acb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa8a336acd625c1e9b222d2c890e59acb">onConnected</a> (std::function&lt; void()&gt; const &amp;listener)</td></tr>
 <tr class="memdesc:aa8a336acd625c1e9b222d2c890e59acb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener called on the owner after each successful connect to the server, the first included (spec 8 §7, "Reconnect"). A shell registers <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">Session::reconnected</a></span> here, so the session re-sends its watch set and re-reads what it shows after an outage. The source owns the backend's single connect hook, so anything else that wants connects subscribes here too.  <br /></td></tr>
 </table>
@@ -150,7 +160,7 @@ virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
 <div class="textblock"><p>Where the screens and the models are: a server (remote) or the application linked in-process (local). </p>
 <p><span class="tt">main</span> builds one from its arguments and hands it to <span class="tt"><a class="el" href="../../dd/dcc/classmorph_1_1ui_1_1Frontend.html#ab0dd0fd8da772357590d2c8100468c41" title="Builds the runtime and its executor, opens source, mounts the app shell and drives the loop until App...">Frontend::run</a></span>. Every call is made on the context's owner executor, and every callback it is given must be called there too. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a256cfb9a07cf71f77b316c80e159accd" name="a256cfb9a07cf71f77b316c80e159accd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a256cfb9a07cf71f77b316c80e159accd">&#9670;&#160;</a></span>open()</h2>
@@ -226,6 +236,37 @@ virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
   </dd>
 </dl>
 
+<p>Implemented in <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a6a8d8978a688b39c59f9d3c1f336f95d">morph::client::Source</a>.</p>
+
+</div>
+</div>
+<a id="a8f4a2c24fe518e38108369f4f2258d48" name="a8f4a2c24fe518e38108369f4f2258d48"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f4a2c24fe518e38108369f4f2258d48">&#9670;&#160;</a></span>close()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::AppSource::close </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Releases everything <span class="tt"><a class="el" href="#a256cfb9a07cf71f77b316c80e159accd" title="Connects (or, local, sets up the models), signs the user in natively if the application needs it,...">open</a></span> made (connections, bridges, handlers) and drops a <span class="tt">ready</span> not yet delivered. Called by <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span> once the screens are gone and before the frontend's runtime is; the source may be opened again afterwards. </p>
+
+<p>Implemented in <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#aafe1e52304476a80028d428748b3344a">morph::client::Source</a>.</p>
+
 </div>
 </div>
 <a id="aa8a336acd625c1e9b222d2c890e59acb" name="aa8a336acd625c1e9b222d2c890e59acb"></a>
@@ -259,7 +300,9 @@ virtual void&#160;</td><td class="memItemRight"><b>close</b> ()=0</td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p>Reimplemented in <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a41879aec8ab4bbb284c524ec69cfc690">morph::client::Source</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>

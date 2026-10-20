@@ -22,5 +22,8 @@ var structmorph_1_1forms_1_1FieldMeta =
     [ "multipleOf", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3740c426ffb300b255ca32b690e8979c", null ],
     [ "unit", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a85533330e32d6d465ee303dc92fab216", null ],
     [ "decimals", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#af57735bbefb2f396f906d1c832413727", null ],
-    [ "blankAs", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#adef93e37ac9d09fb581c645af1fccf6d", null ]
+    [ "blankAs", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#adef93e37ac9d09fb581c645af1fccf6d", null ],
+    [ "optionsAction", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a2ae8611c013dcc43e92438a12ba751e4", null ],
+    [ "valueField", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#af82a935a426682e216a8cdc4367286c8", null ],
+    [ "labelField", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3805793b0e5078c6fa5af1d654f4fc8a", null ]
 ];

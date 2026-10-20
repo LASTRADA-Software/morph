@@ -22,7 +22,7 @@ var searchData=
   ['updateifnecessary_19',['updateIfNecessary',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#ac0bd97bb3a86586c4f29775c9d8b1e7b',1,'morph::reactive::detail::Node']]],
   ['updaterow_20',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
   ['upload_21',['upload',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48',1,'morph::ui::InterpreterHost::upload()'],['../d5/db2/classmorph_1_1ui_1_1FileTransfer.html#a55331756291c0086e67f3900e464ac2b',1,'morph::ui::FileTransfer::upload()'],['../d1/dc0/author_8hpp.html#a5b46a71d4bcc0c2e5744dfff55d2db11',1,'morph::ui::author::upload()']]],
-  ['uploadfor_22',['uploadFor',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6458f0bc280e5bd67aee23c586fda1dc',1,'morph::ui::InterpreterHost']]],
+  ['uploadfor_22',['uploadFor',['../d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a57372d9c6e014f56e5827427f18cf354',1,'morph::client::ApplicationHost::uploadFor()'],['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6458f0bc280e5bd67aee23c586fda1dc',1,'morph::ui::InterpreterHost::uploadFor()']]],
   ['usablehere_23',['usableHere',['../de/d54/qt__quick_2frontend_8hpp.html#a682cba56cbf2eb5f27f26a332946933b',1,'morph::qt_quick']]],
   ['usescomparator_24',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
   ['utf8length_25',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]]

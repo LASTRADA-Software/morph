@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::DateTimeInputWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,344,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; DateTimeInputWidget &gt;" shape="rect" coords="0,168,344,192"/>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;" shape="rect" coords="0,224,344,248"/>
-<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="0,280,344,304"/>
+<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value, caption, captionShown." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="0,280,344,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -145,6 +145,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7171669f3163f62f75206b71b6f6c16c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows an instant. Never calls the <span class="tt">onChange</span> handler.  <br /></td></tr>
 <tr class="memitem:a152ce8979db7ac496374e3c842e5343e" id="r_a152ce8979db7ac496374e3c842e5343e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a152ce8979db7ac496374e3c842e5343e">setOnChange</a> (std::function&lt; void(std::optional&lt; <a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">morph::time::Timestamp</a> &gt;)&gt; onChange)=0</td></tr>
 <tr class="memdesc:a152ce8979db7ac496374e3c842e5343e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user edit calls, with the instant entered or <span class="tt">nullopt</span> for a cleared field.  <br /></td></tr>
+<tr class="memitem:aa9bde28280602950f477a91deae19f94" id="r_aa9bde28280602950f477a91deae19f94"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa9bde28280602950f477a91deae19f94">setCaption</a> (std::string_view label, bool shown)=0</td></tr>
+<tr class="memdesc:aa9bde28280602950f477a91deae19f94"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1FieldWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html">morph::ui::FieldWidget</a></td></tr>
 <tr class="memitem:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_a2191979f8dc3a207166ad1c5c58d7080"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#a2191979f8dc3a207166ad1c5c58d7080">setReadOnly</a> (bool readonly)=0</td></tr>
 <tr class="memdesc:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the value read-only or editable again. A read-only field still takes focus and lets its text be selected, and reports no edit, submit or commit.  <br /></td></tr>
@@ -193,7 +195,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A date or date-and-time field, in the mode and display zone fixed at creation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a7171669f3163f62f75206b71b6f6c16c" name="a7171669f3163f62f75206b71b6f6c16c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7171669f3163f62f75206b71b6f6c16c">&#9670;&#160;</a></span>setValue()</h2>
@@ -262,6 +264,46 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html#a17568efda076444358cc8c920d8c00cc">morph::ui::testing::detail::FakeDateTimeInput</a>.</p>
+
+</div>
+</div>
+<a id="aa9bde28280602950f477a91deae19f94" name="aa9bde28280602950f477a91deae19f94"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa9bde28280602950f477a91deae19f94">&#9670;&#160;</a></span>setCaption()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::DateTimeInputWidget::setCaption </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
+    <tr><td class="paramname">shown</td><td>Whether the input shows it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html#ad5727c7ea7d3761af332d63900109a0d">morph::ui::testing::detail::FakeDateTimeInput</a>.</p>
 
 </div>
 </div>

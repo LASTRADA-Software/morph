@@ -36,5 +36,6 @@ var structmorph_1_1forms_1_1FieldSpec =
     [ "sliderStep", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#aeaa2777366b4d79a116a5edaf78be57c", null ],
     [ "itemType", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a3a964fa707f7629b8904946e1b672f09", null ],
     [ "children", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#ad8da77f65b968a8244b39717dcaaeac2", null ],
-    [ "truncated", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a8fd5f0c1bd39530f8fd214e312628f0d", null ]
+    [ "truncated", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a8fd5f0c1bd39530f8fd214e312628f0d", null ],
+    [ "bytes", "d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#aaab1a412c3e44db2a0b29faaa059f26c", null ]
 ];

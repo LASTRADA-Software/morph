@@ -148,13 +148,17 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a41736c4a25579c00bb3f5765dd1b9ae4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes a pin.  <br /></td></tr>
 <tr class="memitem:ab7cbc1f5c698ddfa432640eff4f360a4" id="r_ab7cbc1f5c698ddfa432640eff4f360a4"><td class="memItemLeft">std::vector&lt; std::string &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ab7cbc1f5c698ddfa432640eff4f360a4">pins</a> () const noexcept</td></tr>
 <tr class="memdesc:ab7cbc1f5c698ddfa432640eff4f360a4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pins, in order.  <br /></td></tr>
+<tr class="memitem:a2d2fb15be3c99237e303dce809fa0ee3" id="r_a2d2fb15be3c99237e303dce809fa0ee3"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2d2fb15be3c99237e303dce809fa0ee3">setCurrent</a> (std::string_view screenId)</td></tr>
+<tr class="memdesc:a2d2fb15be3c99237e303dce809fa0ee3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the entry of the screen that is open, and clears the mark of the one marked before. A pin is not marked.  <br /></td></tr>
+<tr class="memitem:a8479f52efc86082887fc1a067b967215" id="r_a8479f52efc86082887fc1a067b967215"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a8479f52efc86082887fc1a067b967215">current</a> () const noexcept</td></tr>
+<tr class="memdesc:a8479f52efc86082887fc1a067b967215"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen whose entry is marked.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The catalog as a list a person opens screens from, with a title search and pinned shortcuts. </p>
-<p>Entries are grouped by module, then group, in the order each first appears; each group has a heading. An unavailable entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose titles contains the text, ignoring ASCII case, and the headings of the groups that still show one. Neither copyable nor movable; owned by the owner thread of its backend.</p>
+<p>Entries are grouped by module, then group, in the order each first appears; each group has a heading. Each entry is a list item (<span class="tt"><a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a7d74f3b92b19da5e606d737d339a9679" title="An entry of a list: as wide as its line, its label at the start, unframed, and marked while selected.">ButtonStyle::Item</a></span>) as wide as the navigator, and <span class="tt"><a class="el" href="#a2d2fb15be3c99237e303dce809fa0ee3" title="Marks the entry of the screen that is open, and clears the mark of the one marked before....">setCurrent</a></span> marks the open screen's. An unavailable entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose titles contains the text, ignoring ASCII case, and the headings of the groups that still show one. Neither copyable nor movable; owned by the owner thread of its backend.</p>
 <p>Test ids: <span class="tt">navigator</span>, <span class="tt">navigator_search</span>, <span class="tt">navigator_pins</span>, <span class="tt">nav_&lt;screen id&gt;</span>, <span class="tt">pin_&lt;screen id&gt;</span>, and <span class="tt">navigator_group_&lt;module&gt;/&lt;group&gt;</span> for a heading. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a71c9edb7e1f1cef82e3968f3c43f78b9" name="a71c9edb7e1f1cef82e3968f3c43f78b9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a71c9edb7e1f1cef82e3968f3c43f78b9">&#9670;&#160;</a></span>Navigator()</h2>
@@ -198,7 +202,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,7 +233,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +262,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Moves keyboard focus to the search, as the navigator's shortcut does. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +298,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it was pinned: <span class="tt">false</span> for an unknown or already pinned screen, or when the pins are full. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +334,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it was pinned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -360,7 +364,72 @@ Public Member Functions</h2></td></tr>
 <p>The pins, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Their screen ids. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2d2fb15be3c99237e303dce809fa0ee3" name="a2d2fb15be3c99237e303dce809fa0ee3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2d2fb15be3c99237e303dce809fa0ee3">&#9670;&#160;</a></span>setCurrent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Navigator::setCurrent </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks the entry of the screen that is open, and clears the mark of the one marked before. A pin is not marked. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The open screen's id; one the navigator does not list, or empty, leaves no entry marked. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8479f52efc86082887fc1a067b967215" name="a8479f52efc86082887fc1a067b967215"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8479f52efc86082887fc1a067b967215">&#9670;&#160;</a></span>current()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string const  &amp; morph::ui::Navigator::current </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The screen whose entry is marked. </p>
+<dl class="section return"><dt>Returns</dt><dd>Its id; empty when none is. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>

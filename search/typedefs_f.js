@@ -8,8 +8,9 @@ var searchData=
   ['screens_5',['screens',['../d8/d09/structmorph_1_1app_1_1App.html#ac68c7b05321902fefe027defba3b69a3',1,'morph::app::App']]],
   ['sections_6',['sections',['../d6/d7b/structmorph_1_1forms_1_1SectionGroup.html#ad2c59329c775c0d799947b94e799e288',1,'morph::forms::SectionGroup']]],
   ['shellfactory_7',['ShellFactory',['../de/d54/qt__quick_2frontend_8hpp.html#a06d7decb8e1a6c2dbc144463354300f7',1,'morph::qt_quick::ShellFactory'],['../d1/dff/tui_2frontend_8hpp.html#a01dc7d4438f2015790afccc7d0e7b2eb',1,'morph::tui::ShellFactory'],['../de/df6/ui_2frontend_8hpp.html#aabd84f51c7dc7db8d12851c954d8b92c',1,'morph::ui::ShellFactory']]],
-  ['slotid_8',['SlotId',['../d8/d11/view_8hpp.html#aed6afd4774d6752d919d24c3e08d4065',1,'morph::ui']]],
-  ['sortchain_9',['SortChain',['../d4/d54/sort_8hpp.html#a2a0c1b1eb86dfba26c696a0f2a60f0ff',1,'morph::table']]],
-  ['steps_10',['steps',['../d6/d94/structmorph_1_1flows_1_1Wizard.html#a0934ffb865cabd73e624f3b77e3a902f',1,'morph::flows::Wizard']]],
-  ['submitter_11',['Submitter',['../dd/d9b/form__session_8hpp.html#ad286f38d482391bf411a830a192ef7b5',1,'morph::forms']]]
+  ['signinmapper_8',['SignInMapper',['../d5/d98/shell_8hpp.html#ac1dd96cc1912a843b9450151d4ff88d6',1,'morph::client']]],
+  ['slotid_9',['SlotId',['../d8/d11/view_8hpp.html#aed6afd4774d6752d919d24c3e08d4065',1,'morph::ui']]],
+  ['sortchain_10',['SortChain',['../d4/d54/sort_8hpp.html#a2a0c1b1eb86dfba26c696a0f2a60f0ff',1,'morph::table']]],
+  ['steps_11',['steps',['../d6/d94/structmorph_1_1flows_1_1Wizard.html#a0934ffb865cabd73e624f3b77e3a902f',1,'morph::flows::Wizard']]],
+  ['submitter_12',['Submitter',['../dd/d9b/form__session_8hpp.html#ad286f38d482391bf411a830a192ef7b5',1,'morph::forms']]]
 ];

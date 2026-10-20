@@ -4,5 +4,8 @@ var classmorph_1_1ui_1_1TextInputWidget =
     [ "setPlaceholder", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a5af001846d473ed5242e08e651b44908", null ],
     [ "setOnChange", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a0e937b2ee04f7d2b402ac6b64157b13f", null ],
     [ "setOnSubmit", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aae1eb31ad6bb2c3bcad03efbc830cef6", null ],
-    [ "setOnCommit", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96", null ]
+    [ "setOnCommit", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96", null ],
+    [ "setUnit", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a336c18c4c6de6bd5758868562d2f3f95", null ],
+    [ "setDecimals", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a4ac7ae0308c01088d5c1aef0354bce2b", null ],
+    [ "setCaption", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a485acba53524dffd9d48ae2cd4fbecb1", null ]
 ];

@@ -148,6 +148,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d3e/backend
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3AWidgetBounds" id="r_morph_3A_3Aui_3A_3Atesting_3A_3AWidgetBounds"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">morph::ui::testing::WidgetBounds</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a widget is drawn, in its backend's own units (a cell on the terminal; <span class="tt">Theme.unitWidth</span> and <span class="tt">Theme.unitHeight</span> on Qt Quick), from the top left of the window or screen.  <a href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3AConformanceProbe" id="r_morph_3A_3Aui_3A_3Atesting_3A_3AConformanceProbe"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">morph::ui::testing::ConformanceProbe</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How the conformance cases read and drive one backend under test.  <a href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3AConformanceCase" id="r_morph_3A_3Aui_3A_3Atesting_3A_3AConformanceCase"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html">morph::ui::testing::ConformanceCase</a></td></tr>
@@ -160,6 +162,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt"><a class="el" href="../../da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html" title="Captured by value in a handler, tells whether the backend destroyed the handler while it ran.">LifeSentinel</a></span> reports about the handler that holds it.  <a href="../../d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3ALifeSentinel" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3ALifeSentinel"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html">morph::ui::testing::detail::LifeSentinel</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Captured by value in a handler, tells whether the backend destroyed the handler while it ran.  <a href="../../da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AGeometry" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AGeometry"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry.html">morph::ui::testing::detail::Geometry</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry.  <a href="../../d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AMeasured" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AMeasured"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html">morph::ui::testing::detail::Measured</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a case measures, the one child of the mounted root, and its children in order.  <a href="../../d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -249,6 +255,30 @@ Functions</h2></td></tr>
 <tr class="memdesc:a4257249ddc9ffb36ed7799f9f6bdca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a closed collapsible section's content takes no click and its header does; the user's opening reaches <span class="tt">onToggle</span>, and once the application opens it the content takes clicks.  <br /></td></tr>
 <tr class="memitem:aacdc29891eeb6afa21068e646c93256e" id="r_aacdc29891eeb6afa21068e646c93256e"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aacdc29891eeb6afa21068e646c93256e">morph::ui::testing::detail::dropZoneTakesWholeDrops</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
 <tr class="memdesc:aacdc29891eeb6afa21068e646c93256e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a drop zone takes a drop of one accepted file, compared without case, and refuses a file it does not accept and several files when it takes one.  <br /></td></tr>
+<tr class="memitem:a45dc348de0ce06af7ed91a7b6d28928f" id="r_a45dc348de0ce06af7ed91a7b6d28928f"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a45dc348de0ce06af7ed91a7b6d28928f">morph::ui::testing::detail::sizedText</a> (std::string text, <a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a> layout)</td></tr>
+<tr class="memdesc:a45dc348de0ce06af7ed91a7b6d28928f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A text that sizes as <code class="param">layout</code> says.  <br /></td></tr>
+<tr class="memitem:add4587cc9e67e5d735d43f102e05bd75" id="r_add4587cc9e67e5d735d43f102e05bd75"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#add4587cc9e67e5d735d43f102e05bd75">morph::ui::testing::detail::insideColumn</a> (<a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> inner)</td></tr>
+<tr class="memdesc:add4587cc9e67e5d735d43f102e05bd75"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">inner</code> inside a column, so it is sized as a child is: a root fills the window or screen whatever its own sizing.  <br /></td></tr>
+<tr class="memitem:ae5ff554f704b25e8cbadfa241a126ae8" id="r_ae5ff554f704b25e8cbadfa241a126ae8"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ae5ff554f704b25e8cbadfa241a126ae8">morph::ui::testing::detail::insideRow</a> (<a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> inner)</td></tr>
+<tr class="memdesc:ae5ff554f704b25e8cbadfa241a126ae8"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">inner</code> inside a row, so its height is sized as a child's is.  <br /></td></tr>
+<tr class="memitem:ab6a235095ff58116003bb4fa38430f4a" id="r_ab6a235095ff58116003bb4fa38430f4a"><td class="memItemLeft"><a class="el" href="../../d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html">Measured</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab6a235095ff58116003bb4fa38430f4a">morph::ui::testing::detail::measured</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe, <a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html">Mounted</a> const &amp;view)</td></tr>
+<tr class="memdesc:ab6a235095ff58116003bb4fa38430f4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a case measures, inside the root <span class="tt"><a class="el" href="#add4587cc9e67e5d735d43f102e05bd75" title="inner inside a column, so it is sized as a child is: a root fills the window or screen whatever its o...">insideColumn</a></span> or <span class="tt"><a class="el" href="#ae5ff554f704b25e8cbadfa241a126ae8" title="inner inside a row, so its height is sized as a child&#39;s is.">insideRow</a></span> made.  <br /></td></tr>
+<tr class="memitem:a39276c9c9c8973cecc8609275b519a03" id="r_a39276c9c9c8973cecc8609275b519a03"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39276c9c9c8973cecc8609275b519a03">morph::ui::testing::detail::maximumCapsStretchShare</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a39276c9c9c8973cecc8609275b519a03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: along a row, a stretch child's share stops at its maximum and its stretch sibling takes the rest.  <br /></td></tr>
+<tr class="memitem:a9c9d81f127d030e2d84889c1fe8bf7e6" id="r_a9c9d81f127d030e2d84889c1fe8bf7e6"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9c9d81f127d030e2d84889c1fe8bf7e6">morph::ui::testing::detail::minimumWidensContent</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a9c9d81f127d030e2d84889c1fe8bf7e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: along a row, a content child is at least its minimum wide.  <br /></td></tr>
+<tr class="memitem:a0458e430abc47912051e616739f22646" id="r_a0458e430abc47912051e616739f22646"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0458e430abc47912051e616739f22646">morph::ui::testing::detail::maximumCapsAcross</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a0458e430abc47912051e616739f22646"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: across a column, a stretch child stops at its maximum, at the start.  <br /></td></tr>
+<tr class="memitem:a1664acc54ebdc803d2a6df06329db07b" id="r_a1664acc54ebdc803d2a6df06329db07b"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1664acc54ebdc803d2a6df06329db07b">morph::ui::testing::detail::maximumCapsStretchHeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a1664acc54ebdc803d2a6df06329db07b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: down a column, a stretch child's height stops at its maximum and its stretch sibling takes the rest.  <br /></td></tr>
+<tr class="memitem:a86f465edce8c0b1434d771d979e63c4c" id="r_a86f465edce8c0b1434d771d979e63c4c"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a86f465edce8c0b1434d771d979e63c4c">morph::ui::testing::detail::rowCentresAcross</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a86f465edce8c0b1434d771d979e63c4c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a row 3 units tall with <span class="tt">align: center</span> places a 1-unit text a unit down.  <br /></td></tr>
+<tr class="memitem:af80d48a68ccc17fc2a2cbc007c6142ff" id="r_af80d48a68ccc17fc2a2cbc007c6142ff"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af80d48a68ccc17fc2a2cbc007c6142ff">morph::ui::testing::detail::columnJustifies</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:af80d48a68ccc17fc2a2cbc007c6142ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a column with <span class="tt">justify: end</span> places its last child's end at its own end, and <span class="tt">between</span> its first child at the start and its last at the end.  <br /></td></tr>
+<tr class="memitem:a82562963785c417318177b92d66677ba" id="r_a82562963785c417318177b92d66677ba"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a82562963785c417318177b92d66677ba">morph::ui::testing::detail::cappedChildCentres</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a82562963785c417318177b92d66677ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a child capped below its column's width with <span class="tt">alignSelf: center</span> has equal space either side; a stretch child with <span class="tt">maxWidth: 44</span> in a 70-unit column with <span class="tt">align: center</span> is 44 wide and centred.  <br /></td></tr>
+<tr class="memitem:aecf398a21dce6aeb7feecf89f6d25313" id="r_aecf398a21dce6aeb7feecf89f6d25313"><td class="memItemLeft">std::span&lt; <a class="el" href="../../db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html">ConformanceCase</a> const &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aecf398a21dce6aeb7feecf89f6d25313">morph::ui::testing::layoutConformanceCases</a> ()</td></tr>
+<tr class="memdesc:aecf398a21dce6aeb7feecf89f6d25313"><td class="mdescLeft">&#160;</td><td class="mdescRight">The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose <span class="tt">boundsOf</span> reads geometry; a probe that reads none fails every one.  <br /></td></tr>
 <tr class="memitem:a40f3611811880916195ad1becfbe3d46" id="r_a40f3611811880916195ad1becfbe3d46"><td class="memItemLeft">std::span&lt; <a class="el" href="../../db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html">ConformanceCase</a> const &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a40f3611811880916195ad1becfbe3d46">morph::ui::testing::conformanceCases</a> ()</td></tr>
 <tr class="memdesc:a40f3611811880916195ad1becfbe3d46"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every conformance case, in a fixed order.  <br /></td></tr>
 </table>
@@ -295,7 +325,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +366,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -372,7 +402,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or null when it is not a <span class="tt">ContainerWidget</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +438,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The root widget as a container. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -455,7 +485,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The child, or null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -496,7 +526,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">a,b,c</span>; a missing child reads <span class="tt">&lt;null&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -537,7 +567,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">a,c</span>; a row without a first cell reads <span class="tt">&lt;null&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -573,7 +603,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">1,"b"</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00309">309</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -609,7 +639,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -645,7 +675,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -681,7 +711,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -717,7 +747,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -753,7 +783,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -789,7 +819,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00430">430</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -825,7 +855,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -861,7 +891,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00489">489</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00512">512</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -897,7 +927,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00509">509</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00532">532</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -933,7 +963,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00552">552</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -969,7 +999,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1005,7 +1035,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1041,7 +1071,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00649">649</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1077,7 +1107,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00735">735</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1113,7 +1143,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00755">755</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1149,7 +1179,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00765">765</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00788">788</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1185,7 +1215,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00819">819</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1221,7 +1251,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00880">880</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00903">903</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1257,7 +1287,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00916">916</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1293,7 +1323,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00975">975</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00998">998</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1329,7 +1359,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01000">1000</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01023">1023</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1365,7 +1395,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01026">1026</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01049">1049</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1401,7 +1431,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01112">1112</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1442,7 +1472,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The keys the panel's <span class="tt">onDrop</span> received. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01124">1124</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01147">1147</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1478,7 +1508,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01142">1142</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01165">1165</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1514,7 +1544,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01153">1153</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01176">1176</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1550,7 +1580,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01186">1186</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1586,7 +1616,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01174">1174</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01197">1197</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1622,7 +1652,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01205">1205</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01228">1228</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1658,7 +1688,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01235">1235</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01258">1258</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1694,7 +1724,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01255">1255</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01278">1278</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1730,7 +1760,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01287">1287</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01310">1310</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1766,7 +1796,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01313">1313</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01336">1336</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1802,7 +1832,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01331">1331</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01354">1354</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1838,7 +1868,443 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01366">1366</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01389">1389</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a45dc348de0ce06af7ed91a7b6d28928f" name="a45dc348de0ce06af7ed91a7b6d28928f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45dc348de0ce06af7ed91a7b6d28928f">&#9670;&#160;</a></span>sizedText()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::testing::detail::sizedText </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a></td>          <td class="paramname"><span class="paramname"><em>layout</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A text that sizes as <code class="param">layout</code> says. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The text. </td></tr>
+    <tr><td class="paramname">layout</td><td>Its size request. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01443">1443</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="add4587cc9e67e5d735d43f102e05bd75" name="add4587cc9e67e5d735d43f102e05bd75"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#add4587cc9e67e5d735d43f102e05bd75">&#9670;&#160;</a></span>insideColumn()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::testing::detail::insideColumn </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a></td>          <td class="paramname"><span class="paramname"><em>inner</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><code class="param">inner</code> inside a column, so it is sized as a child is: a root fills the window or screen whatever its own sizing. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inner</td><td>The container a case measures. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The column. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01453">1453</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae5ff554f704b25e8cbadfa241a126ae8" name="ae5ff554f704b25e8cbadfa241a126ae8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae5ff554f704b25e8cbadfa241a126ae8">&#9670;&#160;</a></span>insideRow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::testing::detail::insideRow </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a></td>          <td class="paramname"><span class="paramname"><em>inner</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><code class="param">inner</code> inside a row, so its height is sized as a child's is. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inner</td><td>The container a case measures. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The row. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01458">1458</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab6a235095ff58116003bb4fa38430f4a" name="ab6a235095ff58116003bb4fa38430f4a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6a235095ff58116003bb4fa38430f4a">&#9670;&#160;</a></span>measured()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Measured morph::ui::testing::detail::measured </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html">Mounted</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>view</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The container a case measures, inside the root <span class="tt">insideColumn</span> or <span class="tt">insideRow</span> made. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+    <tr><td class="paramname">view</td><td>The mount. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>It and its children. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01472">1472</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39276c9c9c8973cecc8609275b519a03" name="a39276c9c9c8973cecc8609275b519a03"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39276c9c9c8973cecc8609275b519a03">&#9670;&#160;</a></span>maximumCapsStretchShare()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::maximumCapsStretchShare </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: along a row, a stretch child's share stops at its maximum and its stretch sibling takes the rest. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01485">1485</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9c9d81f127d030e2d84889c1fe8bf7e6" name="a9c9d81f127d030e2d84889c1fe8bf7e6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9c9d81f127d030e2d84889c1fe8bf7e6">&#9670;&#160;</a></span>minimumWidensContent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::minimumWidensContent </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: along a row, a content child is at least its minimum wide. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01505">1505</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0458e430abc47912051e616739f22646" name="a0458e430abc47912051e616739f22646"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0458e430abc47912051e616739f22646">&#9670;&#160;</a></span>maximumCapsAcross()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::maximumCapsAcross </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: across a column, a stretch child stops at its maximum, at the start. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01523">1523</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1664acc54ebdc803d2a6df06329db07b" name="a1664acc54ebdc803d2a6df06329db07b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1664acc54ebdc803d2a6df06329db07b">&#9670;&#160;</a></span>maximumCapsStretchHeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::maximumCapsStretchHeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: down a column, a stretch child's height stops at its maximum and its stretch sibling takes the rest. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01547">1547</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a86f465edce8c0b1434d771d979e63c4c" name="a86f465edce8c0b1434d771d979e63c4c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a86f465edce8c0b1434d771d979e63c4c">&#9670;&#160;</a></span>rowCentresAcross()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::rowCentresAcross </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a row 3 units tall with <span class="tt">align: center</span> places a 1-unit text a unit down. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01567">1567</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af80d48a68ccc17fc2a2cbc007c6142ff" name="af80d48a68ccc17fc2a2cbc007c6142ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af80d48a68ccc17fc2a2cbc007c6142ff">&#9670;&#160;</a></span>columnJustifies()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::columnJustifies </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a column with <span class="tt">justify: end</span> places its last child's end at its own end, and <span class="tt">between</span> its first child at the start and its last at the end. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01589">1589</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a82562963785c417318177b92d66677ba" name="a82562963785c417318177b92d66677ba"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a82562963785c417318177b92d66677ba">&#9670;&#160;</a></span>cappedChildCentres()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::cappedChildCentres </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a child capped below its column's width with <span class="tt">alignSelf: center</span> has equal space either side; a stretch child with <span class="tt">maxWidth: 44</span> in a 70-unit column with <span class="tt">align: center</span> is 44 wide and centred. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01620">1620</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aecf398a21dce6aeb7feecf89f6d25313" name="aecf398a21dce6aeb7feecf89f6d25313"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aecf398a21dce6aeb7feecf89f6d25313">&#9670;&#160;</a></span>layoutConformanceCases()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::span&lt; ConformanceCase const  &gt; morph::ui::testing::layoutConformanceCases </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose <span class="tt">boundsOf</span> reads geometry; a probe that reads none fails every one. </p>
+<dl class="section return"><dt>Returns</dt><dd>The cases. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01655">1655</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1868,7 +2334,7 @@ Functions</h2></td></tr>
 <p>Every conformance case, in a fixed order. </p>
 <p>Run each on a fresh probe; <span class="tt">nullopt</span> is a pass, anything else is the failure message. A backend's test suite loops over these with its own <span class="tt">ConformanceProbe</span>. </p><dl class="section return"><dt>Returns</dt><dd>The cases. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01391">1391</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01675">1675</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

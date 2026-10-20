@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/d30/structm
 </div><!--header-->
 <div class="contents">
 
-<p>A widget's size request in both dimensions.  
+<p>A widget's size request in both dimensions, and the bounds its extent is clamped into.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&gt;</code></p>
@@ -137,11 +137,22 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ad7288838a13653e64e02455eba165785"><td class="mdescLeft">&#160;</td><td class="mdescRight">Along the horizontal axis.  <br /></td></tr>
 <tr class="memitem:a1bf7b7ee502cd67a42139bf479d9ba91" id="r_a1bf7b7ee502cd67a42139bf479d9ba91"><td class="memItemLeft"><a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1bf7b7ee502cd67a42139bf479d9ba91">height</a> {}</td></tr>
 <tr class="memdesc:a1bf7b7ee502cd67a42139bf479d9ba91"><td class="mdescLeft">&#160;</td><td class="mdescRight">Along the vertical axis.  <br /></td></tr>
+<tr class="memitem:a7a266001425bf04b5369a6afa2d966aa" id="r_a7a266001425bf04b5369a6afa2d966aa"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7a266001425bf04b5369a6afa2d966aa">minWidth</a></td></tr>
+<tr class="memdesc:a7a266001425bf04b5369a6afa2d966aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least width, in backend units; <span class="tt">nullopt</span> for none.  <br /></td></tr>
+<tr class="memitem:a999931a69c17ff5ec005c4be297c0c63" id="r_a999931a69c17ff5ec005c4be297c0c63"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a999931a69c17ff5ec005c4be297c0c63">maxWidth</a></td></tr>
+<tr class="memdesc:a999931a69c17ff5ec005c4be297c0c63"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most width, in backend units; <span class="tt">nullopt</span> for none.  <br /></td></tr>
+<tr class="memitem:a576b5120f803d85d9b663465070c1a49" id="r_a576b5120f803d85d9b663465070c1a49"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a576b5120f803d85d9b663465070c1a49">minHeight</a></td></tr>
+<tr class="memdesc:a576b5120f803d85d9b663465070c1a49"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least height, in backend units; <span class="tt">nullopt</span> for none.  <br /></td></tr>
+<tr class="memitem:aab93e030ead8e047082cc4c1a02a45f9" id="r_aab93e030ead8e047082cc4c1a02a45f9"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aab93e030ead8e047082cc4c1a02a45f9">maxHeight</a></td></tr>
+<tr class="memdesc:aab93e030ead8e047082cc4c1a02a45f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most height, in backend units; <span class="tt">nullopt</span> for none.  <br /></td></tr>
+<tr class="memitem:ab9e00da431c2d6bf6dcc821c84ad3169" id="r_ab9e00da431c2d6bf6dcc821c84ad3169"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab9e00da431c2d6bf6dcc821c84ad3169">alignSelf</a></td></tr>
+<tr class="memdesc:ab9e00da431c2d6bf6dcc821c84ad3169"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the node sits across its row's, column's or grid row's axis; <span class="tt">nullopt</span> takes the container's <span class="tt">align</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A widget's size request in both dimensions. </p>
+<div class="textblock"><p>A widget's size request in both dimensions, and the bounds its extent is clamped into. </p>
+<p>A bound clamps the extent the sizing gives, whatever the sizing: a stretch child's share stops at its maximum and a content or fixed child takes at least its minimum. A negative bound, a minimum above its maximum and a fixed amount outside its bounds are refused at mount (<span class="tt">std::logic_error</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ac67f65a0c1b8479462a845233ce3e852" name="ac67f65a0c1b8479462a845233ce3e852"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac67f65a0c1b8479462a845233ce3e852">&#9670;&#160;</a></span>operator==()</h2>
@@ -167,7 +178,7 @@ Public Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Memberwise equality. </p>
-<dl class="section return"><dt>Returns</dt><dd>Whether both dimensions match. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the sizings, the bounds and the alignment match. </dd></dl>
 
 </div>
 </div>
@@ -186,7 +197,7 @@ Public Attributes</h2></td></tr>
 
 <p>Along the horizontal axis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00303">303</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00310">310</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -204,7 +215,97 @@ Public Attributes</h2></td></tr>
 
 <p>Along the vertical axis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7a266001425bf04b5369a6afa2d966aa" name="a7a266001425bf04b5369a6afa2d966aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7a266001425bf04b5369a6afa2d966aa">&#9670;&#160;</a></span>minWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::LayoutHints::minWidth</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The least width, in backend units; <span class="tt">nullopt</span> for none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00314">314</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a999931a69c17ff5ec005c4be297c0c63" name="a999931a69c17ff5ec005c4be297c0c63"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a999931a69c17ff5ec005c4be297c0c63">&#9670;&#160;</a></span>maxWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::LayoutHints::maxWidth</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The most width, in backend units; <span class="tt">nullopt</span> for none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a576b5120f803d85d9b663465070c1a49" name="a576b5120f803d85d9b663465070c1a49"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a576b5120f803d85d9b663465070c1a49">&#9670;&#160;</a></span>minHeight</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::LayoutHints::minHeight</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The least height, in backend units; <span class="tt">nullopt</span> for none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aab93e030ead8e047082cc4c1a02a45f9" name="aab93e030ead8e047082cc4c1a02a45f9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab93e030ead8e047082cc4c1a02a45f9">&#9670;&#160;</a></span>maxHeight</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::LayoutHints::maxHeight</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The most height, in backend units; <span class="tt">nullopt</span> for none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab9e00da431c2d6bf6dcc821c84ad3169" name="ab9e00da431c2d6bf6dcc821c84ad3169"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab9e00da431c2d6bf6dcc821c84ad3169">&#9670;&#160;</a></span>alignSelf</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&gt; morph::ui::LayoutHints::alignSelf</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the node sits across its row's, column's or grid row's axis; <span class="tt">nullopt</span> takes the container's <span class="tt">align</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

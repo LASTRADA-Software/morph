@@ -121,10 +121,19 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dca/structm
 </div><!--header-->
 <div class="contents">
 
-<p>How a <span class="tt"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html" title="Tabs over screens: one screen instance per tab, mounted into the tab&#39;s page through DocumentScreenHos...">Workspace</a></span> treats screens.  
+<p>How a workspace treats screens.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>&gt;</code></p>
+<div class="dynheader">
+Inheritance diagram for morph::ui::WorkspaceOptions:</div>
+<div class="dyncontent">
+ <div class="center">
+  <img src="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.png" usemap="#morph_3A_3Aui_3A_3AWorkspaceOptions_map" alt=""/>
+  <map id="morph_3A_3Aui_3A_3AWorkspaceOptions_map" name="morph_3A_3Aui_3A_3AWorkspaceOptions_map">
+<area href="../../d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions.html" title="A WorkspaceModel&#39;s options: the workspace&#39;s, and how a tab&#39;s page is made and unmade." alt="morph::ui::WorkspaceModelOptions" shape="rect" coords="0,56,210,80"/>
+  </map>
+</div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -139,12 +148,12 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ae6d59c611c7c5ab7f486c526777cdadd" id="r_ae6d59c611c7c5ab7f486c526777cdadd"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd">recordDelay</a> {500}</td></tr>
 <tr class="memdesc:ae6d59c611c7c5ab7f486c526777cdadd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The quiet period before the record is written, with a scheduler.  <br /></td></tr>
 <tr class="memitem:a30f81edaa10f4480d47c6c122ad919d3" id="r_a30f81edaa10f4480d47c6c122ad919d3"><td class="memItemLeft">std::function&lt; void()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a30f81edaa10f4480d47c6c122ad919d3">onChanged</a></td></tr>
-<tr class="memdesc:a30f81edaa10f4480d47c6c122ad919d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called after the open tabs, their captions or the active tab changed; empty calls nothing.  <br /></td></tr>
+<tr class="memdesc:a30f81edaa10f4480d47c6c122ad919d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called after the open tabs, their titles, unsaved state or identities, or the active tab changed; empty calls nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>How a <span class="tt"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html" title="Tabs over screens: one screen instance per tab, mounted into the tab&#39;s page through DocumentScreenHos...">Workspace</a></span> treats screens. </p>
+<div class="textblock"><p>How a workspace treats screens. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a4bf52d2a961791d38f3d5b435de390db" name="a4bf52d2a961791d38f3d5b435de390db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4bf52d2a961791d38f3d5b435de390db">&#9670;&#160;</a></span>screens</h2>
@@ -160,7 +169,7 @@ Public Attributes</h2></td></tr>
 
 <p>The catalog facts of a screen id; empty treats every screen as plain. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +187,7 @@ Public Attributes</h2></td></tr>
 
 <p>The host screens a catalog entry's <span class="tt">host</span> names. Borrowed; null mounts none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +205,7 @@ Public Attributes</h2></td></tr>
 
 <p>Receives the record: the routes of the open tabs, in order, each time the tabs change. A tab with no route (a param with no route form) is left out. Empty writes no record. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +223,7 @@ Public Attributes</h2></td></tr>
 
 <p>When given, a burst of changes writes the record once, <span class="tt"><a class="el" href="#ae6d59c611c7c5ab7f486c526777cdadd" title="The quiet period before the record is written, with a scheduler.">recordDelay</a></span> after the last of them. Borrowed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +241,7 @@ Public Attributes</h2></td></tr>
 
 <p>The quiet period before the record is written, with a scheduler. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -248,14 +257,14 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Called after the open tabs, their captions or the active tab changed; empty calls nothing. </p>
+<p>Called after the open tabs, their titles, unsaved state or identities, or the active tab changed; empty calls nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
 <hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/ui/<a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a></li>
+<li>morph/ui/<a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

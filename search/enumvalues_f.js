@@ -11,5 +11,6 @@ var searchData=
   ['precisionexceeded_8',['PrecisionExceeded',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7aac93b79157edb278bc89b71a8969b21a',1,'morph::forms']]],
   ['pref_9',['Pref',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a56a2e1cec4756c692a127d5dabf0d11d',1,'morph::ui']]],
   ['primary_10',['Primary',['../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352',1,'morph::ui']]],
-  ['private_11',['Private',['../d1/dc0/author_8hpp.html#a88b3efad6e1294a60e835161e694bcb1a47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui::author'],['../dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069eaa47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui']]]
+  ['private_11',['Private',['../d1/dc0/author_8hpp.html#a88b3efad6e1294a60e835161e694bcb1a47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui::author'],['../dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069eaa47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui']]],
+  ['push_12',['Push',['../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a9c6a9d9f033001a9b3104984d319563b',1,'morph::ui']]]
 ];

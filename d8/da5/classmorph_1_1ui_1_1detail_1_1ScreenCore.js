@@ -16,6 +16,8 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "runList", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a9d265851166191eb62e29b503238a183", null ],
     [ "runOne", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a105e8e54b2186f36c3e3d5c22539b3fb", null ],
     [ "runEvent", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1518e227276e358136b73299fdf7fa4f", null ],
+    [ "lowerActionParts", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a65458c89d2c6bdcdbdff96e01459db91", null ],
+    [ "lowerBadgeParts", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a00a810c378213cdacb12da68dcf1ef28", null ],
     [ "lower", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0e0356595c888ecda8e3182d524de57", null ],
     [ "lowerAll", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afc9b26ecab4c765cb138847d08f2dc48", null ],
     [ "addPending", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a12be639fee87a3b69d74343ce8e3ef6d", null ],

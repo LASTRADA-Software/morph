@@ -139,7 +139,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d11/view_8h
 <code>#include &quot;<a class="el" href="../../d0/df9/runtime_8hpp_source.html">../reactive/runtime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d5f/signal_8hpp_source.html">../reactive/signal.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d9/dd9/alignment_8hpp_source.html">alignment.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../dd/d96/button__style_8hpp_source.html">button_style.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d8/d11/view_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -156,7 +158,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASizing" id="r_morph_3A_3Aui_3A_3ASizing"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">morph::ui::Sizing</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).  <a href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ALayoutHints" id="r_morph_3A_3Aui_3A_3ALayoutHints"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">morph::ui::LayoutHints</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A widget's size request in both dimensions.  <a href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A widget's size request in both dimensions, and the bounds its extent is clamped into.  <a href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AAccessibility" id="r_morph_3A_3Aui_3A_3AAccessibility"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d03/structmorph_1_1ui_1_1Accessibility.html">morph::ui::Accessibility</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What assistive technology announces for a node.  <a href="../../d9/d03/structmorph_1_1ui_1_1Accessibility.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AKeyBinding" id="r_morph_3A_3Aui_3A_3AKeyBinding"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d7b/structmorph_1_1ui_1_1KeyBinding.html">morph::ui::KeyBinding</a></td></tr>
@@ -247,6 +249,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a region shows when it has nothing to show: a title, an explanation and an optional action.  <a href="../../d8/d99/structmorph_1_1ui_1_1EmptyState.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADrawer" id="r_morph_3A_3Aui_3A_3ADrawer"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/df7/structmorph_1_1ui_1_1Drawer.html">morph::ui::Drawer</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A panel that slides in from one edge over the content: a <span class="tt"><a class="el" href="../../d2/dc0/structmorph_1_1ui_1_1Dialog.html" title="A modal overlay; its content is mounted only while it is open.">Dialog</a></span> with a side, and the same rules.  <a href="../../d3/df7/structmorph_1_1ui_1_1Drawer.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AActionBar" id="r_morph_3A_3Aui_3A_3AActionBar"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html">morph::ui::ActionBar</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay <span class="tt">actions</span> lower to. The mount refuses one anywhere else.  <a href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASplitter" id="r_morph_3A_3Aui_3A_3ASplitter"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d07/structmorph_1_1ui_1_1Splitter.html">morph::ui::Splitter</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Panes side by side, or stacked, with handles the user drags to share the space between them.  <a href="../../d7/d07/structmorph_1_1ui_1_1Splitter.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACollapsible" id="r_morph_3A_3Aui_3A_3ACollapsible"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d0/db5/structmorph_1_1ui_1_1Collapsible.html">morph::ui::Collapsible</a></td></tr>
@@ -261,6 +265,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a <span class="tt"><a class="el" href="#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span> points at: exactly one node kind.  <a href="../../d9/d5b/structmorph_1_1ui_1_1NodeData.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ATableOptions" id="r_morph_3A_3Aui_3A_3ATableOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html">morph::ui::TableOptions</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Everything about a <span class="tt"><a class="el" href="#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> beyond its columns and rows.  <a href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ATableRowView" id="r_morph_3A_3Aui_3A_3ATableRowView"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d6d/structmorph_1_1ui_1_1TableRowView.html">morph::ui::TableRowView</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a table's row view builds for one row: its cells, one per column, and its tone.  <a href="../../da/d6d/structmorph_1_1ui_1_1TableRowView.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-concepts" class="groupheader"><a id="concepts" name="concepts"></a>
 Concepts</h2></td></tr>
@@ -287,6 +293,7 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a902b0d55fddef6f8d651fe1035b7d4bd">Error</a>
 , <br />
 &#160;&#160;<a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38">Success</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867">Section</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a14948061dae38a78ef544a3b4d9873e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a></span> is styled; each backend maps a role to its theme.  <a href="#a14948061dae38a78ef544a3b4d9873e5">More...</a><br /></td></tr>
@@ -399,6 +406,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a88949d610151cdd7a5993211f6b0f07c"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a region shows when it has nothing to show.  <br /></td></tr>
 <tr class="memitem:ac32bc9fa7f17605e28fdaf77a96f3870" id="r_ac32bc9fa7f17605e28fdaf77a96f3870"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac32bc9fa7f17605e28fdaf77a96f3870">morph::ui::drawer</a> (<a class="el" href="../../d3/df7/structmorph_1_1ui_1_1Drawer.html">Drawer</a> spec)</td></tr>
 <tr class="memdesc:ac32bc9fa7f17605e28fdaf77a96f3870"><td class="mdescLeft">&#160;</td><td class="mdescRight">A panel that slides in from one edge.  <br /></td></tr>
+<tr class="memitem:a0680b5da5baee2db8a0adcf1dfcaea51" id="r_a0680b5da5baee2db8a0adcf1dfcaea51"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0680b5da5baee2db8a0adcf1dfcaea51">morph::ui::actionBar</a> (<a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html">ActionBar</a> spec)</td></tr>
+<tr class="memdesc:a0680b5da5baee2db8a0adcf1dfcaea51"><td class="mdescLeft">&#160;</td><td class="mdescRight">An action bar node.  <br /></td></tr>
 <tr class="memitem:ab0f45edb78821c04379a3cf41091f775" id="r_ab0f45edb78821c04379a3cf41091f775"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab0f45edb78821c04379a3cf41091f775">morph::ui::splitter</a> (<a class="el" href="../../d7/d07/structmorph_1_1ui_1_1Splitter.html">Splitter</a> spec)</td></tr>
 <tr class="memdesc:ab0f45edb78821c04379a3cf41091f775"><td class="mdescLeft">&#160;</td><td class="mdescRight">Panes with handles the user drags.  <br /></td></tr>
 <tr class="memitem:a0735c59e8fed7c1e25bb578d6ae89abd" id="r_a0735c59e8fed7c1e25bb578d6ae89abd"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0735c59e8fed7c1e25bb578d6ae89abd">morph::ui::collapsible</a> (<a class="el" href="../../d0/db5/structmorph_1_1ui_1_1Collapsible.html">Collapsible</a> spec)</td></tr>
@@ -420,6 +429,9 @@ requires std::is_enum_v&lt;E&gt;</td></tr>
 <tr class="memitem:acf831cc5b89c22045d627630e96bf21b" id="r_acf831cc5b89c22045d627630e96bf21b"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
 <tr class="memitem:acf831cc5b89c22045d627630e96bf21b template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#acf831cc5b89c22045d627630e96bf21b">morph::ui::table</a> (std::vector&lt; <a class="el" href="../../df/ddf/structmorph_1_1ui_1_1TableColumn.html">TableColumn</a> &gt; columns, std::function&lt; std::vector&lt; RowT &gt;()&gt; rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; std::vector&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a> &gt;(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; cells, <a class="el" href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html">TableOptions</a> options={})</td></tr>
 <tr class="memdesc:acf831cc5b89c22045d627630e96bf21b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table of keyed rows: one <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span> of cells per row, under the column headers.  <br /></td></tr>
+<tr class="memitem:a4400bff106cad6dffe2a86cacdfe12dc" id="r_a4400bff106cad6dffe2a86cacdfe12dc"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
+<tr class="memitem:a4400bff106cad6dffe2a86cacdfe12dc template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4400bff106cad6dffe2a86cacdfe12dc">morph::ui::table</a> (std::vector&lt; <a class="el" href="../../df/ddf/structmorph_1_1ui_1_1TableColumn.html">TableColumn</a> &gt; columns, std::function&lt; std::vector&lt; RowT &gt;()&gt; rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; <a class="el" href="../../da/d6d/structmorph_1_1ui_1_1TableRowView.html">TableRowView</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; rowView, <a class="el" href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html">TableOptions</a> options={})</td></tr>
+<tr class="memdesc:a4400bff106cad6dffe2a86cacdfe12dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table of keyed rows whose row view gives each row its tone as well as its cells.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -446,7 +458,7 @@ Variables</h2></td></tr>
 
 <p>A widget event handler taking no arguments. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +477,7 @@ Variables</h2></td></tr>
 <p>The identity of a Switch case, a Select option, a ForEach or Table row and a drag payload. </p>
 <p>Never a floating-point number: morph ids can exceed 2^53. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -484,7 +496,7 @@ Variables</h2></td></tr>
 <p>The stable identity of a slot: a bound property a renderer can refer to by number. </p>
 <p>Whoever builds the tree assigns slot ids; the interpreter numbers every bound property of a document, and a code-generating renderer names the value it reads after it (<span class="tt">v.s17</span>). <span class="tt">Mounted</span> does not use them. A slot made from a bare callable has no id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -502,7 +514,7 @@ Variables</h2></td></tr>
 
 <p>A view-tree node: immutable, shared data. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -539,9 +551,11 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38" name="a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38"></a>Success&#160;</td><td class="fielddoc"><p>A confirmation. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867" name="a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867"></a>Section&#160;</td><td class="fielddoc"><p>The heading of a group within a list: body size, bold and muted, below a <span class="tt">Heading</span>. </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -575,7 +589,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -607,7 +621,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -639,7 +653,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -671,7 +685,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,7 +717,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -741,7 +755,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -773,7 +787,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +823,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -843,7 +857,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -893,7 +907,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>What a <span class="tt">Prop</span> takes as a slot with <code class="param">slotId</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -929,7 +943,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code class="param">value</code> clamped to <span class="tt">[0, kMaxSpacingStep]</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00515">515</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -973,7 +987,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The shared node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01082">1082</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01154">1154</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1009,7 +1023,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01091">1091</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1045,7 +1059,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01096">1096</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01168">1168</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1081,7 +1095,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01101">1101</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01173">1173</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1117,7 +1131,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01106">1106</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01178">1178</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1153,7 +1167,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01111">1111</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01183">1183</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1189,7 +1203,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01116">1116</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01188">1188</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1225,7 +1239,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01121">1121</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01193">1193</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1261,7 +1275,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01126">1126</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01198">1198</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1297,7 +1311,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01131">1131</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01203">1203</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1333,7 +1347,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01136">1136</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01208">1208</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1369,7 +1383,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01213">1213</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1405,7 +1419,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01146">1146</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01218">1218</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1441,7 +1455,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01151">1151</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01223">1223</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1477,7 +1491,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01156">1156</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01228">1228</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1513,7 +1527,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01161">1161</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01233">1233</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1549,7 +1563,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01166">1166</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01238">1238</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1585,7 +1599,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01243">1243</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1621,7 +1635,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01176">1176</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01248">1248</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1657,7 +1671,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01253">1253</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1693,7 +1707,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01186">1186</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01258">1258</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1729,7 +1743,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01191">1191</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01263">1263</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1765,7 +1779,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01196">1196</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01268">1268</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1801,7 +1815,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01201">1201</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01273">1273</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1837,7 +1851,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01206">1206</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01278">1278</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1873,7 +1887,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01211">1211</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01283">1283</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1909,7 +1923,43 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01216">1216</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01288">1288</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0680b5da5baee2db8a0adcf1dfcaea51" name="a0680b5da5baee2db8a0adcf1dfcaea51"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0680b5da5baee2db8a0adcf1dfcaea51">&#9670;&#160;</a></span>actionBar()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::actionBar </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html">ActionBar</a></td>          <td class="paramname"><span class="paramname"><em>spec</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An action bar node. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spec</td><td>The bar. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01293">1293</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1945,7 +1995,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01221">1221</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01298">1298</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1981,7 +2031,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01226">1226</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01303">1303</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2017,7 +2067,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01231">1231</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01308">1308</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2059,7 +2109,7 @@ template&lt;typename Kind&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01238">1238</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01315">1315</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2121,7 +2171,7 @@ requires std::is_enum_v&lt;E&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01257">1257</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01334">1334</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2194,7 +2244,7 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01288">1288</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01365">1365</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2267,12 +2317,12 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01309">1309</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01386">1386</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
 <a id="acf831cc5b89c22045d627630e96bf21b" name="acf831cc5b89c22045d627630e96bf21b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acf831cc5b89c22045d627630e96bf21b">&#9670;&#160;</a></span>table()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#acf831cc5b89c22045d627630e96bf21b">&#9670;&#160;</a></span>table() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2340,7 +2390,80 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01344">1344</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01429">1429</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4400bff106cad6dffe2a86cacdfe12dc" name="a4400bff106cad6dffe2a86cacdfe12dc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4400bff106cad6dffe2a86cacdfe12dc">&#9670;&#160;</a></span>table() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename RowT&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::table </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/ddf/structmorph_1_1ui_1_1TableColumn.html">TableColumn</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>columns</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::vector&lt; RowT &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>rows</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>keyOf</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; <a class="el" href="../../da/d6d/structmorph_1_1ui_1_1TableRowView.html">TableRowView</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>rowView</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html">TableOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A table of keyed rows whose row view gives each row its tone as well as its cells. </p>
+<p>As the other <span class="tt">table</span>, with <code class="param">rowView</code> answering a <span class="tt">TableRowView</span>: the tone binds in the row's own scope, and the table is told it after the row's key and on every change. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">RowT</td><td>The row type; copyable. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">columns</td><td>The columns, in order. </td></tr>
+    <tr><td class="paramname">rows</td><td>Reads the rows; every signal it reads is a dependency. </td></tr>
+    <tr><td class="paramname">keyOf</td><td>A row's identity; a later duplicate of a key is reported and refused, and the first one is kept. </td></tr>
+    <tr><td class="paramname">rowView</td><td>Builds a row's cells, one per column, and its tone, once, from a signal the mount keeps equal to the row. </td></tr>
+    <tr><td class="paramname">options</td><td>Selection, activation and <span class="tt">Common</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>when <code class="param">rows</code>, <code class="param">keyOf</code> or <code class="param">rowView</code> is empty. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01457">1457</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2367,7 +2490,7 @@ template&lt;typename RowT&gt; </div>
 
 <p>The largest spacing step: a <span class="tt">gap</span> or <span class="tt">padding</span> names a step from 0 (none) to this, which each backend maps to its own distance (the theme's <span class="tt">space.&lt;step&gt;</span> on Qt Quick, cells on the terminal). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00553">553</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

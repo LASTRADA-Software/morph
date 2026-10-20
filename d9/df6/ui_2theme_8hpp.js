@@ -14,8 +14,11 @@ var ui_2theme_8hpp =
       [ "Color", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aacb5feb1b7314637725a2e73bdc9f7295", null ],
       [ "Number", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aab2ee912b91d69b435159c7c3f6df7f5f", null ],
       [ "Dimension", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa9e0e31246b7b078403969b265870b3f4", null ],
-      [ "Shadow", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa3f39588bb19e28051d9aedfbb170025c", null ]
+      [ "Shadow", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa3f39588bb19e28051d9aedfbb170025c", null ],
+      [ "FontFamily", "d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aadb55ba76fdbfc07bc3f1b88989151092", null ]
     ] ],
+    [ "morph::ui::isIconName", "d9/df6/ui_2theme_8hpp.html#a2101cc098937825c1d1c65660ad82e8a", null ],
+    [ "morph::ui::iconGlyph", "d9/df6/ui_2theme_8hpp.html#a3f7f31cbdb5006e2f3a283bb0160b8d2", null ],
     [ "morph::ui::detail::numberOf", "d9/df6/ui_2theme_8hpp.html#aec47f25e43b0bc87bfd37dfcf698dfeb", null ],
     [ "morph::ui::detail::memberOf", "d9/df6/ui_2theme_8hpp.html#a34f90eeeddc346416f3c3282e77379fb", null ],
     [ "morph::ui::detail::pixelsOf", "d9/df6/ui_2theme_8hpp.html#a97b893ef7d67a880ededa79d501ff3e9", null ],
@@ -35,6 +38,7 @@ var ui_2theme_8hpp =
     [ "morph::ui::detail::checkMemberName", "d9/df6/ui_2theme_8hpp.html#a7f81bd5730e6c0f4d80245d4d28c5b5a", null ],
     [ "morph::ui::detail::readGroup", "d9/df6/ui_2theme_8hpp.html#a7a1012270f80b37fa2404850af04a6e8", null ],
     [ "morph::ui::detail::readThemeMap", "d9/df6/ui_2theme_8hpp.html#ac11accc0e12e465ea51ee2000dbb20e3", null ],
+    [ "morph::ui::detail::readIcons", "d9/df6/ui_2theme_8hpp.html#a0f16f22b738401f67762796675079021", null ],
     [ "morph::ui::isThemeIndex", "d9/df6/ui_2theme_8hpp.html#a34c53e9088bed9e87763083bb600fa17", null ],
     [ "morph::ui::parseTokens", "d9/df6/ui_2theme_8hpp.html#a687d392bf2a97ad1d3a33f97bf55d31a", null ],
     [ "morph::ui::resolveTokens", "d9/df6/ui_2theme_8hpp.html#a4748ec0fb1656d605446863afeaebfae", null ],
@@ -42,13 +46,18 @@ var ui_2theme_8hpp =
     [ "morph::ui::resolveTheme", "d9/df6/ui_2theme_8hpp.html#aecf98c587d900ce47c54af5ce01b802b", null ],
     [ "morph::ui::checkTheme", "d9/df6/ui_2theme_8hpp.html#a1d8c7bd7c8f889237b229fd99be0803f", null ],
     [ "morph::ui::detail::shadowOf", "d9/df6/ui_2theme_8hpp.html#a611d0794e635d2198e6adc50077e1011", null ],
+    [ "morph::ui::detail::familiesOf", "d9/df6/ui_2theme_8hpp.html#a6cf38ccd6dc3e718b48556e64644d174", null ],
+    [ "morph::ui::detail::tokenAt", "d9/df6/ui_2theme_8hpp.html#ae83d1df86659355c9ff3db305591b24f", null ],
+    [ "morph::ui::detail::familyValue", "d9/df6/ui_2theme_8hpp.html#a6076315178f982b00acbebb1ffa0592b", null ],
     [ "morph::ui::themeValues", "d9/df6/ui_2theme_8hpp.html#a584b26c30b180905a58dac3480f3602e", null ],
     [ "morph::ui::kThemeVocabulary", "d9/df6/ui_2theme_8hpp.html#af999583dfef89f2c26e48ce6228b3f1b", null ],
     [ "morph::ui::kMaxThemeTokens", "d9/df6/ui_2theme_8hpp.html#adfc8b5a52d66901cb00798ebc8a4af0f", null ],
     [ "morph::ui::kMaxThemeVariants", "d9/df6/ui_2theme_8hpp.html#ae187550ac7fc325bfd25003bb1c61c41", null ],
+    [ "morph::ui::kMaxThemeIcons", "d9/df6/ui_2theme_8hpp.html#a924af3fbed9de8c7b9862c703533fde9", null ],
+    [ "morph::ui::kFrameworkIcons", "d9/df6/ui_2theme_8hpp.html#a1fca6e21526df5f46ad14b45e2c7291e", null ],
     [ "morph::ui::kMaxAliasChain", "d9/df6/ui_2theme_8hpp.html#a6e4b4f213f8422895388c9d7fa8fa591", null ],
     [ "morph::ui::detail::kPixelsPerRem", "d9/df6/ui_2theme_8hpp.html#aa75d5224e69a0ed975ce8f1494c59cc1", null ],
     [ "morph::ui::detail::kKnownTokenTypes", "d9/df6/ui_2theme_8hpp.html#a2f2fa03b36507a9424d191f5f0a20b0a", null ],
     [ "morph::ui::detail::kFontWeights", "d9/df6/ui_2theme_8hpp.html#a27918f810beaad38837cd35c770ab194", null ],
-    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#a0be8c7219d79dd08719da67b606ea67d", null ]
+    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#ace59cc5e2844fc25b20b0c57a3508fc5", null ]
 ];

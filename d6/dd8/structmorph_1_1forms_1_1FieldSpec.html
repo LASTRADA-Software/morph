@@ -202,6 +202,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ad8da77f65b968a8244b39717dcaaeac2"><td class="mdescLeft">&#160;</td><td class="mdescRight">An Object's members, or an ObjectArray's element members, in <span class="tt">x-order</span>.  <br /></td></tr>
 <tr class="memitem:a8fd5f0c1bd39530f8fd214e312628f0d" id="r_a8fd5f0c1bd39530f8fd214e312628f0d"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8fd5f0c1bd39530f8fd214e312628f0d">truncated</a> = false</td></tr>
 <tr class="memdesc:a8fd5f0c1bd39530f8fd214e312628f0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">An Object or ObjectArray whose members are not described: its <span class="tt">$ref</span> is already on the path, it is deeper than <span class="tt"><a class="el" href="../../d5/dc9/field__model_8hpp.html#a6ea53cf90753d42a7875aeaf7ceced77" title="How many object levels below the action a schema is described; a deeper member is FieldSpec::truncate...">kMaxNestingDepth</a></span>, or its schema states no members.  <br /></td></tr>
+<tr class="memitem:aaab1a412c3e44db2a0b29faaa059f26c" id="r_aaab1a412c3e44db2a0b29faaa059f26c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aaab1a412c3e44db2a0b29faaa059f26c">bytes</a> = false</td></tr>
+<tr class="memdesc:aaab1a412c3e44db2a0b29faaa059f26c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">string</span> member whose schema says <span class="tt">contentEncoding: base64</span>: its wire value is a file's bytes, which a document moves inline only under the session's inline cap.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Everything the engine knows about one field, from its schema property. </p>
@@ -871,6 +873,24 @@ Public Attributes</h2></td></tr>
 <p>An Object or ObjectArray whose members are not described: its <span class="tt">$ref</span> is already on the path, it is deeper than <span class="tt"><a class="el" href="../../d5/dc9/field__model_8hpp.html#a6ea53cf90753d42a7875aeaf7ceced77" title="How many object levels below the action a schema is described; a deeper member is FieldSpec::truncate...">kMaxNestingDepth</a></span>, or its schema states no members. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaab1a412c3e44db2a0b29faaa059f26c" name="aaab1a412c3e44db2a0b29faaa059f26c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaab1a412c3e44db2a0b29faaa059f26c">&#9670;&#160;</a></span>bytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::forms::FieldSpec::bytes = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">string</span> member whose schema says <span class="tt">contentEncoding: base64</span>: its wire value is a file's bytes, which a document moves inline only under the session's inline cap. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
 
 </div>
 </div>

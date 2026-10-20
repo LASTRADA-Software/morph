@@ -159,6 +159,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a8b2bdca6a57de4f3e7be36bdf281a86e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">selectionMode</span>, which <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49" title="Selects rows of a table by key: the table marks them, then onSelectionChange gets the keys.">RecordingBackend::selectRows</a></span> enforces.  <br /></td></tr>
 <tr class="memitem:a1c09d9ee362715a47f6d8965a368cfb0" id="r_a1c09d9ee362715a47f6d8965a368cfb0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1c09d9ee362715a47f6d8965a368cfb0">setRowKey</a> (Widget &amp;row, <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key) override</td></tr>
 <tr class="memdesc:a1c09d9ee362715a47f6d8965a368cfb0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">rowKey</span> on <code class="param">row</code>, and marks the row when its key is requested.  <br /></td></tr>
+<tr class="memitem:a11d5922b80e92b97b59849b1b9361ed2" id="r_a11d5922b80e92b97b59849b1b9361ed2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a11d5922b80e92b97b59849b1b9361ed2">setRowTone</a> (Widget &amp;row, std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt; tone) override</td></tr>
+<tr class="memdesc:a11d5922b80e92b97b59849b1b9361ed2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the row's property <span class="tt">tone</span> (<span class="tt">none</span> for no tone).  <br /></td></tr>
 <tr class="memitem:a814af2dbe852c6bce8b52d95de8a184c" id="r_a814af2dbe852c6bce8b52d95de8a184c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a814af2dbe852c6bce8b52d95de8a184c">setSelection</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys) override</td></tr>
 <tr class="memdesc:a814af2dbe852c6bce8b52d95de8a184c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Requests the rows with <code class="param">keys</code>, and records property <span class="tt">selection</span> as the rows it marks.  <br /></td></tr>
 <tr class="memitem:a710e46821c89c90256bfba9bf1189771" id="r_a710e46821c89c90256bfba9bf1189771"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a710e46821c89c90256bfba9bf1189771">setOnSelectionChange</a> (std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;)&gt; onSelectionChange) override</td></tr>
@@ -226,6 +228,8 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:adcfb5e450c81840f3a19af86dc108b54 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's handlers.  <br /></td></tr>
 <tr class="memitem:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a479e91548e0d21291aed6622fcf21e5b"><td class="memItemLeft"><a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a479e91548e0d21291aed6622fcf21e5b">store</a> () const noexcept</td></tr>
 <tr class="memdesc:a479e91548e0d21291aed6622fcf21e5b pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store this widget records into.  <br /></td></tr>
+<tr class="memitem:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a1fe343ba61e3430d4bf3d64c87ad2d65"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a1fe343ba61e3430d4bf3d64c87ad2d65">sharedStore</a> () const noexcept</td></tr>
+<tr class="memdesc:a1fe343ba61e3430d4bf3d64c87ad2d65 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store, shared: what a part this widget makes (an overlay's footer) records into.  <br /></td></tr>
 <tr class="memitem:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a7e1dc5da8d400e819d73832cdad60580"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a7e1dc5da8d400e819d73832cdad60580">id</a> () const noexcept</td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
@@ -233,7 +237,7 @@ Additional Inherited Members</h2></td></tr>
 <div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html" title="Keyed rows under column headers, with selection and activation by key.">TableWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">selectionMode</span>, <span class="tt">selection</span>, and <span class="tt">rowKey</span> on a row. </p>
 <p><span class="tt">selection</span> shows the rows the widget marks: the requested keys, in the order requested, that one of its current rows has. The requested keys are kept, so a row that arrives with one of them is marked and a row that goes is unmarked; that re-marking is the widget's own doing and is not logged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01241">1241</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01342">1342</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a93a5b753ee0e31a0a92611e6ca8b6ad4" name="a93a5b753ee0e31a0a92611e6ca8b6ad4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a93a5b753ee0e31a0a92611e6ca8b6ad4">&#9670;&#160;</a></span>FakeTable()</h2>
@@ -277,7 +281,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01247">1247</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01348">1348</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +310,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Removes the hook that points at this table, so nothing calls it once the table is gone, even if the record outlives it because recording the destruction failed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01257">1257</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01358">1358</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +348,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a57e44fc23672c4b59cbd608a0f3f6431">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01272">1272</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01373">1373</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -381,7 +385,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac200cf43bffd4f746a674f14f54b97fe">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01280">1280</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01381">1381</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +433,55 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae3017e5306e3fde63ec0366cca4983ff">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01289">1289</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01390">1390</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a11d5922b80e92b97b59849b1b9361ed2" name="a11d5922b80e92b97b59849b1b9361ed2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a11d5922b80e92b97b59849b1b9361ed2">&#9670;&#160;</a></span>setRowTone()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setRowTone </td>
+          <td>(</td>
+          <td class="paramtype">Widget &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>tone</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records the row's property <span class="tt">tone</span> (<span class="tt">none</span> for no tone). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">row</td><td>One of this table's rows. </td></tr>
+    <tr><td class="paramname">tone</td><td>The tone, or none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>when <code class="param">row</code> is not this table's child. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a017d3b015da5d05d9a24478f9d497346">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01404">1404</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -466,7 +518,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae52b435d2acdb2e4d9c18594bf90a8c8">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01301">1301</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01414">1414</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -503,7 +555,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a6f26c731e1f73666f5210be99bb3db52">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01308">1308</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01421">1421</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -540,7 +592,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac00fed62056c476c5aec27e4b40b71eb">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01314">1314</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01427">1427</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -570,7 +622,7 @@ Additional Inherited Members</h2></td></tr>
 <p>The selection mode last set. </p>
 <dl class="section return"><dt>Returns</dt><dd>The mode; <span class="tt">None</span> until <span class="tt"><a class="el" href="#a8b2bdca6a57de4f3e7be36bdf281a86e" title="Records property selectionMode, which RecordingBackend::selectRows enforces.">setSelectionMode</a></span> runs. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01318">1318</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01431">1431</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -606,7 +658,7 @@ Additional Inherited Members</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The row's id, or <span class="tt">nullopt</span> when no current row has <code class="param">key</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01323">1323</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01436">1436</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -641,7 +693,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01334">1334</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01447">1447</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

@@ -179,13 +179,15 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <tr class="memdesc:acd96cdee9dbd020cddc43d192bd24600"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens or closes a collapsible section with its own control, as a user would.  <br /></td></tr>
 <tr class="memitem:ac5fc06f5c06036f4aed7c62881e2332e" id="r_ac5fc06f5c06036f4aed7c62881e2332e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ac5fc06f5c06036f4aed7c62881e2332e">dropFiles</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;zone, std::vector&lt; std::string &gt; const &amp;paths)=0</td></tr>
 <tr class="memdesc:ac5fc06f5c06036f4aed7c62881e2332e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops files from the operating system onto a drop zone, as a user would.  <br /></td></tr>
+<tr class="memitem:a26efd279f0b1470fd1bbef23b136afe3" id="r_a26efd279f0b1470fd1bbef23b136afe3"><td class="memItemLeft">virtual std::optional&lt; <a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a26efd279f0b1470fd1bbef23b136afe3">boundsOf</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;widget)</td></tr>
+<tr class="memdesc:a26efd279f0b1470fd1bbef23b136afe3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a widget is drawn, for the layout cases (<span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#aecf398a21dce6aeb7feecf89f6d25313" title="The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose b...">layoutConformanceCases</a></span>). A backend that lays nothing out, such as <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html" title="A headless IViewBackend: fake widgets that record every operation, a golden dump of the live tree,...">RecordingBackend</a></span>, answers none and runs only <span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46" title="Every conformance case, in a fixed order.">conformanceCases</a></span>; a layout case run on it fails.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How the conformance cases read and drive one backend under test. </p>
 <p>The driving operations act as a user would, through the backend's own input path where it has one; each may run pending work before and after it. Reading operations report what the widget shows now.</p>
 <p>Whether a handler can run after its widget was destroyed is observable only for a backend whose input can be delivered later than the driving call, such as a queued connection; a probe whose <span class="tt"><a class="el" href="#a5e8271e983eade47e61cad83579f27f0" title="Activates a button as a user would.">click</a></span> delivers before it returns passes that case without exercising it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a3ce5ac62ebd304294599ba1696be87ce" name="a3ce5ac62ebd304294599ba1696be87ce"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3ce5ac62ebd304294599ba1696be87ce">&#9670;&#160;</a></span>backend()</h2>
@@ -887,6 +889,42 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="a26efd279f0b1470fd1bbef23b136afe3" name="a26efd279f0b1470fd1bbef23b136afe3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a26efd279f0b1470fd1bbef23b136afe3">&#9670;&#160;</a></span>boundsOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::optional&lt; <a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a> &gt; morph::ui::testing::ConformanceProbe::boundsOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>widget</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where a widget is drawn, for the layout cases (<span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#aecf398a21dce6aeb7feecf89f6d25313" title="The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose b...">layoutConformanceCases</a></span>). A backend that lays nothing out, such as <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html" title="A headless IViewBackend: fake widgets that record every operation, a golden dump of the live tree,...">RecordingBackend</a></span>, answers none and runs only <span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46" title="Every conformance case, in a fixed order.">conformanceCases</a></span>; a layout case run on it fails. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">widget</td><td>The widget. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its bounds, in the backend's own units; <span class="tt">nullopt</span> when the probe reads no geometry. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

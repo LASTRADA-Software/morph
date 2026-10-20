@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['zerodigit_0',['zeroDigit',['../dc/ddc/structmorph_1_1render_1_1NumericLocale.html#abe01b9aa6d09b055a8567149fd5f79fb',1,'morph::render::NumericLocale']]]
+  ['x_0',['x',['../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html#a9f29f89148496835bf3008a9f53ea410',1,'morph::ui::testing::WidgetBounds']]]
 ];

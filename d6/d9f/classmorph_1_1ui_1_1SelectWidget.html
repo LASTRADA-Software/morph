@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::SelectWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,300,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; SelectWidget &gt;" shape="rect" coords="0,168,300,192"/>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; SelectWidget &gt;" shape="rect" coords="0,224,300,248"/>
-<area href="../../d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html" title="A fake SelectWidget: properties style, options, selected." alt="morph::ui::testing::detail::FakeSelect" shape="rect" coords="0,280,300,304"/>
+<area href="../../d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html" title="A fake SelectWidget: properties style, options, selected, caption, captionShown." alt="morph::ui::testing::detail::FakeSelect" shape="rect" coords="0,280,300,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -149,6 +149,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0cc32a4a1806655cba232495dbc20218"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user choice calls, with the option's key.  <br /></td></tr>
 <tr class="memitem:a3cab8ab9d264cbf24746b154df0afcfe" id="r_a3cab8ab9d264cbf24746b154df0afcfe"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a3cab8ab9d264cbf24746b154df0afcfe">setOnOpen</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onOpen)</td></tr>
 <tr class="memdesc:a3cab8ab9d264cbf24746b154df0afcfe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Calls <code class="param">onOpen</code> each time the user opens the dropdown, also when it has no options to show. A radio group, and a backend that does not report opening, keep the default, which never calls it: opening is a hint, such as a retry of a failed fetch of the options, never something a select relies on.  <br /></td></tr>
+<tr class="memitem:ad40c88b8b06a82a2be2edbe8522eea8b" id="r_ad40c88b8b06a82a2be2edbe8522eea8b"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad40c88b8b06a82a2be2edbe8522eea8b">setCaption</a> (std::string_view label, bool shown)=0</td></tr>
+<tr class="memdesc:ad40c88b8b06a82a2be2edbe8522eea8b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1FieldWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html">morph::ui::FieldWidget</a></td></tr>
 <tr class="memitem:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_a2191979f8dc3a207166ad1c5c58d7080"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#a2191979f8dc3a207166ad1c5c58d7080">setReadOnly</a> (bool readonly)=0</td></tr>
 <tr class="memdesc:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the value read-only or editable again. A read-only field still takes focus and lets its text be selected, and reports no edit, submit or commit.  <br /></td></tr>
@@ -198,7 +200,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <div class="textblock"><p>A choice of one keyed option. </p>
 <p>The widget keeps the key last requested by <span class="tt"><a class="el" href="#a301feb38ab667c29ff68a534e4fd9486" title="Requests the option with key. It is marked while the options contain it; otherwise none is marked....">setSelected</a></span> or chosen by the user, and marks the option with that key whenever the current options contain one. A key outside the options marks none, and stays requested: options that bring it back mark it again. Options and selection may therefore arrive in either order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a0d34e0a47dcf6c6b88476cd5fa3f4eec" name="a0d34e0a47dcf6c6b88476cd5fa3f4eec"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0d34e0a47dcf6c6b88476cd5fa3f4eec">&#9670;&#160;</a></span>setOptions()</h2>
@@ -338,7 +340,47 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 <p>Reimplemented in <a class="el" href="../../d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a8f72fac72ef3e061e57fa7f9f096fde7">morph::ui::testing::detail::FakeSelect</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad40c88b8b06a82a2be2edbe8522eea8b" name="ad40c88b8b06a82a2be2edbe8522eea8b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad40c88b8b06a82a2be2edbe8522eea8b">&#9670;&#160;</a></span>setCaption()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::SelectWidget::setCaption </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
+    <tr><td class="paramname">shown</td><td>Whether the input shows it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#ae258833a0188999ff78b0ee3754d9a28">morph::ui::testing::detail::FakeSelect</a>.</p>
 
 </div>
 </div>

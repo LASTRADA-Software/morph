@@ -133,7 +133,7 @@ Inheritance diagram for morph::ui::ButtonWidget:</div>
   <map id="morph_3A_3Aui_3A_3AButtonWidget_map" name="morph_3A_3Aui_3A_3AButtonWidget_map">
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,297,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; ButtonWidget &gt;" shape="rect" coords="0,112,297,136"/>
-<area href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html" title="A fake ButtonWidget: properties label and emphasis." alt="morph::ui::testing::detail::FakeButton" shape="rect" coords="0,168,297,192"/>
+<area href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html" title="A fake ButtonWidget: properties label, emphasis, icon, style and selected." alt="morph::ui::testing::detail::FakeButton" shape="rect" coords="0,168,297,192"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -145,6 +145,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:adb29f86dae28c307bf4a14e3052cfaee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what activation calls (Enter, Space or a click).  <br /></td></tr>
 <tr class="memitem:aa59762c08dd9a998a2a04a7a81c037cc" id="r_aa59762c08dd9a998a2a04a7a81c037cc"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa59762c08dd9a998a2a04a7a81c037cc">setEmphasis</a> (<a class="el" href="../../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a> emphasis)=0</td></tr>
 <tr class="memdesc:aa59762c08dd9a998a2a04a7a81c037cc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets how much the button stands out. The mount calls it only for another value than <span class="tt">Normal</span>.  <br /></td></tr>
+<tr class="memitem:ac9d9bd83f40d5386d25828130abcd476" id="r_ac9d9bd83f40d5386d25828130abcd476"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ac9d9bd83f40d5386d25828130abcd476">setIcon</a> (std::string_view icon)=0</td></tr>
+<tr class="memdesc:ac9d9bd83f40d5386d25828130abcd476"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the icon drawn beside the caption; called once, and only for a button that has one.  <br /></td></tr>
+<tr class="memitem:ab2f83b47fee4bb0cd8aed0fe5bedc2ea" id="r_ab2f83b47fee4bb0cd8aed0fe5bedc2ea"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab2f83b47fee4bb0cd8aed0fe5bedc2ea">setStyle</a> (<a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5">ButtonStyle</a> style)=0</td></tr>
+<tr class="memdesc:ab2f83b47fee4bb0cd8aed0fe5bedc2ea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets how the button is drawn. A new button is a push button; the mount calls it once, only for <span class="tt">Item</span>.  <br /></td></tr>
+<tr class="memitem:a57b42a827084d5ed8c87d5f9954cd766" id="r_a57b42a827084d5ed8c87d5f9954cd766"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a57b42a827084d5ed8c87d5f9954cd766">setSelected</a> (bool selected)=0</td></tr>
+<tr class="memdesc:a57b42a827084d5ed8c87d5f9954cd766"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount calls it only for an <span class="tt">Item</span>, when bound or <span class="tt">true</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -288,6 +294,111 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html#a0d64a98dd75503f5a8c6dcb01db2377b">morph::ui::testing::detail::FakeButton</a>.</p>
+
+</div>
+</div>
+<a id="ac9d9bd83f40d5386d25828130abcd476" name="ac9d9bd83f40d5386d25828130abcd476"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac9d9bd83f40d5386d25828130abcd476">&#9670;&#160;</a></span>setIcon()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::ButtonWidget::setIcon </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>icon</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the icon drawn beside the caption; called once, and only for a button that has one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">icon</td><td>The name of an icon in the theme's icon set. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html#a6dabbad4a9325727ef255b5847b7dfb3">morph::ui::testing::detail::FakeButton</a>.</p>
+
+</div>
+</div>
+<a id="ab2f83b47fee4bb0cd8aed0fe5bedc2ea" name="ab2f83b47fee4bb0cd8aed0fe5bedc2ea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2f83b47fee4bb0cd8aed0fe5bedc2ea">&#9670;&#160;</a></span>setStyle()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::ButtonWidget::setStyle </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5">ButtonStyle</a></td>          <td class="paramname"><span class="paramname"><em>style</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets how the button is drawn. A new button is a push button; the mount calls it once, only for <span class="tt">Item</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">style</td><td>The style. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html#a0215d29313da9bcc83c850f7a8f84db7">morph::ui::testing::detail::FakeButton</a>.</p>
+
+</div>
+</div>
+<a id="a57b42a827084d5ed8c87d5f9954cd766" name="a57b42a827084d5ed8c87d5f9954cd766"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a57b42a827084d5ed8c87d5f9954cd766">&#9670;&#160;</a></span>setSelected()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::ButtonWidget::setSelected </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>selected</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount calls it only for an <span class="tt">Item</span>, when bound or <span class="tt">true</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">selected</td><td>Whether it is the current one. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html#ad3b78fd0c0ed498818a568c1efb692ae">morph::ui::testing::detail::FakeButton</a>.</p>
 
 </div>
 </div>

@@ -2,11 +2,13 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
 [
     [ "testing", "dir_38ec2fbe70709af2d3c11d894513cd88.html", "dir_38ec2fbe70709af2d3c11d894513cd88" ],
     [ "agent.hpp", "dd/d2d/agent_8hpp.html", "dd/d2d/agent_8hpp" ],
+    [ "alignment.hpp", "d9/dd9/alignment_8hpp.html", "d9/dd9/alignment_8hpp" ],
     [ "author.hpp", "d1/dc0/author_8hpp.html", "d1/dc0/author_8hpp" ],
     [ "author_forms.hpp", "d0/d4d/author__forms_8hpp.html", "d0/d4d/author__forms_8hpp" ],
     [ "backend.hpp", "d0/dc2/ui_2backend_8hpp.html", "d0/dc2/ui_2backend_8hpp" ],
     [ "bundle.hpp", "d0/dab/bundle_8hpp.html", "d0/dab/bundle_8hpp" ],
     [ "button_emphasis.hpp", "d5/dae/button__emphasis_8hpp.html", "d5/dae/button__emphasis_8hpp" ],
+    [ "button_style.hpp", "dd/d96/button__style_8hpp.html", "dd/d96/button__style_8hpp" ],
     [ "catalogue.hpp", "d1/d1e/catalogue_8hpp.html", "d1/d1e/catalogue_8hpp" ],
     [ "dev_reload.hpp", "d0/dcd/dev__reload_8hpp.html", "d0/dcd/dev__reload_8hpp" ],
     [ "dev_tools.hpp", "d3/d6d/dev__tools_8hpp.html", "d3/d6d/dev__tools_8hpp" ],
@@ -33,5 +35,6 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
     [ "theme.hpp", "d9/df6/ui_2theme_8hpp.html", "d9/df6/ui_2theme_8hpp" ],
     [ "value.hpp", "d6/dda/value_8hpp.html", "d6/dda/value_8hpp" ],
     [ "view.hpp", "d8/d11/view_8hpp.html", "d8/d11/view_8hpp" ],
-    [ "workspace.hpp", "dc/de1/workspace_8hpp.html", "dc/de1/workspace_8hpp" ]
+    [ "workspace.hpp", "dc/de1/workspace_8hpp.html", "dc/de1/workspace_8hpp" ],
+    [ "workspace_model.hpp", "d0/d27/workspace__model_8hpp.html", "d0/d27/workspace__model_8hpp" ]
 ];

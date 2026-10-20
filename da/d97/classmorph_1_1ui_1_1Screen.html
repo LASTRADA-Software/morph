@@ -148,6 +148,14 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <tr class="memdesc:a9d170f37684ec1cf1d5f5425b050925d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the document's <span class="tt"><a class="el" href="#a9d170f37684ec1cf1d5f5425b050925d" title="Evaluates the document&#39;s title.">title</a></span>.  <br /></td></tr>
 <tr class="memitem:a965ff0074fb10c900a0a1671aa9e9036" id="r_a965ff0074fb10c900a0a1671aa9e9036"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a965ff0074fb10c900a0a1671aa9e9036">identity</a> () const</td></tr>
 <tr class="memdesc:a965ff0074fb10c900a0a1671aa9e9036"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the document's <span class="tt"><a class="el" href="#a965ff0074fb10c900a0a1671aa9e9036" title="Evaluates the document&#39;s identity.">identity</a></span>.  <br /></td></tr>
+<tr class="memitem:a9bd8bf05ce292888fa6dd27c279e4cbc" id="r_a9bd8bf05ce292888fa6dd27c279e4cbc"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9bd8bf05ce292888fa6dd27c279e4cbc">subtitle</a> () const</td></tr>
+<tr class="memdesc:a9bd8bf05ce292888fa6dd27c279e4cbc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the document's <span class="tt"><a class="el" href="#a9bd8bf05ce292888fa6dd27c279e4cbc" title="Evaluates the document&#39;s subtitle, the head&#39;s line under the title.">subtitle</a></span>, the head's line under the title.  <br /></td></tr>
+<tr class="memitem:aca33fb8c36c66cbf6db6b7b864a5ccfb" id="r_aca33fb8c36c66cbf6db6b7b864a5ccfb"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d2f/structmorph_1_1ui_1_1HeadBadge.html">HeadBadge</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aca33fb8c36c66cbf6db6b7b864a5ccfb">status</a> () const</td></tr>
+<tr class="memdesc:aca33fb8c36c66cbf6db6b7b864a5ccfb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's status badges that are visible now, in order. A tracked read.  <br /></td></tr>
+<tr class="memitem:a5d39dbae9fe03e26450dfded93e4f8c0" id="r_a5d39dbae9fe03e26450dfded93e4f8c0"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d3/d86/structmorph_1_1ui_1_1HeadAction.html">HeadAction</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5d39dbae9fe03e26450dfded93e4f8c0">actions</a> () const</td></tr>
+<tr class="memdesc:a5d39dbae9fe03e26450dfded93e4f8c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's actions that are visible now, in order, each with whether it is enabled. A tracked read.  <br /></td></tr>
+<tr class="memitem:a7502d884e31e813b49b726363d44b57e" id="r_a7502d884e31e813b49b726363d44b57e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7502d884e31e813b49b726363d44b57e">runAction</a> (std::string_view actionId)</td></tr>
+<tr class="memdesc:a7502d884e31e813b49b726363d44b57e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs a head action's <span class="tt">onClick</span> as a user event in the screen scope, in one batch.  <br /></td></tr>
 <tr class="memitem:a0a329ba938eb00c0038c0c211729d8f4" id="r_a0a329ba938eb00c0038c0c211729d8f4"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0a329ba938eb00c0038c0c211729d8f4">dirty</a> () const</td></tr>
 <tr class="memdesc:a0a329ba938eb00c0038c0c211729d8f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the document's <span class="tt"><a class="el" href="#a0a329ba938eb00c0038c0c211729d8f4" title="Evaluates the document&#39;s dirty.">dirty</a></span>.  <br /></td></tr>
 <tr class="memitem:aa6448a986c4487adb6b1a25159505318" id="r_aa6448a986c4487adb6b1a25159505318"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa6448a986c4487adb6b1a25159505318">pending</a> () const</td></tr>
@@ -175,7 +183,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <div class="textblock"><p>A mounted screen: its scopes, its view mounted through <span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html" title="A view tree mounted on a backend: its widgets, built once, and the bindings that keep them current.">Mounted</a></span>, and what its host asks of it. </p>
 <p>Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and the backend outlive it. Destroying it runs <span class="tt">onUnmount</span>, unmounts the view and releases every scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02529">2529</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02695">2695</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a59328acdd48a28a5e5e2195c8f2d3ed6" name="a59328acdd48a28a5e5e2195c8f2d3ed6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a59328acdd48a28a5e5e2195c8f2d3ed6">&#9670;&#160;</a></span>~Screen()</h2>
@@ -202,7 +210,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 
 <p>Runs <span class="tt">onUnmount</span>, then unmounts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02537">2537</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02703">2703</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -233,7 +241,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The root widget. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02551">2551</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02719">2719</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -263,7 +271,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The document's id. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02560">2560</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02728">2728</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -299,7 +307,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value; <span class="tt">null</span> for an expression that does not parse. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02566">2566</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02734">2734</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -329,7 +337,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a9d170f37684ec1cf1d5f5425b050925d" title="Evaluates the document&#39;s title.">title</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02576">2576</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02744">2744</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -359,7 +367,133 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a965ff0074fb10c900a0a1671aa9e9036" title="Evaluates the document&#39;s identity.">identity</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02580">2580</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02748">2748</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9bd8bf05ce292888fa6dd27c279e4cbc" name="a9bd8bf05ce292888fa6dd27c279e4cbc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9bd8bf05ce292888fa6dd27c279e4cbc">&#9670;&#160;</a></span>subtitle()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> morph::ui::Screen::subtitle </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Evaluates the document's <span class="tt"><a class="el" href="#a9bd8bf05ce292888fa6dd27c279e4cbc" title="Evaluates the document&#39;s subtitle, the head&#39;s line under the title.">subtitle</a></span>, the head's line under the title. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">null</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02752">2752</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aca33fb8c36c66cbf6db6b7b864a5ccfb" name="aca33fb8c36c66cbf6db6b7b864a5ccfb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aca33fb8c36c66cbf6db6b7b864a5ccfb">&#9670;&#160;</a></span>status()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../dd/d2f/structmorph_1_1ui_1_1HeadBadge.html">HeadBadge</a> &gt; morph::ui::Screen::status </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's status badges that are visible now, in order. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02756">2756</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5d39dbae9fe03e26450dfded93e4f8c0" name="a5d39dbae9fe03e26450dfded93e4f8c0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5d39dbae9fe03e26450dfded93e4f8c0">&#9670;&#160;</a></span>actions()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d3/d86/structmorph_1_1ui_1_1HeadAction.html">HeadAction</a> &gt; morph::ui::Screen::actions </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's actions that are visible now, in order, each with whether it is enabled. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02769">2769</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7502d884e31e813b49b726363d44b57e" name="a7502d884e31e813b49b726363d44b57e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7502d884e31e813b49b726363d44b57e">&#9670;&#160;</a></span>runAction()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Screen::runAction </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Runs a head action's <span class="tt">onClick</span> as a user event in the screen scope, in one batch. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">actionId</td><td>The action's id. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it ran: <span class="tt">false</span>, with a diagnostic, for an id the head does not hold, or holds hidden or disabled. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02787">2787</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -389,7 +523,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Evaluates the document's <span class="tt"><a class="el" href="#a0a329ba938eb00c0038c0c211729d8f4" title="Evaluates the document&#39;s dirty.">dirty</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is <span class="tt">true</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02584">2584</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02807">2807</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -419,7 +553,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Whether the screen has work a close waits for: an open dialog or drawer, a mutation run, or an upload or download in flight, in any of its scopes (spec 6 §3). A tracked read, so an Effect that reads it runs again when it changes. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02594">2594</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02817">2817</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +583,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The reactive runtime the screen runs on. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02598">2598</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02821">2821</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +613,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Runs <span class="tt">onClose</span>, as the host does before it closes the screen. </p>
 <dl class="section return"><dt>Returns</dt><dd>False when <span class="tt">onClose</span> ran <span class="tt">cancelClose</span>: the screen stays open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02602">2602</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02825">2825</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -509,7 +643,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>Runs <span class="tt">onClose</span>, and hands back the flag its <span class="tt">cancelClose</span> sets. </p>
 <p>The flag is shared with every command list <span class="tt">onClose</span> starts, such as the <span class="tt">onResult</span> of a confirm dialog it opens, so it can still be set after this returns; a host reads it once the screen is no longer <span class="tt"><a class="el" href="#aa6448a986c4487adb6b1a25159505318" title="Whether the screen has work a close waits for: an open dialog or drawer, a mutation run,...">pending()</a></span>. </p><dl class="section return"><dt>Returns</dt><dd>The flag, or <span class="tt">nullptr</span> when the document declares no <span class="tt">onClose</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02612">2612</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02835">2835</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -545,7 +679,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02623">2623</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02846">2846</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -580,7 +714,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02627">2627</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02850">2850</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -610,7 +744,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The diagnostics reported so far, each path and reason once. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02635">2635</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02858">2858</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -651,7 +785,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it fits and was taken. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02642">2642</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02865">2865</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -681,7 +815,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 <p>The screen's document, whose <span class="tt">customize</span> block names the points a preferences store loads. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02655">2655</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02878">2878</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -717,7 +851,7 @@ Screen &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Screen &amp;&a
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its channel and token; an empty channel when it has none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06677">6677</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07543">7543</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

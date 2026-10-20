@@ -185,6 +185,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt">navigate</span> asks the host to open (spec 6 §16, §20).  <a href="../../dc/d75/structmorph_1_1ui_1_1NavigateRequest.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AUploadRequest" id="r_morph_3A_3Aui_3A_3AUploadRequest"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/ddd/structmorph_1_1ui_1_1UploadRequest.html">morph::ui::UploadRequest</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What an <span class="tt">upload</span> command asks the host to send, and the mutation that will reference the file, which is what the server authorises the upload as (spec 6 §18).  <a href="../../d9/ddd/structmorph_1_1ui_1_1UploadRequest.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AInlineFile" id="r_morph_3A_3Aui_3A_3AInlineFile"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dc7/structmorph_1_1ui_1_1InlineFile.html">morph::ui::InlineFile</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A file whose bytes a document moves inline: <span class="tt">download</span> from bytes, <span class="tt">upload</span> into bytes.  <a href="../../dd/dc7/structmorph_1_1ui_1_1InlineFile.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AInterpreterHost" id="r_morph_3A_3Aui_3A_3AInterpreterHost"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html">morph::ui::InterpreterHost</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the application answers for the commands a document cannot carry out alone (spec 6). Every default answers "not supported", which the interpreter reports as a diagnostic.  <a href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASessionOptions" id="r_morph_3A_3Aui_3A_3ASessionOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html">morph::ui::SessionOptions</a></td></tr>
@@ -239,12 +241,20 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a command list runs: its scope, the names bound there, and what it may answer.  <a href="../../d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ALowerCtx" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ALowerCtx"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">morph::ui::detail::LowerCtx</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a node is lowered: its scope, the names bound there and the boundary that owns its queries.  <a href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AActionModel" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AActionModel"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel.html">morph::ui::detail::ActionModel</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An <span class="tt">actionButton</span> part, lowered in the scope of the list it belongs to: what a screen's head shows and an overlay's footer draws as buttons.  <a href="../../d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ABadgeModel" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ABadgeModel"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html">morph::ui::detail::BadgeModel</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">headBadge</span> part, lowered in the screen scope.  <a href="../../d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html">morph::ui::detail::ScreenCore</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that declares scopes, lowers nodes and runs commands.  <a href="../../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore_3A_3AKeptState" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore_3A_3AKeptState"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html">morph::ui::detail::ScreenCore::KeptState</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A state of the screen this one replaces: its declared type's name and its value.  <a href="../../d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore_3A_3ALoweredNode" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AScreenCore_3A_3ALoweredNode"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html">morph::ui::detail::ScreenCore::LoweredNode</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A node as it was lowered, which the inspector lists while its scope lives.  <a href="../../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AHeadBadge" id="r_morph_3A_3Aui_3A_3AHeadBadge"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d2f/structmorph_1_1ui_1_1HeadBadge.html">morph::ui::HeadBadge</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A status badge of a screen's head, as its handle answers it.  <a href="../../dd/d2f/structmorph_1_1ui_1_1HeadBadge.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AHeadAction" id="r_morph_3A_3Aui_3A_3AHeadAction"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d86/structmorph_1_1ui_1_1HeadAction.html">morph::ui::HeadAction</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An action of a screen's head, as its handle answers it.  <a href="../../d3/d86/structmorph_1_1ui_1_1HeadAction.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AScreen" id="r_morph_3A_3Aui_3A_3AScreen"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/d97/classmorph_1_1ui_1_1Screen.html">morph::ui::Screen</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A mounted screen: its scopes, its view mounted through <span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html" title="A view tree mounted on a backend: its widgets, built once, and the bindings that keep them current.">Mounted</a></span>, and what its host asks of it.  <a href="../../da/d97/classmorph_1_1ui_1_1Screen.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AAppRoot" id="r_morph_3A_3Aui_3A_3AAppRoot"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d83/classmorph_1_1ui_1_1AppRoot.html">morph::ui::AppRoot</a></td></tr>
@@ -272,6 +282,8 @@ Typedefs</h2></td></tr>
 <tr class="memdesc:adb1bad3b6835a38393f5c80badce05e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">One run of a mutation, as a command sees it: whether it succeeded, and the reply.  <br /></td></tr>
 <tr class="memitem:a82972b9a51cae8a658d17961a41c62fa" id="r_a82972b9a51cae8a658d17961a41c62fa"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a82972b9a51cae8a658d17961a41c62fa">morph::ui::detail::Done</a> = std::function&lt;void(bool)&gt;</td></tr>
 <tr class="memdesc:a82972b9a51cae8a658d17961a41c62fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called once when a command finishes: whether it succeeded.  <br /></td></tr>
+<tr class="memitem:aab64f809e95347d45245abacf4fcce84" id="r_aab64f809e95347d45245abacf4fcce84"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aab64f809e95347d45245abacf4fcce84">morph::ui::detail::ActionModels</a> = std::vector&lt;<a class="el" href="../../d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel.html">ActionModel</a>&gt;</td></tr>
+<tr class="memdesc:aab64f809e95347d45245abacf4fcce84"><td class="mdescLeft">&#160;</td><td class="mdescRight">A list of lowered <span class="tt">actionButton</span> parts, in document order.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
@@ -354,6 +366,16 @@ Functions</h2></td></tr>
 <tr class="memdesc:a3cd2ef69ff1c2ba74e40bf828a7e312a"><td class="mdescLeft">&#160;</td><td class="mdescRight">One field of a form as a record: <span class="tt">value</span> (the encoded value, <span class="tt">null</span> while blank or invalid), <span class="tt">draft</span> (the text), <span class="tt">valid</span>, <span class="tt">required</span>, <span class="tt">visible</span>, <span class="tt">readonly</span> and <span class="tt">errors</span>. Tracked.  <br /></td></tr>
 <tr class="memitem:a4885aa10182f83b110dd4ac948e293e7" id="r_a4885aa10182f83b110dd4ac948e293e7"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4885aa10182f83b110dd4ac948e293e7">morph::ui::detail::formValue</a> (<a class="el" href="../../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html">ElementState</a> const &amp;element, std::string_view name)</td></tr>
 <tr class="memdesc:a4885aa10182f83b110dd4ac948e293e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">A form's element values (spec 5 §6): <span class="tt">ready</span>, <span class="tt">body</span> (the record the form would submit, <span class="tt">null</span> while not ready), <span class="tt">submitted</span> (whether a submission was sent), <span class="tt">pending</span>, and each field by its wire name. Tracked.  <br /></td></tr>
+<tr class="memitem:a975c9cde4915bcd28bf75f650e6f8c78" id="r_a975c9cde4915bcd28bf75f650e6f8c78"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a975c9cde4915bcd28bf75f650e6f8c78">morph::ui::detail::base64Encode</a> (std::string_view bytes)</td></tr>
+<tr class="memdesc:a975c9cde4915bcd28bf75f650e6f8c78"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bytes as base64 (RFC 4648, with padding): how a document carries an inline file.  <br /></td></tr>
+<tr class="memitem:a8fc0a6e91d8d89a2d5a31bd1a9849e6e" id="r_a8fc0a6e91d8d89a2d5a31bd1a9849e6e"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8fc0a6e91d8d89a2d5a31bd1a9849e6e">morph::ui::detail::base64Decode</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a8fc0a6e91d8d89a2d5a31bd1a9849e6e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Base64 text as bytes (RFC 4648, with or without padding).  <br /></td></tr>
+<tr class="memitem:a74dbf259e0fa6ff3dafcf8d366e9fd15" id="r_a74dbf259e0fa6ff3dafcf8d366e9fd15"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a74dbf259e0fa6ff3dafcf8d366e9fd15">morph::ui::detail::base64Size</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a74dbf259e0fa6ff3dafcf8d366e9fd15"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many bytes base64 text decodes to, read from its length alone.  <br /></td></tr>
+<tr class="memitem:a108d6ed7b1de5c31bcd8163c67b7085e" id="r_a108d6ed7b1de5c31bcd8163c67b7085e"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a108d6ed7b1de5c31bcd8163c67b7085e">morph::ui::detail::sizeText</a> (std::size_t bytes)</td></tr>
+<tr class="memdesc:a108d6ed7b1de5c31bcd8163c67b7085e"><td class="mdescLeft">&#160;</td><td class="mdescRight">A byte count as a person reads it: <span class="tt">512 bytes</span>, <span class="tt">2.4 KiB</span>, <span class="tt">1 MiB</span>.  <br /></td></tr>
+<tr class="memitem:a0d2a5b0b6e012c86fd19b2b891a5f130" id="r_a0d2a5b0b6e012c86fd19b2b891a5f130"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0d2a5b0b6e012c86fd19b2b891a5f130">morph::ui::detail::inlineBytes</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:a0d2a5b0b6e012c86fd19b2b891a5f130"><td class="mdescLeft">&#160;</td><td class="mdescRight">A document's inline file content as bytes: base64 text, or a list of integers 0 to 255.  <br /></td></tr>
 <tr class="memitem:ad052ae1a07cb000f0d6402c23aff6e0b" id="r_ad052ae1a07cb000f0d6402c23aff6e0b"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad052ae1a07cb000f0d6402c23aff6e0b">morph::ui::detail::boolOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
 <tr class="memdesc:ad052ae1a07cb000f0d6402c23aff6e0b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A value as a <span class="tt">bool</span> property: <span class="tt">true</span> only for <span class="tt">true</span>.  <br /></td></tr>
 <tr class="memitem:adfc188dc908560855854b7ac399faf1c" id="r_adfc188dc908560855854b7ac399faf1c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#adfc188dc908560855854b7ac399faf1c">morph::ui::detail::stringOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
@@ -366,12 +388,20 @@ Functions</h2></td></tr>
 <tr class="memdesc:a1992aa08a839b4a733930666dcb848b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A custom component's event payload as a value: <span class="tt">i:&lt;int64&gt;</span> an <span class="tt">int</span>, <span class="tt">s:&lt;<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>&gt;</span> a <span class="tt">string</span>, anything else JSON text read as the event's declared type, and text that is none of those a <span class="tt">string</span>.  <br /></td></tr>
 <tr class="memitem:ab01a3c040e4fd72e3a5fa8d3998208df" id="r_ab01a3c040e4fd72e3a5fa8d3998208df"><td class="memItemLeft">std::int64_t&#160;</td><td class="memItemRight"><a class="el" href="#ab01a3c040e4fd72e3a5fa8d3998208df">morph::ui::detail::intOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, std::int64_t fallback)</td></tr>
 <tr class="memdesc:ab01a3c040e4fd72e3a5fa8d3998208df"><td class="mdescLeft">&#160;</td><td class="mdescRight">A value as an integer: an <span class="tt">int</span>, or a decimal truncated toward zero.  <br /></td></tr>
+<tr class="memitem:a399f42fbac91b84be088eab5a87994f2" id="r_a399f42fbac91b84be088eab5a87994f2"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a399f42fbac91b84be088eab5a87994f2">morph::ui::detail::roleNamed</a> (std::string_view name)</td></tr>
+<tr class="memdesc:a399f42fbac91b84be088eab5a87994f2"><td class="mdescLeft">&#160;</td><td class="mdescRight">A text role by name.  <br /></td></tr>
 <tr class="memitem:affa0c0308a545d40dec03a4ef80e6724" id="r_affa0c0308a545d40dec03a4ef80e6724"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a>&#160;</td><td class="memItemRight"><a class="el" href="#affa0c0308a545d40dec03a4ef80e6724">morph::ui::detail::roleOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
-<tr class="memdesc:affa0c0308a545d40dec03a4ef80e6724"><td class="mdescLeft">&#160;</td><td class="mdescRight">A text role by name.  <br /></td></tr>
+<tr class="memdesc:affa0c0308a545d40dec03a4ef80e6724"><td class="mdescLeft">&#160;</td><td class="mdescRight">A text role by name, as <span class="tt"><a class="el" href="#a399f42fbac91b84be088eab5a87994f2" title="A text role by name.">roleNamed</a></span> reads it.  <br /></td></tr>
 <tr class="memitem:af052a28aecac55e902220ed7ab4f941d" id="r_af052a28aecac55e902220ed7ab4f941d"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a>&#160;</td><td class="memItemRight"><a class="el" href="#af052a28aecac55e902220ed7ab4f941d">morph::ui::detail::toneOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
 <tr class="memdesc:af052a28aecac55e902220ed7ab4f941d"><td class="mdescLeft">&#160;</td><td class="mdescRight">A tone by name.  <br /></td></tr>
 <tr class="memitem:acbc3b27e4669a2d35dfe265b395687b2" id="r_acbc3b27e4669a2d35dfe265b395687b2"><td class="memItemLeft"><a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a>&#160;</td><td class="memItemRight"><a class="el" href="#acbc3b27e4669a2d35dfe265b395687b2">morph::ui::detail::sizingOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
 <tr class="memdesc:acbc3b27e4669a2d35dfe265b395687b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">A sizing by its document form: <span class="tt">"content"</span>, <span class="tt">{"fixed": n}</span> or <span class="tt">{"stretch": w}</span>.  <br /></td></tr>
+<tr class="memitem:ab7601823069437db1487247bdb16a73f" id="r_ab7601823069437db1487247bdb16a73f"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab7601823069437db1487247bdb16a73f">morph::ui::detail::isSizing</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:ab7601823069437db1487247bdb16a73f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a value is a sizing of one dimension: <span class="tt">"content"</span>, <span class="tt">{"fixed": n}</span> or <span class="tt">{"stretch": w}</span>.  <br /></td></tr>
+<tr class="memitem:aaed0b0a590eaa99efc2f26d80b636dd0" id="r_aaed0b0a590eaa99efc2f26d80b636dd0"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#aaed0b0a590eaa99efc2f26d80b636dd0">morph::ui::detail::alignOf</a> (std::string_view name)</td></tr>
+<tr class="memdesc:aaed0b0a590eaa99efc2f26d80b636dd0"><td class="mdescLeft">&#160;</td><td class="mdescRight">An alignment by name, as the loader checked it: <span class="tt">start</span>, <span class="tt">center</span>, <span class="tt">end</span>, or stretch for none.  <br /></td></tr>
+<tr class="memitem:a3e1037b78c8cdaf9ecc47a952152d583" id="r_a3e1037b78c8cdaf9ecc47a952152d583"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3e1037b78c8cdaf9ecc47a952152d583">morph::ui::detail::justifyOf</a> (std::string_view name)</td></tr>
+<tr class="memdesc:a3e1037b78c8cdaf9ecc47a952152d583"><td class="mdescLeft">&#160;</td><td class="mdescRight">A justification by name, as the loader checked it: <span class="tt">center</span>, <span class="tt">end</span>, <span class="tt"><a class="el" href="../../d5/d8c/message_8hpp.html#a80bd07a4e729108b0953069fae80383e" title="Whether an operand lies in a CLDR range low..high.">between</a></span>, or start for none.  <br /></td></tr>
 <tr class="memitem:a1f3a9f22d8d8795456b80b0299668f80" id="r_a1f3a9f22d8d8795456b80b0299668f80"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5">Axis</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1f3a9f22d8d8795456b80b0299668f80">morph::ui::detail::axisOf</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
 <tr class="memdesc:a1f3a9f22d8d8795456b80b0299668f80"><td class="mdescLeft">&#160;</td><td class="mdescRight">An axis by name: <span class="tt">horizontal</span>, or vertical for anything else.  <br /></td></tr>
 <tr class="memitem:aae57f2a6e1bf4112756d6f3bf30fe193" id="r_aae57f2a6e1bf4112756d6f3bf30fe193"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0">StepState</a>&#160;</td><td class="memItemRight"><a class="el" href="#aae57f2a6e1bf4112756d6f3bf30fe193">morph::ui::detail::stepStateOf</a> (std::string_view name)</td></tr>
@@ -388,6 +418,10 @@ Functions</h2></td></tr>
 <tr class="memdesc:a592a82727ba371257d15f567a68828bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Detaches a lowering context's scope.  <br /></td></tr>
 <tr class="memitem:a0fed1819ae4aa0c2ceb4f59964efed90" id="r_a0fed1819ae4aa0c2ceb4f59964efed90"><td class="memItemLeft"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0fed1819ae4aa0c2ceb4f59964efed90">morph::ui::detail::attached</a> (<a class="el" href="../../dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html">DetachedLower</a> const &amp;held)</td></tr>
 <tr class="memdesc:a0fed1819ae4aa0c2ceb4f59964efed90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Puts a detached context's scope back.  <br /></td></tr>
+<tr class="memitem:ae3a9191b04b620a051a3e9ac26b58017" id="r_ae3a9191b04b620a051a3e9ac26b58017"><td class="memItemLeft">std::expected&lt; forms::detail::engine::Json, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae3a9191b04b620a051a3e9ac26b58017">morph::ui::detail::changeWire</a> (std::string const &amp;payload, std::string_view type)</td></tr>
+<tr class="memdesc:ae3a9191b04b620a051a3e9ac26b58017"><td class="mdescLeft">&#160;</td><td class="mdescRight">A component's <span class="tt">change</span> payload as the wire value of the field it draws, read as the <span class="tt">value</span> prop's declared type.  <br /></td></tr>
+<tr class="memitem:a3f5cda07834754b8aa37b9134fe0f7fb" id="r_a3f5cda07834754b8aa37b9134fe0f7fb"><td class="memItemLeft">std::function&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3f5cda07834754b8aa37b9134fe0f7fb">morph::ui::detail::formFilled</a> (std::string const &amp;prop, <a class="el" href="../../d0/d0d/classmorph_1_1forms_1_1FieldState.html">forms::FieldState</a> *state)</td></tr>
+<tr class="memdesc:a3f5cda07834754b8aa37b9134fe0f7fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a form fills of a field component's props: the field's value, errors, read-only and required state, and label, each a tracked read of the field.  <br /></td></tr>
 <tr class="memitem:adfad0eeb9b56a5d22a183a623d2e84d6" id="r_adfad0eeb9b56a5d22a183a623d2e84d6"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html">ArrangedChild</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adfad0eeb9b56a5d22a183a623d2e84d6">morph::ui::detail::arrangedChildren</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;stored, std::span&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const *const &gt; declared)</td></tr>
 <tr class="memdesc:adfad0eeb9b56a5d22a183a623d2e84d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">A container's children in the order a stored <span class="tt">arrange</span> choice gives, each marked shown or hidden.  <br /></td></tr>
 <tr class="memitem:a1ee0bda17c563ef3efabfc716e51da80" id="r_a1ee0bda17c563ef3efabfc716e51da80"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1ee0bda17c563ef3efabfc716e51da80">morph::ui::detail::arrangedOrder</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;stored, std::span&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const *const &gt; declared)</td></tr>
@@ -399,6 +433,10 @@ Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
+<tr class="memitem:aebc25a37be046be9a7d590742ec3064e" id="r_aebc25a37be046be9a7d590742ec3064e"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aebc25a37be046be9a7d590742ec3064e">morph::ui::kDefaultInlineFileBytes</a> = std::size_t{1024} * 1024</td></tr>
+<tr class="memdesc:aebc25a37be046be9a7d590742ec3064e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The inline cap a session has unless it is given another: 1 MiB.  <br /></td></tr>
+<tr class="memitem:ae1e54e8866c65852b7bac732d1f3d9ad" id="r_ae1e54e8866c65852b7bac732d1f3d9ad"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ae1e54e8866c65852b7bac732d1f3d9ad">morph::ui::kMaxInlineFileBytes</a> = (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4</td></tr>
+<tr class="memdesc:ae1e54e8866c65852b7bac732d1f3d9ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for the rest of the body, so the encoded file still fits <span class="tt">wire::kMaxEnvelopeBytes</span>.  <br /></td></tr>
 <tr class="memitem:aa145390415cb3c86f0cef9a63320ee34" id="r_aa145390415cb3c86f0cef9a63320ee34"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aa145390415cb3c86f0cef9a63320ee34">morph::ui::detail::kCommandLogSize</a> = 256</td></tr>
 <tr class="memdesc:aa145390415cb3c86f0cef9a63320ee34"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many command lists the inspector's log keeps.  <br /></td></tr>
 <tr class="memitem:aa2de76267a8222a91458a4530b03c49e" id="r_aa2de76267a8222a91458a4530b03c49e"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aa2de76267a8222a91458a4530b03c49e">morph::ui::detail::kPruneLoweredAt</a> = 256</td></tr>
@@ -443,7 +481,7 @@ Variables</h2></td></tr>
 
 <p>Sends a <span class="tt">watch</span> or <span class="tt">unwatch</span> request for a session's cache (spec 8 §7): the kind, and the <span class="tt">WatchBody</span> as JSON. <span class="tt">ui::watcherOver</span> builds one over a remote source's exchange. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00373">373</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -461,7 +499,7 @@ Variables</h2></td></tr>
 
 <p>New rows by the canonical text of their key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00622">622</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00669">669</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +517,7 @@ Variables</h2></td></tr>
 
 <p>The names bound at one place, innermost last. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01413">1413</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01471">1471</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +535,7 @@ Variables</h2></td></tr>
 
 <p>One run of a mutation, as a command sees it: whether it succeeded, and the reply. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01954">1954</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02012">2012</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -515,7 +553,25 @@ Variables</h2></td></tr>
 
 <p>Called once when a command finishes: whether it succeeded. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02071">2071</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02129">2129</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aab64f809e95347d45245abacf4fcce84" name="aab64f809e95347d45245abacf4fcce84"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab64f809e95347d45245abacf4fcce84">&#9670;&#160;</a></span>ActionModels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#aab64f809e95347d45245abacf4fcce84">morph::ui::detail::ActionModels</a> = std::vector&lt;ActionModel&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A list of lowered <span class="tt">actionButton</span> parts, in document order. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02163">2163</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -548,7 +604,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00483">483</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00530">530</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -580,7 +636,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00808">808</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00855">855</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -617,7 +673,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">what()</span>, or <span class="tt">unknown error</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00449">449</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -653,7 +709,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -689,7 +745,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -736,7 +792,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00444">444</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00491">491</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -772,7 +828,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The <span class="tt">id</span> field, or <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -813,7 +869,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new row. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00516">516</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -866,7 +922,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new value, or why it is unchanged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00542">542</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -907,7 +963,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The diagnostic's reason. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00580">580</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -948,7 +1004,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value without them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00547">547</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00594">594</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -984,7 +1040,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its members in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00619">619</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1036,7 +1092,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00638">638</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1089,7 +1145,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new value, or nothing when no row matched. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00631">631</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00678">678</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1136,7 +1192,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00757">757</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00804">804</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1189,7 +1245,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new value, or nothing when no row matched. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00773">773</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00820">820</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1236,7 +1292,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01738">1738</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01796">1796</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1272,7 +1328,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01749">1749</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01807">1807</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1313,7 +1369,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01767">1767</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01825">1825</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1349,7 +1405,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01793">1793</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01851">1851</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1385,7 +1441,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>An <span class="tt">int</span> or a string. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01806">1806</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01864">1864</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1421,7 +1477,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The strings. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01816">1816</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01874">1874</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1457,7 +1513,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01833">1833</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01891">1891</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1493,7 +1549,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context, its scope dropped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02064">2064</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02122">2122</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1534,7 +1590,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The spec, or <span class="tt">nullptr</span> when the kind has no such key of its own. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02087">2087</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02181">2181</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1570,7 +1626,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02100">2100</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02194">2194</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1606,7 +1662,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its key, such as <span class="tt">refetch</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02116">2116</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02210">2210</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1642,7 +1698,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text; empty for <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03105">3105</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03331">3331</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1683,7 +1739,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The channel, or <span class="tt">nullptr</span> while the alias is unbound. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03122">3122</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03348">3348</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1724,7 +1780,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The element, or <span class="tt">nullptr</span> for a node that keeps none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03727">3727</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03953">3953</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1764,7 +1820,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03740">3740</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03966">3966</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1817,7 +1873,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03976">3976</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04202">4202</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1853,7 +1909,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03987">3987</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04213">4213</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1889,7 +1945,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04112">4112</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04338">4338</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1925,7 +1981,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04125">4125</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04351">4351</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1966,7 +2022,187 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value; <span class="tt">null</span> for a name the form does not have, or a form without a session. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04152">4152</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04378">4378</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a975c9cde4915bcd28bf75f650e6f8c78" name="a975c9cde4915bcd28bf75f650e6f8c78"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a975c9cde4915bcd28bf75f650e6f8c78">&#9670;&#160;</a></span>base64Encode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::detail::base64Encode </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>bytes</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Bytes as base64 (RFC 4648, with padding): how a document carries an inline file. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bytes</td><td>The bytes. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05048">5048</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8fc0a6e91d8d89a2d5a31bd1a9849e6e" name="a8fc0a6e91d8d89a2d5a31bd1a9849e6e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8fc0a6e91d8d89a2d5a31bd1a9849e6e">&#9670;&#160;</a></span>base64Decode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::base64Decode </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Base64 text as bytes (RFC 4648, with or without padding). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The bytes, or <span class="tt">std::nullopt</span> for text that is not base64. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05071">5071</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a74dbf259e0fa6ff3dafcf8d366e9fd15" name="a74dbf259e0fa6ff3dafcf8d366e9fd15"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a74dbf259e0fa6ff3dafcf8d366e9fd15">&#9670;&#160;</a></span>base64Size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::detail::base64Size </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many bytes base64 text decodes to, read from its length alone. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The byte count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05115">5115</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a108d6ed7b1de5c31bcd8163c67b7085e" name="a108d6ed7b1de5c31bcd8163c67b7085e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a108d6ed7b1de5c31bcd8163c67b7085e">&#9670;&#160;</a></span>sizeText()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::detail::sizeText </td>
+          <td>(</td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>bytes</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A byte count as a person reads it: <span class="tt">512 bytes</span>, <span class="tt">2.4 KiB</span>, <span class="tt">1 MiB</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bytes</td><td>The count. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05125">5125</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0d2a5b0b6e012c86fd19b2b891a5f130" name="a0d2a5b0b6e012c86fd19b2b891a5f130"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d2a5b0b6e012c86fd19b2b891a5f130">&#9670;&#160;</a></span>inlineBytes()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::string, std::string &gt; morph::ui::detail::inlineBytes </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A document's inline file content as bytes: base64 text, or a list of integers 0 to 255. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">value</td><td>The value. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The bytes, or why the value is neither. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05144">5144</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2007,7 +2243,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04940">4940</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05376">5376</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2048,7 +2284,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04950">4950</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05386">5386</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2095,7 +2331,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04960">4960</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05396">5396</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2131,7 +2367,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It; zero for anything that is not a number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04984">4984</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05420">5420</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2172,7 +2408,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05002">5002</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05438">5438</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2213,7 +2449,43 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05028">5028</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05464">5464</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a399f42fbac91b84be088eab5a87994f2" name="a399f42fbac91b84be088eab5a87994f2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a399f42fbac91b84be088eab5a87994f2">&#9670;&#160;</a></span>roleNamed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; TextRole &gt; morph::ui::detail::roleNamed </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A text role by name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td><span class="tt">normal</span>, <span class="tt">muted</span>, <span class="tt">heading</span> (or <span class="tt">title</span>), <span class="tt">section</span>, <span class="tt">error</span>, <span class="tt">success</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The role; <span class="tt">nullopt</span> for any other name. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05477">5477</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2244,17 +2516,17 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>A text role by name. </p>
+<p>A text role by name, as <span class="tt">roleNamed</span> reads it. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">value</td><td><span class="tt">normal</span>, <span class="tt">muted</span>, <span class="tt">heading</span> (or <span class="tt">title</span>), <span class="tt">error</span>, <span class="tt">success</span>. </td></tr>
+    <tr><td class="paramname">value</td><td>The name. </td></tr>
     <tr><td class="paramname">format</td><td>Unused. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The role; <span class="tt">Normal</span> for anything else. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The role; <span class="tt">Normal</span> for any other name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05042">5042</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05503">5503</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2295,7 +2567,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tone; <span class="tt">Neutral</span> for anything else. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05063">5063</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05511">5511</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2331,7 +2603,115 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05083">5083</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05531">5531</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab7601823069437db1487247bdb16a73f" name="ab7601823069437db1487247bdb16a73f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab7601823069437db1487247bdb16a73f">&#9670;&#160;</a></span>isSizing()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::isSizing </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a value is a sizing of one dimension: <span class="tt">"content"</span>, <span class="tt">{"fixed": n}</span> or <span class="tt">{"stretch": w}</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">value</td><td>The value. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether <span class="tt">sizingOf</span> reads it as written rather than as content by default. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05544">5544</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaed0b0a590eaa99efc2f26d80b636dd0" name="aaed0b0a590eaa99efc2f26d80b636dd0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaed0b0a590eaa99efc2f26d80b636dd0">&#9670;&#160;</a></span>alignOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Align morph::ui::detail::alignOf </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An alignment by name, as the loader checked it: <span class="tt">start</span>, <span class="tt">center</span>, <span class="tt">end</span>, or stretch for none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The name; empty for none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The alignment. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05556">5556</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3e1037b78c8cdaf9ecc47a952152d583" name="a3e1037b78c8cdaf9ecc47a952152d583"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3e1037b78c8cdaf9ecc47a952152d583">&#9670;&#160;</a></span>justifyOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Justify morph::ui::detail::justifyOf </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A justification by name, as the loader checked it: <span class="tt">center</span>, <span class="tt">end</span>, <span class="tt">between</span>, or start for none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The name; empty for none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The justification. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05572">5572</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2367,7 +2747,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The axis. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05096">5096</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05588">5588</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2403,7 +2783,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05104">5104</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05596">5596</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2444,7 +2824,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The options. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05118">5118</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05610">5610</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2480,7 +2860,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05134">5134</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05626">5626</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2527,7 +2907,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05145">5145</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05637">5637</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2574,7 +2954,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The overlay. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05717">5717</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06331">6331</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2610,7 +2990,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context, its scope held weakly. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05764">5764</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06378">6378</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2646,7 +3026,89 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The context; its scope is null once the scope is gone. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05771">5771</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06385">6385</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae3a9191b04b620a051a3e9ac26b58017" name="ae3a9191b04b620a051a3e9ac26b58017"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3a9191b04b620a051a3e9ac26b58017">&#9670;&#160;</a></span>changeWire()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; forms::detail::engine::Json, std::string &gt; morph::ui::detail::changeWire </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>payload</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>type</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A component's <span class="tt">change</span> payload as the wire value of the field it draws, read as the <span class="tt">value</span> prop's declared type. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">payload</td><td>The payload, as the backend reports it. </td></tr>
+    <tr><td class="paramname">type</td><td>The <span class="tt">value</span> prop's type. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The wire value, or why the payload is not one. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06525">6525</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3f5cda07834754b8aa37b9134fe0f7fb" name="a3f5cda07834754b8aa37b9134fe0f7fb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3f5cda07834754b8aa37b9134fe0f7fb">&#9670;&#160;</a></span>formFilled()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt; Value()&gt; morph::ui::detail::formFilled </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>prop</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d0/d0d/classmorph_1_1forms_1_1FieldState.html">forms::FieldState</a> *</td>          <td class="paramname"><span class="paramname"><em>state</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a form fills of a field component's props: the field's value, errors, read-only and required state, and label, each a tracked read of the field. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">prop</td><td>The prop's name. </td></tr>
+    <tr><td class="paramname">state</td><td>The field. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The read, or empty for a prop the form does not fill. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06555">6555</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2687,7 +3149,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Every child, in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06444">6444</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07310">7310</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2728,7 +3190,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ids to show, in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06475">6475</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07341">7341</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2764,7 +3226,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">[{"id", "hidden"}, …]</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06488">6488</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07354">7354</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2805,11 +3267,63 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The element, or <span class="tt">nullptr</span> when the subtree has none with that id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l06502">6502</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07368">7368</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="aebc25a37be046be9a7d590742ec3064e" name="aebc25a37be046be9a7d590742ec3064e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aebc25a37be046be9a7d590742ec3064e">&#9670;&#160;</a></span>kDefaultInlineFileBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kDefaultInlineFileBytes = std::size_t{1024} * 1024</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The inline cap a session has unless it is given another: 1 MiB. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae1e54e8866c65852b7bac732d1f3d9ad" name="ae1e54e8866c65852b7bac732d1f3d9ad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae1e54e8866c65852b7bac732d1f3d9ad">&#9670;&#160;</a></span>kMaxInlineFileBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxInlineFileBytes = (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for the rest of the body, so the encoded file still fits <span class="tt">wire::kMaxEnvelopeBytes</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aa145390415cb3c86f0cef9a63320ee34" name="aa145390415cb3c86f0cef9a63320ee34"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa145390415cb3c86f0cef9a63320ee34">&#9670;&#160;</a></span>kCommandLogSize</h2>
 
@@ -2832,7 +3346,7 @@ Variables</h2></td></tr>
 
 <p>How many command lists the inspector's log keeps. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02108">2108</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02202">2202</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -2858,7 +3372,7 @@ Variables</h2></td></tr>
 
 <p>How often, in lowered nodes, the inspector's node list drops the nodes whose scope is gone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02111">2111</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02205">2205</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

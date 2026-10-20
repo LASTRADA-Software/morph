@@ -263,6 +263,10 @@ Variables</h2></td></tr>
 <tr class="memdesc:adb3ff9d66f7c7ff9bef2596a0d5309f2"><td class="mdescLeft">&#160;</td><td class="mdescRight">A message catalogue.  <br /></td></tr>
 <tr class="memitem:a974114de52df8baf62bfbc0ddaa110d5" id="r_a974114de52df8baf62bfbc0ddaa110d5"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a974114de52df8baf62bfbc0ddaa110d5">morph::ui::kComponentFile</a> = &quot;component&quot;</td></tr>
 <tr class="memdesc:a974114de52df8baf62bfbc0ddaa110d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A delivered custom component (spec 5 §10).  <br /></td></tr>
+<tr class="memitem:a437c7675a1be1c10acafc0c00db5da39" id="r_a437c7675a1be1c10acafc0c00db5da39"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a437c7675a1be1c10acafc0c00db5da39">morph::ui::kIconFile</a> = &quot;icon&quot;</td></tr>
+<tr class="memdesc:a437c7675a1be1c10acafc0c00db5da39"><td class="mdescLeft">&#160;</td><td class="mdescRight">An icon of a theme's icon set: SVG text.  <br /></td></tr>
+<tr class="memitem:a9a1d0eec1394d9636d5083eb38cc1556" id="r_a9a1d0eec1394d9636d5083eb38cc1556"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a9a1d0eec1394d9636d5083eb38cc1556">morph::ui::kMaxIconBytes</a> = std::size_t{64} * 1024</td></tr>
+<tr class="memdesc:a9a1d0eec1394d9636d5083eb38cc1556"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest icon file a bundle may hold.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the UI service's client and server share (spec 5 §12): content hashes, the bundle's manifest, and the bodies of the <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> envelopes, with their bounds and their parsers. </p>
@@ -302,7 +306,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The hash. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,7 +342,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">sha256:</span> followed by exactly 64 lower-case hexadecimal digits. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +383,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -432,7 +436,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the message is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,7 +497,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The message, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00437">437</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -537,7 +541,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -578,7 +582,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -631,7 +635,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the list is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00485">485</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -678,7 +682,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the map is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -714,7 +718,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00523">523</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -750,7 +754,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The manifest, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00532">532</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -786,7 +790,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00574">574</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -822,7 +826,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -858,7 +862,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00629">629</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00633">633</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -894,7 +898,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00650">650</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00654">654</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -930,7 +934,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00668">668</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00672">672</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -966,7 +970,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00679">679</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00683">683</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1002,7 +1006,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00710">710</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00714">714</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>
@@ -1654,6 +1658,58 @@ template&lt;typename T&gt; </div>
 <p>A delivered custom component (spec 5 §10). </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a437c7675a1be1c10acafc0c00db5da39" name="a437c7675a1be1c10acafc0c00db5da39"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a437c7675a1be1c10acafc0c00db5da39">&#9670;&#160;</a></span>kIconFile</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::kIconFile = &quot;icon&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An icon of a theme's icon set: SVG text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9a1d0eec1394d9636d5083eb38cc1556" name="a9a1d0eec1394d9636d5083eb38cc1556"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9a1d0eec1394d9636d5083eb38cc1556">&#9670;&#160;</a></span>kMaxIconBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxIconBytes = std::size_t{64} * 1024</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The largest icon file a bundle may hold. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dab/bundle_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>.</p>
 
 </div>
 </div>

@@ -151,6 +151,8 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
 <tr class="memdesc:a44f3b643199b14dd61cebb6aabf73eba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen has unsaved changes: the document's <span class="tt"><a class="el" href="#a44f3b643199b14dd61cebb6aabf73eba" title="Whether the screen has unsaved changes: the document&#39;s dirty.">dirty</a></span>.  <br /></td></tr>
 <tr class="memitem:a8a791404c733714c898d9efb1539f38d" id="r_a8a791404c733714c898d9efb1539f38d"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a8a791404c733714c898d9efb1539f38d">identity</a> () const =0</td></tr>
 <tr class="memdesc:a8a791404c733714c898d9efb1539f38d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's identity: the document's <span class="tt"><a class="el" href="#a8a791404c733714c898d9efb1539f38d" title="The screen&#39;s identity: the document&#39;s identity, null when it declares none. A host re-keys a tab when...">identity</a></span>, <span class="tt">null</span> when it declares none. A host re-keys a tab when it changes.  <br /></td></tr>
+<tr class="memitem:ab649d647751f197859149860777cd270" id="r_ab649d647751f197859149860777cd270"><td class="memItemLeft">virtual <a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html">ScreenHead</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ab649d647751f197859149860777cd270">head</a> () noexcept</td></tr>
+<tr class="memdesc:ab649d647751f197859149860777cd270"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's head beside its title, for a shell to show above it.  <br /></td></tr>
 <tr class="memitem:a85c7c8455178a5d716c91ba683c7c5ee" id="r_a85c7c8455178a5d716c91ba683c7c5ee"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee">requestClose</a> (std::function&lt; void(bool closed)&gt; done)=0</td></tr>
 <tr class="memdesc:a85c7c8455178a5d716c91ba683c7c5ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the screen to close (spec 6 §3).  <br /></td></tr>
 <tr class="memitem:a9242625e69c44dfdd57c1129cede65f4" id="r_a9242625e69c44dfdd57c1129cede65f4"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9242625e69c44dfdd57c1129cede65f4">forceClose</a> ()=0</td></tr>
@@ -164,7 +166,7 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
 <div class="textblock"><p>One mounted screen, as its host sees it. </p>
 <p>The host reads <span class="tt"><a class="el" href="#aedcbc26e44d494f356574b80d1836ad6" title="The screen&#39;s title: the document&#39;s title, as text.">title</a></span>, <span class="tt"><a class="el" href="#a44f3b643199b14dd61cebb6aabf73eba" title="Whether the screen has unsaved changes: the document&#39;s dirty.">dirty</a></span> and <span class="tt"><a class="el" href="#a8a791404c733714c898d9efb1539f38d" title="The screen&#39;s identity: the document&#39;s identity, null when it declares none. A host re-keys a tab when...">identity</a></span> to show the tab and the unsaved indicator, and closes the screen through <span class="tt"><a class="el" href="#a85c7c8455178a5d716c91ba683c7c5ee" title="Asks the screen to close (spec 6 §3).">requestClose</a></span>. It never destroys a handle whose close is pending, except after <span class="tt"><a class="el" href="#a9242625e69c44dfdd57c1129cede65f4" title="Closes the screen without asking: skips onClose and the close guard, runs onUnmount,...">forceClose</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aedcbc26e44d494f356574b80d1836ad6" name="aedcbc26e44d494f356574b80d1836ad6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aedcbc26e44d494f356574b80d1836ad6">&#9670;&#160;</a></span>title()</h2>
@@ -253,6 +255,36 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
 <dl class="section return"><dt>Returns</dt><dd>It; it keeps its last value once the screen is closed. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#aee8e05a17d978d35de3077d7885d8be1">morph::ui::Explorer</a>.</p>
+
+</div>
+</div>
+<a id="ab649d647751f197859149860777cd270" name="ab649d647751f197859149860777cd270"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab649d647751f197859149860777cd270">&#9670;&#160;</a></span>head()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html">ScreenHead</a> * morph::ui::ScreenHandle::head </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The screen's head beside its title, for a shell to show above it. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the handle: a document screen's (empty values when the document declares no head); null for a host screen unless its handle overrides this. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +378,7 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
 <p>Whether the screen can save its changes: a document screen that declares <span class="tt">onSave</span>, or a host screen whose handle implements <span class="tt"><a class="el" href="#a08079c795abec25606caa780c997fb76" title="Saves the screen&#39;s changes (spec 6 §15) and answers whether it is then clean.">save</a></span>. A close guard offers <em>save and close</em> only when this is <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; <span class="tt">false</span> unless a derived handle says otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -381,7 +413,7 @@ ScreenHandle &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHa
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d14/form__v
 <code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;stdexcept&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
@@ -141,6 +142,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d14/form__v
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d6c/layout_8hpp_source.html">../layout.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/db3/text_8hpp_source.html">detail/text.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d0/d39/field__layout_8hpp_source.html">field_layout.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/dc0/overrides_8hpp_source.html">overrides.hpp</a>&quot;</code><br />
@@ -150,12 +152,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d14/form__v
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AFormViewOptions" id="r_morph_3A_3Aforms_3A_3AFormViewOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d99/structmorph_1_1forms_1_1FormViewOptions.html">morph::forms::FormViewOptions</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How <span class="tt"><a class="el" href="#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: its fields laid out by group (sections as panels, consecutive tab groups as one tab ...">formView</a></span> lays a form out and labels its chrome.  <a href="../../de/d99/structmorph_1_1forms_1_1FormViewOptions.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How <span class="tt"><a class="el" href="#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: the title (the options&#39; title, else the schema&#39;s while showTitle),...">formView</a></span> lays a form out and labels its chrome.  <a href="../../de/d99/structmorph_1_1forms_1_1FormViewOptions.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:a12b83b9171c10702e8553c2bf7c179b2" id="r_a12b83b9171c10702e8553c2bf7c179b2"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">ui::Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a12b83b9171c10702e8553c2bf7c179b2">morph::forms::formView</a> (<a class="el" href="../../dc/dd2/classmorph_1_1forms_1_1FormSession.html">FormSession</a> &amp;session, <a class="el" href="../../de/d99/structmorph_1_1forms_1_1FormViewOptions.html">FormViewOptions</a> options={})</td></tr>
-<tr class="memdesc:a12b83b9171c10702e8553c2bf7c179b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Renders <code class="param">session:</code> its fields laid out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or error.  <br /></td></tr>
+<tr class="memdesc:a12b83b9171c10702e8553c2bf7c179b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Renders <code class="param">session:</code> the title (the options' <span class="tt">title</span>, else the schema's while <span class="tt">showTitle</span>), its fields laid out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or error.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">formView</span>: a <span class="tt">FormSession</span> rendered as a view tree (<span class="tt">ui::Node</span>), so one form draws on every frontend. </p>
@@ -190,17 +192,23 @@ Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Renders <code class="param">session:</code> its fields laid out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or error. </p>
+<p>Renders <code class="param">session:</code> the title (the options' <span class="tt">title</span>, else the schema's while <span class="tt">showTitle</span>), its fields laid out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or error. </p>
 <p>The nodes bind to the session and its fields by pointer: mount the result after the session and destroy the mount before it. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">session</td><td>The session. </td></tr>
-    <tr><td class="paramname">options</td><td>Overrides, grid columns, the chrome's labels. </td></tr>
+    <tr><td class="paramname">options</td><td>Overrides, grid columns, the chrome's labels, the field layout. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The view. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>when <span class="tt">options.inlineLabelWidth</span> is below 1. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>

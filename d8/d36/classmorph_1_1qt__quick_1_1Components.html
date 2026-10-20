@@ -161,11 +161,11 @@ Public Member Functions</h2></td></tr>
 <ul>
 <li>A <b>host component</b> is QML the client carries, registered by name and version. It loads into the backend's own engine, so it may import the application's other modules.</li>
 <li>A <b>bundle component</b> is QML text delivered in the application's bundle and named by its SHA-256 digest. It loads only when the text matches the digest, and compiles in a dedicated engine whose root context holds nothing, so it sees nothing but what is set on it.</li>
-<li>The <b>restyle map</b> names a component for a built-in kind. The component must declare every property and function of the kind's <span class="tt">MorphUi</span> component; one that does not is refused when it is mapped.</li>
+<li>The <b>restyle map</b> names a component for a built-in kind, or for a part a built-in component draws (<span class="tt">tableRow</span>, a table row's background; <span class="tt">scrollBar</span>, a scroll area's bar; <span class="tt">splitterHandle</span>, a splitter's handle). The component must declare every property and function of its <span class="tt">MorphUi</span> base; one that does not is refused when it is mapped.</li>
 </ul>
 <p>Each component reports its events through <span class="tt">host.fire(event, payload)</span>, <span class="tt">host</span> being a <span class="tt">var</span> property it declares and the renderer sets. A component that fails to load is reported once, through the callback, and the caller renders its fallback. Neither copyable nor movable; it outlives every backend that uses it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d8d/components_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d2/d8d/components_8hpp_source.html">components.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d8d/components_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d2/d8d/components_8hpp_source.html">components.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aee59d8828a756b1307e51639b6ab2abb" name="aee59d8828a756b1307e51639b6ab2abb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aee59d8828a756b1307e51639b6ab2abb">&#9670;&#160;</a></span>Components()</h2>
@@ -309,7 +309,7 @@ Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">engine</td><td>The engine the backend renders with. Borrowed for the call. </td></tr>
-    <tr><td class="paramname">kind</td><td>The kind as a document names it: <span class="tt">button</span>, <span class="tt">textInput</span>, <span class="tt">checkbox</span>, <span class="tt">select</span>, … </td></tr>
+    <tr><td class="paramname">kind</td><td>The kind as a document names it (<span class="tt">button</span>, <span class="tt">textInput</span>, <span class="tt">checkbox</span>, <span class="tt">select</span>, …), the multi-line input (<span class="tt">textArea</span>), or a part kind (<span class="tt">tableRow</span>). </td></tr>
     <tr><td class="paramname">component</td><td>The registered component's name. </td></tr>
   </table>
   </dd>

@@ -8,6 +8,10 @@ var structmorph_1_1ui_1_1Command =
     [ "binding", "d9/d50/structmorph_1_1ui_1_1Command.html#adfa6d61a7c8f0f54f2465193e07e2130", null ],
     [ "option", "d9/d50/structmorph_1_1ui_1_1Command.html#a1b4ae5490984a8e1c6c107d331f5b895", null ],
     [ "transfer", "d9/d50/structmorph_1_1ui_1_1Command.html#a2918dd48ca51f32c66fe3ab6643d2674", null ],
+    [ "bytes", "d9/d50/structmorph_1_1ui_1_1Command.html#a5d381e71a80ef0fef73d309004004027", null ],
+    [ "mediaType", "d9/d50/structmorph_1_1ui_1_1Command.html#ae1a1b5590eac6df517a5a681a8a2318b", null ],
+    [ "nameAs", "d9/d50/structmorph_1_1ui_1_1Command.html#a52af80b2a96de08b66445fd61d42a668", null ],
+    [ "typeAs", "d9/d50/structmorph_1_1ui_1_1Command.html#a65f1dfbc0d95f9bb4ca247520704b0d6", null ],
     [ "commands", "d9/d50/structmorph_1_1ui_1_1Command.html#a39e71c56f263d38069ff7014c951f622", null ],
     [ "alternative", "d9/d50/structmorph_1_1ui_1_1Command.html#afaef8fef323a3eae166dcbe395ae07e5", null ]
 ];

@@ -138,11 +138,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a7d525a4a42cdaee896a3618b39cb2ca0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the window's width class (<span class="tt"><a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp.html#a69fefb171bfcfaf3bda1d9ab14ee92c4" title="The window width class {&quot;env&quot;: &quot;widthClass&quot;} reads (spec 3 §8).">widthClassOf</a></span>) when the window first has a width and each time the class changes; empty calls nothing. The shell sets it as <span class="tt">{"env": "widthClass"}</span>.  <br /></td></tr>
 <tr class="memitem:a7540d35a217bbc011b2c896d5862d40d" id="r_a7540d35a217bbc011b2c896d5862d40d"><td class="memItemLeft"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffc">ui::DevelopmentTools</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7540d35a217bbc011b2c896d5862d40d">devTools</a> = <a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36">ui::DevelopmentTools::Off</a></td></tr>
 <tr class="memdesc:a7540d35a217bbc011b2c896d5862d40d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Development mode (spec 6 §21): with <span class="tt">On</span>, Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). With <span class="tt">Off</span>, the key does nothing.  <br /></td></tr>
+<tr class="memitem:a3bc471c87d5890a111d30fdc2954aa6d" id="r_a3bc471c87d5890a111d30fdc2954aa6d"><td class="memItemLeft">std::function&lt; void(QQmlEngine &amp;engine, QQuickWindow &amp;window)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3bc471c87d5890a111d30fdc2954aa6d">onEngine</a></td></tr>
+<tr class="memdesc:a3bc471c87d5890a111d30fdc2954aa6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called once per run with the engine and the window, after both exist and before the backend is built: where an application registers its QML modules, maps its restyles and applies its own theme. Empty calls nothing. When it throws, <span class="tt">run</span> tears down what it made and rethrows; nothing is mounted.  <br /></td></tr>
+<tr class="memitem:a7510d84e6f53730efd5d215fa8656cd8" id="r_a7510d84e6f53730efd5d215fa8656cd8"><td class="memItemLeft"><a class="el" href="../../de/d54/qt__quick_2frontend_8hpp.html#ac2acaa399408a4e69482d956cbb7c685">BundleTheme</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7510d84e6f53730efd5d215fa8656cd8">bundleTheme</a> = <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp.html#ac2acaa399408a4e69482d956cbb7c685a9639e32cab248434a17ab32237cb3b71">BundleTheme::Apply</a></td></tr>
+<tr class="memdesc:a7510d84e6f53730efd5d215fa8656cd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the bundle's theme is applied when the source opens. With <span class="tt">Apply</span>, a theme <span class="tt"><a class="el" href="#a3bc471c87d5890a111d30fdc2954aa6d" title="Called once per run with the engine and the window, after both exist and before the backend is built:...">onEngine</a></span> set that the bundle's then replaces is reported once on <span class="tt">std::cerr</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a <span class="tt"><a class="el" href="../../d0/d8a/classmorph_1_1qt__quick_1_1Frontend.html" title="Runs a morph application in a Qt Quick window, on the calling thread.">qt_quick::Frontend</a></span> runs with. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a6c38f91a8bb920d63a3a66b1d6091e65" name="a6c38f91a8bb920d63a3a66b1d6091e65"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6c38f91a8bb920d63a3a66b1d6091e65">&#9670;&#160;</a></span>mountShell</h2>
@@ -158,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>Mounts the shell when the source is ready; it must not be empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>The restyle map and the custom components the backend uses; null uses none. Borrowed: it outlives the run. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>The window's title. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the window's width class (<span class="tt"><a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp.html#a69fefb171bfcfaf3bda1d9ab14ee92c4" title="The window width class {&quot;env&quot;: &quot;widthClass&quot;} reads (spec 3 §8).">widthClassOf</a></span>) when the window first has a width and each time the class changes; empty calls nothing. The shell sets it as <span class="tt">{"env": "widthClass"}</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +234,43 @@ Public Attributes</h2></td></tr>
 
 <p>Development mode (spec 6 §21): with <span class="tt">On</span>, Ctrl+Shift+I in the window opens the inspector over the screen the shell shows (<span class="tt"><a class="el" href="../../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a" title="Hands the development inspector over the focused screen to visit, before returning (spec 6 §21)....">ui::MountedShell::inspectFocused</a></span>). With <span class="tt">Off</span>, the key does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3bc471c87d5890a111d30fdc2954aa6d" name="a3bc471c87d5890a111d30fdc2954aa6d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3bc471c87d5890a111d30fdc2954aa6d">&#9670;&#160;</a></span>onEngine</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(QQmlEngine&amp; engine, QQuickWindow&amp; window)&gt; morph::qt_quick::FrontendConfig::onEngine</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called once per run with the engine and the window, after both exist and before the backend is built: where an application registers its QML modules, maps its restyles and applies its own theme. Empty calls nothing. When it throws, <span class="tt">run</span> tears down what it made and rethrows; nothing is mounted. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7510d84e6f53730efd5d215fa8656cd8" name="a7510d84e6f53730efd5d215fa8656cd8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7510d84e6f53730efd5d215fa8656cd8">&#9670;&#160;</a></span>bundleTheme</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../de/d54/qt__quick_2frontend_8hpp.html#ac2acaa399408a4e69482d956cbb7c685">BundleTheme</a> morph::qt_quick::FrontendConfig::bundleTheme = <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp.html#ac2acaa399408a4e69482d956cbb7c685a9639e32cab248434a17ab32237cb3b71">BundleTheme::Apply</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the bundle's theme is applied when the source opens. With <span class="tt">Apply</span>, a theme <span class="tt"><a class="el" href="#a3bc471c87d5890a111d30fdc2954aa6d" title="Called once per run with the engine and the window, after both exist and before the backend is built:...">onEngine</a></span> set that the bundle's then replaces is reported once on <span class="tt">std::cerr</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../de/d54/qt__quick_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>

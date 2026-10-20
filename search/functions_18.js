@@ -58,5 +58,6 @@ var searchData=
   ['_7eupdateguard_55',['~UpdateGuard',['../d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html#a5465ef0e4fe3f93f70690c9f796e5a8a',1,'morph::reactive::detail::UpdateGuard']]],
   ['_7ewidgeteventscope_56',['~WidgetEventScope',['../d9/d4c/classmorph_1_1reactive_1_1detail_1_1WidgetEventScope.html#a4a36feae33d4ec2cbfc0abf06bcd1d43',1,'morph::reactive::detail::WidgetEventScope']]],
   ['_7ewireclampscope_57',['~WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aabf463705127cf7821606cb315e0ed36',1,'morph::math::WireClampScope']]],
-  ['_7eworkspace_58',['~Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255',1,'morph::ui::Workspace']]]
+  ['_7eworkspace_58',['~Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255',1,'morph::ui::Workspace']]],
+  ['_7eworkspacemodel_59',['~WorkspaceModel',['../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a3047cc341e9db2059c9f61a75b0dd7e2',1,'morph::ui::WorkspaceModel']]]
 ];

@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::TabsWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,319,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; TabsWidget &gt;" shape="rect" coords="0,168,319,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; TabsWidget &gt;" shape="rect" coords="0,224,319,248"/>
-<area href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html" title="A fake TabsWidget: properties tabs, selected." alt="morph::ui::testing::detail::FakeTabs" shape="rect" coords="0,280,319,304"/>
+<area href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html" title="A fake TabsWidget: properties tabs, selected, barShown." alt="morph::ui::testing::detail::FakeTabs" shape="rect" coords="0,280,319,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -147,6 +147,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0c3b17111c1f016bdc9679f23e161029"><td class="mdescLeft">&#160;</td><td class="mdescRight">Highlights a tab. Never calls the <span class="tt">onSelect</span> handler.  <br /></td></tr>
 <tr class="memitem:ab26a51b8e9603780798c5dc4c90f027a" id="r_ab26a51b8e9603780798c5dc4c90f027a"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab26a51b8e9603780798c5dc4c90f027a">setOnSelect</a> (std::function&lt; void(std::size_t)&gt; onSelect)=0</td></tr>
 <tr class="memdesc:ab26a51b8e9603780798c5dc4c90f027a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user's tab choice calls, with its index.  <br /></td></tr>
+<tr class="memitem:a70289120b0f751daf75a4b1da408402c" id="r_a70289120b0f751daf75a4b1da408402c"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a70289120b0f751daf75a4b1da408402c">setBarShown</a> (bool shown)=0</td></tr>
+<tr class="memdesc:a70289120b0f751daf75a4b1da408402c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the strip of tab buttons. The selected page shows either way. A new tabs widget shows its strip.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
 <tr class="memitem:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget" id="r_a0f85cf00d946d0fc63f6d7057310478d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html#a0f85cf00d946d0fc63f6d7057310478d">moveChild</a> (Widget &amp;child, std::size_t index)=0</td></tr>
 <tr class="memdesc:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves <code class="param">child</code> to position <code class="param">index:</code> it is removed, then inserted before the child now at <code class="param">index</code>.  <br /></td></tr>
@@ -190,7 +192,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <div class="textblock"><p>A tab bar over page slots. </p>
 <p>Its children are page slots in the order they were first shown; the mount keeps exactly the selected page's slot visible. <span class="tt"><a class="el" href="#a0c3b17111c1f016bdc9679f23e161029" title="Highlights a tab. Never calls the onSelect handler.">setSelected</a></span> moves the bar's highlight only. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a7004a5a7a5e9a23904dd025d1aa75615" name="a7004a5a7a5e9a23904dd025d1aa75615"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7004a5a7a5e9a23904dd025d1aa75615">&#9670;&#160;</a></span>setTabs()</h2>
@@ -294,6 +296,41 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#af7e24ad6b837fd71f288ffb5b57dad11">morph::ui::testing::detail::FakeTabs</a>.</p>
+
+</div>
+</div>
+<a id="a70289120b0f751daf75a4b1da408402c" name="a70289120b0f751daf75a4b1da408402c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a70289120b0f751daf75a4b1da408402c">&#9670;&#160;</a></span>setBarShown()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TabsWidget::setBarShown </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows or hides the strip of tab buttons. The selected page shows either way. A new tabs widget shows its strip. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether the strip is drawn. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#ad4c12bf682aeb60183c48205cf5502ef">morph::ui::testing::detail::FakeTabs</a>.</p>
 
 </div>
 </div>

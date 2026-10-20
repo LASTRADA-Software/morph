@@ -133,6 +133,7 @@ Inheritance diagram for morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;:
   <map id="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeLeaf_3C_20Interface_20_3E_map" name="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeLeaf_3C_20Interface_20_3E_map">
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" title="The ContainerWidget half of every fake container." alt="morph::ui::testing::detail::FakeContainer&lt; Interface &gt;" shape="rect" coords="0,56,304,80"/>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" title="The FieldWidget half of every fake field: properties readonly, required, errors, stale." alt="morph::ui::testing::detail::FakeField&lt; Interface &gt;" shape="rect" coords="314,56,618,80"/>
+<area href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html" title="A fake overlay&#39;s footer: a Footer child, made when it is first asked for, so an overlay that never sh..." alt="morph::ui::testing::detail::FakeOverlay&lt; Interface &gt;" shape="rect" coords="0,112,304,136"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -185,6 +186,8 @@ Protected Member Functions</h2></td></tr>
 <tr class="memdesc:adcfb5e450c81840f3a19af86dc108b54"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's handlers.  <br /></td></tr>
 <tr class="memitem:a479e91548e0d21291aed6622fcf21e5b" id="r_a479e91548e0d21291aed6622fcf21e5b"><td class="memItemLeft"><a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a479e91548e0d21291aed6622fcf21e5b">store</a> () const noexcept</td></tr>
 <tr class="memdesc:a479e91548e0d21291aed6622fcf21e5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store this widget records into.  <br /></td></tr>
+<tr class="memitem:a1fe343ba61e3430d4bf3d64c87ad2d65" id="r_a1fe343ba61e3430d4bf3d64c87ad2d65"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a1fe343ba61e3430d4bf3d64c87ad2d65">sharedStore</a> () const noexcept</td></tr>
+<tr class="memdesc:a1fe343ba61e3430d4bf3d64c87ad2d65"><td class="mdescLeft">&#160;</td><td class="mdescRight">The store, shared: what a part this widget makes (an overlay's footer) records into.  <br /></td></tr>
 <tr class="memitem:a7e1dc5da8d400e819d73832cdad60580" id="r_a7e1dc5da8d400e819d73832cdad60580"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a7e1dc5da8d400e819d73832cdad60580">id</a> () const noexcept</td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
@@ -198,7 +201,7 @@ class morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;</div><p>The <span 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00706">706</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a3315df8bc8818827aafd77198af851be" name="a3315df8bc8818827aafd77198af851be"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3315df8bc8818827aafd77198af851be">&#9670;&#160;</a></span>FakeLeaf()</h2>
@@ -250,7 +253,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00659">659</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00713">713</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +284,7 @@ template&lt;typename Interface&gt; </div>
 
 <p>Forgets the widget and logs its destruction; its remaining children become roots. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00664">664</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00718">718</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,7 +322,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00679">679</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00733">733</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +359,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00683">683</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -393,7 +396,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00687">687</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00741">741</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -430,7 +433,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00745">745</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -472,7 +475,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00753">753</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -509,7 +512,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00762">762</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -546,7 +549,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00766">766</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -583,7 +586,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00716">716</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00770">770</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -620,7 +623,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00720">720</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00774">774</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -657,7 +660,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00724">724</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00778">778</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -699,7 +702,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00784">784</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -730,7 +733,7 @@ template&lt;typename Interface&gt; </div>
 
 <p>Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="#adca561be0edc99b3359b9cf29af4784f" title="Moves the backend&#39;s recorded focus here, and logs focus.">focus</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00743">743</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00797">797</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -767,7 +770,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00747">747</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00801">801</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +812,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00753">753</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00807">807</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -841,7 +844,7 @@ template&lt;typename Interface&gt; </div>
 <p>This widget's handlers. </p>
 <dl class="section return"><dt>Returns</dt><dd>The handlers, for a setter to store into. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00757">757</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00811">811</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -873,7 +876,39 @@ template&lt;typename Interface&gt; </div>
 <p>The store this widget records into. </p>
 <dl class="section return"><dt>Returns</dt><dd>The store. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00761">761</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1fe343ba61e3430d4bf3d64c87ad2d65" name="a1fe343ba61e3430d4bf3d64c87ad2d65"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1fe343ba61e3430d4bf3d64c87ad2d65">&#9670;&#160;</a></span>sharedStore()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; const  &amp; <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::sharedStore </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel protected">protected</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The store, shared: what a part this widget makes (an overlay's footer) records into. </p>
+<dl class="section return"><dt>Returns</dt><dd>The store. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00819">819</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -905,7 +940,7 @@ template&lt;typename Interface&gt; </div>
 <p>This widget's id. </p>
 <dl class="section return"><dt>Returns</dt><dd>The id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00765">765</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00823">823</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

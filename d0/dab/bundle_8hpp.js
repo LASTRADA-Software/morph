@@ -52,5 +52,7 @@ var bundle_8hpp =
     [ "morph::ui::kAppFile", "d0/dab/bundle_8hpp.html#ad0cedd366bc2b55f45e68aedab4f5f58", null ],
     [ "morph::ui::kThemeFile", "d0/dab/bundle_8hpp.html#afd45d0285e1a460ac6328a09b6127b1f", null ],
     [ "morph::ui::kMessagesFile", "d0/dab/bundle_8hpp.html#adb3ff9d66f7c7ff9bef2596a0d5309f2", null ],
-    [ "morph::ui::kComponentFile", "d0/dab/bundle_8hpp.html#a974114de52df8baf62bfbc0ddaa110d5", null ]
+    [ "morph::ui::kComponentFile", "d0/dab/bundle_8hpp.html#a974114de52df8baf62bfbc0ddaa110d5", null ],
+    [ "morph::ui::kIconFile", "d0/dab/bundle_8hpp.html#a437c7675a1be1c10acafc0c00db5da39", null ],
+    [ "morph::ui::kMaxIconBytes", "d0/dab/bundle_8hpp.html#a9a1d0eec1394d9636d5083eb38cc1556", null ]
 ];

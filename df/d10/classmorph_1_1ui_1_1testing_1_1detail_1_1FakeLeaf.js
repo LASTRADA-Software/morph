@@ -18,5 +18,6 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf =
     [ "set", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a02c2c7a69bd9d310703f50895c4b04e1", null ],
     [ "callbacks", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adcfb5e450c81840f3a19af86dc108b54", null ],
     [ "store", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a479e91548e0d21291aed6622fcf21e5b", null ],
+    [ "sharedStore", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a1fe343ba61e3430d4bf3d64c87ad2d65", null ],
     [ "id", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a7e1dc5da8d400e819d73832cdad60580", null ]
 ];

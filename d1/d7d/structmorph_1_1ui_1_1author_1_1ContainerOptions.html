@@ -132,11 +132,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a24dda33443ea37bfd6e282f17098440f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The gap between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>.  <br /></td></tr>
 <tr class="memitem:a57f487bd1ec3da45dec8f7591ce63ff5" id="r_a57f487bd1ec3da45dec8f7591ce63ff5"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5">columns</a></td></tr>
 <tr class="memdesc:a57f487bd1ec3da45dec8f7591ce63ff5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A grid's columns; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>.  <br /></td></tr>
+<tr class="memitem:a01e669bc66cdcef38d89f09b21a73501" id="r_a01e669bc66cdcef38d89f09b21a73501"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a01e669bc66cdcef38d89f09b21a73501">align</a></td></tr>
+<tr class="memdesc:a01e669bc66cdcef38d89f09b21a73501"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the children sit across the axis; absent stretches them.  <br /></td></tr>
+<tr class="memitem:ac16b631ab76472b5eb3803e81efdda28" id="r_ac16b631ab76472b5eb3803e81efdda28"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac16b631ab76472b5eb3803e81efdda28">justify</a></td></tr>
+<tr class="memdesc:ac16b631ab76472b5eb3803e81efdda28"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns share its width.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Options of <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span>, <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> and <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#aac17190012b6bb580026d8d47ddc26f3" title="A grid node.">grid</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03078">3078</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03349">3349</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a24dda33443ea37bfd6e282f17098440f" name="a24dda33443ea37bfd6e282f17098440f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a24dda33443ea37bfd6e282f17098440f">&#9670;&#160;</a></span>gap</h2>
@@ -152,7 +156,7 @@ Public Attributes</h2></td></tr>
 
 <p>The gap between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03080">3080</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03351">3351</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,7 +174,43 @@ Public Attributes</h2></td></tr>
 
 <p>A grid's columns; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03082">3082</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03353">3353</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a01e669bc66cdcef38d89f09b21a73501" name="a01e669bc66cdcef38d89f09b21a73501"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a01e669bc66cdcef38d89f09b21a73501">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&gt; morph::ui::author::ContainerOptions::align</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the children sit across the axis; absent stretches them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03355">3355</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac16b631ab76472b5eb3803e81efdda28" name="ac16b631ab76472b5eb3803e81efdda28"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac16b631ab76472b5eb3803e81efdda28">&#9670;&#160;</a></span>justify</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a>&gt; morph::ui::author::ContainerOptions::justify</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns share its width. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03358">3358</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

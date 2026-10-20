@@ -5,6 +5,8 @@ var structmorph_1_1ui_1_1Select =
     [ "onSelect", "d7/d7b/structmorph_1_1ui_1_1Select.html#afc5f4fc855ee5a55f7bbd361783b7be5", null ],
     [ "onOpen", "d7/d7b/structmorph_1_1ui_1_1Select.html#a0b23982f6666b23afcb870eb9e7952cc", null ],
     [ "style", "d7/d7b/structmorph_1_1ui_1_1Select.html#a5767d68e89a3450fb7df4c1b8020dc27", null ],
+    [ "label", "d7/d7b/structmorph_1_1ui_1_1Select.html#a918f649b063f0ff17377e1145b7ecce9", null ],
+    [ "showLabel", "d7/d7b/structmorph_1_1ui_1_1Select.html#a311b67e3eaa4c5bb853224830221f555", null ],
     [ "field", "d7/d7b/structmorph_1_1ui_1_1Select.html#aa8fa7fe913d4af10c536cec671b54c87", null ],
     [ "common", "d7/d7b/structmorph_1_1ui_1_1Select.html#ae32716eb9f43fc11c8daa2129596cc97", null ]
 ];

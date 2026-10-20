@@ -1,8 +1,6 @@
 var searchData=
 [
-  ['rationalerror_0',['RationalError',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9e',1,'morph::math']]],
-  ['reorderpolicy_1',['ReorderPolicy',['../de/d46/engine_8hpp.html#aa4d02472cb32db2690e4da3c9fcb5e8f',1,'morph::table']]],
-  ['replyuse_2',['ReplyUse',['../db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6',1,'morph::ui']]],
-  ['role_3',['Role',['../d1/dc0/author_8hpp.html#a7d241e0d4896177e7eca8601e7c11325',1,'morph::ui::author']]],
-  ['roundingmode_4',['RoundingMode',['../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a',1,'morph::math']]]
+  ['patchmiss_0',['PatchMiss',['../db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3',1,'morph::ui::detail']]],
+  ['pluralcategory_1',['PluralCategory',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7',1,'morph::ui']]],
+  ['proptype_2',['PropType',['../d1/dc0/author_8hpp.html#a95426682ac3c0f37a78cc0d5db6ed9c8',1,'morph::ui::author']]]
 ];

@@ -180,6 +180,12 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:af57735bbefb2f396f906d1c832413727"><td class="mdescLeft">&#160;</td><td class="mdescRight">Display and entry precision: for a plain <span class="tt">double</span>/<span class="tt">float</span> member emitted as <span class="tt">x-displayDecimals</span>, for a bare <span class="tt"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html" title="Exact rational number with a runtime decimal-precision tag.">math::Rational</a></span> member as <span class="tt">x-decimalPlaces</span>. Disengaged emits nothing.  <br /></td></tr>
 <tr class="memitem:adef93e37ac9d09fb581c645af1fccf6d" id="r_adef93e37ac9d09fb581c645af1fccf6d"><td class="memItemLeft"><a class="el" href="../../df/d0b/blank__as_8hpp.html#a08a85983649d14d984e6686cf52fa2a4">BlankAs</a>&#160;</td><td class="memItemRight"><a class="el" href="#adef93e37ac9d09fb581c645af1fccf6d">blankAs</a> {<a class="el" href="../../df/d0b/blank__as_8hpp.html#a08a85983649d14d984e6686cf52fa2a4a3f9823fc8c5bf8d5efbb0ad3be5f16c9">BlankAs::Omit</a>}</td></tr>
 <tr class="memdesc:adef93e37ac9d09fb581c645af1fccf6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a blank control submits for a <span class="tt">std::string</span> / <span class="tt">std::optional&lt;std::string&gt;</span> member; <span class="tt"><a class="el" href="../../df/d0b/blank__as_8hpp.html#a08a85983649d14d984e6686cf52fa2a4ace2c8aed9c2fa0cfbed56cbda4d8bf07">BlankAs::Empty</a></span> emits <span class="tt">"x-blankAs": "empty"</span>.  <br /></td></tr>
+<tr class="memitem:a2ae8611c013dcc43e92438a12ba751e4" id="r_a2ae8611c013dcc43e92438a12ba751e4"><td class="memItemLeft">std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a2ae8611c013dcc43e92438a12ba751e4">optionsAction</a> {}</td></tr>
+<tr class="memdesc:a2ae8611c013dcc43e92438a12ba751e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type id of the registered action whose result rows are this member's options, for a member that is not a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>&lt;…&gt;</span>: the member is emitted with <span class="tt">x-optionsAction</span>, <span class="tt">x-optionValue</span> and <span class="tt">x-optionLabel</span>, as a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a></span> is, so a renderer draws it as a lookup select. Empty emits nothing. Set together with <span class="tt"><a class="el" href="#af82a935a426682e216a8cdc4367286c8" title="Field of each options row submitted as the value (x-optionValue); set with optionsAction.">valueField</a></span> and <span class="tt"><a class="el" href="#a3805793b0e5078c6fa5af1d654f4fc8a" title="Field of each options row shown to the user (x-optionLabel); set with optionsAction.">labelField</a></span>; a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a></span> member, whose type already names its options, refuses it.  <br /></td></tr>
+<tr class="memitem:af82a935a426682e216a8cdc4367286c8" id="r_af82a935a426682e216a8cdc4367286c8"><td class="memItemLeft">std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#af82a935a426682e216a8cdc4367286c8">valueField</a> {}</td></tr>
+<tr class="memdesc:af82a935a426682e216a8cdc4367286c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Field of each options row submitted as the value (<span class="tt">x-optionValue</span>); set with <span class="tt"><a class="el" href="#a2ae8611c013dcc43e92438a12ba751e4" title="Type id of the registered action whose result rows are this member&#39;s options, for a member that is no...">optionsAction</a></span>.  <br /></td></tr>
+<tr class="memitem:a3805793b0e5078c6fa5af1d654f4fc8a" id="r_a3805793b0e5078c6fa5af1d654f4fc8a"><td class="memItemLeft">std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a3805793b0e5078c6fa5af1d654f4fc8a">labelField</a> {}</td></tr>
+<tr class="memdesc:a3805793b0e5078c6fa5af1d654f4fc8a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Field of each options row shown to the user (<span class="tt">x-optionLabel</span>); set with <span class="tt"><a class="el" href="#a2ae8611c013dcc43e92438a12ba751e4" title="Type id of the registered action whose result rows are this member&#39;s options, for a member that is no...">optionsAction</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>, and a plain member's display <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span>/<span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision: for a plain double/float member emitted as x-displayDecimals,...">decimals</a></span> (docs/spec/forms/forms.md, "Field metadata"). </p>
@@ -220,7 +226,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +256,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +286,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -316,7 +322,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +358,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00378">378</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -388,7 +394,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -424,7 +430,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -460,7 +466,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -496,7 +502,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -759,6 +765,60 @@ Public Attributes</h2></td></tr>
 <p>An edit form prefilled from a stored record cannot otherwise clear an optional string: a blank control is omitted, and an omitted member reads as "leave it unchanged". With <span class="tt">Empty</span> a field the user emptied &ndash; or one prefilled with <span class="tt">""</span> &ndash; submits <span class="tt">""</span>; a field never prefilled and never typed into is still omitted. <b>Ignored on any other member type.</b> </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2ae8611c013dcc43e92438a12ba751e4" name="a2ae8611c013dcc43e92438a12ba751e4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2ae8611c013dcc43e92438a12ba751e4">&#9670;&#160;</a></span>optionsAction</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::forms::FieldMeta::optionsAction {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Type id of the registered action whose result rows are this member's options, for a member that is not a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a>&lt;…&gt;</span>: the member is emitted with <span class="tt">x-optionsAction</span>, <span class="tt">x-optionValue</span> and <span class="tt">x-optionLabel</span>, as a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a></span> is, so a renderer draws it as a lookup select. Empty emits nothing. Set together with <span class="tt"><a class="el" href="#af82a935a426682e216a8cdc4367286c8" title="Field of each options row submitted as the value (x-optionValue); set with optionsAction.">valueField</a></span> and <span class="tt"><a class="el" href="#a3805793b0e5078c6fa5af1d654f4fc8a" title="Field of each options row shown to the user (x-optionLabel); set with optionsAction.">labelField</a></span>; a <span class="tt"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">Choice</a></span> member, whose type already names its options, refuses it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af82a935a426682e216a8cdc4367286c8" name="af82a935a426682e216a8cdc4367286c8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af82a935a426682e216a8cdc4367286c8">&#9670;&#160;</a></span>valueField</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::forms::FieldMeta::valueField {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Field of each options row submitted as the value (<span class="tt">x-optionValue</span>); set with <span class="tt"><a class="el" href="#a2ae8611c013dcc43e92438a12ba751e4" title="Type id of the registered action whose result rows are this member&#39;s options, for a member that is no...">optionsAction</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3805793b0e5078c6fa5af1d654f4fc8a" name="a3805793b0e5078c6fa5af1d654f4fc8a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3805793b0e5078c6fa5af1d654f4fc8a">&#9670;&#160;</a></span>labelField</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::forms::FieldMeta::labelField {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Field of each options row shown to the user (<span class="tt">x-optionLabel</span>); set with <span class="tt"><a class="el" href="#a2ae8611c013dcc43e92438a12ba751e4" title="Type id of the registered action whose result rows are this member&#39;s options, for a member that is no...">optionsAction</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d77/classmo
 </div><!--header-->
 <div class="contents">
 
-<p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>.  
+<p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>&gt;</code></p>
@@ -131,7 +131,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ab261a5690054f1171b8eaf6d1e168ccb" id="r_ab261a5690054f1171b8eaf6d1e168ccb"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ab261a5690054f1171b8eaf6d1e168ccb">Workspace</a> (<a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html">reactive::Runtime</a> &amp;runtime, <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html">IViewBackend</a> &amp;backend, <a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">DocumentScreenHost</a> &amp;host, <a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">WorkspaceOptions</a> options={}, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent=nullptr)</td></tr>
 <tr class="memdesc:ab261a5690054f1171b8eaf6d1e168ccb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The shell, its tab bar appended to <code class="param">parent</code>.  <br /></td></tr>
 <tr class="memitem:a5d77ac885f19e43986785df74f8bf255" id="r_a5d77ac885f19e43986785df74f8bf255"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5d77ac885f19e43986785df74f8bf255">~Workspace</a> ()</td></tr>
-<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unmounts every screen without asking, newest first.  <br /></td></tr>
+<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unmounts every screen without asking, newest first, then the pages.  <br /></td></tr>
 <tr class="memitem:a11259d56e201b21163b10858807e351b" id="r_a11259d56e201b21163b10858807e351b"><td class="memItemLeft"><a id="a11259d56e201b21163b10858807e351b" name="a11259d56e201b21163b10858807e351b"></a>
 &#160;</td><td class="memItemRight"><b>Workspace</b> (Workspace const &amp;)=delete</td></tr>
 <tr class="memitem:a6865f2f2516c004839e6f19da91d7d61" id="r_a6865f2f2516c004839e6f19da91d7d61"><td class="memItemLeft"><a id="a6865f2f2516c004839e6f19da91d7d61" name="a6865f2f2516c004839e6f19da91d7d61"></a>
@@ -142,10 +142,12 @@ Public Member Functions</h2></td></tr>
 <a class="el" href="#ab261a5690054f1171b8eaf6d1e168ccb">Workspace</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#ab261a5690054f1171b8eaf6d1e168ccb">Workspace</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a4dc7cee5793b4171dae5c385e6cd1983" id="r_a4dc7cee5793b4171dae5c385e6cd1983"><td class="memItemLeft"><a class="el" href="../../de/d86/classmorph_1_1ui_1_1TabsWidget.html">TabsWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a4dc7cee5793b4171dae5c385e6cd1983">root</a> () noexcept</td></tr>
 <tr class="memdesc:a4dc7cee5793b4171dae5c385e6cd1983"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tab bar: the shell's root widget, which the host places.  <br /></td></tr>
+<tr class="memitem:a7e33472efabd86a9aa0c10513b0c8218" id="r_a7e33472efabd86a9aa0c10513b0c8218"><td class="memItemLeft"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html">WorkspaceModel</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a7e33472efabd86a9aa0c10513b0c8218">model</a> () noexcept</td></tr>
+<tr class="memdesc:a7e33472efabd86a9aa0c10513b0c8218"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tab logic the bar shows, for an application that reads or drives it by tab id.  <br /></td></tr>
 <tr class="memitem:a275a2594b0c3c45b75133aaf576e8083" id="r_a275a2594b0c3c45b75133aaf576e8083"><td class="memItemLeft">std::expected&lt; std::size_t, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a275a2594b0c3c45b75133aaf576e8083">open</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params)</td></tr>
-<tr class="memdesc:a275a2594b0c3c45b75133aaf576e8083"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a screen, or focuses the tab that already shows it.  <br /></td></tr>
+<tr class="memdesc:a275a2594b0c3c45b75133aaf576e8083"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a screen, or focuses the tab that already shows it (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8889b38f2ec5e8f4c535cc2731441925" title="Opens a screen, or focuses the tab that already shows it; the tab opened or focused is the active one...">WorkspaceModel::open</a></span>).  <br /></td></tr>
 <tr class="memitem:ac38b96b3172d2c11ccab5df5fa3df267" id="r_ac38b96b3172d2c11ccab5df5fa3df267"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac38b96b3172d2c11ccab5df5fa3df267">start</a> (<a class="el" href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html">WorkspaceStart</a> const &amp;how)</td></tr>
-<tr class="memdesc:ac38b96b3172d2c11ccab5df5fa3df267"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the start screens: with <span class="tt">resume</span>, every recorded route whose screen is known and available, in order, and the fallback when none of them opened; otherwise the <span class="tt"><a class="el" href="#ac38b96b3172d2c11ccab5df5fa3df267" title="Opens the start screens: with resume, every recorded route whose screen is known and available,...">start</a></span> screen. The first tab opened is the active one.  <br /></td></tr>
+<tr class="memdesc:ac38b96b3172d2c11ccab5df5fa3df267"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the start screens (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a6ef80d373a24f616909b8e97d1e6a10b" title="Opens the start screens: with resume, every recorded route whose screen is known and available,...">WorkspaceModel::start</a></span>).  <br /></td></tr>
 <tr class="memitem:a7611398d3d5f52041ebb516038d673e7" id="r_a7611398d3d5f52041ebb516038d673e7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7611398d3d5f52041ebb516038d673e7">flushRecord</a> ()</td></tr>
 <tr class="memdesc:a7611398d3d5f52041ebb516038d673e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared.  <br /></td></tr>
 <tr class="memitem:a2a051e32780eed67419f5867d1dbc713" id="r_a2a051e32780eed67419f5867d1dbc713"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2a051e32780eed67419f5867d1dbc713">record</a> () const</td></tr>
@@ -168,18 +170,18 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ae818ab3fa0bd893cba6a6d5485213e7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's index.  <br /></td></tr>
 <tr class="memitem:a0c05abb39feb16f73b579d7632c318d5" id="r_a0c05abb39feb16f73b579d7632c318d5"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a0c05abb39feb16f73b579d7632c318d5">handleOf</a> (std::size_t index) const noexcept</td></tr>
 <tr class="memdesc:a0c05abb39feb16f73b579d7632c318d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen handle of a tab: what a client remounts for development reload and inspects.  <br /></td></tr>
-<tr class="memitem:ab30cde461dba11a3a237f59c26c1d7ed" id="r_ab30cde461dba11a3a237f59c26c1d7ed"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ab30cde461dba11a3a237f59c26c1d7ed">activeHandle</a> () const noexcept</td></tr>
-<tr class="memdesc:ab30cde461dba11a3a237f59c26c1d7ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's screen handle.  <br /></td></tr>
+<tr class="memitem:a83bb553575e38fc48442a7eeba61ffd8" id="r_a83bb553575e38fc48442a7eeba61ffd8"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a83bb553575e38fc48442a7eeba61ffd8">activeHandle</a> () const</td></tr>
+<tr class="memdesc:a83bb553575e38fc48442a7eeba61ffd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's screen handle.  <br /></td></tr>
 <tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2de906de11c865c7a7cc724bb7235b05">forceCloseAll</a> ()</td></tr>
 <tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving.  <br /></td></tr>
 <tr class="memitem:a8f8c64f7fbce706b574150d9c7cf216c" id="r_a8f8c64f7fbce706b574150d9c7cf216c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">WorkspaceTab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f8c64f7fbce706b574150d9c7cf216c">tabs</a> () const</td></tr>
 <tr class="memdesc:a8f8c64f7fbce706b574150d9c7cf216c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The open tabs, in order.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>. </p>
-<p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> keep the order they were opened in. Opening a screen whose identity an open tab already has focuses that tab; a singleton screen has one tab. Closing runs each screen's close protocol (spec 6 §3), one tab at a time, and a walk over several tabs stops at the first veto. The shell takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. Neither copyable nor movable; owned by the owner thread of its runtime. </p>
+<div class="textblock"><p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it. </p>
+<p>The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol (spec 6 §3), one tab at a time, a walk over several tabs stopping at the first veto. The bar shows the model's tabs and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. Neither copyable nor movable; owned by the owner thread of its runtime. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab261a5690054f1171b8eaf6d1e168ccb" name="ab261a5690054f1171b8eaf6d1e168ccb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab261a5690054f1171b8eaf6d1e168ccb">&#9670;&#160;</a></span>Workspace()</h2>
@@ -235,7 +237,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -262,9 +264,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Unmounts every screen without asking, newest first. </p>
+<p>Unmounts every screen without asking, newest first, then the pages. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -295,7 +297,37 @@ Public Member Functions</h2></td></tr>
 <p>The tab bar: the shell's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7e33472efabd86a9aa0c10513b0c8218" name="a7e33472efabd86a9aa0c10513b0c8218"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e33472efabd86a9aa0c10513b0c8218">&#9670;&#160;</a></span>model()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html">WorkspaceModel</a> &amp; morph::ui::Workspace::model </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The tab logic the bar shows, for an application that reads or drives it by tab id. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the shell. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -326,8 +358,8 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Opens a screen, or focuses the tab that already shows it. </p>
-<p>The tab whose screen and identity match is focused; a singleton screen's tab is focused; a <span class="tt">reuseEmpty</span> screen opened with an identity replaces its tab that has no identity and no unsaved changes; otherwise a new tab is opened. The tab opened or focused is the active one. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Opens a screen, or focuses the tab that already shows it (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8889b38f2ec5e8f4c535cc2731441925" title="Opens a screen, or focuses the tab that already shows it; the tab opened or focused is the active one...">WorkspaceModel::open</a></span>). </p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">screenId</td><td>The screen id. </td></tr>
     <tr><td class="paramname">params</td><td>Its params. </td></tr>
@@ -336,7 +368,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tab's index, or why the screen could not be mounted; a refused mount opens nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +395,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Opens the start screens: with <span class="tt">resume</span>, every recorded route whose screen is known and available, in order, and the fallback when none of them opened; otherwise the <span class="tt"><a class="el" href="#ac38b96b3172d2c11ccab5df5fa3df267" title="Opens the start screens: with resume, every recorded route whose screen is known and available,...">start</a></span> screen. The first tab opened is the active one. </p>
+<p>Opens the start screens (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a6ef80d373a24f616909b8e97d1e6a10b" title="Opens the start screens: with resume, every recorded route whose screen is known and available,...">WorkspaceModel::start</a></span>). </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">how</td><td>The start screen, the fallback and the record. </td></tr>
@@ -372,7 +404,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of tabs opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +433,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +463,7 @@ Public Member Functions</h2></td></tr>
 <p>The record as it would be written now: the routes of the open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The routes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -466,7 +498,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -495,7 +527,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the next tab in most-recently-used order (Ctrl+Tab). Repeated calls walk the order as it was at the first of them; any other activation starts a new walk. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -524,7 +556,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the previous tab in most-recently-used order (Ctrl+Shift+Tab). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +596,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -598,13 +630,13 @@ Public Member Functions</h2></td></tr>
 <p>Closes every tab but one, one at a time, stopping at the first veto. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">index</td><td>The tab kept. </td></tr>
+    <tr><td class="paramname">index</td><td>The tab kept; past the last one closes every tab. </td></tr>
     <tr><td class="paramname">done</td><td>Called once with whether every other tab closed; may be empty. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -639,7 +671,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -674,7 +706,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -704,7 +736,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's index. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -740,12 +772,12 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null past the end. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ab30cde461dba11a3a237f59c26c1d7ed" name="ab30cde461dba11a3a237f59c26c1d7ed"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab30cde461dba11a3a237f59c26c1d7ed">&#9670;&#160;</a></span>activeHandle()</h2>
+<a id="a83bb553575e38fc48442a7eeba61ffd8" name="a83bb553575e38fc48442a7eeba61ffd8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a83bb553575e38fc48442a7eeba61ffd8">&#9670;&#160;</a></span>activeHandle()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -762,7 +794,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -770,7 +802,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's screen handle. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or null while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -799,7 +831,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -829,7 +861,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

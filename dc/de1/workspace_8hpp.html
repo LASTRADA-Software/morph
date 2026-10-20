@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de1/workspa
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
@@ -140,23 +141,20 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de1/workspa
 <code>#include &quot;<a class="el" href="../../de/d99/scope_8hpp_source.html">../reactive/scope.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/d2f/route_8hpp_source.html">route.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../dc/de1/workspace_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceScreen" id="r_morph_3A_3Aui_3A_3AWorkspaceScreen"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html">morph::ui::WorkspaceScreen</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the shell needs to know of one screen id: the catalog's <span class="tt"><a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f" title="The screen has at most one tab.">singleton</a></span> and <span class="tt"><a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#aca993acff26c8eb05147a1c8e6bbad7c" title="A tab of the screen with no identity and no unsaved changes is replaced, not stacked,...">reuseEmpty</a></span>.  <a href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceStart" id="r_morph_3A_3Aui_3A_3AWorkspaceStart"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html">morph::ui::WorkspaceStart</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a workspace starts (spec 6 §7, <span class="tt">app-start</span>).  <a href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceOptions" id="r_morph_3A_3Aui_3A_3AWorkspaceOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">morph::ui::WorkspaceOptions</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html" title="Tabs over screens: one screen instance per tab, mounted into the tab&#39;s page through DocumentScreenHos...">Workspace</a></span> treats screens.  <a href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceTab" id="r_morph_3A_3Aui_3A_3AWorkspaceTab"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">morph::ui::WorkspaceTab</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One open tab, as an application's tab menu or a test reads it.  <a href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspace" id="r_morph_3A_3Aui_3A_3AWorkspace"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html">morph::ui::Workspace</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>.  <a href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it.  <a href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html#details">More...</a><br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a <span class="tt">DocumentScreenHost</span>. </p>

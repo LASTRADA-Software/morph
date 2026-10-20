@@ -136,6 +136,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac47c728bd6437ea4ff1d00883368db79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Date or date and time; set once.  <br /></td></tr>
 <tr class="memitem:a00b40637adfabbe60b52937779b7790a" id="r_a00b40637adfabbe60b52937779b7790a"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a00b40637adfabbe60b52937779b7790a">offsetMinutes</a> = 0</td></tr>
 <tr class="memdesc:a00b40637adfabbe60b52937779b7790a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The display zone's offset from UTC, in minutes; set once.  <br /></td></tr>
+<tr class="memitem:a7b4ba49fc0be4c9b2637bc73a3f27acd" id="r_a7b4ba49fc0be4c9b2637bc73a3f27acd"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7b4ba49fc0be4c9b2637bc73a3f27acd">label</a></td></tr>
+<tr class="memdesc:a7b4ba49fc0be4c9b2637bc73a3f27acd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The field's label: its visible caption while <span class="tt"><a class="el" href="#a5396350b9e44723fa75a76ca53ad7f8d" title="Whether the input draws label as a visible caption itself; set once. A form leaves it false,...">showLabel</a></span>; a form's cell draws it otherwise, beside the input. Empty: none.  <br /></td></tr>
+<tr class="memitem:a5396350b9e44723fa75a76ca53ad7f8d" id="r_a5396350b9e44723fa75a76ca53ad7f8d"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a5396350b9e44723fa75a76ca53ad7f8d">showLabel</a> = false</td></tr>
+<tr class="memdesc:a5396350b9e44723fa75a76ca53ad7f8d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the input draws <span class="tt"><a class="el" href="#a7b4ba49fc0be4c9b2637bc73a3f27acd" title="The field&#39;s label: its visible caption while showLabel; a form&#39;s cell draws it otherwise,...">label</a></span> as a visible caption itself; set once. A form leaves it false, since its cell draws the caption.  <br /></td></tr>
 <tr class="memitem:ab19f0b5b4e97ba18fb538f366dd3aae0" id="r_ab19f0b5b4e97ba18fb538f366dd3aae0"><td class="memItemLeft"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab19f0b5b4e97ba18fb538f366dd3aae0">field</a> {}</td></tr>
 <tr class="memdesc:ab19f0b5b4e97ba18fb538f366dd3aae0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read-only, required, errors and stale.  <br /></td></tr>
 <tr class="memitem:a570eb8b858cbedfe5239ffea85b919bf" id="r_a570eb8b858cbedfe5239ffea85b919bf"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a570eb8b858cbedfe5239ffea85b919bf">common</a> {}</td></tr>
@@ -144,7 +148,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A date, or a date and time, edited in a display zone and reported as an instant. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00828">828</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00885">885</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af74c093674b74bb462568732d520109c" name="af74c093674b74bb462568732d520109c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af74c093674b74bb462568732d520109c">&#9670;&#160;</a></span>value</h2>
@@ -160,7 +164,7 @@ Public Attributes</h2></td></tr>
 
 <p>The instant shown; <span class="tt">nullopt</span> (or an empty <span class="tt">Timestamp</span>) shows an empty field. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00830">830</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00887">887</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the instant the user entered, or <span class="tt">nullopt</span> when they cleared the field. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00832">832</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00889">889</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +200,7 @@ Public Attributes</h2></td></tr>
 
 <p>Date or date and time; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00834">834</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00891">891</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +218,43 @@ Public Attributes</h2></td></tr>
 
 <p>The display zone's offset from UTC, in minutes; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00836">836</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00893">893</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7b4ba49fc0be4c9b2637bc73a3f27acd" name="a7b4ba49fc0be4c9b2637bc73a3f27acd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7b4ba49fc0be4c9b2637bc73a3f27acd">&#9670;&#160;</a></span>label</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::DateTimeInput::label</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The field's label: its visible caption while <span class="tt"><a class="el" href="#a5396350b9e44723fa75a76ca53ad7f8d" title="Whether the input draws label as a visible caption itself; set once. A form leaves it false,...">showLabel</a></span>; a form's cell draws it otherwise, beside the input. Empty: none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00896">896</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5396350b9e44723fa75a76ca53ad7f8d" name="a5396350b9e44723fa75a76ca53ad7f8d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5396350b9e44723fa75a76ca53ad7f8d">&#9670;&#160;</a></span>showLabel</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::DateTimeInput::showLabel = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the input draws <span class="tt"><a class="el" href="#a7b4ba49fc0be4c9b2637bc73a3f27acd" title="The field&#39;s label: its visible caption while showLabel; a form&#39;s cell draws it otherwise,...">label</a></span> as a visible caption itself; set once. A form leaves it false, since its cell draws the caption. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00899">899</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>Read-only, required, errors and stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00838">838</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00901">901</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00840">840</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00903">903</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

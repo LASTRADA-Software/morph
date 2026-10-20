@@ -13,6 +13,8 @@ var classmorph_1_1ui_1_1InterpreterHost =
     [ "upload", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48", null ],
     [ "uploadFor", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6458f0bc280e5bd67aee23c586fda1dc", null ],
     [ "download", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6bac462c1175a7d0e5110c525fdbfbe4", null ],
+    [ "readFile", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6e75cdcafb27fbb7ab456a6a8d354417", null ],
+    [ "saveFile", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a01f21ef4c55d0118a50e691086462137", null ],
     [ "preferenceChanged", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a8b9c1e20321481e181ce2fbd3c54d6d6", null ],
     [ "permissionsStale", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4871fa26b8ebb36507e289469a4ac83b", null ]
 ];

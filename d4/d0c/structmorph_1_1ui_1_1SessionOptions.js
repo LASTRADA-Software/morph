@@ -6,5 +6,6 @@ var structmorph_1_1ui_1_1SessionOptions =
     [ "catalog", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#ab39d41c72d3ca279d24d7e89252d14c3", null ],
     [ "classify", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#a0f9cecf4b22b1e65fdb0a0b33a0c67cf", null ],
     [ "developmentTools", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#af53173c1a06cb3317f827ecc3ef4ab61", null ],
-    [ "watcher", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#acbb2aac89841c0aad006e65ffb6d3510", null ]
+    [ "watcher", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#acbb2aac89841c0aad006e65ffb6d3510", null ],
+    [ "maxInlineFileBytes", "d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#a3c64106d7954788ad732c9a487122fea", null ]
 ];

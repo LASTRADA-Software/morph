@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d99/structm
 </div><!--header-->
 <div class="contents">
 
-<p>How <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: its fields laid out by group (sections as panels, consecutive tab groups as one tab ...">formView</a></span> lays a form out and labels its chrome.  
+<p>How <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: the title (the options&#39; title, else the schema&#39;s while showTitle),...">formView</a></span> lays a form out and labels its chrome.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>&gt;</code></p>
@@ -134,8 +134,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:aff32027d8e9b3c2b038655ab7080a52b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Columns of every section's, accordion's and tab's grid; <span class="tt">x-colspan</span> is clamped to it.  <br /></td></tr>
 <tr class="memitem:a624f9506279bf5837efdc568d3832b8c" id="r_a624f9506279bf5837efdc568d3832b8c"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a624f9506279bf5837efdc568d3832b8c">flatGridColumns</a></td></tr>
 <tr class="memdesc:a624f9506279bf5837efdc568d3832b8c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Columns of the implicit group's grid; unset is 1 while <span class="tt"><a class="el" href="#aff32027d8e9b3c2b038655ab7080a52b" title="Columns of every section&#39;s, accordion&#39;s and tab&#39;s grid; x-colspan is clamped to it.">gridColumns</a></span> is 2, else <span class="tt"><a class="el" href="#aff32027d8e9b3c2b038655ab7080a52b" title="Columns of every section&#39;s, accordion&#39;s and tab&#39;s grid; x-colspan is clamped to it.">gridColumns</a></span>.  <br /></td></tr>
-<tr class="memitem:ab6851c684322eceb0dc8fe8cf50a1af1" id="r_ab6851c684322eceb0dc8fe8cf50a1af1"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ab6851c684322eceb0dc8fe8cf50a1af1">submitLabel</a> = &quot;Submit&quot;</td></tr>
-<tr class="memdesc:ab6851c684322eceb0dc8fe8cf50a1af1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The explicit-mode button's label.  <br /></td></tr>
+<tr class="memitem:a39d0cccd4f5b6a2e5eab3c2cff021eb7" id="r_a39d0cccd4f5b6a2e5eab3c2cff021eb7"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">ui::Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39d0cccd4f5b6a2e5eab3c2cff021eb7">submitLabel</a> = &quot;Submit&quot;</td></tr>
+<tr class="memdesc:a39d0cccd4f5b6a2e5eab3c2cff021eb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The explicit-mode button's label, which the status line names (<span class="tt">ready: press &lt;label&gt;</span>).  <br /></td></tr>
 <tr class="memitem:aaf6ab0b23d5fb1025f3cb9aa98dcd9b9" id="r_aaf6ab0b23d5fb1025f3cb9aa98dcd9b9"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aaf6ab0b23d5fb1025f3cb9aa98dcd9b9">addLabel</a> = &quot;Add&quot;</td></tr>
 <tr class="memdesc:aaf6ab0b23d5fb1025f3cb9aa98dcd9b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The caption of a collection's Add button.  <br /></td></tr>
 <tr class="memitem:a71f32a8e9c4b7457389042769da22c27" id="r_a71f32a8e9c4b7457389042769da22c27"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a71f32a8e9c4b7457389042769da22c27">removeLabel</a> = &quot;Remove&quot;</td></tr>
@@ -144,11 +144,17 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a4e3e65f0b12289b473f5de5582fb30bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the form's title heads the view.  <br /></td></tr>
 <tr class="memitem:abebea0a12e4925186b251c1e6f7da210" id="r_abebea0a12e4925186b251c1e6f7da210"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#abebea0a12e4925186b251c1e6f7da210">showStatus</a> = true</td></tr>
 <tr class="memdesc:abebea0a12e4925186b251c1e6f7da210"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the status line ("fill the required (*) fields", …) is shown.  <br /></td></tr>
+<tr class="memitem:a055c36d5c64048765cbad1b3c33060af" id="r_a055c36d5c64048765cbad1b3c33060af"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">ui::Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a055c36d5c64048765cbad1b3c33060af">title</a></td></tr>
+<tr class="memdesc:a055c36d5c64048765cbad1b3c33060af"><td class="mdescLeft">&#160;</td><td class="mdescRight">A heading over the fields (test id <span class="tt">form_title</span>) in place of the schema's title; empty shows none. A title given is shown whatever <span class="tt"><a class="el" href="#a4e3e65f0b12289b473f5de5582fb30bd" title="Whether the form&#39;s title heads the view.">showTitle</a></span> says.  <br /></td></tr>
+<tr class="memitem:ac6dc3cc7084403a341897cd4725ef9d2" id="r_ac6dc3cc7084403a341897cd4725ef9d2"><td class="memItemLeft"><a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2">FieldLayout</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac6dc3cc7084403a341897cd4725ef9d2">fieldLayout</a> = <a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2a29b733fdb4bddeda910b3b4a659c2fef">FieldLayout::Stacked</a></td></tr>
+<tr class="memdesc:ac6dc3cc7084403a341897cd4725ef9d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where each cell puts its field's caption: over the control, or beside it.  <br /></td></tr>
+<tr class="memitem:a6d344f72a8ddafad2bbc3cca6a81daf5" id="r_a6d344f72a8ddafad2bbc3cca6a81daf5"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a6d344f72a8ddafad2bbc3cca6a81daf5">inlineLabelWidth</a> = 16</td></tr>
+<tr class="memdesc:a6d344f72a8ddafad2bbc3cca6a81daf5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width of an inline caption, in backend units; at least 1, else <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: the title (the options&#39; title, else the schema&#39;s while showTitle),...">formView</a></span> throws <span class="tt">std::invalid_argument</span>. Read only for <span class="tt"><a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2a0125cf5f3ca38b312ca5d3b511c45a13" title="The label beside the control, at a fixed width, centred on it; the help under the control.">FieldLayout::Inline</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>How <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: its fields laid out by group (sections as panels, consecutive tab groups as one tab ...">formView</a></span> lays a form out and labels its chrome. </p>
+<div class="textblock"><p>How <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: the title (the options&#39; title, else the schema&#39;s while showTitle),...">formView</a></span> lays a form out and labels its chrome. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a4d89f2d073de98dd019e961fd3f8c552" name="a4d89f2d073de98dd019e961fd3f8c552"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4d89f2d073de98dd019e961fd3f8c552">&#9670;&#160;</a></span>overrides</h2>
@@ -164,7 +170,7 @@ Public Attributes</h2></td></tr>
 
 <p>Replacement controls. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +188,7 @@ Public Attributes</h2></td></tr>
 
 <p>Columns of every section's, accordion's and tab's grid; <span class="tt">x-colspan</span> is clamped to it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,25 +206,25 @@ Public Attributes</h2></td></tr>
 
 <p>Columns of the implicit group's grid; unset is 1 while <span class="tt"><a class="el" href="#aff32027d8e9b3c2b038655ab7080a52b" title="Columns of every section&#39;s, accordion&#39;s and tab&#39;s grid; x-colspan is clamped to it.">gridColumns</a></span> is 2, else <span class="tt"><a class="el" href="#aff32027d8e9b3c2b038655ab7080a52b" title="Columns of every section&#39;s, accordion&#39;s and tab&#39;s grid; x-colspan is clamped to it.">gridColumns</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ab6851c684322eceb0dc8fe8cf50a1af1" name="ab6851c684322eceb0dc8fe8cf50a1af1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab6851c684322eceb0dc8fe8cf50a1af1">&#9670;&#160;</a></span>submitLabel</h2>
+<a id="a39d0cccd4f5b6a2e5eab3c2cff021eb7" name="a39d0cccd4f5b6a2e5eab3c2cff021eb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39d0cccd4f5b6a2e5eab3c2cff021eb7">&#9670;&#160;</a></span>submitLabel</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::forms::FormViewOptions::submitLabel = &quot;Submit&quot;</td>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">ui::Prop</a>&lt;std::string&gt; morph::forms::FormViewOptions::submitLabel = &quot;Submit&quot;</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>The explicit-mode button's label. </p>
+<p>The explicit-mode button's label, which the status line names (<span class="tt">ready: press &lt;label&gt;</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +242,7 @@ Public Attributes</h2></td></tr>
 
 <p>The caption of a collection's Add button. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +260,7 @@ Public Attributes</h2></td></tr>
 
 <p>The caption of a collection row's Remove button. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +278,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the form's title heads the view. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +296,61 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the status line ("fill the required (*) fields", …) is shown. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a055c36d5c64048765cbad1b3c33060af" name="a055c36d5c64048765cbad1b3c33060af"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a055c36d5c64048765cbad1b3c33060af">&#9670;&#160;</a></span>title</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">ui::Prop</a>&lt;std::string&gt; morph::forms::FormViewOptions::title</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A heading over the fields (test id <span class="tt">form_title</span>) in place of the schema's title; empty shows none. A title given is shown whatever <span class="tt"><a class="el" href="#a4e3e65f0b12289b473f5de5582fb30bd" title="Whether the form&#39;s title heads the view.">showTitle</a></span> says. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac6dc3cc7084403a341897cd4725ef9d2" name="ac6dc3cc7084403a341897cd4725ef9d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac6dc3cc7084403a341897cd4725ef9d2">&#9670;&#160;</a></span>fieldLayout</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2">FieldLayout</a> morph::forms::FormViewOptions::fieldLayout = <a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2a29b733fdb4bddeda910b3b4a659c2fef">FieldLayout::Stacked</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where each cell puts its field's caption: over the control, or beside it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6d344f72a8ddafad2bbc3cca6a81daf5" name="a6d344f72a8ddafad2bbc3cca6a81daf5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6d344f72a8ddafad2bbc3cca6a81daf5">&#9670;&#160;</a></span>inlineLabelWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::forms::FormViewOptions::inlineLabelWidth = 16</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The width of an inline caption, in backend units; at least 1, else <span class="tt"><a class="el" href="../../da/d14/form__view_8hpp.html#a12b83b9171c10702e8553c2bf7c179b2" title="Renders session: the title (the options&#39; title, else the schema&#39;s while showTitle),...">formView</a></span> throws <span class="tt">std::invalid_argument</span>. Read only for <span class="tt"><a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2a0125cf5f3ca38b312ca5d3b511c45a13" title="The label beside the control, at a fixed width, centred on it; the help under the control.">FieldLayout::Inline</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d14/form__view_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../da/d14/form__view_8hpp_source.html">form_view.hpp</a>.</p>
 
 </div>
 </div>

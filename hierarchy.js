@@ -36,6 +36,13 @@ var hierarchy =
     [ "morph::bridge::BridgeHandler&lt; Model, Sharing &gt;", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", null ],
     [ "morph::bridge::NoSharing", "d8/d38/structmorph_1_1bridge_1_1NoSharing.html", null ],
     [ "morph::bridge::RawHandler", "d8/d3a/classmorph_1_1bridge_1_1RawHandler.html", null ],
+    [ "morph::client::Args", "dd/dc3/structmorph_1_1client_1_1Args.html", null ],
+    [ "morph::client::LocalApp", "dd/dd4/structmorph_1_1client_1_1LocalApp.html", null ],
+    [ "morph::client::LocalSetup", "d8/d04/structmorph_1_1client_1_1LocalSetup.html", null ],
+    [ "morph::client::RemoteTransport", "d5/db6/structmorph_1_1client_1_1RemoteTransport.html", null ],
+    [ "morph::client::ShellOptions", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html", null ],
+    [ "morph::client::SignedIn", "d9/d37/structmorph_1_1client_1_1SignedIn.html", null ],
+    [ "morph::client::Source::Transport", "dc/daf/structmorph_1_1client_1_1Source_1_1Transport.html", null ],
     [ "morph::core::FileIoOps", "db/d00/structmorph_1_1core_1_1FileIoOps.html", null ],
     [ "morph::detail::FixedString&lt; N &gt;", "df/d52/structmorph_1_1detail_1_1FixedString.html", null ],
     [ "morph::effects::ActionRecord", "da/d4f/structmorph_1_1effects_1_1ActionRecord.html", null ],
@@ -215,6 +222,10 @@ var hierarchy =
       [ "morph::reactive::Computed< std::optional< std::string > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::string >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< morph::ui::Value >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< std::vector< morph::ui::HeadBadge > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< std::vector< morph::ui::HeadAction > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< std::vector< morph::ui::WorkspaceTabState > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< std::optional< morph::ui::WorkspaceTabId > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< Target >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Signal< std::optional< std::string > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::optional< morph::forms::PendingConfirm > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
@@ -230,6 +241,7 @@ var hierarchy =
       [ "morph::reactive::Signal< std::set< std::string, std::less<> > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::shared_ptr< morph::ui::FormatContext const > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< ValueRecord >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
+      [ "morph::reactive::Signal< std::optional< morph::ui::WorkspaceTabId > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< morph::ui::Value >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< morph::ui::detail::RtScope * >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::shared_ptr< morph::ui::detail::CacheEntry > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
@@ -364,6 +376,7 @@ var hierarchy =
     [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
     [ "morph::tui::FrontendConfig", "d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html", null ],
     [ "morph::ui::Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", null ],
+    [ "morph::ui::ActionBar", "d6/dda/structmorph_1_1ui_1_1ActionBar.html", null ],
     [ "morph::ui::ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", null ],
     [ "morph::ui::ActionEffect", "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html", null ],
     [ "morph::ui::ActionField", "d2/d20/structmorph_1_1ui_1_1ActionField.html", null ],
@@ -374,7 +387,13 @@ var hierarchy =
     [ "morph::ui::AppContext", "dd/db8/classmorph_1_1ui_1_1AppContext.html", null ],
     [ "morph::ui::ApplicationInfo", "d8/d2a/structmorph_1_1ui_1_1ApplicationInfo.html", null ],
     [ "morph::ui::AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html", null ],
-    [ "morph::ui::AppSource", "d5/d3d/classmorph_1_1ui_1_1AppSource.html", null ],
+    [ "morph::ui::AppSource", "d5/d3d/classmorph_1_1ui_1_1AppSource.html", [
+      [ "morph::client::Source", "d3/de2/classmorph_1_1client_1_1Source.html", [
+        [ "morph::client::LocalSource", "d1/d98/classmorph_1_1client_1_1LocalSource.html", null ],
+        [ "morph::client::RemoteSource", "d2/d13/classmorph_1_1client_1_1RemoteSource.html", null ]
+      ] ]
+    ] ],
+    [ "morph::ui::author::ActionButtonOptions", "d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html", null ],
     [ "morph::ui::author::ActionFacts&lt; Action &gt;", "d5/d43/structmorph_1_1ui_1_1author_1_1ActionFacts.html", null ],
     [ "morph::ui::author::ActionPart", "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart.html", null ],
     [ "morph::ui::author::Any", "d1/dde/structmorph_1_1ui_1_1author_1_1Any.html", null ],
@@ -422,7 +441,12 @@ var hierarchy =
     [ "morph::ui::author::FilePickerOptions", "d8/d21/structmorph_1_1ui_1_1author_1_1FilePickerOptions.html", null ],
     [ "morph::ui::author::ForEachOptions", "dd/d09/structmorph_1_1ui_1_1author_1_1ForEachOptions.html", null ],
     [ "morph::ui::author::FormOptions&lt; Action &gt;", "d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html", null ],
+    [ "morph::ui::author::FormPresentation", "d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html", null ],
     [ "morph::ui::author::Handle&lt; T &gt;", "da/d66/classmorph_1_1ui_1_1author_1_1Handle.html", null ],
+    [ "morph::ui::author::Handle&lt; T &gt;", "da/d66/classmorph_1_1ui_1_1author_1_1Handle.html", [
+      [ "morph::ui::author::ResultHandle< T >", "df/d32/classmorph_1_1ui_1_1author_1_1ResultHandle.html", null ]
+    ] ],
+    [ "morph::ui::author::HeadBadgeOptions", "d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html", null ],
     [ "morph::ui::author::InstanceSpec", "dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html", null ],
     [ "morph::ui::author::MenuItem", "d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html", null ],
     [ "morph::ui::author::ModelFacts&lt; Model &gt;", "d7/dc1/structmorph_1_1ui_1_1author_1_1ModelFacts.html", null ],
@@ -481,11 +505,14 @@ var hierarchy =
     [ "morph::ui::CustomRequest", "d2/d54/structmorph_1_1ui_1_1CustomRequest.html", null ],
     [ "morph::ui::DateTimeInput", "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html", null ],
     [ "morph::ui::Decimal", "d8/d70/structmorph_1_1ui_1_1Decimal.html", null ],
+    [ "morph::ui::detail::ActionModel", "d6/d99/structmorph_1_1ui_1_1detail_1_1ActionModel.html", null ],
     [ "morph::ui::detail::AliasResolver", "d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html", null ],
     [ "morph::ui::detail::ArrangedChild", "df/dac/structmorph_1_1ui_1_1detail_1_1ArrangedChild.html", null ],
+    [ "morph::ui::detail::BadgeModel", "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html", null ],
     [ "morph::ui::detail::Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", null ],
     [ "morph::ui::detail::BoundaryRuntime", "dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html", null ],
     [ "morph::ui::detail::CacheEntry", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html", null ],
+    [ "morph::ui::detail::catalogue::TitleParts", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html", null ],
     [ "morph::ui::detail::CheckContext", "de/d88/structmorph_1_1ui_1_1detail_1_1CheckContext.html", null ],
     [ "morph::ui::detail::CheckRuntime", "d4/dad/structmorph_1_1ui_1_1detail_1_1CheckRuntime.html", null ],
     [ "morph::ui::detail::CommandCtx", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html", null ],
@@ -572,6 +599,8 @@ var hierarchy =
     [ "morph::ui::FrontendOption", "da/d01/structmorph_1_1ui_1_1FrontendOption.html", null ],
     [ "morph::ui::Grid", "de/d85/structmorph_1_1ui_1_1Grid.html", null ],
     [ "morph::ui::GridCell", "df/d66/structmorph_1_1ui_1_1GridCell.html", null ],
+    [ "morph::ui::HeadAction", "d3/d86/structmorph_1_1ui_1_1HeadAction.html", null ],
+    [ "morph::ui::HeadBadge", "dd/d2f/structmorph_1_1ui_1_1HeadBadge.html", null ],
     [ "morph::ui::HelloReply", "d3/d85/structmorph_1_1ui_1_1HelloReply.html", null ],
     [ "morph::ui::HelloRequest", "db/dbe/structmorph_1_1ui_1_1HelloRequest.html", null ],
     [ "morph::ui::HostArg", "dd/d5b/structmorph_1_1ui_1_1HostArg.html", null ],
@@ -589,11 +618,13 @@ var hierarchy =
     [ "morph::ui::IHistory", "d6/d55/classmorph_1_1ui_1_1IHistory.html", [
       [ "morph::ui::testing::MemoryHistory", "d8/de9/classmorph_1_1ui_1_1testing_1_1MemoryHistory.html", null ]
     ] ],
+    [ "morph::ui::InlineFile", "dd/dc7/structmorph_1_1ui_1_1InlineFile.html", null ],
     [ "morph::ui::InspectedNode", "da/de6/structmorph_1_1ui_1_1InspectedNode.html", null ],
     [ "morph::ui::InspectedQuery", "d4/d2f/structmorph_1_1ui_1_1InspectedQuery.html", null ],
     [ "morph::ui::Inspector", "dd/db3/classmorph_1_1ui_1_1Inspector.html", null ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", null ],
     [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", [
+      [ "morph::client::ApplicationHost", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html", null ],
       [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
     ] ],
     [ "morph::ui::InterpreterOptions", "d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html", null ],
@@ -672,6 +703,7 @@ var hierarchy =
     [ "morph::ui::ScreenHandle", "da/de8/classmorph_1_1ui_1_1ScreenHandle.html", [
       [ "morph::ui::Explorer", "d9/df4/classmorph_1_1ui_1_1Explorer.html", null ]
     ] ],
+    [ "morph::ui::ScreenHead", "d6/db2/classmorph_1_1ui_1_1ScreenHead.html", null ],
     [ "morph::ui::ScreenHost", "de/d1a/classmorph_1_1ui_1_1ScreenHost.html", [
       [ "morph::ui::DocumentScreenHost", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html", null ]
     ] ],
@@ -701,6 +733,7 @@ var hierarchy =
     [ "morph::ui::Table", "de/de3/structmorph_1_1ui_1_1Table.html", null ],
     [ "morph::ui::TableColumn", "df/ddf/structmorph_1_1ui_1_1TableColumn.html", null ],
     [ "morph::ui::TableOptions", "d7/d25/structmorph_1_1ui_1_1TableOptions.html", null ],
+    [ "morph::ui::TableRowView", "da/d6d/structmorph_1_1ui_1_1TableRowView.html", null ],
     [ "morph::ui::Tabs", "d0/d49/structmorph_1_1ui_1_1Tabs.html", null ],
     [ "morph::ui::testing::ConformanceCase", "db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html", null ],
     [ "morph::ui::testing::ConformanceProbe", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html", null ],
@@ -708,13 +741,18 @@ var hierarchy =
     [ "morph::ui::testing::detail::Checks", "d0/d7d/classmorph_1_1ui_1_1testing_1_1detail_1_1Checks.html", null ],
     [ "morph::ui::testing::detail::Entry", "db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html", null ],
     [ "morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-      [ "morph::ui::testing::detail::FakeContainer< Interface >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", null ],
+      [ "morph::ui::testing::detail::FakeContainer< Interface >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+        [ "morph::ui::testing::detail::FakeOverlay< Interface >", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html", null ]
+      ] ],
       [ "morph::ui::testing::detail::FakeField< Interface >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", null ]
     ] ],
+    [ "morph::ui::testing::detail::Geometry", "d3/d99/classmorph_1_1ui_1_1testing_1_1detail_1_1Geometry.html", null ],
     [ "morph::ui::testing::detail::HandlerLife", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife.html", null ],
     [ "morph::ui::testing::detail::LifeSentinel", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html", null ],
+    [ "morph::ui::testing::detail::Measured", "d6/d85/structmorph_1_1ui_1_1testing_1_1detail_1_1Measured.html", null ],
     [ "morph::ui::testing::detail::Record", "d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html", null ],
     [ "morph::ui::testing::detail::RecordStore", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html", null ],
+    [ "morph::ui::testing::WidgetBounds", "d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html", null ],
     [ "morph::ui::Text", "dd/dfe/structmorph_1_1ui_1_1Text.html", null ],
     [ "morph::ui::TextInput", "d3/dbc/structmorph_1_1ui_1_1TextInput.html", null ],
     [ "morph::ui::ThemeIndex", "d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html", null ],
@@ -763,14 +801,18 @@ var hierarchy =
         [ "morph::ui::DialogWidget", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html", [
           [ "morph::ui::testing::detail::FakeLeaf< DialogWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< DialogWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
-              [ "morph::ui::testing::detail::FakeDialog", "dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html", null ]
+              [ "morph::ui::testing::detail::FakeOverlay< DialogWidget >", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html", [
+                [ "morph::ui::testing::detail::FakeDialog", "dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html", null ]
+              ] ]
             ] ]
           ] ]
         ] ],
         [ "morph::ui::DrawerWidget", "de/d3c/classmorph_1_1ui_1_1DrawerWidget.html", [
           [ "morph::ui::testing::detail::FakeLeaf< DrawerWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< DrawerWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
-              [ "morph::ui::testing::detail::FakeDrawer", "d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html", null ]
+              [ "morph::ui::testing::detail::FakeOverlay< DrawerWidget >", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html", [
+                [ "morph::ui::testing::detail::FakeDrawer", "d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html", null ]
+              ] ]
             ] ]
           ] ]
         ] ],
@@ -796,7 +838,11 @@ var hierarchy =
           ] ]
         ] ],
         [ "morph::ui::ScrollWidget", "d1/d8b/classmorph_1_1ui_1_1ScrollWidget.html", null ],
-        [ "morph::ui::SlotWidget", "de/d98/classmorph_1_1ui_1_1SlotWidget.html", null ],
+        [ "morph::ui::SlotWidget", "de/d98/classmorph_1_1ui_1_1SlotWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< morph::ui::SlotWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< morph::ui::SlotWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", null ]
+          ] ]
+        ] ],
         [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", [
           [ "morph::ui::testing::detail::FakeLeaf< SplitterWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< SplitterWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
@@ -910,10 +956,15 @@ var hierarchy =
       ] ]
     ] ],
     [ "morph::ui::Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", null ],
-    [ "morph::ui::WorkspaceOptions", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html", null ],
+    [ "morph::ui::WorkspaceModel", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html", null ],
+    [ "morph::ui::WorkspaceOptions", "de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html", [
+      [ "morph::ui::WorkspaceModelOptions", "d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions.html", null ]
+    ] ],
     [ "morph::ui::WorkspaceScreen", "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html", null ],
     [ "morph::ui::WorkspaceStart", "d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html", null ],
     [ "morph::ui::WorkspaceTab", "df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html", null ],
+    [ "morph::ui::WorkspaceTabId", "d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html", null ],
+    [ "morph::ui::WorkspaceTabState", "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html", null ],
     [ "morph::units::Quantity&lt; U, DeclaredDecimals &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],
     [ "morph::units::Quantity&lt; U &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", [
       [ "morph::units::NamedQuantity< Name, U >", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", null ]
@@ -943,6 +994,8 @@ var hierarchy =
     [ "morph::wire::WireCodecOps", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html", null ],
     [ "std::exception", null, [
       [ "std::logic_error", null, [
+        [ "morph::forms::ConflictingOptionsError", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError.html", null ],
+        [ "morph::forms::IncompleteOptionsError", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError.html", null ],
         [ "morph::forms::UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", null ],
         [ "morph::model::DuplicateRegistrationError", "d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html", null ],
         [ "morph::model::EffectsRegistrationError", "d6/dea/structmorph_1_1model_1_1EffectsRegistrationError.html", null ],

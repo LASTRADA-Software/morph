@@ -134,11 +134,17 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a00e43f8c240737a3dc1072ec9655b12a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Space between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>.  <br /></td></tr>
 <tr class="memitem:aef926235e6821ab1bfd8a9225ce0ce80" id="r_aef926235e6821ab1bfd8a9225ce0ce80"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#aef926235e6821ab1bfd8a9225ce0ce80">common</a> {}</td></tr>
 <tr class="memdesc:aef926235e6821ab1bfd8a9225ce0ce80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:ab25d3f45e9c08b1590e7a3851e0d6209" id="r_ab25d3f45e9c08b1590e7a3851e0d6209"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab25d3f45e9c08b1590e7a3851e0d6209">tone</a></td></tr>
+<tr class="memdesc:ab25d3f45e9c08b1590e7a3851e0d6209"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's tone: disengaged when none was given; an engaged <span class="tt"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html" title="A node property: a constant, or a slot — a reactive read, with a stable id when it was given one.">Prop</a></span> whose value is <span class="tt">nullopt</span> has no tone at the moment. Only <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span>'s row view sets it; the mount refuses it on a row outside a table.  <br /></td></tr>
+<tr class="memitem:adda33ccfe0eeb7010d83bab04a78bd54" id="r_adda33ccfe0eeb7010d83bab04a78bd54"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#adda33ccfe0eeb7010d83bab04a78bd54">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aafbb09a82eafab60150d0996e8fe46560">Align::Stretch</a></td></tr>
+<tr class="memdesc:adda33ccfe0eeb7010d83bab04a78bd54"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the children sit across the row (vertically); set once.  <br /></td></tr>
+<tr class="memitem:a26605fdac1155e8aa5d6c536b5d9a43c" id="r_a26605fdac1155e8aa5d6c536b5d9a43c"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a>&#160;</td><td class="memItemRight"><a class="el" href="#a26605fdac1155e8aa5d6c536b5d9a43c">justify</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4aa6122a65eaa676f700ae68d393054a37">Justify::Start</a></td></tr>
+<tr class="memdesc:a26605fdac1155e8aa5d6c536b5d9a43c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the spare width goes while no shown child stretches; set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Children laid out left to right. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00575">575</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa2f804db00e0e955362335dc292c13a6" name="aa2f804db00e0e955362335dc292c13a6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa2f804db00e0e955362335dc292c13a6">&#9670;&#160;</a></span>children</h2>
@@ -154,7 +160,7 @@ Public Attributes</h2></td></tr>
 
 <p>The children, in order; a null child is skipped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00530">530</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00577">577</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +178,7 @@ Public Attributes</h2></td></tr>
 
 <p>Space between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00532">532</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00579">579</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +196,61 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00534">534</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00581">581</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab25d3f45e9c08b1590e7a3851e0d6209" name="ab25d3f45e9c08b1590e7a3851e0d6209"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab25d3f45e9c08b1590e7a3851e0d6209">&#9670;&#160;</a></span>tone</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::optional&lt;<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a>&gt; &gt; &gt; morph::ui::Row::tone</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A table row's tone: disengaged when none was given; an engaged <span class="tt"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html" title="A node property: a constant, or a slot — a reactive read, with a stable id when it was given one.">Prop</a></span> whose value is <span class="tt">nullopt</span> has no tone at the moment. Only <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span>'s row view sets it; the mount refuses it on a row outside a table. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00584">584</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adda33ccfe0eeb7010d83bab04a78bd54" name="adda33ccfe0eeb7010d83bab04a78bd54"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adda33ccfe0eeb7010d83bab04a78bd54">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> morph::ui::Row::align = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aafbb09a82eafab60150d0996e8fe46560">Align::Stretch</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the children sit across the row (vertically); set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a26605fdac1155e8aa5d6c536b5d9a43c" name="a26605fdac1155e8aa5d6c536b5d9a43c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a26605fdac1155e8aa5d6c536b5d9a43c">&#9670;&#160;</a></span>justify</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> morph::ui::Row::justify = <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4aa6122a65eaa676f700ae68d393054a37">Justify::Start</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the spare width goes while no shown child stretches; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00588">588</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

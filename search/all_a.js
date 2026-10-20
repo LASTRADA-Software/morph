@@ -11,5 +11,9 @@ var searchData=
   ['json_20schema_20generation_20for_20auto_20built_20guis_8',['&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'']]],
   ['jsonint_9',['jsonInt',['../d6/dda/value_8hpp.html#ae17a8d6aeb774cdfa58e3e892d943e4f',1,'morph::ui::detail']]],
   ['jsontextvalue_10',['jsonTextValue',['../db/d42/interpreter_8hpp.html#a2a87c57ab97796c06ccfaef30b4755b5',1,'morph::ui::detail']]],
-  ['jsontype_11',['jsonType',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a63fa87e66ac01e645662124dd66678ca',1,'morph::forms::FieldSpec']]]
+  ['jsontype_11',['jsonType',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a63fa87e66ac01e645662124dd66678ca',1,'morph::forms::FieldSpec']]],
+  ['justify_12',['Justify',['../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4',1,'morph::ui']]],
+  ['justify_13',['justify',['../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html#ac16b631ab76472b5eb3803e81efdda28',1,'morph::ui::author::ContainerOptions::justify'],['../d1/d05/structmorph_1_1ui_1_1Column.html#abed9ca87522026d8aace7862496f7757',1,'morph::ui::Column::justify'],['../d7/da8/structmorph_1_1ui_1_1Row.html#a26605fdac1155e8aa5d6c536b5d9a43c',1,'morph::ui::Row::justify']]],
+  ['justifyname_14',['justifyName',['../d1/dc0/author_8hpp.html#aac4092d72452a9298795c8dd6d9b77f4',1,'morph::ui::author::detail']]],
+  ['justifyof_15',['justifyOf',['../db/d42/interpreter_8hpp.html#a3e1037b78c8cdaf9ecc47a952152d583',1,'morph::ui::detail']]]
 ];

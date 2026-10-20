@@ -150,11 +150,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dc0/author_
 <code>#include &quot;../core/registry.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d7f/fixed__string_8hpp_source.html">../detail/fixed_string.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../df/d31/reflected__member_8hpp_source.html">../detail/reflected_member.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d0/d39/field__layout_8hpp_source.html">../forms/engine/field_layout.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">../ui/document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">../ui/value.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d1/de8/rational_8hpp_source.html">../util/rational.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d9/dd9/alignment_8hpp_source.html">alignment.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../dd/d96/button__style_8hpp_source.html">button_style.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d1/dc0/author_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -210,6 +213,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A mutation of a scope, without its action type: what <span class="tt"><a class="el" href="#afe5761f1b8c3d5dcfa0e2736a3a8d105" title="signIn: runs a sign-in mutation and installs the token it returns.">signIn</a></span>, <span class="tt"><a class="el" href="#a5b46a71d4bcc0c2e5744dfff55d2db11" title="upload: sends a file through a mutation (files/1).">upload</a></span> and <span class="tt">can</span> name.  <a href="../../d6/d30/classmorph_1_1ui_1_1author_1_1MutationRef.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AQueryHandle_3C_20Action_2C_20Value_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AQueryHandle_3C_20Action_2C_20Value_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html">morph::ui::author::QueryHandle&lt; Action, Value &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A query declared by a scope.  <a href="../../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AResultHandle_3C_20T_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AResultHandle_3C_20T_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../df/d32/classmorph_1_1ui_1_1author_1_1ResultHandle.html">morph::ui::author::ResultHandle&lt; T &gt;</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A mutation's result: a <span class="tt"><a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html" title="An expression of a document, typed by the C++ value it evaluates to (spec 5 §11).">Handle</a></span> with no field reads.  <a href="../../df/d32/classmorph_1_1ui_1_1author_1_1ResultHandle.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AMutationHandle_3C_20Action_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AMutationHandle_3C_20Action_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html">morph::ui::author::MutationHandle&lt; Action &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A mutation declared by a scope.  <a href="../../da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ABodyField_3C_20Action_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ABodyField_3C_20Action_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d3c/classmorph_1_1ui_1_1author_1_1BodyField.html">morph::ui::author::BodyField&lt; Action &gt;</a></td></tr>
@@ -248,6 +253,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A declared component, for <span class="tt"><a class="el" href="#ac93e3947a3cefa2b9125d623d0f1293a" title="A custom node: a declared component with its props and events.">custom</a></span> nodes.  <a href="../../da/dee/classmorph_1_1ui_1_1author_1_1ComponentRef.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3APoint" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3APoint"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../df/d11/classmorph_1_1ui_1_1author_1_1Point.html">morph::ui::author::Point</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A customization point (spec 5 §12b).  <a href="../../df/d11/classmorph_1_1ui_1_1author_1_1Point.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AHeadBadgeOptions" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AHeadBadgeOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">morph::ui::author::HeadBadgeOptions</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A status badge of the screen's head (<span class="tt">screen.status</span>).  <a href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AActionButtonOptions" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AActionButtonOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">morph::ui::author::ActionButtonOptions</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A button of a screen's head (<span class="tt">screen.action</span>), or of a dialog's or drawer's footer.  <a href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AScope" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AScope"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html">morph::ui::author::Scope</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's own scope: its declarations, params, lifecycle keys, components and customization points.  <a href="../../d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ARunOptions" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ARunOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html">morph::ui::author::RunOptions</a></td></tr>
@@ -304,6 +313,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An overlay on one field of a form (spec 6 §10), applied to the parsed form model.  <a href="../../d8/dc4/structmorph_1_1ui_1_1author_1_1FieldSettings.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AFieldOverlay_3C_20Action_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AFieldOverlay_3C_20Action_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay.html">morph::ui::author::FieldOverlay&lt; Action &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One field of a form's <span class="tt">fields</span> overlay, by member pointer.  <a href="../../d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AFormPresentation" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AFormPresentation"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">morph::ui::author::FormPresentation</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="#af020b669d18373ffc0f3b8e69f0f28b4" title="A form node: a schema form of the forms engine over an action (spec 2); each field takes its label fr...">form</a></span>, <span class="tt"><a class="el" href="#a7d36157a6129d5292611cf3ff244a08d" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> or <span class="tt"><a class="el" href="#abab6c15d842c49ed038fa080bcd2aca3" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> presents its forms: the keys every one of them takes.  <a href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AFormOptions_3C_20Action_20_3E" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AFormOptions_3C_20Action_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html">morph::ui::author::FormOptions&lt; Action &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Options of <span class="tt"><a class="el" href="#af020b669d18373ffc0f3b8e69f0f28b4" title="A form node: a schema form of the forms engine over an action (spec 2); each field takes its label fr...">form</a></span>.  <a href="../../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ACustomOptions" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ACustomOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html">morph::ui::author::CustomOptions</a></td></tr>
@@ -456,6 +467,12 @@ Functions</h2></td></tr>
 <tr class="memdesc:af730d2256014f2dbe5476bebc4323235"><td class="mdescLeft">&#160;</td><td class="mdescRight">A document value as a constant expression: a scalar as itself, a list, record, decimal or quantity wrapped in <span class="tt">{"lit": v}</span>.  <br /></td></tr>
 <tr class="memitem:a423766b1b89bd1aefb76b825065b7adc" id="r_a423766b1b89bd1aefb76b825065b7adc"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>&#160;</td><td class="memItemRight"><a class="el" href="#a423766b1b89bd1aefb76b825065b7adc">morph::ui::author::detail::single</a> (std::string_view key, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> value)</td></tr>
 <tr class="memdesc:a423766b1b89bd1aefb76b825065b7adc"><td class="mdescLeft">&#160;</td><td class="mdescRight">A one-key JSON object.  <br /></td></tr>
+<tr class="memitem:aaa01f35875ed03f09ae913a671515fed" id="r_aaa01f35875ed03f09ae913a671515fed"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aaa01f35875ed03f09ae913a671515fed">morph::ui::author::detail::alignName</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align)</td></tr>
+<tr class="memdesc:aaa01f35875ed03f09ae913a671515fed"><td class="mdescLeft">&#160;</td><td class="mdescRight">An alignment's document name.  <br /></td></tr>
+<tr class="memitem:aac4092d72452a9298795c8dd6d9b77f4" id="r_aac4092d72452a9298795c8dd6d9b77f4"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aac4092d72452a9298795c8dd6d9b77f4">morph::ui::author::detail::justifyName</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> justify)</td></tr>
+<tr class="memdesc:aac4092d72452a9298795c8dd6d9b77f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A justification's document name.  <br /></td></tr>
+<tr class="memitem:ab593cedbe5c0cb7a73b5d711a41ca06f" id="r_ab593cedbe5c0cb7a73b5d711a41ca06f"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab593cedbe5c0cb7a73b5d711a41ca06f">morph::ui::author::detail::literalOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;expression)</td></tr>
+<tr class="memdesc:ab593cedbe5c0cb7a73b5d711a41ca06f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value of a constant expression, as <span class="tt"><a class="el" href="#af730d2256014f2dbe5476bebc4323235" title="A document value as a constant expression: a scalar as itself, a list, record, decimal or quantity wr...">constant</a></span> writes one.  <br /></td></tr>
 <tr class="memitem:ad94009cc79bca4e8ac9df450b0058819" id="r_ad94009cc79bca4e8ac9df450b0058819"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad94009cc79bca4e8ac9df450b0058819">morph::ui::author::detail::call</a> (std::string_view function, std::vector&lt; <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &gt; args)</td></tr>
 <tr class="memdesc:ad94009cc79bca4e8ac9df450b0058819"><td class="mdescLeft">&#160;</td><td class="mdescRight">A call of an <span class="tt">expr/1</span> library function.  <br /></td></tr>
 <tr class="memitem:a8c02cabf34369e92f479385735905cb7" id="r_a8c02cabf34369e92f479385735905cb7"><td class="memItemLeft">std::optional&lt; std::pair&lt; std::string, std::string &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8c02cabf34369e92f479385735905cb7">morph::ui::author::detail::namedRead</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
@@ -538,6 +555,11 @@ requires detail::HandleOperands&lt;L, R&gt;</td></tr>
 <tr class="memdesc:acb472415147b00ed57abeb514e33cde6"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#acb472415147b00ed57abeb514e33cde6" title="concat.">concat</a></span>.  <br /></td></tr>
 <tr class="memitem:a3ed7acb46ca8d5d9854299ff35b4aca2" id="r_a3ed7acb46ca8d5d9854299ff35b4aca2"><td class="memItemLeft"><a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html">Handle</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3ed7acb46ca8d5d9854299ff35b4aca2">morph::ui::author::format</a> (<a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;pattern, std::vector&lt; <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> &gt; args)</td></tr>
 <tr class="memdesc:a3ed7acb46ca8d5d9854299ff35b4aca2"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a3ed7acb46ca8d5d9854299ff35b4aca2" title="format: a template with {0}, {1}, … placeholders.">format</a></span>: a template with <span class="tt">{0}</span>, <span class="tt">{1}</span>, … placeholders.  <br /></td></tr>
+<tr class="memitem:ab6f9c5dead9d037f83574e8db2b20979" id="r_ab6f9c5dead9d037f83574e8db2b20979"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab6f9c5dead9d037f83574e8db2b20979">morph::ui::author::concatLists</a> (std::vector&lt; <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> &gt; const &amp;lists)</td></tr>
+<tr class="memdesc:ab6f9c5dead9d037f83574e8db2b20979"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#ab6f9c5dead9d037f83574e8db2b20979" title="concatLists: the lists, one after another; null while any of them is null.">concatLists</a></span>: the lists, one after another; <span class="tt">null</span> while any of them is <span class="tt">null</span>.  <br /></td></tr>
+<tr class="memitem:aec040df86cfd28035c9546ce8284f12f" id="r_aec040df86cfd28035c9546ce8284f12f"><td class="memTemplParams" colspan="2">template&lt;typename T&gt; </td></tr>
+<tr class="memitem:aec040df86cfd28035c9546ce8284f12f template"><td class="memItemLeft"><a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html">Handle</a>&lt; std::vector&lt; T &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aec040df86cfd28035c9546ce8284f12f">morph::ui::author::concatLists</a> (std::vector&lt; <a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html">Handle</a>&lt; std::vector&lt; T &gt; &gt; &gt; const &amp;lists)</td></tr>
+<tr class="memdesc:aec040df86cfd28035c9546ce8284f12f"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#ab6f9c5dead9d037f83574e8db2b20979" title="concatLists: the lists, one after another; null while any of them is null.">concatLists</a></span> of lists of one element type.  <br /></td></tr>
 <tr class="memitem:aa158a441b87c4d82832d38adb16e2af9" id="r_aa158a441b87c4d82832d38adb16e2af9"><td class="memItemLeft"><a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html">Handle</a>&lt; std::int64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa158a441b87c4d82832d38adb16e2af9">morph::ui::author::count</a> (<a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;list)</td></tr>
 <tr class="memdesc:aa158a441b87c4d82832d38adb16e2af9"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#aa158a441b87c4d82832d38adb16e2af9" title="count: a list&#39;s length.">count</a></span>: a list's length.  <br /></td></tr>
 <tr class="memitem:a2ad4aa2cf28f056f258cead6b72cb1b4" id="r_a2ad4aa2cf28f056f258cead6b72cb1b4"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2ad4aa2cf28f056f258cead6b72cb1b4">morph::ui::author::sum</a> (<a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;list)</td></tr>
@@ -563,6 +585,12 @@ requires detail::HandleOperands&lt;L, R&gt;</td></tr>
 <tr class="memdesc:a1faa876e346036b5807dd48d5ba5a7e9"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">{"if": [c, a, b]}</span>: a choice between two values.  <br /></td></tr>
 <tr class="memitem:a6fb9f927b24b669ee52a8dc63628f63d" id="r_a6fb9f927b24b669ee52a8dc63628f63d"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6fb9f927b24b669ee52a8dc63628f63d">morph::ui::author::obj</a> (std::vector&lt; std::pair&lt; std::string, <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> &gt; &gt; const &amp;fields)</td></tr>
 <tr class="memdesc:a6fb9f927b24b669ee52a8dc63628f63d"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">{"<a class="el" href="#a6fb9f927b24b669ee52a8dc63628f63d" title="{&quot;obj&quot;: {...}}: a record built from expressions.">obj</a>": {...}}</span>: a record built from expressions.  <br /></td></tr>
+<tr class="memitem:a67b01f1b047b86ee729e53da221ea014" id="r_a67b01f1b047b86ee729e53da221ea014"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a67b01f1b047b86ee729e53da221ea014">morph::ui::author::content</a> ()</td></tr>
+<tr class="memdesc:a67b01f1b047b86ee729e53da221ea014"><td class="mdescLeft">&#160;</td><td class="mdescRight">The content sizing, <span class="tt">"<a class="el" href="#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>: as much as the content needs.  <br /></td></tr>
+<tr class="memitem:ad8bc7066fe98cda8e15e050c51c8447d" id="r_ad8bc7066fe98cda8e15e050c51c8447d"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad8bc7066fe98cda8e15e050c51c8447d">morph::ui::author::fixed</a> (int units)</td></tr>
+<tr class="memdesc:ad8bc7066fe98cda8e15e050c51c8447d"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fixed sizing, <span class="tt">{"lit": {"<a class="el" href="#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": units}}</span>.  <br /></td></tr>
+<tr class="memitem:abdf723a44b0443754d84d8f3ec04eec4" id="r_abdf723a44b0443754d84d8f3ec04eec4"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#abdf723a44b0443754d84d8f3ec04eec4">morph::ui::author::stretch</a> (int weight=1)</td></tr>
+<tr class="memdesc:abdf723a44b0443754d84d8f3ec04eec4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A stretch sizing, <span class="tt">{"lit": {"<a class="el" href="#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": weight}}</span>: a share of the leftover space.  <br /></td></tr>
 <tr class="memitem:a0eacf5a5bba37ad223446cd3a35c8cfb" id="r_a0eacf5a5bba37ad223446cd3a35c8cfb"><td class="memItemLeft"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0eacf5a5bba37ad223446cd3a35c8cfb">morph::ui::author::list</a> (std::vector&lt; <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> &gt; const &amp;items)</td></tr>
 <tr class="memdesc:a0eacf5a5bba37ad223446cd3a35c8cfb"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">{"<a class="el" href="#a0eacf5a5bba37ad223446cd3a35c8cfb" title="{&quot;list&quot;: [...]}: a list built from expressions.">list</a>": [...]}</span>: a list built from expressions.  <br /></td></tr>
 <tr class="memitem:a118aff700afd7b90be7c3aff28590a19" id="r_a118aff700afd7b90be7c3aff28590a19"><td class="memTemplParams" colspan="2">template&lt;typename T = Any&gt; </td></tr>
@@ -602,6 +630,14 @@ requires detail::HandleOperands&lt;L, R&gt;</td></tr>
 <tr class="memdesc:a017173b68cd6edf317e4245c7a663b78"><td class="mdescLeft">&#160;</td><td class="mdescRight">A document type name for a C++ type, as <span class="tt">params</span> and <span class="tt">state</span> declare it.  <br /></td></tr>
 <tr class="memitem:a45cda1df1b076eeab4e1399f227bd03f" id="r_a45cda1df1b076eeab4e1399f227bd03f"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a45cda1df1b076eeab4e1399f227bd03f">morph::ui::author::showErrorsName</a> (<a class="el" href="#a5b4a4ba2853d3bfe0ba8aa0a23a526dc">ShowErrors</a> when)</td></tr>
 <tr class="memdesc:a45cda1df1b076eeab4e1399f227bd03f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The spelling of a <span class="tt"><a class="el" href="#a5b4a4ba2853d3bfe0ba8aa0a23a526dc" title="When a scope&#39;s element errors show (spec 5 §6).">ShowErrors</a></span>.  <br /></td></tr>
+<tr class="memitem:a39033eb179412eb76226e1b50487841e" id="r_a39033eb179412eb76226e1b50487841e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a39033eb179412eb76226e1b50487841e">morph::ui::author::detail::putPresent</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &amp;json, char const *key, <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;value)</td></tr>
+<tr class="memdesc:a39033eb179412eb76226e1b50487841e"><td class="mdescLeft">&#160;</td><td class="mdescRight">An expression key of a part, left out when absent.  <br /></td></tr>
+<tr class="memitem:a9c1fa5b781011a17f4d1f051b1e20c1b" id="r_a9c1fa5b781011a17f4d1f051b1e20c1b"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9c1fa5b781011a17f4d1f051b1e20c1b">morph::ui::author::detail::headBadge</a> (<a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">HeadBadgeOptions</a> const &amp;badge)</td></tr>
+<tr class="memdesc:a9c1fa5b781011a17f4d1f051b1e20c1b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a9c1fa5b781011a17f4d1f051b1e20c1b" title="A headBadge part&#39;s JSON.">headBadge</a></span> part's JSON.  <br /></td></tr>
+<tr class="memitem:a1165e4d383901d503ea631acfd7df5b5" id="r_a1165e4d383901d503ea631acfd7df5b5"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1165e4d383901d503ea631acfd7df5b5">morph::ui::author::detail::actionButton</a> (<a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">ActionButtonOptions</a> const &amp;action)</td></tr>
+<tr class="memdesc:a1165e4d383901d503ea631acfd7df5b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">An <span class="tt"><a class="el" href="#a1165e4d383901d503ea631acfd7df5b5" title="An actionButton part&#39;s JSON.">actionButton</a></span> part's JSON.  <br /></td></tr>
+<tr class="memitem:af829f7444803ab9e606bf5fa77fdc27f" id="r_af829f7444803ab9e606bf5fa77fdc27f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af829f7444803ab9e606bf5fa77fdc27f">morph::ui::author::detail::append</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &amp;json, char const *key, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> item)</td></tr>
+<tr class="memdesc:af829f7444803ab9e606bf5fa77fdc27f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">item</code> to the array at <code class="param">key</code> of <code class="param">json</code>, making the array on first use.  <br /></td></tr>
 <tr class="memitem:a1bae0ae2785327ece6d91e2b16c39511" id="r_a1bae0ae2785327ece6d91e2b16c39511"><td class="memItemLeft"><a class="el" href="../../df/ddf/classmorph_1_1ui_1_1author_1_1Command.html">Command</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1bae0ae2785327ece6d91e2b16c39511">morph::ui::author::detail::command</a> (std::string_view key, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> value)</td></tr>
 <tr class="memdesc:a1bae0ae2785327ece6d91e2b16c39511"><td class="mdescLeft">&#160;</td><td class="mdescRight">A command with one key.  <br /></td></tr>
 <tr class="memitem:a20bd26199257c7f0d0d01439460d0cf6" id="r_a20bd26199257c7f0d0d01439460d0cf6"><td class="memItemLeft"><a class="el" href="../../df/ddf/classmorph_1_1ui_1_1author_1_1Command.html">Command</a>&#160;</td><td class="memItemRight"><a class="el" href="#a20bd26199257c7f0d0d01439460d0cf6">morph::ui::author::set</a> (<a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;target, <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;value)</td></tr>
@@ -675,6 +711,8 @@ requires detail::HandleOperands&lt;L, R&gt;</td></tr>
 <tr class="memdesc:a486e7d347cb1c8b2b0cfbaa647f5fa07"><td class="mdescLeft">&#160;</td><td class="mdescRight">A menu item's JSON.  <br /></td></tr>
 <tr class="memitem:abebef2afc25f2dd936388d960034b62a" id="r_abebef2afc25f2dd936388d960034b62a"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#abebef2afc25f2dd936388d960034b62a">morph::ui::author::menu</a> (std::vector&lt; <a class="el" href="../../d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html">MenuItem</a> &gt; const &amp;items)</td></tr>
 <tr class="memdesc:abebef2afc25f2dd936388d960034b62a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#abebef2afc25f2dd936388d960034b62a" title="A menu node.">menu</a></span> node.  <br /></td></tr>
+<tr class="memitem:af20af48df729ffc33737852fb0e15d23" id="r_af20af48df729ffc33737852fb0e15d23"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#af20af48df729ffc33737852fb0e15d23">morph::ui::author::detail::stackNode</a> (char const *kind, <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;children, <a class="el" href="../../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html">ContainerOptions</a> const &amp;options)</td></tr>
+<tr class="memdesc:af20af48df729ffc33737852fb0e15d23"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row or column with its options.  <br /></td></tr>
 <tr class="memitem:a292c3d313d58e373d98df98e63251768" id="r_a292c3d313d58e373d98df98e63251768"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a292c3d313d58e373d98df98e63251768">morph::ui::author::column</a> (<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;children, <a class="el" href="../../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html">ContainerOptions</a> const &amp;options={})</td></tr>
 <tr class="memdesc:a292c3d313d58e373d98df98e63251768"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> node.  <br /></td></tr>
 <tr class="memitem:af5970e3875401b6bab351f57e52d563b" id="r_af5970e3875401b6bab351f57e52d563b"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#af5970e3875401b6bab351f57e52d563b">morph::ui::author::row</a> (<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;children, <a class="el" href="../../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html">ContainerOptions</a> const &amp;options={})</td></tr>
@@ -749,18 +787,20 @@ requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496ba
 <tr class="memdesc:a816e18093c8a377ccb6ad3a7e241868a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a816e18093c8a377ccb6ad3a7e241868a" title="A customize node: the editor of a customization point.">customize</a></span> node: the editor of a customization point.  <br /></td></tr>
 <tr class="memitem:a96dbfb7969cda3d4e160b143726693be" id="r_a96dbfb7969cda3d4e160b143726693be"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a96dbfb7969cda3d4e160b143726693be">morph::ui::author::boundary</a> (<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;children, <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;loading={}, <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;error={})</td></tr>
 <tr class="memdesc:a96dbfb7969cda3d4e160b143726693be"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a96dbfb7969cda3d4e160b143726693be" title="A boundary node: loading until its queries have values, error when one failed without one.">boundary</a></span> node: <span class="tt">loading</span> until its queries have values, <span class="tt">error</span> when one failed without one.  <br /></td></tr>
+<tr class="memitem:af9e452b5b3a1de7f621cd1fecc88f976" id="r_af9e452b5b3a1de7f621cd1fecc88f976"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af9e452b5b3a1de7f621cd1fecc88f976">morph::ui::author::detail::present</a> (<a class="el" href="../../df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html">NodeWriter</a> &amp;node, <a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;presentation)</td></tr>
+<tr class="memdesc:af9e452b5b3a1de7f621cd1fecc88f976"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes <code class="param">presentation's</code> keys on <code class="param">node</code>.  <br /></td></tr>
 <tr class="memitem:af020b669d18373ffc0f3b8e69f0f28b4" id="r_af020b669d18373ffc0f3b8e69f0f28b4"><td class="memTemplParams" colspan="2">template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>, typename Model&gt; <br />
 requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt;</td></tr>
 <tr class="memitem:af020b669d18373ffc0f3b8e69f0f28b4 template"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#af020b669d18373ffc0f3b8e69f0f28b4">morph::ui::author::form</a> (<a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;model, <a class="el" href="../../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html">FormOptions</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> &gt; const &amp;options={})</td></tr>
 <tr class="memdesc:af020b669d18373ffc0f3b8e69f0f28b4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#af020b669d18373ffc0f3b8e69f0f28b4" title="A form node: a schema form of the forms engine over an action (spec 2); each field takes its label fr...">form</a></span> node: a schema form of the forms engine over an action (spec 2); each field takes its label from the schema or the overlay.  <br /></td></tr>
-<tr class="memitem:a23e279bfc1c91e2d1f59e0f63da00e90" id="r_a23e279bfc1c91e2d1f59e0f63da00e90"><td class="memTemplParams" colspan="2">template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>, typename Model&gt; <br />
+<tr class="memitem:a7d36157a6129d5292611cf3ff244a08d" id="r_a7d36157a6129d5292611cf3ff244a08d"><td class="memTemplParams" colspan="2">template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>, typename Model&gt; <br />
 requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt;</td></tr>
-<tr class="memitem:a23e279bfc1c91e2d1f59e0f63da00e90 template"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a23e279bfc1c91e2d1f59e0f63da00e90">morph::ui::author::collection</a> (<a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;model)</td></tr>
-<tr class="memdesc:a23e279bfc1c91e2d1f59e0f63da00e90"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a23e279bfc1c91e2d1f59e0f63da00e90" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> node: the forms engine's list screen over an action.  <br /></td></tr>
-<tr class="memitem:acdaa662c33689582aa26424bf39411b9" id="r_acdaa662c33689582aa26424bf39411b9"><td class="memTemplParams" colspan="2">template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>, typename Model&gt; <br />
+<tr class="memitem:a7d36157a6129d5292611cf3ff244a08d template"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7d36157a6129d5292611cf3ff244a08d">morph::ui::author::collection</a> (<a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;model, <a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;presentation={})</td></tr>
+<tr class="memdesc:a7d36157a6129d5292611cf3ff244a08d"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#a7d36157a6129d5292611cf3ff244a08d" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> node: the forms engine's list screen over an action.  <br /></td></tr>
+<tr class="memitem:abab6c15d842c49ed038fa080bcd2aca3" id="r_abab6c15d842c49ed038fa080bcd2aca3"><td class="memTemplParams" colspan="2">template&lt;typename <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>, typename Model&gt; <br />
 requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&gt;</td></tr>
-<tr class="memitem:acdaa662c33689582aa26424bf39411b9 template"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#acdaa662c33689582aa26424bf39411b9">morph::ui::author::wizard</a> (<a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;model)</td></tr>
-<tr class="memdesc:acdaa662c33689582aa26424bf39411b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#acdaa662c33689582aa26424bf39411b9" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> node: the forms engine's wizard over an action.  <br /></td></tr>
+<tr class="memitem:abab6c15d842c49ed038fa080bcd2aca3 template"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#abab6c15d842c49ed038fa080bcd2aca3">morph::ui::author::wizard</a> (<a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;model, <a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;presentation={})</td></tr>
+<tr class="memdesc:abab6c15d842c49ed038fa080bcd2aca3"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#abab6c15d842c49ed038fa080bcd2aca3" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> node: the forms engine's wizard over an action.  <br /></td></tr>
 <tr class="memitem:ac93e3947a3cefa2b9125d623d0f1293a" id="r_ac93e3947a3cefa2b9125d623d0f1293a"><td class="memItemLeft"><a class="el" href="../../d2/d81/classmorph_1_1ui_1_1author_1_1Node.html">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac93e3947a3cefa2b9125d623d0f1293a">morph::ui::author::custom</a> (<a class="el" href="../../da/dee/classmorph_1_1ui_1_1author_1_1ComponentRef.html">ComponentRef</a> const &amp;component, <a class="el" href="../../d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html">CustomOptions</a> const &amp;options={})</td></tr>
 <tr class="memdesc:ac93e3947a3cefa2b9125d623d0f1293a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="#ac93e3947a3cefa2b9125d623d0f1293a" title="A custom node: a declared component with its props and events.">custom</a></span> node: a declared component with its props and events.  <br /></td></tr>
 <tr class="memitem:a7578f968a1525abdb9eb20e1a89b99fc" id="r_a7578f968a1525abdb9eb20e1a89b99fc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7578f968a1525abdb9eb20e1a89b99fc">morph::ui::author::detail::names</a> (<a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;node, std::string_view key)</td></tr>
@@ -819,7 +859,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>Concatenates two tokens after expanding them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04284">4284</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04638">4638</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -842,11 +882,11 @@ Variables</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <b>Value:</b><div class="fragment"><div class="line"><a class="code hl_define" href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a>(a, b)</div>
-<div class="ttc" id="aauthor_8hpp_html_ab847b5f6a52c9cf4dd6bb4c20fbdd15d"><div class="ttname"><a href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT_(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04284">author.hpp:4284</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_ab847b5f6a52c9cf4dd6bb4c20fbdd15d"><div class="ttname"><a href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT_(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04638">author.hpp:4638</a></div></div>
 </div><!-- fragment -->
 <p>Concatenates two tokens after expanding them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04286">4286</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04640">4640</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -870,8 +910,8 @@ Variables</h2></td></tr>
 <div class="line">    return (SCREEN);                                                                                  \</div>
 <div class="line">});                                                                                                   \</div>
 <div class="line">}</div>
-<div class="ttc" id="aauthor_8hpp_html_a45697032040d625f96390dfced787014"><div class="ttname"><a href="#a45697032040d625f96390dfced787014">morph::ui::author::enrollScreen</a></div><div class="ttdeci">bool enrollScreen(Make const &amp;make) noexcept</div><div class="ttdoc">Enrols a screen into the process&#39;s registry; what MORPH_REGISTER_SCREEN runs.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04273">author.hpp:4273</a></div></div>
-<div class="ttc" id="aauthor_8hpp_html_ad7886260d9645c4b05d54647934ef523"><div class="ttname"><a href="#ad7886260d9645c4b05d54647934ef523">MORPH_UI_AUTHOR_CAT</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04286">author.hpp:4286</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_a45697032040d625f96390dfced787014"><div class="ttname"><a href="#a45697032040d625f96390dfced787014">morph::ui::author::enrollScreen</a></div><div class="ttdeci">bool enrollScreen(Make const &amp;make) noexcept</div><div class="ttdoc">Enrols a screen into the process&#39;s registry; what MORPH_REGISTER_SCREEN runs.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04627">author.hpp:4627</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_ad7886260d9645c4b05d54647934ef523"><div class="ttname"><a href="#ad7886260d9645c4b05d54647934ef523">MORPH_UI_AUTHOR_CAT</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04640">author.hpp:4640</a></div></div>
 </div><!-- fragment -->
 <p>Enrols a screen into the process's registry at static initialisation. A refusal is kept in <span class="tt">screenRegistry().refusals()</span>, which a server's test asserts is empty. </p>
 <dl class="params"><dt>Parameters</dt><dd>
@@ -881,7 +921,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04296">4296</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04650">4650</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -908,7 +948,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -934,7 +974,7 @@ template&lt;typename L&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00395">395</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -961,7 +1001,7 @@ template&lt;typename L, typename R&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -979,7 +1019,7 @@ template&lt;typename L, typename R&gt; </div>
 
 <p>An expression whose value type is not tracked: the type of every node property. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00703">703</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -997,7 +1037,7 @@ template&lt;typename L, typename R&gt; </div>
 
 <p>The scope a row of a <span class="tt">table</span> or <span class="tt">forEach</span> declares its own state, queries and model aliases on. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02160">2160</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02319">2319</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1015,7 +1055,7 @@ template&lt;typename L, typename R&gt; </div>
 
 <p>A scope's builder: declares on the scope and returns the nodes that read it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03152">3152</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03453">3453</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1050,7 +1090,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01441">1441</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01546">1546</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1086,7 +1126,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01519">1519</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01624">1624</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1118,7 +1158,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01613">1613</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01718">1718</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1152,7 +1192,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02163">2163</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02322">2322</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1192,7 +1232,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02178">2178</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02337">2337</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1230,7 +1270,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02536">2536</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02798">2798</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1266,7 +1306,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02635">2635</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02897">2897</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1300,7 +1340,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02903">2903</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03174">3174</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1332,7 +1372,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02973">2973</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03244">3244</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1366,7 +1406,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03369">3369</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03680">3680</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1398,7 +1438,7 @@ template&lt;typename L, typename R&gt; </div>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03376">3376</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03687">3687</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1437,7 +1477,7 @@ template&lt;typename Result&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The names glaze writes them under, or <span class="tt">std::nullopt</span> when glaze does not write <code class="param">Result</code> as a record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1479,7 +1519,7 @@ template&lt;typename Result&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1521,7 +1561,7 @@ template&lt;typename Result&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1560,7 +1600,7 @@ template&lt;typename From, typename To&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True for <span class="tt">Any</span> on either side, the same type, or a conversion between them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1599,7 +1639,7 @@ template&lt;typename From, typename To&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it can. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00341">341</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1643,7 +1683,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1687,7 +1727,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00454">454</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1733,7 +1773,7 @@ template&lt;typename L&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00470">470</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00473">473</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1779,7 +1819,7 @@ template&lt;typename L&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1815,7 +1855,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00490">490</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1851,7 +1891,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression's JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1892,7 +1932,115 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{key: value}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaa01f35875ed03f09ae913a671515fed" name="aaa01f35875ed03f09ae913a671515fed"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaa01f35875ed03f09ae913a671515fed">&#9670;&#160;</a></span>alignName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::author::detail::alignName </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a></td>          <td class="paramname"><span class="paramname"><em>align</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An alignment's document name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">align</td><td>The alignment. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">start</span>, <span class="tt">center</span>, <span class="tt">end</span> or <span class="tt">stretch</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aac4092d72452a9298795c8dd6d9b77f4" name="aac4092d72452a9298795c8dd6d9b77f4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aac4092d72452a9298795c8dd6d9b77f4">&#9670;&#160;</a></span>justifyName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::author::detail::justifyName </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a></td>          <td class="paramname"><span class="paramname"><em>justify</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A justification's document name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">justify</td><td>The justification. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">start</span>, <span class="tt">center</span>, <span class="tt">end</span> or <span class="tt">between</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab593cedbe5c0cb7a73b5d711a41ca06f" name="ab593cedbe5c0cb7a73b5d711a41ca06f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab593cedbe5c0cb7a73b5d711a41ca06f">&#9670;&#160;</a></span>literalOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; Json &gt; morph::ui::author::detail::literalOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>expression</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The value of a constant expression, as <span class="tt">constant</span> writes one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">expression</td><td>The expression's JSON. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A scalar as itself, the inside of <span class="tt">{"lit": v}</span>; <span class="tt">nullopt</span> for an expression that is not a constant. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1933,7 +2081,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"fn": function, "args": [...]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00517">517</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00553">553</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1969,7 +2117,7 @@ template&lt;typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The form (<span class="tt">ref</span> or <span class="tt">row</span>) and its path, or nothing for any other expression. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2016,7 +2164,7 @@ template&lt;typename L&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2063,7 +2211,7 @@ template&lt;typename L&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00567">567</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2114,7 +2262,7 @@ template&lt;typename Class, typename Member&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2158,7 +2306,7 @@ template&lt;typename X&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00748">748</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2215,7 +2363,7 @@ template&lt;typename Result, typename L, typename R&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The call. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00729">729</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00765">765</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2266,7 +2414,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sum. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00743">743</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2317,7 +2465,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The difference. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00755">755</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00791">791</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2368,7 +2516,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The product. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00767">767</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00803">803</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2419,7 +2567,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact quotient. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2470,7 +2618,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the left is less. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2521,7 +2669,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the left is less or equal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00779">779</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2572,7 +2720,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the left is greater. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00851">851</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2623,7 +2771,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the left is greater or equal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00827">827</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00863">863</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2674,7 +2822,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The conjunction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00839">839</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00875">875</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2725,7 +2873,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The disjunction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00851">851</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00887">887</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2769,7 +2917,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The negation. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00860">860</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00896">896</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2813,7 +2961,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The negated number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00869">869</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2864,7 +3012,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether they are equal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00882">882</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00918">918</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2915,7 +3063,7 @@ requires detail::HandleOperands&lt;L, R&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether they differ. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00894">894</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00930">930</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -2964,7 +3112,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The call. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00904">904</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00940">940</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3000,7 +3148,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The test. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00916">916</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00952">952</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3036,7 +3184,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The call. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00921">921</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00957">957</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3072,7 +3220,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The joined string. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00926">926</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00962">962</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3113,7 +3261,87 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The formatted string. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00934">934</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00970">970</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab6f9c5dead9d037f83574e8db2b20979" name="ab6f9c5dead9d037f83574e8db2b20979"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6f9c5dead9d037f83574e8db2b20979">&#9670;&#160;</a></span>concatLists() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">AnyHandle morph::ui::author::concatLists </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>lists</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt">concatLists</span>: the lists, one after another; <span class="tt">null</span> while any of them is <span class="tt">null</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">lists</td><td>The lists, in order. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The joined list. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00981">981</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aec040df86cfd28035c9546ce8284f12f" name="aec040df86cfd28035c9546ce8284f12f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aec040df86cfd28035c9546ce8284f12f">&#9670;&#160;</a></span>concatLists() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Handle&lt; std::vector&lt; T &gt; &gt; morph::ui::author::concatLists </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../da/d66/classmorph_1_1ui_1_1author_1_1Handle.html">Handle</a>&lt; std::vector&lt; T &gt; &gt; &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>lists</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt">concatLists</span> of lists of one element type. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">T</td><td>The element type. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">lists</td><td>The lists, in order. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The joined list. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00988">988</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3149,7 +3377,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00945">945</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01000">1000</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3185,7 +3413,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01005">1005</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3226,7 +3454,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The test. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00956">956</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01011">1011</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3262,7 +3490,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The test. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00963">963</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01018">1018</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3303,7 +3531,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rounded number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00969">969</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01024">1024</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3339,7 +3567,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The decimal, at the places typed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00977">977</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01032">1032</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3380,7 +3608,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The decimal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00984">984</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01039">1039</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3416,7 +3644,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00991">991</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01046">1046</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3457,7 +3685,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l00999">999</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01054">1054</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3504,7 +3732,7 @@ template&lt;typename R = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The <span class="tt">{"t": ...}</span> form. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01008">1008</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01063">1063</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3559,7 +3787,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The choice. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01030">1030</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01085">1085</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3595,7 +3823,109 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01039">1039</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01094">1094</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a67b01f1b047b86ee729e53da221ea014" name="a67b01f1b047b86ee729e53da221ea014"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a67b01f1b047b86ee729e53da221ea014">&#9670;&#160;</a></span>content()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">AnyHandle morph::ui::author::content </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The content sizing, <span class="tt">"content"</span>: as much as the content needs. </p>
+<dl class="section return"><dt>Returns</dt><dd>The sizing, a constant the loader checks. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01104">1104</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad8bc7066fe98cda8e15e050c51c8447d" name="ad8bc7066fe98cda8e15e050c51c8447d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad8bc7066fe98cda8e15e050c51c8447d">&#9670;&#160;</a></span>fixed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">AnyHandle morph::ui::author::fixed </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A fixed sizing, <span class="tt">{"lit": {"fixed": units}}</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The size in backend units, 0 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The sizing, a constant the loader checks. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01109">1109</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abdf723a44b0443754d84d8f3ec04eec4" name="abdf723a44b0443754d84d8f3ec04eec4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abdf723a44b0443754d84d8f3ec04eec4">&#9670;&#160;</a></span>stretch()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">AnyHandle morph::ui::author::stretch </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>weight</em></span><span class="paramdefsep"> = </span><span class="paramdefval">1</span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A stretch sizing, <span class="tt">{"lit": {"stretch": weight}}</span>: a share of the leftover space. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">weight</td><td>The share's weight, 1 or more. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The sizing, a constant the loader checks. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01116">1116</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3631,7 +3961,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01050">1050</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01123">1123</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3675,7 +4005,7 @@ template&lt;typename T = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01064">1064</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01137">1137</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3713,7 +4043,7 @@ template&lt;typename T = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01072">1072</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01145">1145</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3758,7 +4088,7 @@ template&lt;typename Class, typename Member&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01082">1082</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01155">1155</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3794,7 +4124,7 @@ template&lt;typename Class, typename Member&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01162">1162</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3854,7 +4184,7 @@ template&lt;typename E = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The mapped list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01098">1098</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3914,7 +4244,7 @@ template&lt;typename E = Any&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The filtered list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01114">1114</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01187">1187</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3963,7 +4293,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The filtered list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01129">1129</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01202">1202</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -3999,7 +4329,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01136">1136</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01209">1209</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4035,7 +4365,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01214">1214</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4071,7 +4401,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read; <span class="tt">null</span> on a client without it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01148">1148</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01221">1221</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4107,7 +4437,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"ref": "props.name"}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01155">1155</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01228">1228</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4137,7 +4467,7 @@ template&lt;typename Class&gt; </div>
 <p>The payload of the event whose command list runs. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"ref": "event"}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01159">1159</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01232">1232</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4173,7 +4503,7 @@ template&lt;typename Class&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The element. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01216">1216</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01289">1289</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4211,7 +4541,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">bool</span>, <span class="tt">int</span>, <span class="tt">string</span>, <span class="tt">decimal</span>, <span class="tt">quantity</span>, <span class="tt">timestamp</span>, <span class="tt">list&lt;T&gt;</span>, <span class="tt">T?</span>, or <span class="tt">record</span> for any other class. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01860">1860</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02019">2019</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4247,7 +4577,171 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">touched</span>, <span class="tt">submit</span> or <span class="tt">always</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02172">2172</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02331">2331</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39033eb179412eb76226e1b50487841e" name="a39033eb179412eb76226e1b50487841e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39033eb179412eb76226e1b50487841e">&#9670;&#160;</a></span>putPresent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::detail::putPresent </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">char const *</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An expression key of a part, left out when absent. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">json</td><td>The part. </td></tr>
+    <tr><td class="paramname">key</td><td>The key. </td></tr>
+    <tr><td class="paramname">value</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02436">2436</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9c1fa5b781011a17f4d1f051b1e20c1b" name="a9c1fa5b781011a17f4d1f051b1e20c1b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9c1fa5b781011a17f4d1f051b1e20c1b">&#9670;&#160;</a></span>headBadge()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Json morph::ui::author::detail::headBadge </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">HeadBadgeOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>badge</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">headBadge</span> part's JSON. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">badge</td><td>The badge. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02445">2445</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1165e4d383901d503ea631acfd7df5b5" name="a1165e4d383901d503ea631acfd7df5b5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1165e4d383901d503ea631acfd7df5b5">&#9670;&#160;</a></span>actionButton()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Json morph::ui::author::detail::actionButton </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">ActionButtonOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>action</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An <span class="tt">actionButton</span> part's JSON. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">action</td><td>The button. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02457">2457</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af829f7444803ab9e606bf5fa77fdc27f" name="af829f7444803ab9e606bf5fa77fdc27f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af829f7444803ab9e606bf5fa77fdc27f">&#9670;&#160;</a></span>append()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::detail::append </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">char const *</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a></td>          <td class="paramname"><span class="paramname"><em>item</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends <code class="param">item</code> to the array at <code class="param">key</code> of <code class="param">json</code>, making the array on first use. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">json</td><td>The object. </td></tr>
+    <tr><td class="paramname">key</td><td>The key. </td></tr>
+    <tr><td class="paramname">item</td><td>The item. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02479">2479</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4288,7 +4782,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02449">2449</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02711">2711</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4335,7 +4829,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02460">2460</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02722">2722</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4377,7 +4871,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02471">2471</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02733">2733</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4432,7 +4926,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02491">2491</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02753">2753</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4468,7 +4962,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02510">2510</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02772">2772</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4504,7 +4998,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02515">2515</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02777">2777</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4540,7 +5034,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02520">2520</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02782">2782</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4576,7 +5070,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02525">2525</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02787">2787</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4612,7 +5106,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02533">2533</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02795">2795</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4653,7 +5147,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02562">2562</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02824">2824</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4694,7 +5188,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02585">2585</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02847">2847</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4735,7 +5229,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02593">2593</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02855">2855</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4771,7 +5265,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02600">2600</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02862">2862</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4812,7 +5306,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02606">2606</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02868">2868</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4848,7 +5342,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02618">2618</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02880">2880</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4884,7 +5378,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02623">2623</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02885">2885</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4914,7 +5408,7 @@ template&lt;typename Action&gt; </div>
 <p><span class="tt">resetPrefs</span> of every point of the screen. </p>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02627">2627</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02889">2889</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4950,7 +5444,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02632">2632</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02894">2894</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -4991,7 +5485,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02646">2646</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02908">2908</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5027,7 +5521,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02659">2659</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02921">2921</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5063,7 +5557,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02664">2664</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02926">2926</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5110,7 +5604,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02671">2671</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02933">2933</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5140,7 +5634,7 @@ template&lt;typename Action&gt; </div>
 <p><span class="tt">cancelClose</span>: keeps a screen open, inside <span class="tt">onClose</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02681">2681</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02943">2943</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5170,7 +5664,7 @@ template&lt;typename Action&gt; </div>
 <p><span class="tt">retry</span>: refetches every failed query of a boundary, inside its <span class="tt">error</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02685">2685</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02947">2947</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5206,7 +5700,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02690">2690</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02952">2952</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5236,7 +5730,7 @@ template&lt;typename Action&gt; </div>
 <p><span class="tt">signOut</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02696">2696</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02958">2958</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5283,7 +5777,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02711">2711</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02973">2973</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5324,7 +5818,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The command. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02729">2729</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02991">2991</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5371,7 +5865,7 @@ template&lt;typename Action&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02744">2744</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03006">3006</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5407,7 +5901,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02862">2862</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03124">3124</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5443,7 +5937,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02887">2887</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03154">3154</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5479,7 +5973,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02932">2932</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03203">3203</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5515,7 +6009,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02963">2963</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03234">3234</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5551,7 +6045,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02999">2999</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03270">3270</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5587,7 +6081,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03035">3035</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03306">3306</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5623,7 +6117,54 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03068">3068</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03339">3339</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af20af48df729ffc33737852fb0e15d23" name="af20af48df729ffc33737852fb0e15d23"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af20af48df729ffc33737852fb0e15d23">&#9670;&#160;</a></span>stackNode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::author::detail::stackNode </td>
+          <td>(</td>
+          <td class="paramtype">char const *</td>          <td class="paramname"><span class="paramname"><em>kind</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>children</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html">ContainerOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A row or column with its options. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">kind</td><td><span class="tt">row</span> or <span class="tt">column</span>. </td></tr>
+    <tr><td class="paramname">children</td><td>The children. </td></tr>
+    <tr><td class="paramname">options</td><td>The gap and the alignment. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03368">3368</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5658,13 +6199,13 @@ template&lt;typename Action&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">children</td><td>The children. </td></tr>
-    <tr><td class="paramname">options</td><td>The gap. </td></tr>
+    <tr><td class="paramname">options</td><td>The gap and the alignment. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03089">3089</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03386">3386</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5699,13 +6240,13 @@ template&lt;typename Action&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">children</td><td>The children. </td></tr>
-    <tr><td class="paramname">options</td><td>The gap. </td></tr>
+    <tr><td class="paramname">options</td><td>The gap and the alignment. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03097">3097</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03394">3394</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5740,13 +6281,13 @@ template&lt;typename Action&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">children</td><td>The children. </td></tr>
-    <tr><td class="paramname">options</td><td>The gap and columns. </td></tr>
+    <tr><td class="paramname">options</td><td>The gap, columns and alignment; a <span class="tt">justify</span> is written, and the loader refuses it. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03105">3105</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03402">3402</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5776,7 +6317,7 @@ template&lt;typename Action&gt; </div>
 <p>A <span class="tt">spacer</span> node. </p>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03115">3115</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03416">3416</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5817,7 +6358,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03133">3133</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03434">3434</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5858,7 +6399,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03147">3147</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03448">3448</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5905,7 +6446,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03196">3196</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03497">3497</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5941,7 +6482,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03221">3221</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03522">3522</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -5994,7 +6535,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03261">3261</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03564">3564</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6041,7 +6582,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03286">3286</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03597">3597</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6088,7 +6629,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03295">3295</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03606">3606</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6135,7 +6676,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03304">3304</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03615">3615</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6176,7 +6717,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03312">3312</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03623">3623</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6223,7 +6764,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03331">3331</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03642">3642</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6259,7 +6800,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The columns. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03359">3359</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03670">3670</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6312,7 +6853,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03411">3411</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03725">3725</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6353,7 +6894,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03455">3455</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03770">3770</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6400,7 +6941,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03466">3466</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03781">3781</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6457,7 +6998,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03485">3485</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03800">3800</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6508,7 +7049,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03509">3509</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03824">3824</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6555,7 +7096,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03518">3518</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03833">3833</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6591,7 +7132,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03543">3543</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03858">3858</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6627,7 +7168,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03572">3572</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03887">3887</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6667,7 +7208,7 @@ requires Runs&lt;Model, Action&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03595">3595</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03910">3910</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6703,7 +7244,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03628">3628</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03943">3943</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6750,7 +7291,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03640">3640</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03955">3955</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6791,7 +7332,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03648">3648</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03963">3963</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6832,7 +7373,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03656">3656</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03971">3971</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6868,7 +7409,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03663">3663</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03978">3978</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6904,7 +7445,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03682">3682</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03997">3997</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6951,7 +7492,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03694">3694</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04009">4009</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -6992,7 +7533,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03719">3719</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04034">4034</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7033,7 +7574,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03743">3743</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04058">4058</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7069,7 +7610,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03755">3755</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04070">4070</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7116,7 +7657,47 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03764">3764</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04079">4079</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af9e452b5b3a1de7f621cd1fecc88f976" name="af9e452b5b3a1de7f621cd1fecc88f976"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af9e452b5b3a1de7f621cd1fecc88f976">&#9670;&#160;</a></span>present()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::detail::present </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html">NodeWriter</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>node</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>presentation</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Writes <code class="param">presentation's</code> keys on <code class="param">node</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">node</td><td>The node being written. </td></tr>
+    <tr><td class="paramname">presentation</td><td>The keys. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04158">4158</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7167,12 +7748,12 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03855">3855</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04208">4208</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a23e279bfc1c91e2d1f59e0f63da00e90" name="a23e279bfc1c91e2d1f59e0f63da00e90"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a23e279bfc1c91e2d1f59e0f63da00e90">&#9670;&#160;</a></span>collection()</h2>
+<a id="a7d36157a6129d5292611cf3ff244a08d" name="a7d36157a6129d5292611cf3ff244a08d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d36157a6129d5292611cf3ff244a08d">&#9670;&#160;</a></span>collection()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -7186,8 +7767,12 @@ requires Runs&lt;Model, Action&gt;</div>
         <tr>
           <td class="memname">Node morph::ui::author::collection </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>model</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>model</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>presentation</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -7208,17 +7793,18 @@ requires Runs&lt;Model, Action&gt;</div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">model</td><td>The alias. </td></tr>
+    <tr><td class="paramname">presentation</td><td>The keys that reach every form the view draws; its title replaces the view's heading. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03889">3889</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04244">4244</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
-<a id="acdaa662c33689582aa26424bf39411b9" name="acdaa662c33689582aa26424bf39411b9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acdaa662c33689582aa26424bf39411b9">&#9670;&#160;</a></span>wizard()</h2>
+<a id="abab6c15d842c49ed038fa080bcd2aca3" name="abab6c15d842c49ed038fa080bcd2aca3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abab6c15d842c49ed038fa080bcd2aca3">&#9670;&#160;</a></span>wizard()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -7232,8 +7818,12 @@ requires Runs&lt;Model, Action&gt;</div>
         <tr>
           <td class="memname">Node morph::ui::author::wizard </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>model</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d3/d2c/classmorph_1_1ui_1_1author_1_1ModelHandle.html">ModelHandle</a>&lt; Model &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>model</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html">FormPresentation</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>presentation</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -7254,12 +7844,13 @@ requires Runs&lt;Model, Action&gt;</div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">model</td><td>The alias. </td></tr>
+    <tr><td class="paramname">presentation</td><td>The keys that reach every step's form; its title replaces the view's heading. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03906">3906</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04261">4261</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7300,7 +7891,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03928">3928</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04282">4282</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7341,7 +7932,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it names the node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03956">3956</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04310">4310</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7377,7 +7968,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it has. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03971">3971</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04325">4325</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7413,7 +8004,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03979">3979</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04333">4333</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7454,7 +8045,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The refusal, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04029">4029</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04383">4383</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7495,7 +8086,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The refusal, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04019">4019</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04373">4373</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7531,7 +8122,7 @@ requires Runs&lt;Model, Action&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The first rule broken, with the node's path, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04063">4063</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04417">4417</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7575,7 +8166,7 @@ template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedStrin
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04139">4139</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04493">4493</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7616,7 +8207,7 @@ template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedStrin
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04147">4147</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04501">4501</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7646,7 +8237,7 @@ template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedStrin
 <p>The process's screen registry, which <span class="tt"><a class="el" href="#a64c74fd59d10dad228e7da1ac4bc79bf" title="Enrols a screen into the process&#39;s registry at static initialisation. A refusal is kept in screenRegi...">MORPH_REGISTER_SCREEN</a></span> enrols into. </p>
 <dl class="section return"><dt>Returns</dt><dd>The registry. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04263">4263</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04617">4617</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7690,7 +8281,7 @@ template&lt;std::invocable Make&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span>, for the static initialiser that runs it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04273">4273</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04627">4627</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -7717,7 +8308,7 @@ template&lt;std::invocable Make&gt; </div>
 
 <p>The dialog or drawer a command list runs in. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01222">1222</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01295">1295</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

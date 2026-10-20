@@ -136,11 +136,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:abe07a11fc3bd101f449f3fe09d27fad3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every dimension of the set, by path, in px.  <br /></td></tr>
 <tr class="memitem:a62e693bae97862410517cb4f7327cd73" id="r_a62e693bae97862410517cb4f7327cd73"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html">ThemeShadow</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a62e693bae97862410517cb4f7327cd73">shadows</a></td></tr>
 <tr class="memdesc:a62e693bae97862410517cb4f7327cd73"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every shadow of the set, by path.  <br /></td></tr>
+<tr class="memitem:a50c6938f787a4a4f7bdf6232b0da79ad" id="r_a50c6938f787a4a4f7bdf6232b0da79ad"><td class="memItemLeft">std::map&lt; std::string, std::vector&lt; std::string &gt;, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a50c6938f787a4a4f7bdf6232b0da79ad">families</a></td></tr>
+<tr class="memdesc:a50c6938f787a4a4f7bdf6232b0da79ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every font family list of the set, by path, in order of preference; empty for none.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The <span class="tt">ui-theme/1</span> set's values for one resolved theme. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00963">963</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aefd7c922d0b56486be1c02027cce611a" name="aefd7c922d0b56486be1c02027cce611a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aefd7c922d0b56486be1c02027cce611a">&#9670;&#160;</a></span>colors</h2>
@@ -156,7 +158,7 @@ Public Attributes</h2></td></tr>
 
 <p>Every colour of the set, by path. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00965">965</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01050">1050</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +176,7 @@ Public Attributes</h2></td></tr>
 
 <p>Every number of the set, by path. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00967">967</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01052">1052</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +194,7 @@ Public Attributes</h2></td></tr>
 
 <p>Every dimension of the set, by path, in px. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00969">969</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01054">1054</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +212,25 @@ Public Attributes</h2></td></tr>
 
 <p>Every shadow of the set, by path. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00971">971</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01056">1056</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a50c6938f787a4a4f7bdf6232b0da79ad" name="a50c6938f787a4a4f7bdf6232b0da79ad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a50c6938f787a4a4f7bdf6232b0da79ad">&#9670;&#160;</a></span>families</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::map&lt;std::string, std::vector&lt;std::string&gt;, std::less&lt;&gt; &gt; morph::ui::ThemeValues::families</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Every font family list of the set, by path, in order of preference; empty for none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01058">1058</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>

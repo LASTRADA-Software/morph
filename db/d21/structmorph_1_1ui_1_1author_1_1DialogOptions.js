@@ -6,5 +6,6 @@ var structmorph_1_1ui_1_1author_1_1DialogOptions =
     [ "side", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a40ac370adcadba6c5d5f5669e7b682d9", null ],
     [ "defaultAction", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a5240359fa067d5b0266cb6529f88ea61", null ],
     [ "cancel", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#aeb4b72ab71da740a0aabaa6aec6a298c", null ],
-    [ "onDismiss", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a5576b6f4846c63fb7e537113e6e388be", null ]
+    [ "onDismiss", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a5576b6f4846c63fb7e537113e6e388be", null ],
+    [ "actions", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#abe0e322c5669f797101d3293c86a2d3a", null ]
 ];

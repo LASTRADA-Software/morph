@@ -51,6 +51,7 @@ var view_8hpp =
     [ "morph::ui::KeyValue", "dc/df0/structmorph_1_1ui_1_1KeyValue.html", "dc/df0/structmorph_1_1ui_1_1KeyValue" ],
     [ "morph::ui::EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", "d8/d99/structmorph_1_1ui_1_1EmptyState" ],
     [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", "d3/df7/structmorph_1_1ui_1_1Drawer" ],
+    [ "morph::ui::ActionBar", "d6/dda/structmorph_1_1ui_1_1ActionBar.html", "d6/dda/structmorph_1_1ui_1_1ActionBar" ],
     [ "morph::ui::Splitter", "d7/d07/structmorph_1_1ui_1_1Splitter.html", "d7/d07/structmorph_1_1ui_1_1Splitter" ],
     [ "morph::ui::Collapsible", "d0/db5/structmorph_1_1ui_1_1Collapsible.html", "d0/db5/structmorph_1_1ui_1_1Collapsible" ],
     [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", "d0/dcb/structmorph_1_1ui_1_1DropZone" ],
@@ -58,6 +59,7 @@ var view_8hpp =
     [ "morph::ui::Custom", "db/d27/structmorph_1_1ui_1_1Custom.html", "db/d27/structmorph_1_1ui_1_1Custom" ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", "d9/d5b/structmorph_1_1ui_1_1NodeData" ],
     [ "morph::ui::TableOptions", "d7/d25/structmorph_1_1ui_1_1TableOptions.html", "d7/d25/structmorph_1_1ui_1_1TableOptions" ],
+    [ "morph::ui::TableRowView", "da/d6d/structmorph_1_1ui_1_1TableRowView.html", "da/d6d/structmorph_1_1ui_1_1TableRowView" ],
     [ "morph::ui::detail::ConstantConvertible", "d5/d2a/conceptmorph_1_1ui_1_1detail_1_1ConstantConvertible.html", null ],
     [ "morph::ui::Action", "d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f", null ],
     [ "morph::ui::Key", "d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2", null ],
@@ -68,7 +70,8 @@ var view_8hpp =
       [ "Muted", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a70a51c85067ce6cd7fa1630b5a2d4951", null ],
       [ "Heading", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a0101316665d4f82adaa26d86fbbb2d6e", null ],
       [ "Error", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a902b0d55fddef6f8d651fe1035b7d4bd", null ],
-      [ "Success", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38", null ]
+      [ "Success", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38", null ],
+      [ "Section", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867", null ]
     ] ],
     [ "morph::ui::TextInputMode", "d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37", [
       [ "SingleLine", "d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37a3e5c1fb76b6543ac61af54b185f02af9", null ],
@@ -142,6 +145,7 @@ var view_8hpp =
     [ "morph::ui::keyValue", "d8/d11/view_8hpp.html#a11e6866463705be091166f191ed9f49b", null ],
     [ "morph::ui::emptyState", "d8/d11/view_8hpp.html#a88949d610151cdd7a5993211f6b0f07c", null ],
     [ "morph::ui::drawer", "d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870", null ],
+    [ "morph::ui::actionBar", "d8/d11/view_8hpp.html#a0680b5da5baee2db8a0adcf1dfcaea51", null ],
     [ "morph::ui::splitter", "d8/d11/view_8hpp.html#ab0f45edb78821c04379a3cf41091f775", null ],
     [ "morph::ui::collapsible", "d8/d11/view_8hpp.html#a0735c59e8fed7c1e25bb578d6ae89abd", null ],
     [ "morph::ui::dropZone", "d8/d11/view_8hpp.html#a695bba553e54a28202c0b765fe10a0da", null ],
@@ -150,5 +154,6 @@ var view_8hpp =
     [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1", null ],
     [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a5c27cc72f0c576e4f003315f12ac4f80", null ],
     [ "morph::ui::table", "d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b", null ],
+    [ "morph::ui::table", "d8/d11/view_8hpp.html#a4400bff106cad6dffe2a86cacdfe12dc", null ],
     [ "morph::ui::kMaxSpacingStep", "d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f", null ]
 ];

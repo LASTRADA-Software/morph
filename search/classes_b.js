@@ -14,10 +14,13 @@ var searchData=
   ['loadedbundle_11',['LoadedBundle',['../db/d4f/structmorph_1_1ui_1_1LoadedBundle.html',1,'morph::ui']]],
   ['loadoptions_12',['LoadOptions',['../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html',1,'morph::ui']]],
   ['loadwarning_13',['LoadWarning',['../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html',1,'morph::ui']]],
-  ['localbackend_14',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
-  ['logentry_15',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
-  ['loggedcommand_16',['LoggedCommand',['../d8/d58/structmorph_1_1ui_1_1LoggedCommand.html',1,'morph::ui']]],
-  ['loopexecutor_17',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
-  ['lowerctx_18',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]],
-  ['lowerednode_19',['LoweredNode',['../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html',1,'morph::ui::detail::ScreenCore']]]
+  ['localapp_14',['LocalApp',['../dd/dd4/structmorph_1_1client_1_1LocalApp.html',1,'morph::client']]],
+  ['localbackend_15',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
+  ['localsetup_16',['LocalSetup',['../d8/d04/structmorph_1_1client_1_1LocalSetup.html',1,'morph::client']]],
+  ['localsource_17',['LocalSource',['../d1/d98/classmorph_1_1client_1_1LocalSource.html',1,'morph::client']]],
+  ['logentry_18',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
+  ['loggedcommand_19',['LoggedCommand',['../d8/d58/structmorph_1_1ui_1_1LoggedCommand.html',1,'morph::ui']]],
+  ['loopexecutor_20',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
+  ['lowerctx_21',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]],
+  ['lowerednode_22',['LoweredNode',['../dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html',1,'morph::ui::detail::ScreenCore']]]
 ];

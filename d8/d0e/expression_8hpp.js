@@ -60,7 +60,7 @@ var expression_8hpp =
     [ "morph::ui::detail::kAllKinds", "d8/d0e/expression_8hpp.html#adfd6fb089175637ecf4324dfe2b43509", null ],
     [ "morph::ui::detail::kNumeric", "d8/d0e/expression_8hpp.html#a904a78e57c1d4f5b33790ba34d0addad", null ],
     [ "morph::ui::detail::kOrdered", "d8/d0e/expression_8hpp.html#a36510bc5882d9dbd986570731bef4ea7", null ],
-    [ "morph::ui::detail::kFunctions", "d8/d0e/expression_8hpp.html#a536f42190ff450c8116561a747b38300", null ],
+    [ "morph::ui::detail::kFunctions", "d8/d0e/expression_8hpp.html#ab5b877d3c69f812c61843be3a28e449e", null ],
     [ "morph::ui::detail::kEnvNames", "d8/d0e/expression_8hpp.html#a6fd684e6821cca9ab7819f016aadb7ef", null ],
     [ "morph::ui::detail::kSessionNames", "d8/d0e/expression_8hpp.html#a0d1d95fcf12d2c7123288a5bb5d8ec14", null ]
 ];
