@@ -29,4 +29,6 @@ QtObject {
     property color infoBg: "#e3f2fd"
     property color infoBorder: "#90caf9"
     property color infoDot: "#1565c0"
+    // A table's header background; transparent draws no fill, matching a table with no theme-set header.
+    property color tableHeader: "#00000000"
 }

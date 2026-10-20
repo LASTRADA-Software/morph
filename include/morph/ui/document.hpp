@@ -812,8 +812,11 @@ inline constexpr std::array<KeySpec, 15> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 4> kColumnKeys = {
-    {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};
+inline constexpr std::array<KeySpec, 5> kColumnKeys = {{{"id", Shape::Name},
+                                                        {"label", Shape::Expr},
+                                                        {"width", Shape::Expr},
+                                                        {"role", Shape::Expr},
+                                                        {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},

@@ -13,6 +13,10 @@ MorphWidget {
     // The columns: [{label, kind (0 content, 1 fixed, 2 stretch), amount}].
     property var columns: []
     readonly property Item content: body
+    // What draws under the header's column labels: MorphTableHeaderBackground, or the `tableHeader` restyle. C++
+    // sets it when it makes the table.
+    property Component headerBackground: null
+    readonly property Item headerBackgroundItem: headerBackgroundLoader.item as Item
     // A content column's widest-cell width, cached per column index; [] until seeded. A cell growing only raises
     // its entry (no rescan needed); a cell shrinking, a row leaving, or a cell's/row's visibility changing can only
     // be resolved by rescanning that column, since the cache does not know whether the row that set its current
@@ -140,22 +144,39 @@ MorphWidget {
         anchors.fill: parent
         spacing: 0
 
-        Row {
-            id: header
+        Item {
+            id: headerArea
+            implicitWidth: header.implicitWidth
+            implicitHeight: header.implicitHeight
 
-            Repeater {
-                model: root.columns
+            Loader {
+                id: headerBackgroundLoader
+                anchors.fill: parent
+                sourceComponent: root.headerBackground
+            }
+            Binding {
+                target: headerBackgroundLoader.item
+                property: "scheme"
+                value: root.scheme
+            }
 
-                Label {
-                    font: Theme.strongFont
-                    required property int index
-                    required property var modelData
-                    width: root.widths[index] !== undefined ? root.widths[index] : 0
-                    text: modelData.label
-                    color: root.scheme.muted
-                    topPadding: Theme.spaceOf(2)
-                    bottomPadding: Theme.spaceOf(2)
-                    elide: Text.ElideRight
+            Row {
+                id: header
+
+                Repeater {
+                    model: root.columns
+
+                    Label {
+                        font: Theme.strongFont
+                        required property int index
+                        required property var modelData
+                        width: root.widths[index] !== undefined ? root.widths[index] : 0
+                        text: modelData.label
+                        color: root.scheme.muted
+                        topPadding: Theme.spaceOf(2)
+                        bottomPadding: Theme.spaceOf(2)
+                        elide: Text.ElideRight
+                    }
                 }
             }
         }

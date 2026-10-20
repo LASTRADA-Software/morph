@@ -3660,6 +3660,8 @@ struct TableColumn {
     AnyHandle label;
     /// @brief The width.
     AnyHandle width;
+    /// @brief The column's text role; absent writes no key, `Normal`.
+    AnyHandle role;
     /// @brief The cell, read in the row scope.
     Nodes cell;
 };
@@ -3739,6 +3741,9 @@ namespace detail {
             }
             if (column.width.present()) {
                 detail::put(part, "width", column.width.json());
+            }
+            if (column.role.present()) {
+                detail::put(part, "role", column.role.json());
             }
             if (!column.cell.empty()) {
                 detail::put(part, "cell", column.cell.json());

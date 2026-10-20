@@ -117,7 +117,7 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role}`, set once; `role` styles a column's default cell and has no effect on one with its own `.cell`), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
