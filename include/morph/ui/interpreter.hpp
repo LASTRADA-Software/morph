@@ -5533,6 +5533,38 @@ namespace detail {
            record->begin()->second.asInt() != nullptr;
 }
 
+/// @brief An alignment by name, as the loader checked it: `start`, `center`, `end`, or stretch for none.
+/// @param name The name; empty for none.
+/// @return The alignment.
+[[nodiscard]] inline Align alignOf(std::string_view name) {
+    if (name == "start") {
+        return Align::Start;
+    }
+    if (name == "center") {
+        return Align::Center;
+    }
+    if (name == "end") {
+        return Align::End;
+    }
+    return Align::Stretch;
+}
+
+/// @brief A justification by name, as the loader checked it: `center`, `end`, `between`, or start for none.
+/// @param name The name; empty for none.
+/// @return The justification.
+[[nodiscard]] inline Justify justifyOf(std::string_view name) {
+    if (name == "center") {
+        return Justify::Center;
+    }
+    if (name == "end") {
+        return Justify::End;
+    }
+    if (name == "between") {
+        return Justify::Between;
+    }
+    return Justify::Start;
+}
+
 /// @brief An axis by name: `horizontal`, or vertical for anything else.
 /// @param value The value.
 /// @return The axis.
@@ -5628,6 +5660,9 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
         } else {
             common.layout.width = sizingOf(value);
         }
+    }
+    if (std::string_view const placed = node.name("alignSelf"); !placed.empty()) {
+        common.layout.alignSelf = alignOf(placed);
     }
     // Literal integers, checked at load.
     for (auto const& [key, bound] :
@@ -6034,20 +6069,32 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "column" || kind == "row") {
         int const gap = static_cast<int>(onceInt("gap", 0));
         if (std::string const arrangement = arrangedBy(node.id); !arrangement.empty()) {
+            if (!node.name("align").empty() || !node.name("justify").empty()) {
+                report(node.path, "an arranged `" + std::string{kind} +
+                                      "` is drawn as a list, which takes no `align` or `justify`");
+            }
             return lowerArranged(node, ctx, element, arrangement, kind == "column" ? Axis::Vertical : Axis::Horizontal,
                                  gap);
         }
         if (kind == "column") {
-            Column spec{.children = children("children"), .gap = gap};
+            Column spec{.children = children("children"),
+                        .gap = gap,
+                        .align = alignOf(node.name("align")),
+                        .justify = justifyOf(node.name("justify"))};
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
-        Row spec{.children = children("children"), .gap = gap};
+        Row spec{.children = children("children"),
+                 .gap = gap,
+                 .align = alignOf(node.name("align")),
+                 .justify = justifyOf(node.name("justify"))};
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }
     if (kind == "grid") {
-        Grid spec{.columns = static_cast<int>(onceInt("columns", 1)), .gap = static_cast<int>(onceInt("gap", 0))};
+        Grid spec{.columns = static_cast<int>(onceInt("columns", 1)),
+                  .gap = static_cast<int>(onceInt("gap", 0)),
+                  .align = alignOf(node.name("align"))};
         for (DocNodePtr const& cell : node.nodes("children")) {
             ExprPtr const span = cell->prop("span");
             spec.cells.push_back(

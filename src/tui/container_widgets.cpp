@@ -30,6 +30,16 @@ void StackImpl::setGap(int gap) {
     refresh();
 }
 
+void StackImpl::setAlign(ui::Align align) {
+    _align = align;
+    refresh();
+}
+
+void StackImpl::setJustify(ui::Justify justify) {
+    _justify = justify;
+    refresh();
+}
+
 void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
     _extents = std::move(extents);
     _extentGap = gap;
@@ -48,7 +58,11 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
-                      StackSpec{.axis = _axis, .gap = _extents.empty() ? _gap : _extentGap, .extents = _extents});
+                      StackSpec{.axis = _axis,
+                                .gap = _extents.empty() ? _gap : _extentGap,
+                                .extents = _extents,
+                                .align = _align,
+                                .justify = _justify});
 }
 
 void StackImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
@@ -70,6 +84,11 @@ void GridImpl::setColumns(int columns) {
 void GridImpl::setGap(int gap) {
     _columnGap = layout::stepCells(gap, ui::Axis::Horizontal);
     _rowGap = layout::stepCells(gap, ui::Axis::Vertical);
+    refresh();
+}
+
+void GridImpl::setAlign(ui::Align align) {
+    _align = align;
     refresh();
 }
 
@@ -135,10 +154,15 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
             continue;
         }
         auto area = layout::slotArea(plan, *slot);
+        // Across a column of the grid the cell fills its width; in its row, the grid's or the cell's own
+        // alignment places it.
         ui::LayoutHints const& hints = child->layout();
         area.width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
-        area.height =
-            layout::crossExtent(hints.height, area.height, layout::boundsOf(hints.minHeight, hints.maxHeight));
+        ui::Align const placed = hints.alignSelf.value_or(_align);
+        int const height = alignedExtent(placed, hints.height, requestedSize(*child).height, area.height,
+                                         layout::boundsOf(hints.minHeight, hints.maxHeight));
+        area.y += alignedOffset(placed, height, area.height);
+        area.height = height;
         areas.push_back(area);
         ++slot;
     }

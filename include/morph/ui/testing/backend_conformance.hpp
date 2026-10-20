@@ -1561,19 +1561,108 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a row 3 units tall with `align: center` places a 1-unit text a unit down.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> rowCentresAcross(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("x", {})}, .align = Align::Center};
+    row.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(3)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the row holds one child");
+    if (inside.children.size() == 1) {
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const text = geometry.of(*inside.children.at(0));
+        geometry.near("the text's height", 1, text.height);
+        geometry.near("the text's offset down the row", 1, text.y - outer.y);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a column with `justify: end` places its last child's end at its own end, and `between` its first
+///        child at the start and its last at the end.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> columnJustifies(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    for (Justify const justify : {Justify::End, Justify::Between}) {
+        Column column{.children = {sizedText("a", {}), sizedText("b", {}), sizedText("c", {})}, .justify = justify};
+        column.common.layout = {.width = Sizing::fixed(20), .height = Sizing::fixed(12)};
+        Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+        probe.settle();
+        Measured const inside = measured(probe, view);
+        checks.that(inside.children.size() == 3, "the column holds three children");
+        if (inside.children.size() != 3) {
+            continue;
+        }
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const first = geometry.of(*inside.children.at(0));
+        WidgetBounds const last = geometry.of(*inside.children.at(2));
+        geometry.near(justify == Justify::End ? "end: the last child's end" : "between: the last child's end",
+                      outer.y + outer.height, last.y + last.height);
+        if (justify == Justify::Between) {
+            geometry.near("between: the first child's start", outer.y, first.y);
+        } else {
+            checks.that(first.y > outer.y + 1, "end: the first child is not at the column's start");
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a child capped below its column's width with `alignSelf: center` has equal space either side; a
+///        stretch child with `maxWidth: 44` in a 70-unit column with `align: center` is 44 wide and centred.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> cappedChildCentres(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    for (bool const own : {true, false}) {
+        LayoutHints card{.width = Sizing::stretch(), .maxWidth = own ? 20 : 44};
+        if (own) {
+            card.alignSelf = Align::Center;
+        }
+        Column column{.children = {sizedText("card", card)}, .align = own ? Align::Stretch : Align::Center};
+        column.common.layout = {.width = Sizing::fixed(70)};
+        Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+        probe.settle();
+        Measured const inside = measured(probe, view);
+        checks.that(inside.children.size() == 1, "the column holds one child");
+        if (inside.children.size() != 1) {
+            continue;
+        }
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const placed = geometry.of(*inside.children.at(0));
+        double const before = placed.x - outer.x;
+        double const after = (outer.x + outer.width) - (placed.x + placed.width);
+        geometry.near(own ? "alignSelf center: the capped child's width" : "align center: the card's width",
+                      own ? 20 : 44, placed.width);
+        geometry.near(own ? "alignSelf center: the space after it, against the space before"
+                          : "align center: the space after the card, against the space before",
+                      before, after);
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 4> const cases{{
+    static std::array<ConformanceCase, 7> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
         {.name = "a stretch child's maximum caps it across a column", .run = detail::maximumCapsAcross},
         {.name = "a stretch child's maximum height caps its share down a column",
          .run = detail::maximumCapsStretchHeight},
+        {.name = "a row centres a child across it", .run = detail::rowCentresAcross},
+        {.name = "a column's justify places its spare height", .run = detail::columnJustifies},
+        {.name = "a capped child is centred by its own alignment or its column's", .run = detail::cappedChildCentres},
     }};
     return cases;
 }

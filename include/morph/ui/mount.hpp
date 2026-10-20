@@ -548,11 +548,20 @@ private:
         }
     }
 
+    // The alignment only when it is not the default, as for a button's emphasis, so a stack that says nothing more
+    // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
-                       Common const& common, ContainerWidget* parent) {
+                       Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
+                       Justify justify = Justify::Start) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         applyCommon(scope, widget, common);
         widget.setGap(spacingStep(gap));
+        if (align != Align::Stretch) {
+            widget.setAlign(align);
+        }
+        if (justify != Justify::Start) {
+            widget.setJustify(justify);
+        }
         mountChildren(scope, children, widget);
         return widget;
     }
@@ -717,14 +726,16 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
-        return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent);
+        return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
+                          spec.justify);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
         if (spec.tone && dynamic_cast<TableWidget*>(parent) == nullptr) {
             throw std::logic_error{"morph::ui: a row's tone is a table row's; this row is not in a table"};
         }
-        return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent);
+        return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
+                          spec.justify);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
@@ -732,6 +743,9 @@ private:
         applyCommon(scope, widget, spec.common);
         widget.setColumns(spec.columns);
         widget.setGap(spacingStep(spec.gap));
+        if (spec.align != Align::Stretch) {
+            widget.setAlign(spec.align);
+        }
         for (GridCell const& cell : spec.cells) {
             Widget* const child = mount(scope, cell.node, &widget);
             if (child != nullptr && cell.span != 1) {

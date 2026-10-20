@@ -20,6 +20,7 @@
 
 #include "tui/chord.hpp"
 #include "tui/context.hpp"
+#include "tui/layout.hpp"
 
 namespace morph::tui::detail {
 
@@ -440,10 +441,22 @@ public:
 
 /// How `arrangeStack` places children.
 struct StackSpec {
-    ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.
-    int gap = 0;                         ///< Cells between neighbours.
-    std::span<int const> extents;        ///< When non-empty, the main-axis extents to use, in order (table columns).
+    ui::Axis axis = ui::Axis::Vertical;      ///< The main axis.
+    int gap = 0;                             ///< Cells between neighbours.
+    std::span<int const> extents;            ///< When non-empty, the main-axis extents to use, in order (table columns).
+    ui::Align align = ui::Align::Stretch;    ///< Where a child sits across the axis, unless its `alignSelf` says.
+    ui::Justify justify = ui::Justify::Start;  ///< Where the spare length goes while no shown child stretches.
 };
+
+/// Where a child of @p extent sits in @p space under @p align: its offset from the space's start, rounded down when
+/// centred; none for a child that fills the space.
+[[nodiscard]] int alignedOffset(ui::Align align, int extent, int space) noexcept;
+
+/// The extent across its container a child takes under @p align, in a @p space-cell line: a content child under a
+/// non-stretch alignment its requested extent, every other child its sizing's (`layout::crossExtent`); both clamped
+/// into the child's bounds and the space.
+[[nodiscard]] int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space,
+                                layout::Bounds bounds) noexcept;
 
 /// The size @p widget asks its container for: its natural size, but a Fixed amount where its layout hints say so.
 [[nodiscard]] ::core::tui::Size requestedSize(WidgetBase const& widget);

@@ -298,6 +298,14 @@ public:
     /// @brief Sets the space between children.
     /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
+
+    /// @brief Places the children across the axis. A new stack stretches them; a child's own `alignSelf` wins.
+    /// @param align Where they sit.
+    virtual void setAlign(Align align) = 0;
+
+    /// @brief Places the spare length along the axis while no shown child stretches. A new stack packs at the start.
+    /// @param justify Where it goes.
+    virtual void setJustify(Justify justify) = 0;
 };
 
 /// @brief Children laid out row-major in columns.
@@ -315,6 +323,11 @@ public:
     /// @param child One of this grid's children.
     /// @param span The column count it occupies.
     virtual void setSpan(Widget& child, int span) = 0;
+
+    /// @brief Places each cell's content vertically in its row. A new grid stretches it; a child's own `alignSelf`
+    ///        wins.
+    /// @param align Where it sits.
+    virtual void setAlign(Align align) = 0;
 };
 
 /// @brief Empty space.

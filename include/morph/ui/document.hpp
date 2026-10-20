@@ -660,7 +660,7 @@ struct KindSpec {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
-inline constexpr std::array<KeySpec, 17> kCommonKeys = {{
+inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
     {"id", Shape::Name},
     {"visible", Shape::Condition},
     {"enabled", Shape::Condition},
@@ -670,6 +670,7 @@ inline constexpr std::array<KeySpec, 17> kCommonKeys = {{
     {"maxWidth", Shape::Expr},
     {"minHeight", Shape::Expr},
     {"maxHeight", Shape::Expr},
+    {"alignSelf", Shape::Text},
     {"span", Shape::Expr},
     {"testId", Shape::Text},
     {"surface", Shape::Text},
@@ -748,10 +749,14 @@ inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr}
                                                           {"onClick", Shape::Commands},
                                                           {"items", Shape::Parts, "menuItem"}}};
 /// @brief The keys of `column` and `row`.
-inline constexpr std::array<KeySpec, 2> kContainerKeys = {{{"children", Shape::Nodes}, {"gap", Shape::Expr}}};
-/// @brief The keys of `grid`.
-inline constexpr std::array<KeySpec, 3> kGridKeys = {
-    {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"columns", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 4> kContainerKeys = {
+    {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
+/// @brief The keys of `grid`; `justify` is read only to refuse it.
+inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes},
+                                                      {"gap", Shape::Expr},
+                                                      {"columns", Shape::Expr},
+                                                      {"align", Shape::Text},
+                                                      {"justify", Shape::Text}}};
 /// @brief The keys of `panel`.
 inline constexpr std::array<KeySpec, 5> kPanelKeys = {{{"title", Shape::Expr},
                                                        {"padding", Shape::Expr},
@@ -2823,7 +2828,29 @@ private:
         return inner;
     }
 
-    void checkNode(DocNode const& node, CheckContext const& context) { checkElement(node, context, false); }
+    void checkNode(DocNode const& node, CheckContext const& context) {
+        if (!node.name("alignSelf").empty()) {
+            refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
+        }
+        checkElement(node, context, false);
+    }
+
+    // What `alignSelf` places a node in.
+    static constexpr std::string_view kAlignSelfPlaces = "`alignSelf` places a node in its row, column or grid";
+
+    // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
+    // a tab page) has no cross axis to place it on.
+    static void checkPlacements(DocNode const& parent) {
+        bool const places =
+            parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" || parent.kind == "forEach";
+        for (auto const& [key, nodes] : parent.children) {
+            for (DocNodePtr const& child : nodes) {
+                if (!child->name("alignSelf").empty() && (!places || key != "children")) {
+                    refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
+                }
+            }
+        }
+    }
 
     void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
         KindSpec const* const spec = findKind(node.kind, part);
@@ -2863,6 +2890,7 @@ private:
                 checkElement(*child, context, true);
             }
         }
+        checkPlacements(node);
         if (!part) {
             checkFlags(node);
             checkLayoutKeys(node);
@@ -2908,6 +2936,9 @@ private:
         } else if (node.kind == "button") {
             static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
             checkChoice(node, "emphasis", kEmphasis);
+        } else if (node.kind == "grid" && !node.name("justify").empty()) {
+            refuse(pointerAppend(node.path, "justify"),
+                   "a grid's columns share its width; there is no spare length to justify");
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
@@ -2924,6 +2955,11 @@ private:
         if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
             checkFormColumns(node);
         }
+        static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
+        static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};
+        checkChoice(node, "align", kAlign);
+        checkChoice(node, "justify", kJustify);
+        checkChoice(node, "alignSelf", kAlign);
         std::string_view const model = node.name("model");
         if (!model.empty()) {
             if (node.name("action").empty()) {

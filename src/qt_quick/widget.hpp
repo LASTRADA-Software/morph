@@ -144,6 +144,10 @@ public:
     void release(ItemBase& child) noexcept;
     /// Moves @p child before the child now at @p index; past the end means last.
     void move(ItemBase& child, std::size_t index);
+    /// Places the children across this container's axis: writes `crossAlign` on every child it holds, and on each
+    /// one it adopts later. Adoption runs in a child's constructor, so a container aligned after its children were
+    /// made reaches them here.
+    void alignChildren(ui::Align align);
     /// The children, in order.
     [[nodiscard]] std::vector<ItemBase*> const& children() const noexcept { return _children; }
     /// How many stacking-order changes `move` has made.
@@ -160,6 +164,9 @@ protected:
     [[nodiscard]] virtual CrossFill crossFill() const noexcept { return CrossFill{.width = true, .height = false}; }
     /// The colour scheme this container's children inherit: its item's `scheme`, or null when it has none.
     [[nodiscard]] virtual QObject* scheme() const = 0;
+    /// Which way this container's alignment places a child, written on each child as `alignAcross`: 0 not at all,
+    /// 1 horizontally (a column's children), 2 vertically (a row's children, a grid cell's content in its row).
+    [[nodiscard]] virtual int alignsAcross() const noexcept { return 0; }
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.
@@ -170,6 +177,8 @@ protected:
 private:
     std::vector<ItemBase*> _children;
     std::size_t _restacks = 0;
+    // The `ui::Align` the children are placed by, as its index.
+    int _crossAlign = 0;
 };
 
 /// Every live widget of every backend in the process, in creation order.

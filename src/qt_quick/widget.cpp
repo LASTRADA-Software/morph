@@ -134,8 +134,13 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
     write("widthAmount", hints.width.amount);
     write("heightKind", static_cast<int>(hints.height.kind));
     write("heightAmount", hints.height.amount);
-    // A bound given must reach the item, and one it cannot take is reported; an unbounded one is offered, so a
-    // component that declares no bounds is not reported for a node that has none.
+    // A bound or an alignment given must reach the item, and one it cannot take is reported; an absent one is
+    // offered, so a component that declares neither is not reported for a node that has none.
+    if (hints.alignSelf) {
+        write("alignSelf", static_cast<int>(*hints.alignSelf));
+    } else {
+        offer("alignSelf", -1);
+    }
     for (auto const& [name, bound] :
          {std::pair{"minWidthUnits", hints.minWidth}, std::pair{"maxWidthUnits", hints.maxWidth},
           std::pair{"minHeightUnits", hints.minHeight}, std::pair{"maxHeightUnits", hints.maxHeight}}) {
@@ -302,11 +307,20 @@ void ContainerCore::adopt(ItemBase& child) {
     CrossFill const fill = crossFill();
     child.offer("fillsWidth", fill.width);
     child.offer("fillsHeight", fill.height);
+    child.offer("alignAcross", alignsAcross());
+    child.offer("crossAlign", _crossAlign);
     if (QObject* const inherited = scheme()) {
         child.offer("inheritedScheme", QVariant::fromValue(inherited));
     }
     _children.push_back(&child);
     adopted(child);
+}
+
+void ContainerCore::alignChildren(ui::Align align) {
+    _crossAlign = static_cast<int>(align);
+    for (ItemBase const* const child : _children) {
+        child->offer("crossAlign", _crossAlign);
+    }
 }
 
 // NOLINTNEXTLINE(misc-no-recursion): a container's children may be containers, which pass it on in turn.

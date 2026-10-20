@@ -235,12 +235,16 @@ class StackImpl final : public ContainerItemWidget<ui::StackWidget> {
 public:
     StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis);
     void setGap(int gap) override;
+    void setAlign(ui::Align align) override;
+    void setJustify(ui::Justify justify) override;
 
 protected:
     /// A column fills its children's width, a row their height.
     [[nodiscard]] CrossFill crossFill() const noexcept override {
         return CrossFill{.width = _axis == ui::Axis::Vertical, .height = _axis == ui::Axis::Horizontal};
     }
+    /// A column places its children horizontally, a row vertically.
+    [[nodiscard]] int alignsAcross() const noexcept override { return _axis == ui::Axis::Vertical ? 1 : 2; }
 
 private:
     ui::Axis _axis;
@@ -252,6 +256,11 @@ public:
     void setColumns(int columns) override;
     void setGap(int gap) override;
     void setSpan(ui::Widget& child, int span) override;
+    void setAlign(ui::Align align) override;
+
+protected:
+    /// A cell's content is placed vertically in its row.
+    [[nodiscard]] int alignsAcross() const noexcept override { return 2; }
 };
 
 class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {
@@ -432,6 +441,10 @@ class TableRowImpl final : public ContainerItemWidget<ui::StackWidget> {
 public:
     TableRowImpl(Context& context, ui::ContainerWidget* parent, TableImpl& table);
     void setGap(int gap) override;
+    /// The table places a row's cells in its columns; the mount never aligns a table row.
+    void setAlign(ui::Align align) override { static_cast<void>(align); }
+    /// As `setAlign`.
+    void setJustify(ui::Justify justify) override { static_cast<void>(justify); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

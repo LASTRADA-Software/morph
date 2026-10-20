@@ -153,10 +153,44 @@ template <typename Special>
     }
 }
 
+/// @brief Formats an alignment.
+/// @param align The alignment.
+/// @return `stretch`, `start`, `center` or `end`.
+[[nodiscard]] inline std::string formatAlign(Align align) {
+    switch (align) {
+        case Align::Start:
+            return "start";
+        case Align::Center:
+            return "center";
+        case Align::End:
+            return "end";
+        case Align::Stretch:
+        default:
+            return "stretch";
+    }
+}
+
+/// @brief Formats a justification.
+/// @param justify The justification.
+/// @return `start`, `center`, `end` or `between`.
+[[nodiscard]] inline std::string formatJustify(Justify justify) {
+    switch (justify) {
+        case Justify::Center:
+            return "center";
+        case Justify::End:
+            return "end";
+        case Justify::Between:
+            return "between";
+        case Justify::Start:
+        default:
+            return "start";
+    }
+}
+
 /// @brief Formats a size request.
 /// @param hints The request.
 /// @return `width/height`, each as `formatSizing` gives it and followed by ` min=<n>` and ` max=<n>` for the bounds
-///         it has, such as `stretch(1) max=44/content`.
+///         it has, then ` self=<align>` when the node places itself, such as `stretch(1) max=44/content self=center`.
 [[nodiscard]] inline std::string formatLayout(LayoutHints const& hints) {
     auto const bounds = [](std::optional<int> minimum, std::optional<int> maximum) {
         std::string text;
@@ -169,7 +203,8 @@ template <typename Special>
         return text;
     };
     return formatSizing(hints.width) + bounds(hints.minWidth, hints.maxWidth) + "/" + formatSizing(hints.height) +
-           bounds(hints.minHeight, hints.maxHeight);
+           bounds(hints.minHeight, hints.maxHeight) +
+           (hints.alignSelf ? " self=" + formatAlign(*hints.alignSelf) : std::string{});
 }
 
 /// @brief Formats a date-time value.
@@ -995,19 +1030,22 @@ public:
     }
 };
 
-/// @brief A fake `StackWidget`, of kind `Column` or `Row`: property `gap`.
+/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`.
 class FakeStack final : public FakeContainer<StackWidget> {
 public:
     using FakeContainer<StackWidget>::FakeContainer;
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
+    void setAlign(Align align) override { set("align", formatAlign(align)); }
+    void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
 };
 
-/// @brief A fake `GridWidget`: properties `columns`, `gap`, and `span` on a child.
+/// @brief A fake `GridWidget`: properties `columns`, `gap`, `align`, and `span` on a child.
 class FakeGrid final : public FakeContainer<GridWidget> {
 public:
     using FakeContainer<GridWidget>::FakeContainer;
     void setColumns(int columns) override { set("columns", std::to_string(columns)); }
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
+    void setAlign(Align align) override { set("align", formatAlign(align)); }
 
     /// @brief Records property `span` on @p child.
     /// @param child One of this grid's children.

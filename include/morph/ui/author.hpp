@@ -33,6 +33,7 @@
 #include "../ui/value.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
+#include "alignment.hpp"
 #include "button_emphasis.hpp"
 
 /// @file
@@ -508,6 +509,22 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     Json json = Json::object_t{};
     detail::put(json, key, std::move(value));
     return json;
+}
+
+/// @brief An alignment's document name.
+/// @param align The alignment.
+/// @return `start`, `center`, `end` or `stretch`.
+[[nodiscard]] inline std::string alignName(Align align) {
+    static constexpr std::array<char const*, 4> kNames = {"stretch", "start", "center", "end"};
+    return kNames.at(static_cast<std::size_t>(align));
+}
+
+/// @brief A justification's document name.
+/// @param justify The justification.
+/// @return `start`, `center`, `end` or `between`.
+[[nodiscard]] inline std::string justifyName(Justify justify) {
+    static constexpr std::array<char const*, 4> kNames = {"start", "center", "end", "between"};
+    return kNames.at(static_cast<std::size_t>(justify));
 }
 
 /// @brief The value of a constant expression, as `constant` writes one.
@@ -1846,6 +1863,11 @@ public:
         }
         return with("sizing", AnyHandle::raw(detail::single("obj", std::move(record))));
     }
+
+    /// @brief Where the node sits in its row, column or grid, in place of the container's `align`.
+    /// @param align The alignment.
+    /// @return The node with it.
+    [[nodiscard]] Node alignSelf(Align align) const { return withText("alignSelf", detail::alignName(align)); }
 
     /// @brief The least width, in backend units.
     /// @param units The bound, 0 or more.
@@ -3318,34 +3340,64 @@ struct ContainerOptions {
     AnyHandle gap;
     /// @brief A grid's columns; adaptive layouts read `env("widthClass")`.
     AnyHandle columns;
+    /// @brief Where the children sit across the axis; absent stretches them.
+    std::optional<Align> align;
+    /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
+    ///        columns share its width.
+    std::optional<Justify> justify;
 };
+
+namespace detail {
+
+/// @brief A row or column with its options.
+/// @param kind     `row` or `column`.
+/// @param children The children.
+/// @param options  The gap and the alignment.
+/// @return The node.
+[[nodiscard]] inline Node stackNode(char const* kind, Nodes const& children, ContainerOptions const& options) {
+    NodeWriter node{kind};
+    node.put("children", children).put("gap", options.gap);
+    if (options.align) {
+        node.text("align", alignName(*options.align));
+    }
+    if (options.justify) {
+        node.text("justify", justifyName(*options.justify));
+    }
+    return node.done();
+}
+
+}  // namespace detail
 
 /// @brief A `column` node.
 /// @param children The children.
-/// @param options  The gap.
+/// @param options  The gap and the alignment.
 /// @return The node.
 [[nodiscard]] inline Node column(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"column"}.put("children", children).put("gap", options.gap).done();
+    return detail::stackNode("column", children, options);
 }
 
 /// @brief A `row` node.
 /// @param children The children.
-/// @param options  The gap.
+/// @param options  The gap and the alignment.
 /// @return The node.
 [[nodiscard]] inline Node row(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"row"}.put("children", children).put("gap", options.gap).done();
+    return detail::stackNode("row", children, options);
 }
 
 /// @brief A `grid` node.
 /// @param children The children.
-/// @param options  The gap and columns.
+/// @param options  The gap, columns and alignment; a `justify` is written, and the loader refuses it.
 /// @return The node.
 [[nodiscard]] inline Node grid(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"grid"}
-        .put("children", children)
-        .put("gap", options.gap)
-        .put("columns", options.columns)
-        .done();
+    detail::NodeWriter node{"grid"};
+    node.put("children", children).put("gap", options.gap).put("columns", options.columns);
+    if (options.align) {
+        node.text("align", detail::alignName(*options.align));
+    }
+    if (options.justify) {
+        node.text("justify", detail::justifyName(*options.justify));
+    }
+    return node.done();
 }
 
 /// @brief A `spacer` node.

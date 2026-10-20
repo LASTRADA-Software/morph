@@ -17,6 +17,13 @@ Item {
     property int heightKind: 0
     property int heightAmount: 0
     // The bounds the extent is clamped into, in units; -1 for none.
+    // Where the widget sits across its container's axis: its own `alignSelf` (−1 none), else the container's
+    // `crossAlign` (0 stretch, 1 start, 2 center, 3 end); `alignAcross` says which way the container places it (0 not
+    // at all, 1 horizontally in a column, 2 vertically in a row or grid). The container writes the last two.
+    property int alignSelf: -1
+    property int crossAlign: 0
+    property int alignAcross: 0
+    readonly property int placedAlign: alignSelf >= 0 ? alignSelf : crossAlign
     property int minWidthUnits: -1
     property int maxWidthUnits: -1
     property int minHeightUnits: -1
@@ -141,8 +148,17 @@ Item {
         return root.host ? root.host.ask(name, payload) : false
     }
 
-    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth && fillsAcross)
-    Layout.fillHeight: heightKind === 2 || (heightKind === 0 && fillsHeight)
+    // A content child under an alignment other than stretch keeps its own extent across; a stretch child keeps its
+    // fill, and its maximum with the alignment places it.
+    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth && fillsAcross && !(alignAcross === 1 && placedAlign !== 0))
+    Layout.fillHeight: heightKind === 2 || (heightKind === 0 && fillsHeight && !(alignAcross === 2 && placedAlign !== 0))
+    Layout.alignment: {
+        if (alignAcross === 0 || placedAlign === 0)
+            return 0
+        if (alignAcross === 1)
+            return placedAlign === 1 ? Qt.AlignLeft : placedAlign === 2 ? Qt.AlignHCenter : Qt.AlignRight
+        return placedAlign === 1 ? Qt.AlignTop : placedAlign === 2 ? Qt.AlignVCenter : Qt.AlignBottom
+    }
     Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
     Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1

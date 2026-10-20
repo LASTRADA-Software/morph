@@ -18,6 +18,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
+#include "alignment.hpp"
 #include "button_emphasis.hpp"
 
 /// @file
@@ -315,9 +316,12 @@ struct LayoutHints {
     std::optional<int> minHeight;
     /// @brief The most height, in backend units; `nullopt` for none.
     std::optional<int> maxHeight;
+    /// @brief Where the node sits across its row's, column's or grid row's axis; `nullopt` takes the container's
+    ///        `align`.
+    std::optional<Align> alignSelf;
 
     /// @brief Memberwise equality.
-    /// @return Whether the sizings and the bounds match.
+    /// @return Whether the sizings, the bounds and the alignment match.
     bool operator==(LayoutHints const&) const = default;
 };
 
@@ -554,6 +558,10 @@ struct Column {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Where the children sit across the column (horizontally); set once.
+    Align align = Align::Stretch;
+    /// @brief Where the spare height goes while no shown child stretches; set once.
+    Justify justify = Justify::Start;
 };
 
 /// @brief Children laid out left to right.
@@ -567,6 +575,10 @@ struct Row {
     /// @brief A table row's tone: disengaged when none was given; an engaged `Prop` whose value is `nullopt` has no
     ///        tone at the moment. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief Where the children sit across the row (vertically); set once.
+    Align align = Align::Stretch;
+    /// @brief Where the spare width goes while no shown child stretches; set once.
+    Justify justify = Justify::Start;
 };
 
 /// @brief One cell of a `Grid`.
@@ -587,6 +599,9 @@ struct Grid {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so
+    ///        there is no spare length to justify.
+    Align align = Align::Stretch;
 };
 
 /// @brief Empty space that takes what its layout hints ask for.

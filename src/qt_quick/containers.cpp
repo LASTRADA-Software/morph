@@ -21,12 +21,24 @@ StackImpl::StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axi
 
 void StackImpl::setGap(int gap) { write("gap", gap); }
 
+void StackImpl::setAlign(ui::Align align) {
+    write("align", static_cast<int>(align));
+    alignChildren(align);
+}
+
+void StackImpl::setJustify(ui::Justify justify) { write("justify", static_cast<int>(justify)); }
+
 GridImpl::GridImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphGrid"), parent} {}
 
 void GridImpl::setColumns(int columns) { write("columns", std::max(1, columns)); }
 
 void GridImpl::setGap(int gap) { write("gap", gap); }
+
+void GridImpl::setAlign(ui::Align align) {
+    write("align", static_cast<int>(align));
+    alignChildren(align);
+}
 
 void GridImpl::setSpan(ui::Widget& child, int span) {
     if (ItemBase const* const base = baseOf(child)) {

@@ -3,6 +3,7 @@
 #include "tui/widget.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <core/tui/Buffer.hpp>
 #include <core/tui/Cell.hpp>
 #include <core/tui/HoverState.hpp>
@@ -629,22 +630,28 @@ struct Placement {
 /// @p size along the main axis.
 int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.height : size.width; }
 
-/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing and bounds decide.
-::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent) {
+/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing, bounds and alignment
+/// (its own, else the stack's @p align) decide its extent and where it sits.
+::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent,
+                         ui::Align align) {
     auto const& area = placement.area;
     ui::LayoutHints const& hints = child.layout();
+    ui::Align const placed = hints.alignSelf.value_or(align);
+    ::core::tui::Size const requested = requestedSize(child);
     if (placement.vertical) {
-        return {
-            .x = area.x,
-            .y = area.y + offset,
-            .width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth)),
-            .height = extent};
+        int const width = alignedExtent(placed, hints.width, requested.width, area.width,
+                                        layout::boundsOf(hints.minWidth, hints.maxWidth));
+        return {.x = area.x + alignedOffset(placed, width, area.width),
+                .y = area.y + offset,
+                .width = width,
+                .height = extent};
     }
-    return {
-        .x = area.x + offset,
-        .y = area.y,
-        .width = extent,
-        .height = layout::crossExtent(hints.height, area.height, layout::boundsOf(hints.minHeight, hints.maxHeight))};
+    int const height = alignedExtent(placed, hints.height, requested.height, area.height,
+                                     layout::boundsOf(hints.minHeight, hints.maxHeight));
+    return {.x = area.x + offset,
+            .y = area.y + alignedOffset(placed, height, area.height),
+            .width = extent,
+            .height = height};
 }
 
 /// The solver's mode: the shown children share the area; the hidden ones get none of it.
@@ -677,10 +684,31 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
     auto const length = placement.vertical ? placement.area.height : placement.area.width;
     auto const extents = layout::distribute(items, layout::Track{.length = length, .gap = spec.gap});
 
-    int offset = 0;
+    // The spare length, placed by `justify` while no shown child stretches: before the first child for `center`
+    // and `end`, or in the gaps for `between`, the remainder one cell at a time from the first gap.
+    int lead = 0;
+    int extraGap = 0;
+    int remainder = 0;
+    bool const stretches = std::ranges::any_of(
+        items, [](layout::Item const& item) { return item.sizing.kind == ui::Sizing::Kind::Stretch; });
+    int const used = std::accumulate(extents.begin(), extents.end(), 0) +
+                     (spec.gap * std::max(0, static_cast<int>(extents.size()) - 1));
+    if (int const spare = length - used; !stretches && spare > 0) {
+        if (spec.justify == ui::Justify::Center) {
+            lead = spare / 2;
+        } else if (spec.justify == ui::Justify::End) {
+            lead = spare;
+        } else if (spec.justify == ui::Justify::Between && extents.size() > 1) {
+            int const gaps = static_cast<int>(extents.size()) - 1;
+            extraGap = spare / gaps;
+            remainder = spare % gaps;
+        }
+    }
+    int offset = lead;
     for (auto const [child, slot, extent] : std::views::zip(placed, slots, extents)) {
-        *slot = slotOf(*child, placement, offset, extent);
-        offset += extent + spec.gap;
+        *slot = slotOf(*child, placement, offset, extent, spec.align);
+        offset += extent + spec.gap + extraGap + (remainder > 0 ? 1 : 0);
+        remainder = std::max(0, remainder - 1);
     }
 }
 
@@ -698,13 +726,34 @@ void columnAreas(std::span<WidgetBase* const> children, Placement const& placeme
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
         if (child->shown()) {
-            area = slotOf(*child, placement, offset, extent);
+            area = slotOf(*child, placement, offset, extent, spec.align);
         }
         offset += extent + spec.gap;
     }
 }
 
 }  // namespace
+
+int alignedOffset(ui::Align align, int extent, int space) noexcept {
+    int const spare = std::max(0, space - extent);
+    switch (align) {
+        case ui::Align::Center:
+            return spare / 2;
+        case ui::Align::End:
+            return spare;
+        case ui::Align::Start:
+        case ui::Align::Stretch:
+        default:
+            return 0;
+    }
+}
+
+int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, layout::Bounds bounds) noexcept {
+    if (align != ui::Align::Stretch && sizing.kind == ui::Sizing::Kind::Content) {
+        return std::clamp(requested, 0, std::max(0, space));
+    }
+    return layout::crossExtent(sizing, space, bounds);
+}
 
 std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                           StackSpec const& spec) {
