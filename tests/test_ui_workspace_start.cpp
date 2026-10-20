@@ -405,6 +405,9 @@ TEST_CASE("navigator: entries are list items, and setCurrent marks the open scre
         return harness.backend.prop(*harness.backend.find("Button", "testId", testId), name);
     };
     CHECK(prop("nav_lims.samples", "style") == "Item");
+    // A group's heading is a section, a step below the application's name.
+    CHECK(harness.backend.prop(*harness.backend.find("Text", "testId", "navigator_group_Lab/Work"), "role") ==
+          "Section");
     CHECK(prop("nav_lims.samples", "layout") == "stretch(1)/content");
     CHECK(prop("pin_lims.samples", "style").empty());     // a pin stays a push button
     CHECK(prop("nav_lims.samples", "selected").empty());  // a new item is not selected, and is not told so

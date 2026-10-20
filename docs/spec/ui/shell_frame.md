@@ -16,7 +16,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | Widget | Test id | What it is |
 |---|---|---|
 | a row, stretch × stretch | `shell` | the whole frame |
-| a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading) and a `ui::Navigator` over `ShellFrameOptions::navigator` |
+| a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading) and a `ui::Navigator` over `ShellFrameOptions::navigator`, whose group headings are sections and whose entries are body text, so the scale runs name, section, entry |
 | a column, stretch × stretch | — | the main column |
 | a row, surface `toolbar`, gap 3, `align: center`, padded by spacers at both ends | `shell_topbar` | the shown screen's title (`shell_title`, a heading that stretches), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |

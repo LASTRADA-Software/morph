@@ -20,7 +20,8 @@ namespace morph::tui::detail {
 
 namespace {
 
-::core::tui::Style const& roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
+// A section heading is the muted style, bold: a step below a heading, which is bold body text.
+::core::tui::Style roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
     if (role == ui::TextRole::Muted) {
         return theme.textMuted;
     }
@@ -32,6 +33,11 @@ namespace {
     }
     if (role == ui::TextRole::Success) {
         return theme.success;
+    }
+    if (role == ui::TextRole::Section) {
+        ::core::tui::Style section = theme.textMuted;
+        section.bold = true;
+        return section;
     }
     return theme.textNormal;
 }
@@ -74,7 +80,7 @@ void TextImpl::setRole(ui::TextRole role) {
 }
 
 void TextImpl::paint(::core::tui::Canvas& canvas) {
-    auto const& style = roleStyle(canvas.theme(), _role);
+    ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
     int row = 0;
     for (auto const line : splitLines(_text)) {
         if (row >= canvas.height()) {

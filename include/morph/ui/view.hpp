@@ -202,6 +202,7 @@ enum class TextRole : std::uint8_t {
     Heading,  ///< A section heading.
     Error,    ///< An error message.
     Success,  ///< A confirmation.
+    Section,  ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
 };
 
 /// @brief How a `TextInput` edits.

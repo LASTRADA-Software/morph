@@ -363,9 +363,10 @@ The cell rule of the host design §4 stands: the cell draws the caption, the con
   text colour. No new token: the body size and weight already exist (`ui/theme.md`, "On Qt Quick").
 - **Terminal.** `roleStyle` draws `Section` as the muted style, bold.
 - **An unknown role** is today `Normal`, silently (`interpreter.hpp:5487`). A literal one is refused at load
-  (decided, §17); a non-literal one that evaluates to an unknown name is reported once per path and drawn `Normal`.
-  This commit turns `tests/test_ui_interpreter_commands.cpp:367` (`"role": "plain"`) into a corpus refusal case and
-  drops its `Normal` assertion (`:380`).
+  (decided, §17); a non-literal one that evaluates to an unknown name is reported once per path and value (the
+  interpreter's diagnostics are keyed by path and reason) and drawn `Normal`. This commit turns
+  `tests/test_ui_interpreter_commands.cpp:367` (`"role": "plain"`) into a corpus refusal case; the interpreter test
+  keeps its `Normal` assertion with `"role": "normal"`, and gains `section` and the `title` alias.
 - **Specs.** `ui/view_tree.md` (Text), `ui/document.md`, `ui/theme.md` (On Qt Quick: the roles' fonts),
   `qt_quick/backend.md`, `tui/frontend.md`, `ui/shell_frame.md`, `ui/workspace.md`.
 

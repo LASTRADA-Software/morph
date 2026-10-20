@@ -229,7 +229,7 @@ private:
         }
         for (Group& group : _groups) {
             group.heading = _backend->createText(_root.get());
-            group.heading->setRole(TextRole::Heading);
+            group.heading->setRole(TextRole::Section);
             group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
             std::string heading = group.module;
             if (!group.group.empty()) {

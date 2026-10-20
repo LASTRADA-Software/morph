@@ -160,7 +160,8 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 
 `Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
 platform font (`Theme.platformMetrics`), the body its size and a heading 1.3 times the body. Every `MorphUi` text and
-control draws in `Theme.bodyFont` (`strongFont` where it is emphasised, `headingFont` for a heading): the theme's
+control draws in `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also
+muted, `headingFont` for a heading): the theme's
 families at the body size, or the platform font untouched while `fontFamilies` is empty. A family Qt cannot resolve
 falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
 comparing `QFontInfo`'s family against the list.

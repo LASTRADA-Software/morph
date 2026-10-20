@@ -161,7 +161,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
-| `text` | `text`, `role` | |
+| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
 | `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
 | `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
@@ -240,7 +240,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
-  evaluates to none of the forms is reported once and lowers to content. A `button`'s `selected` needs `"style": "item"` (it marks a list item). A `grid` takes no `justify` (its columns
+  evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is
+  reported once for its path and drawn `normal`. A `button`'s `selected` needs `"style": "item"` (it marks a list item). A `grid` takes no `justify` (its columns
   share its width; there is no spare length to justify); `alignSelf` is given only on a child of a `row`, `column`,
   `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,
   a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as

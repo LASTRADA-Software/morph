@@ -2617,6 +2617,10 @@ private:
             })};
     }
 
+    /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
+    ///        name of no role is reported once for its path and drawn `Normal`.
+    Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
+
     /// @brief A property read through @p read, as a numbered slot.
     template <typename T, typename Read>
     Prop<T> slotProp(Read read) {
@@ -5467,24 +5471,36 @@ namespace detail {
 }
 
 /// @brief A text role by name.
-/// @param value  `normal`, `muted`, `heading` (or `title`), `error`, `success`.
-/// @param format Unused.
-/// @return The role; `Normal` for anything else.
-[[nodiscard]] inline TextRole roleOf(Value const& value, FormatContext const& format) {
-    std::string const text = textOf(value, format);
-    if (text == "muted") {
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`.
+/// @return The role; `nullopt` for any other name.
+[[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
+    if (name == "normal") {
+        return TextRole::Normal;
+    }
+    if (name == "muted") {
         return TextRole::Muted;
     }
-    if (text == "heading" || text == "title") {
+    if (name == "heading" || name == "title") {
         return TextRole::Heading;
     }
-    if (text == "error") {
+    if (name == "section") {
+        return TextRole::Section;
+    }
+    if (name == "error") {
         return TextRole::Error;
     }
-    if (text == "success") {
+    if (name == "success") {
         return TextRole::Success;
     }
-    return TextRole::Normal;
+    return std::nullopt;
+}
+
+/// @brief A text role by name, as `roleNamed` reads it.
+/// @param value  The name.
+/// @param format Unused.
+/// @return The role; `Normal` for any other name.
+[[nodiscard]] inline TextRole roleOf(Value const& value, FormatContext const& format) {
+    return roleNamed(textOf(value, format)).value_or(TextRole::Normal);
 }
 
 /// @brief A tone by name.
@@ -5634,6 +5650,21 @@ inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
         loweredNodes.push_back(LoweredNode{.node = &node, .scope = ctx.scope, .bindings = ctx.bindings});
     }
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
+}
+
+inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& expr) {
+    if (!expr || expr->kind == ExprKind::Literal) {
+        return bindProp<TextRole>(ctx, expr, TextRole::Normal, roleOf);
+    }
+    return slotProp<TextRole>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
+        Value const value = evalIn(*scope, bindings.get(), expr);
+        std::optional<TextRole> const role = roleNamed(textOf(value, session.formatting()));
+        if (!role) {
+            report(expr->path, "role is " + canonicalJson(value) +
+                                   "; a role is normal, muted, heading, section, error or success");
+        }
+        return role.value_or(TextRole::Normal);
+    });
 }
 
 inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
@@ -5873,8 +5904,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     };
 
     if (kind == "text") {
-        Text spec{.text = textProp("text"),
-                  .role = bindProp<TextRole>(ctx, node.prop("role"), TextRole::Normal, roleOf)};
+        Text spec{.text = textProp("text"), .role = roleProp(ctx, node.prop("role"))};
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));

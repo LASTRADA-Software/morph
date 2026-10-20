@@ -364,7 +364,9 @@ TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui
         { "kind": "text", "testId": "muted", "text": "m", "role": "muted" },
         { "kind": "text", "testId": "heading", "text": "h", "role": "heading" },
         { "kind": "text", "testId": "error", "text": "e", "role": "error" },
-        { "kind": "text", "testId": "normal", "text": "n", "role": "plain" },
+        { "kind": "text", "testId": "normal", "text": "n", "role": "normal" },
+        { "kind": "text", "testId": "section", "text": "s", "role": "section" },
+        { "kind": "text", "testId": "title", "text": "t", "role": "title" },
         { "kind": "badge", "testId": "info", "tone": "info" },
         { "kind": "badge", "testId": "success", "tone": "success" },
         { "kind": "badge", "testId": "warning", "tone": "warning" },
@@ -378,6 +380,8 @@ TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui
     CHECK(h.backend.prop(h.byTestId("Text", "heading"), "role") == "Heading");
     CHECK(h.backend.prop(h.byTestId("Text", "error"), "role") == "Error");
     CHECK(h.backend.prop(h.byTestId("Text", "normal"), "role") == "Normal");
+    CHECK(h.backend.prop(h.byTestId("Text", "section"), "role") == "Section");
+    CHECK(h.backend.prop(h.byTestId("Text", "title"), "role") == "Heading");
     CHECK(h.backend.prop(h.byTestId("Badge", "info"), "tone") == "Info");
     CHECK(h.backend.prop(h.byTestId("Badge", "success"), "tone") == "Ok");
     CHECK(h.backend.prop(h.byTestId("Badge", "warning"), "tone") == "Warn");
@@ -867,4 +871,28 @@ TEST_CASE("button: style item draws a list entry, and selected follows its condi
     CHECK(h.backend.prop(a, "selected") == "false");
     CHECK(h.backend.prop(b, "selected") == "true");
     CHECK(h.diagnostics.empty());
+}
+
+// Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
+TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "roles", "state": { "r": { "init": "big" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "x", "text": "x", "role": { "ref": "r" } },
+        { "kind": "button", "testId": "fix", "label": "fix", "onClick": [ { "set": "r", "value": "section" } ] },
+        { "kind": "button", "testId": "break", "label": "break", "onClick": [ { "set": "r", "value": "huge" } ] } ] } })");
+    int const text = h.byTestId("Text", "x");
+    CHECK(h.backend.prop(text, "role") == "Normal");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().path == "/view/children/0/role");
+    CHECK(h.diagnostics.front().reason.starts_with(R"(role is "big"; a role is)"));
+    h.backend.click(h.byTestId("Button", "fix"));
+    h.settle();
+    CHECK(h.backend.prop(text, "role") == "Section");
+    h.backend.click(h.byTestId("Button", "break"));
+    h.settle();
+    CHECK(h.backend.prop(text, "role") == "Normal");
+    CHECK(h.diagnostics.size() == 2);  // a second unknown name is a second reason for the path
 }

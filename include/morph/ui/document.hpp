@@ -2975,6 +2975,9 @@ private:
             static constexpr std::array<std::string_view, 2> kFieldLayouts = {"stacked", "inline"};
             checkChoice(node, "fieldLayout", kFieldLayouts);
         }
+        if (node.kind == "text") {
+            checkTextRole(node);
+        }
         static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
         static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};
         checkChoice(node, "align", kAlign);
@@ -3136,6 +3139,24 @@ private:
                 refuse(sizing->path, std::string{"a fixed size has no room to bound: the "} +
                                          (axis == 0 ? "width" : "height") + " is fixed outside its bounds");
             }
+        }
+    }
+
+    // A text's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one is read at mount, and
+    // one of no known name is reported there.
+    static void checkTextRole(DocNode const& node) {
+        ExprPtr const role = node.prop("role");
+        if (role == nullptr || role->kind != ExprKind::Literal) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 7> kRoles = {"normal",  "muted", "heading", "title",
+                                                                   "section", "error", "success"};
+        std::string const* const name = role->literal.asString();
+        if (name == nullptr) {
+            refuse(pointerAppend(node.path, "role"), "`role` is a name");
+        }
+        if (!listed(kRoles, *name)) {
+            refuse(pointerAppend(node.path, "role"), "`" + *name + "` is not one of the values of `role`");
         }
     }
 

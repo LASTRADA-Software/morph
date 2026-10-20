@@ -275,6 +275,8 @@ template <typename T, typename F>
             return "Error";
         case TextRole::Success:
             return "Success";
+        case TextRole::Section:
+            return "Section";
         default:
             return "unknown";
     }

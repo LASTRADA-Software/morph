@@ -151,7 +151,7 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 
 `ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
 - **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
-  heading, `navigator_group_<module>/<group>`, and each entry is a list item (`ButtonStyle::Item`) as wide as the
+  heading in the `Section` text role, `navigator_group_<module>/<group>`, and each entry is a list item (`ButtonStyle::Item`) as wide as the
   navigator, `nav_<id>`.
 - **The current entry.** `setCurrent(id)` marks the entry of the screen that is open and clears the one marked
   before; an id the navigator does not list, or empty, leaves none marked, and a pin is never marked. `current()`

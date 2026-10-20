@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// Text: a label in one of the text roles (Normal, Muted, Heading, Error, Success).
+// Text: a label in one of the text roles (Normal, Muted, Heading, Error, Success, Section).
 MorphField {
     id: root
 
@@ -20,7 +20,8 @@ MorphField {
         width: root.controlWidth
         text: root.text
         wrapMode: Text.Wrap
-        font: root.role === 2 ? Theme.headingFont : Theme.fontOf(Theme.bodyPixels, Font.Normal)
+        font: root.role === 2 ? Theme.headingFont : root.role === 5 ? Theme.strongFont
+                                                                     : Theme.fontOf(Theme.bodyPixels, Font.Normal)
         color: root.textColorOf(root.role)
         Accessible.ignored: true
     }
