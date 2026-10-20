@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/mount.hpp>
@@ -147,6 +148,35 @@ TEST_CASE("qt_quick widgets: a text input draws its unit inside the field, and t
     CHECK_FALSE(unit->isVisible());
 }
 
+// Mutation: never show the icon (no visible leading image inside the field).
+TEST_CASE("qt_quick widgets: a text input draws its icon inside the field, and the text starts after it",
+          "[qt_quick]") {
+    Scene scene;
+    std::string const svg = R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 1l6 6"/></svg>)";
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"search", svg}}).empty());
+    auto plain = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    auto input = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    input->setIcon("search");
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    auto const* const icon = control.findChild<QQuickItem*>(QStringLiteral("icon"));
+    REQUIRE(icon != nullptr);
+    CHECK(icon->isVisible());
+    CHECK(control.property("leftPadding").toReal() >
+          Scene::controlOf(*plain).property("leftPadding").toReal() + icon->width() - 1);
+}
+
+// A no-op: an input with no icon reserves no leading space and shows nothing where one would be.
+TEST_CASE("qt_quick widgets: a text input with no icon reserves no leading space", "[qt_quick]") {
+    Scene scene;
+    auto plain = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*plain);
+    auto const* const icon = control.findChild<QQuickItem*>(QStringLiteral("icon"));
+    REQUIRE(icon != nullptr);
+    CHECK_FALSE(icon->isVisible());
+}
+
 TEST_CASE("qt_quick widgets: a setter writes the text without echoing it, and keeps the cursor on the shown text",
           "[qt_quick]") {
     Scene scene;
@@ -261,6 +291,17 @@ TEST_CASE(
     // New options keep the request: it is marked wherever it now is.
     select->setOptions({{.key = std::string{"z"}, .label = "Zed"}, {.key = big, .label = "Big again"}});
     CHECK(impl.marked() == 1);
+}
+
+// Mutation: drop MorphSelect's indicator: override -> the Basic style's stock arrow shows instead.
+TEST_CASE("qt_quick widgets: a dropdown's indicator is themed, and flips with the popup", "[qt_quick]") {
+    Scene scene;
+    auto select = scene.backend().createSelect(nullptr, ui::SelectStyle::Dropdown);
+    scene.settle();
+    QQuickItem& combo = Scene::controlOf(*select);
+    auto* const indicator = combo.property("indicator").value<QQuickItem*>();
+    REQUIRE(indicator != nullptr);
+    CHECK(indicator->objectName() == QStringLiteral("indicator"));
 }
 
 // Mutation: drop MorphSelect's popup Connections -> opening reports nothing.

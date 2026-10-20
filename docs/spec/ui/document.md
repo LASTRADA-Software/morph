@@ -163,7 +163,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 |---|---|---|
 | `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
 | `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
-| `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
+| `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
 | `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |

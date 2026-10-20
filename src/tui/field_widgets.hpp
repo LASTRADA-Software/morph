@@ -91,6 +91,7 @@ public:
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
     void setDecimals(int decimals) override;
+    void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
@@ -114,6 +115,7 @@ private:
     std::string _reported;
     std::string _placeholder;
     std::string _unit;  ///< Drawn muted at the right edge, before the marks; the editable width ends a cell before it.
+    std::string _icon;  ///< A framework icon name draws as a glyph before the field; any other name draws nothing.
     std::function<void(std::string)> _onChange;
     std::function<void(std::string)> _onSubmit;
     std::function<void(std::string)> _onCommit;

@@ -107,6 +107,14 @@ void TextInputImpl::setDecimals(int decimals) {
     write("decimals", decimals);
 }
 
+void TextInputImpl::setIcon(std::string_view icon) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input shows no icon"};
+    }
+    context().checkIcon(icon);
+    write("icon", toQString(icon));
+}
+
 void TextInputImpl::setOnChange(std::function<void(std::string)> onChange) {
     relay().on(QStringLiteral("change"), textHandler(std::move(onChange)));
 }

@@ -210,6 +210,11 @@ public:
     /// @param decimals The places, from 0; -1 when the input does not hold a number.
     virtual void setDecimals(int decimals) = 0;
 
+    /// @brief Sets the icon drawn at the field's leading edge; empty shows none. Called once, and only for a
+    ///        single-line or password input that has one.
+    /// @param icon An icon name of the theme's icon set.
+    virtual void setIcon(std::string_view icon) = 0;
+
     /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
     ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
     /// @param label The label, UTF-8.

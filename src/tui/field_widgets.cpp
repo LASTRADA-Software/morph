@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <format>
 #include <memory>
+#include <morph/ui/theme.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -302,9 +303,20 @@ void TextInputImpl::setDecimals(int decimals) {
     static_cast<void>(decimals);
 }
 
+// The mount never asks a multiline input for an icon.
+void TextInputImpl::setIcon(std::string_view icon) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input shows no icon"};
+    }
+    _icon = std::string{icon};
+    refresh();
+}
+
 ::core::tui::Size TextInputImpl::naturalSize() const {
     int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
-    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit;
+    std::string_view const glyph = ui::iconGlyph(_icon);
+    int const icon = glyph.empty() ? 0 : displayWidth(glyph) + 1;
+    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
     return withFieldCaption({.width = width, .height = height}, caption());
 }
@@ -313,13 +325,20 @@ std::string TextInputImpl::probeText() const { return std::string{_field->text()
 
 void TextInputImpl::paint(::core::tui::Canvas& canvas) {
     auto control = paintFieldCaption(canvas, caption());
+    std::string_view const glyph = ui::iconGlyph(_icon);
+    int const iconWidth = glyph.empty() ? 0 : displayWidth(glyph) + 1;
+    if (iconWidth > 0) {
+        control.putString(0, 0, glyph, control.theme().textMuted);
+    }
+    auto field = control.subcanvas(
+        {.x = iconWidth, .y = 0, .width = std::max(0, control.width() - iconWidth), .height = control.height()});
     if (_unit.empty()) {
-        paintField(*_field, *this, actionable(), control);
+        paintField(*_field, *this, actionable(), field);
     } else {
-        int const unitX = std::max(0, control.width() - marksWidth() - displayWidth(_unit));
-        auto text = control.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = control.height()});
+        int const unitX = std::max(0, field.width() - marksWidth() - displayWidth(_unit));
+        auto text = field.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = field.height()});
         paintField(*_field, *this, actionable(), text);
-        control.putString(0, unitX, _unit, control.theme().textMuted);
+        field.putString(0, unitX, _unit, field.theme().textMuted);
     }
     paintMarks(control);
 }

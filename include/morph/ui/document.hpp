@@ -719,15 +719,16 @@ inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 9> kTextInputKeys = {{{"value", Shape::Expr},
-                                                           {"placeholder", Shape::Expr},
-                                                           {"mode", Shape::Expr},
-                                                           {"commitOn", Shape::Text},
-                                                           {"label", Shape::Expr},
-                                                           {"showLabel", Shape::Flag},
-                                                           {"onChange", Shape::Commands},
-                                                           {"onCommit", Shape::Commands},
-                                                           {"onSubmit", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 10> kTextInputKeys = {{{"value", Shape::Expr},
+                                                            {"placeholder", Shape::Expr},
+                                                            {"mode", Shape::Expr},
+                                                            {"icon", Shape::Expr},
+                                                            {"commitOn", Shape::Text},
+                                                            {"label", Shape::Expr},
+                                                            {"showLabel", Shape::Flag},
+                                                            {"onChange", Shape::Commands},
+                                                            {"onCommit", Shape::Commands},
+                                                            {"onSubmit", Shape::Commands}}};
 /// @brief The keys of `checkbox`.
 inline constexpr std::array<KeySpec, 4> kCheckboxKeys = {
     {{"label", Shape::Expr}, {"checked", Shape::Expr}, {"onToggle", Shape::Commands}, {"onChange", Shape::Commands}}};

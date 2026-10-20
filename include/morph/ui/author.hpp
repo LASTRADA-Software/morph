@@ -3187,6 +3187,9 @@ struct TextInputOptions {
     AnyHandle placeholder;
     /// @brief The input mode, such as `multiline` or `password`.
     AnyHandle mode;
+    /// @brief An icon of the theme's icon map, drawn at the input's leading edge; empty shows none. Refused on a
+    ///        multiline input.
+    AnyHandle icon;
     /// @brief When the draft commits.
     std::optional<Commit> commitOn;
     /// @brief Commands run on every edit.
@@ -3206,7 +3209,8 @@ struct TextInputOptions {
     node.put("value", options.value)
         .put("label", options.label)
         .put("placeholder", options.placeholder)
-        .put("mode", options.mode);
+        .put("mode", options.mode)
+        .put("icon", options.icon);
     if (options.commitOn) {
         node.text("commitOn", kCommits.at(static_cast<std::size_t>(*options.commitOn)));
     }

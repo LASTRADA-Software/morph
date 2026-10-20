@@ -5979,6 +5979,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         } else if (mode == "password") {
             spec.mode = TextInputMode::Password;
         }
+        spec.icon = onceText("icon");
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);

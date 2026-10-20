@@ -17,6 +17,8 @@ MorphField {
     // The fraction digits a number is entered with, -1 for an input that holds no number: carried for a kit's
     // restyle to read; the stock input draws nothing from it.
     property int decimals: -1
+    // The name of an icon in the theme's icon set, drawn at the leading edge inside the field; empty draws none.
+    property string icon: ""
 
     control: field
     accessibleItem: field
@@ -28,7 +30,8 @@ MorphField {
         width: root.controlWidth
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
-        leftPadding: Theme.spaceOf(3)
+        // The text starts after the icon.
+        leftPadding: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0)
         // The text stops before the unit.
         rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
@@ -71,6 +74,17 @@ MorphField {
             visible: root.unit !== ""
             text: root.unit
             color: root.scheme.muted
+        }
+
+        Image {
+            id: iconImage
+            objectName: "icon"
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.spaceOf(3)
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property string themedSource: Theme.iconSource(root.icon)
+            visible: root.icon !== "" && themedSource !== ""
+            source: themedSource
         }
     }
 }
