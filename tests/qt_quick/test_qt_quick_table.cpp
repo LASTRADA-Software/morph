@@ -197,7 +197,7 @@ TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row
     // What this measures: the number of rows `widestCell` visits for a single-row grow, not wall-clock time. A
     // grown column's cells still all need their x/width updated once the column widens (MorphTableRow.qml's
     // onWidthsChanged: place(), one call per row) -- that O(rows) placement cost is real, necessary, and not what
-    // this fix addresses (virtualizing which rows exist at all is #1016's separate, larger concern). What the fix
+    // this fix addresses (virtualizing which rows exist at all is a separate, larger concern). What the fix
     // does address is the O(rows) *scan* needed merely to compute the new width, which this isolates by reading
     // `rowScans`'s delta instead of timing the whole settle.
     auto const buildAndGrow = [](int rowCount) -> int {
