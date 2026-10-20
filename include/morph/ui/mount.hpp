@@ -792,6 +792,9 @@ private:
         PanelWidget& widget = scope.adopt(_backend->createPanel(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        if (Widget* const header = mount(scope, spec.header, &widget); header != nullptr) {
+            widget.setHeader(*header);
+        }
         widget.setPadding(spacingStep(spec.padding));
         widget.setCollapsible(spec.collapsible);
         if (spec.collapsible) {

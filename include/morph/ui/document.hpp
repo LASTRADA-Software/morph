@@ -760,7 +760,8 @@ inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes}
                                                       {"align", Shape::Text},
                                                       {"justify", Shape::Text}}};
 /// @brief The keys of `panel`.
-inline constexpr std::array<KeySpec, 5> kPanelKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kPanelKeys = {{{"title", Shape::Expr},
+                                                       {"header", Shape::Nodes},
                                                        {"padding", Shape::Expr},
                                                        {"collapsible", Shape::Expr},
                                                        {"collapsed", Shape::Expr},

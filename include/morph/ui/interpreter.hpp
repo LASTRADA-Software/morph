@@ -6146,6 +6146,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "panel") {
         Panel spec{.title = textProp("title"), .padding = static_cast<int>(onceInt("padding", 0))};
+        spec.header = child("header");
         spec.child = child("children");
         spec.collapsible = onceBool("collapsible", false);
         spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);

@@ -53,6 +53,14 @@ PanelImpl::PanelImpl(Context& context, ui::ContainerWidget* parent)
 
 void PanelImpl::setTitle(std::string_view title) { write("title", toQString(title)); }
 
+void PanelImpl::setHeader(ui::Widget& header) {
+    ItemBase const* const base = baseOf(header);
+    auto* const area = qobject_cast<QQuickItem*>(part("headerArea"));
+    if (base != nullptr && base->item() != nullptr && area != nullptr) {
+        base->item()->setParentItem(area);
+    }
+}
+
 void PanelImpl::setPadding(int padding) { write("padding", padding); }
 
 void PanelImpl::setCollapsible(bool collapsible) { write("collapsible", collapsible); }

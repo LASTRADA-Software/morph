@@ -14,6 +14,8 @@ MorphWidget {
     property bool collapsible: false
     property bool collapsed: false
     readonly property Item content: column
+    readonly property Item headerArea: headerSlot
+    readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerSlot.children.length > 0
 
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
@@ -37,7 +39,7 @@ MorphWidget {
             anchors.bottomMargin: Theme.spaceOf(root.padding) + 1
 
             RowLayout {
-                visible: root.title !== "" || root.collapsible
+                visible: root.headerRowShown
 
                 ToolButton {
                     font: Theme.bodyFont
@@ -56,6 +58,21 @@ MorphWidget {
                     font: Theme.strongFont
                     text: root.title
                 }
+
+                RowLayout {
+                    id: headerSlot
+                    Layout.fillWidth: true
+                }
+            }
+
+            // Divided from the content exactly when the header row above is shown.
+            Rectangle {
+                objectName: "divider"
+                visible: root.headerRowShown
+                Layout.fillWidth: true
+                height: 1
+                color: root.scheme.border
+                opacity: 0.6
             }
 
             ColumnLayout {
