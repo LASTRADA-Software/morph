@@ -187,6 +187,9 @@ public:
                 _wanted = _routes->initial();
             }
         }
+        // A start screen that is not public is used by the principal the source opened with, so the frame shows its
+        // chrome from the start.
+        _signedIn = !_source->isPublic(start);
         buildFrame();
         if (!openWanted()) {
             mount(start, _options.startParams);
@@ -309,10 +312,9 @@ private:
         };
         frame.onSignOut = [this] { signOut(); };
         _frame = std::make_unique<ui::ShellFrame>(*_backend, nullptr, std::move(frame));
-        // The sidebar and the top bar show once the catalog lists a screen beyond the public ones: before a sign-in
-        // that is none, and an application without one lists its screens from the start.
-        _frame->showSignedIn(!entries.empty());
-        _frame->setPrincipal(_source->principal());
+        // Whether a sign-in happened is the shell's own fact: a local source's signed-out principal is its `--user`
+        // name, and its signed-out catalog lists the screens, so neither tells signed in from signed out.
+        showSignedIn();
         ui::WorkspaceOptions tabs;
         tabs.screens = [entries = catalog != nullptr ? catalog->entries
                                                      : std::vector<ui::CatalogEntry>{}](std::string_view screenId) {
@@ -333,6 +335,12 @@ private:
         tabs.hosts = &_hosts;
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page());
+    }
+
+    // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
+    void showSignedIn() {
+        _frame->showSignedIn(_signedIn);
+        _frame->setPrincipal(_signedIn ? _source->principal() : std::string{});
     }
 
     // The top bar follows the active tab: its caption is the screen's title.
@@ -456,6 +464,12 @@ private:
         _message.reset();
         if (!_workspace) {
             buildFrame();
+        }
+        // Opening a screen that is not public, by a route or a navigation, is using it as the principal the source
+        // holds: the frame shows its chrome as it does for a start screen named so.
+        if (!_signedIn && !_source->isPublic(screenId)) {
+            _signedIn = true;
+            showSignedIn();
         }
         auto const opened = _workspace->open(screenId, params);
         if (!opened) {

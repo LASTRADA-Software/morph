@@ -29,7 +29,9 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 ## Signed in and signed out
 
 `showSignedIn(false)` hides the sidebar and the top bar, so the page is all there is: what a client shows before
-sign-in. `showSignedIn(true)` shows them again.
+sign-in. `showSignedIn(true)` shows them again. The frame does not decide which: a client passes whether its own
+session is signed in, and the principal to show with it (none while signed out). The generic client's rule is in
+[`client/client.md`](../client/client.md#the-shell).
 
 ## Design decisions
 

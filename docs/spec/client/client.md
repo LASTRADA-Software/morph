@@ -69,6 +69,15 @@ params, `onProblem`, `onMounted`, the downloads directory, the history, developm
 `navigate` and a navigator choice open the screen as a tab from a task posted to the owner. An empty `signIn` is
 `std::invalid_argument`.
 
+The frame shows its sidebar and top bar, and the principal, while the shell is signed in, and the page alone
+otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
+when its start screen is not public: an application without a public screen, or a `--screen` that is not public, is
+used by the principal the source opened with. While it is signed out, opening a listed screen that is not public (a
+route the history holds at start, a move back or forward) signs it in the same way. Whether a sign-in happened is the
+shell's own fact, not read from the source: a local source's signed-out principal is its `--user` name and its
+signed-out catalog lists the screens, so neither tells signed in from signed out. The navigator lists the catalog's
+screens either way.
+
 ## Sign-in mapping
 
 - `SignedIn{principal, token}` is what a sign-in installs; `SignInMapper` maps a sign-in mutation's reply to one,
@@ -96,7 +105,8 @@ there itself. An empty mapper is `std::invalid_argument`.
 ## Tests
 
 `tests/client/` (`morph_client_tests`, label `client`), headless over a `FakeAppContext` and `RecordingBackend`:
-the arguments, both sources and the shell over a two-screen probe application, the waits the tests use, and the
+the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
+for when the frame shows its chrome), the waits the tests use, and the
 sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.

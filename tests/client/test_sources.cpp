@@ -471,6 +471,98 @@ TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[clien
 
 namespace {
 
+/// A public login screen that signs in through `Probe_Login`.
+constexpr std::string_view kLogin =
+    R"({"vocab":"ui/1","id":"probe.login","models":{"probe":{"type":"Probe_Model"}},)"
+    R"("mutations":{"login":{"model":"probe","action":"Probe_Login","onSuccess":[{"signIn":{"from":"login"}}]}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"button","testId":"login","label":"Log in","onClick":[{"run":"login"}]}]}})";
+
+/// The probe's screens behind a public login.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> withLogin() {
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.login", kLogin}, std::pair{"probe.home", probe::kHome},
+                                         std::pair{"probe.other", probe::kOther}}) {
+        morph::ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.isPublic = screenId == std::string_view{"probe.login"};
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
+/// Whether the frame's sidebar and top bar both show (`true`), both are hidden (`false`), or neither holds.
+std::optional<bool> chromeShown(morph::ui::testing::RecordingBackend const& backend) {
+    auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
+    auto const topBar = backend.find("Row", "testId", "shell_topbar");
+    if (!sidebar || !topBar) {
+        return std::nullopt;
+    }
+    bool const side = backend.prop(*sidebar, "visible") != "false";
+    bool const top = backend.prop(*topBar, "visible") != "false";
+    return side == top ? std::optional<bool>{side} : std::nullopt;
+}
+
+}  // namespace
+
+// Mutation: show the chrome whenever the catalog lists a screen beyond the public ones (a local source's does before
+// any sign-in, so the login shows the navigation, the principal and Sign out).
+TEST_CASE("Client shell: the frame shows its chrome only while signed in, or on a start that is not public",
+          "[client][shell]") {
+    using Entries = std::vector<std::string>;
+    auto const shellOver = [](std::string start, morph::ui::IHistory* history, auto const& check) {
+        FakeAppContext context;
+        morph::ui::testing::RecordingBackend backend;
+        LocalSource source{morph::client::LocalApp{.name = "probe", .bundle = &withLogin, .setUp = {}},
+                           LocalSetup{.db = {}, .user = "alice"}};
+        ShellLog log;
+        ShellOptions options = log.options(std::move(start));
+        options.history = history;
+        options.signIn = [](morph::ui::Value const& /*reply*/) {
+            return std::optional<morph::client::SignedIn>{morph::client::SignedIn{.principal = "alice", .token = "t"}};
+        };
+        {
+            auto const shell =
+                morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
+            check(context, backend, log);
+        }
+        source.close();
+    };
+    SECTION("signed out on the public login; signed in after the sign-in; signed out again after the sign-out") {
+        shellOver({}, nullptr, [](FakeAppContext& context, auto& backend, ShellLog& log) {
+            REQUIRE(log.mounted == Entries{"probe.login"});
+            CHECK(chromeShown(backend) == false);
+            CHECK(textOf(backend, "shell_principal").value_or("?").empty());
+            backend.click(*backend.find("Button", "testId", "login"));
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == true; }));
+            CHECK(textOf(backend, "shell_principal") == "alice");
+            CHECK(log.mounted.back() == "probe.home");
+            backend.click(*backend.find("Button", "testId", "shell_signOut"));
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == false; }));
+            CHECK(log.mounted.back() == "probe.login");
+            CHECK(log.problems.empty());
+        });
+    }
+    SECTION("a start screen named by --screen that is not public shows the chrome from the start") {
+        shellOver("probe.home", nullptr, [](FakeAppContext& /*context*/, auto& backend, ShellLog& log) {
+            REQUIRE(log.mounted == Entries{"probe.home"});
+            CHECK(chromeShown(backend) == true);
+            CHECK(textOf(backend, "shell_principal") == "alice");
+        });
+    }
+    SECTION("a start whose history route names a screen that is not public shows the chrome") {
+        morph::ui::testing::MemoryHistory history{"probe.other"};
+        shellOver({}, &history, [](FakeAppContext& /*context*/, auto& backend, ShellLog& log) {
+            REQUIRE(log.mounted == Entries{"probe.other"});
+            CHECK(chromeShown(backend) == true);
+        });
+    }
+}
+
+namespace {
+
 // A local backend whose connect hook the test fires, as a transport does after each connect. `reconnect` replays a
 // transport's reconnect: the connect hook, then the bridge's reconnect handler posted to its executor. It logs each
 // bind and execute, in order.
