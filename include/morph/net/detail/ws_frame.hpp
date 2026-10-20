@@ -3,11 +3,14 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <random>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -83,9 +86,20 @@ public:
     /// @return `false` as soon as a byte cannot extend valid UTF-8; once it
     ///         returns `false` the validator must not be fed further.
     bool feed(std::string_view data) {
-        return std::ranges::all_of(data, [this](unsigned char currentByte) {
-            return _remaining == 0 ? startSequence(currentByte) : continueSequence(currentByte);
-        });
+        while (!data.empty()) {
+            if (_remaining == 0) {
+                data = skipAscii(data);
+                if (data.empty()) {
+                    break;
+                }
+            }
+            auto const currentByte = static_cast<unsigned char>(data.front());
+            data.remove_prefix(1);
+            if (!(_remaining == 0 ? startSequence(currentByte) : continueSequence(currentByte))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// @return `true` if no multi-byte sequence was left dangling -- call at
@@ -93,6 +107,27 @@ public:
     [[nodiscard]] bool complete() const { return _remaining == 0; }
 
 private:
+    /// @brief The part of @p data from its first byte that is not ASCII;
+    ///        empty when every byte is ASCII.
+    ///
+    /// Eight bytes at a time: an envelope is JSON, almost all ASCII, and a
+    /// byte-at-a-time walk over it is most of what validation costs.
+    static std::string_view skipAscii(std::string_view data) {
+        constexpr std::uint64_t kHighBits = 0x8080808080808080ULL;
+        std::uint64_t word = 0;
+        while (data.size() >= sizeof word) {
+            std::memcpy(&word, data.data(), sizeof word);
+            if ((word & kHighBits) != 0) {
+                break;
+            }
+            data.remove_prefix(sizeof word);
+        }
+        while (!data.empty() && static_cast<unsigned char>(data.front()) < 0x80U) {
+            data.remove_prefix(1);
+        }
+        return data;
+    }
+
     /// @brief Consumes a byte that starts a new (possibly single-byte) sequence.
     bool startSequence(unsigned char currentByte) {
         if (currentByte < 0x80) {
@@ -429,9 +464,23 @@ private:
             for (std::size_t i = 0; i < 4; ++i) {
                 key[i] = static_cast<std::uint8_t>(_buf[headerLen + i]);
             }
-            for (std::size_t i = 0; i < payload.size(); ++i) {
-                payload[i] = static_cast<char>(static_cast<std::uint8_t>(payload[i]) ^ key[i % key.size()]);
+            // Eight bytes at a time, with the key repeated twice: every word
+            // starts at a multiple of eight, so its bytes line up with the
+            // key's. The tail, shorter than a word, is XORed as the front of one.
+            std::array<std::uint8_t, 8> doubled{};
+            std::ranges::copy(key, std::ranges::copy(key, doubled.begin()).out);
+            auto const wideKey = std::bit_cast<std::uint64_t>(doubled);
+            std::span<char> rest{payload};
+            std::uint64_t word = 0;
+            while (rest.size() >= sizeof word) {
+                std::memcpy(&word, rest.data(), sizeof word);
+                word ^= wideKey;
+                std::memcpy(rest.data(), &word, sizeof word);
+                rest = rest.subspan(sizeof word);
             }
+            std::memcpy(&word, rest.data(), rest.size());
+            word ^= wideKey;
+            std::memcpy(rest.data(), &word, rest.size());
         }
         return payload;
     }

@@ -5,6 +5,7 @@
 #include <morph/net/detail/ws_frame.hpp>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 using morph::net::detail::encodeWsFrame;
 using morph::net::detail::WsFrame;
@@ -564,4 +565,55 @@ TEST_CASE("WsFrameReader rejects a Close frame whose reason holds a byte that is
     WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader unmasks every payload length, across whole words and the tail", "[net][frame]") {
+    // Lengths either side of each eight-byte word, with bytes that differ at
+    // every position, so a key byte applied out of line changes the result.
+    for (std::size_t length = 0; length <= 41; ++length) {
+        std::string payload;
+        for (std::size_t i = 0; i < length; ++i) {
+            payload.push_back(static_cast<char>(((i * 37U) + 11U) & 0xFFU));
+        }
+        WsFrameReader reader{/*expectMasked=*/true};
+        reader.feed(encodeWsFrame(WsOpcode::kBinary, payload, /*mask=*/true));
+        auto frame = reader.tryExtractFrame();
+        INFO("payload length " << length);
+        REQUIRE(frame.has_value());
+        CHECK(frame->payload == payload);
+    }
+}
+
+TEST_CASE("Utf8Validator judges a non-ASCII byte at every offset of a long ASCII run", "[net][frame]") {
+    using morph::net::detail::ws_frame_impl::Utf8Validator;
+    // Every offset puts the byte inside a whole word, at a word's edge, or in
+    // the tail the word-wide skip leaves to the byte-wise walk.
+    for (std::size_t offset = 0; offset <= 24; ++offset) {
+        INFO("offset " << offset);
+        // `after` is never empty: a lead at the very end is a dangling one.
+        auto const around = [offset](std::string_view middle) {
+            std::string text(offset, 'a');
+            text += middle;
+            text.append(25 - offset, 'b');
+            return text;
+        };
+        {
+            Utf8Validator validator;
+            CHECK(validator.feed(around("\xC3\xA9")));  // é, valid
+            CHECK(validator.complete());
+        }
+        {
+            Utf8Validator validator;
+            CHECK_FALSE(validator.feed(around("\xFF")));  // never valid
+        }
+        {
+            Utf8Validator validator;
+            CHECK_FALSE(validator.feed(around("\xC3")));  // a lead with ASCII after it
+        }
+        {
+            Utf8Validator validator;
+            CHECK(validator.feed(std::string(offset, 'a') + "\xC3"));  // a lead the next fragment may finish
+            CHECK_FALSE(validator.complete());
+        }
+    }
 }

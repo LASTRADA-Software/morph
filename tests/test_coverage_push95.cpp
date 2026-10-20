@@ -163,29 +163,6 @@ TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip"
     REQUIRE(bridge.defaultSession().principal.empty());
 }
 
-// ── bridge.hpp:91-95,283-285 — a null initial backend is tolerated ───────────
-
-TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed", "[coverage][bridge]") {
-    // A null backend is tolerated at construction and at destruction.
-    morph::testing::InlineExecutor bridgeOwner;
-    REQUIRE_NOTHROW([&bridgeOwner] {
-        ::morph::bridge::Bridge const bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
-    }());
-}
-
-// ── bridge.hpp:184,190 — switchBackend from a null backend ───────────────────
-
-TEST_CASE("morph::bridge::Bridge: switchBackend from a null backend skips the previous-backend teardown",
-          "[coverage][bridge]") {
-    // With a null initial backend, `previous` is empty after the swap, so both
-    // `if (previous && previous != newShared)` guards (184, 190) take their false
-    // arm and the old-backend teardown is skipped.
-    ::morph::exec::ThreadPoolExecutor pool{1};
-    morph::testing::InlineExecutor bridgeOwner;
-    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
-    REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<::morph::backend::LocalBackend>(pool)));
-}
-
 // ── bridge.hpp:239-242 — executeVia on an unbound handler reports "handler not bound"
 
 TEST_CASE("morph::bridge::Bridge: executeVia on an unregistered binding fails with \"handler not bound\"",

@@ -167,6 +167,37 @@ struct IAuthorizer {
         return std::nullopt;
     }
 
+    /// @brief What `admit` decides about one call: whether it may run, and
+    ///        under which verified principal.
+    struct Admission {
+        /// `authorize`'s answer.
+        bool allowed = false;
+        /// `authenticate`'s answer: the principal to make authoritative, or
+        /// `nullopt` when the authorizer cannot vouch for one.
+        std::optional<std::string> principal;
+    };
+
+    /// @brief Authenticates and authorizes one call together.
+    ///
+    /// `RemoteServer` calls this once per `execute`, in place of
+    /// `authenticate` and `authorize`, so both decisions come from one look at
+    /// the session. The default calls `authenticate` and then `authorize`,
+    /// which keeps an authorizer that overrides only those two exactly as it
+    /// was. A verifying authorizer overrides it to verify the token once and
+    /// take both answers from that verification: a token that expires between
+    /// two verifications cannot be judged valid by one and expired by the
+    /// other.
+    /// @param ctx        Per-call session attached by the client.
+    /// @param modelType  String id of the target model type.
+    /// @param actionType String id of the action being invoked.
+    /// @return Whether the call may run, and the verified principal.
+    [[nodiscard]] virtual Admission admit(const Context& ctx,
+                                          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                          std::string_view modelType, std::string_view actionType) const {
+        auto principal = authenticate(ctx);
+        return Admission{.allowed = authorize(ctx, modelType, actionType), .principal = std::move(principal)};
+    }
+
     /// @brief Optional per-**instance** authorization hook — the multi-tenant gate.
     ///
     /// `authorize` sees only the model *type*, so it cannot answer "may this

@@ -753,20 +753,26 @@ public:
     /// live handler on the owner after a reconnect, and pushes the (initially
     /// empty) default session to the backend.
     ///
-    /// @param backend Initial backend. Ownership is transferred.
+    /// A bridge always has a backend: every handler binds on construction,
+    /// so a bridge without one could not serve its first handler.
+    ///
+    /// @param backend Initial backend. Ownership is transferred. Must not be
+    ///                null.
     /// @param owner   The executor this bridge, its handlers and its backend
     ///                belong to. Construct the bridge there: inside one of its
     ///                tasks, or on the thread that runs them. Borrowed: it must
     ///                outlive this bridge and every reply still in flight when
     ///                the bridge is destroyed.
+    /// @throws std::invalid_argument if @p backend is null.
     Bridge(std::unique_ptr<::morph::backend::detail::IBackend> backend,
            ::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND)
         : _affinity{owner}, _backend{std::shared_ptr<::morph::backend::detail::IBackend>(std::move(backend))} {
-        if (_backend) {
-            _backend->setOwner(_affinity);
-            installReconnectHandler(_backend);
-            _backend->setSession(_defaultSession);
+        if (!_backend) {
+            throw std::invalid_argument{"Bridge: the backend is null"};
         }
+        _backend->setOwner(_affinity);
+        installReconnectHandler(_backend);
+        _backend->setSession(_defaultSession);
     }
 
     /// @brief Clears the backend's reconnect handler, rejects every call still
@@ -780,9 +786,7 @@ public:
     ~Bridge() {
         note("Bridge::~Bridge");
         auto const destroyed = std::make_exception_ptr(::morph::backend::BridgeDestroyedError{});
-        if (_backend) {
-            _backend->setReconnectHandler(nullptr, nullptr);
-        }
+        _backend->setReconnectHandler(nullptr, nullptr);
         std::vector<std::function<void(std::exception_ptr)>> rejected;
         for (auto const& weak : _handlers) {
             if (auto binding = weak.lock()) {
@@ -794,9 +798,7 @@ public:
         for (auto& resume : rejected) {
             resume(destroyed);
         }
-        if (_backend) {
-            _backend->cancelPending(destroyed);
-        }
+        _backend->cancelPending(destroyed);
     }
 
     Bridge(const Bridge&) = delete;
@@ -1108,9 +1110,7 @@ public:
     void setDefaultSession(::morph::session::Context session) {
         note("Bridge::setDefaultSession");
         _defaultSession = session;
-        if (_backend) {
-            _backend->setSession(std::move(session));
-        }
+        _backend->setSession(std::move(session));
     }
 
     /// @brief Sets (or disables) the client-side execute deadline.
@@ -1208,7 +1208,9 @@ public:
     ///       resolution — both would otherwise require an equally-ranked user-defined
     ///       conversion, making every existing call site ambiguous.
     /// @tparam Backend Concrete backend type; must derive from `IBackend`.
-    /// @param newBackend Replacement backend. Ownership is transferred.
+    /// @param newBackend Replacement backend. Ownership is transferred. Must not
+    ///                   be null.
+    /// @throws std::invalid_argument if @p newBackend is null.
     template <typename Backend>
         requires std::derived_from<Backend, ::morph::backend::detail::IBackend>
     void switchBackend(std::unique_ptr<Backend> newBackend) {
@@ -1235,10 +1237,16 @@ public:
     /// The caller keeps shared ownership of @p newBackend, so the same backend
     /// can be re-installed later without reconstructing it.
     ///
-    /// @param newBackend Replacement backend, shared with the caller.
+    /// @param newBackend Replacement backend, shared with the caller. Must not
+    ///                   be null.
+    /// @throws std::invalid_argument if @p newBackend is null; the bridge keeps
+    ///         its backend and every binding.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one ordered sequence -- pin, rebind, then reject what the old backend left waiting -- that reads worse split.
     void switchBackend(std::shared_ptr<::morph::backend::detail::IBackend> newBackend) {
         note("Bridge::switchBackend");
+        if (!newBackend) {
+            throw std::invalid_argument{"Bridge::switchBackend: the backend is null"};
+        }
         auto next = std::move(newBackend);
         next->setOwner(_affinity);
         next->setSession(_defaultSession);
@@ -1315,7 +1323,7 @@ public:
         auto previous = std::exchange(_backend, next);
         next->notifyBackendChanged();
         installReconnectHandler(next);
-        if (previous && previous != next) {
+        if (previous != next) {
             previous->setReconnectHandler(nullptr, nullptr);
             previous->cancelPending(std::make_exception_ptr(::morph::backend::BackendChangedError{}));
         }
@@ -1344,7 +1352,7 @@ public:
         std::vector<std::function<void(std::exception_ptr)>> rejected;
         takeHeld(*binding, rejected);
         auto const raw = binding->currentId.exchange(0);
-        if (raw != 0U && _backend) {
+        if (raw != 0U) {
             _backend->deregisterModel(::morph::exec::detail::ModelId{raw});
         }
         std::erase_if(_handlers, [&binding](const auto& weak) {

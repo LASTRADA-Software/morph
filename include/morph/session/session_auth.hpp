@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../attributes.hpp"
@@ -576,7 +577,7 @@ public:
     [[nodiscard]] bool authorize(const Context& ctx,
                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                  std::string_view modelType, std::string_view actionType) const override {
-        const auto claims = _verifier.verify(ctx.token, _clock());
+        const auto claims = verified(ctx);
         if (!claims) {
             return false;
         }
@@ -587,14 +588,75 @@ public:
     /// @param ctx Per-call session (its `token` is verified).
     /// @return The token's principal if valid, else `nullopt`.
     [[nodiscard]] std::optional<std::string> authenticate(const Context& ctx) const override {
-        const auto claims = _verifier.verify(ctx.token, _clock());
+        const auto claims = verified(ctx);
         if (!claims) {
             return std::nullopt;
         }
         return claims->principal;
     }
 
+    /// @brief Verifies @p ctx's token once, then asks `authenticate` and
+    ///        `authorize` as the default `admit` does.
+    ///
+    /// Both are still called through the vtable, so a subclass that overrides
+    /// either keeps its own decision: a carve-out that admits a call without a
+    /// token, or a rule that refuses more than the token does. While this call
+    /// runs, `SigningAuthorizer`'s own `authenticate` and `authorize` answer
+    /// from the one verification instead of verifying again, so a token is
+    /// judged against one clock reading. Nothing outlives the call.
+    /// @param ctx        Per-call session (its `token` is verified).
+    /// @param modelType  Target model type id (passed to `authorize`).
+    /// @param actionType Target action type id (passed to `authorize`).
+    /// @return `authorize`'s answer and `authenticate`'s, from one
+    ///         verification.
+    [[nodiscard]] Admission admit(const Context& ctx,
+                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                  std::string_view modelType, std::string_view actionType) const override {
+        Verification const once{.owner = this, .ctx = &ctx, .claims = _verifier.verify(ctx.token, _clock())};
+        ActiveVerification const scope{once};
+        auto principal = authenticate(ctx);
+        return Admission{.allowed = authorize(ctx, modelType, actionType), .principal = std::move(principal)};
+    }
+
 private:
+    /// @brief One verification of one session's token, by one authorizer.
+    struct Verification {
+        const SigningAuthorizer* owner;
+        const Context* ctx;
+        std::expected<SessionToken, AuthError> claims;
+    };
+
+    /// @brief The verification the running `admit` on this thread made, if any.
+    static const Verification*& active() noexcept {
+        thread_local const Verification* current = nullptr;
+        return current;
+    }
+
+    /// @brief Installs a verification for the length of one `admit`, and
+    ///        restores the one it replaced, on return or on a throw.
+    class ActiveVerification {
+    public:
+        explicit ActiveVerification(const Verification& verification) noexcept
+            : _previous{std::exchange(active(), &verification)} {}
+        ~ActiveVerification() { active() = _previous; }
+        ActiveVerification(const ActiveVerification&) = delete;
+        ActiveVerification& operator=(const ActiveVerification&) = delete;
+        ActiveVerification(ActiveVerification&&) = delete;
+        ActiveVerification& operator=(ActiveVerification&&) = delete;
+
+    private:
+        const Verification* _previous;
+    };
+
+    /// @brief @p ctx's claims: the running `admit`'s verification when it is
+    ///        this authorizer's of this very session, else a fresh one.
+    [[nodiscard]] std::expected<SessionToken, AuthError> verified(const Context& ctx) const {
+        if (const auto* running = active(); running != nullptr && running->owner == this && running->ctx == &ctx) {
+            return running->claims;
+        }
+        return _verifier.verify(ctx.token, _clock());
+    }
+
     TokenVerifier _verifier;
     Clock _clock;
     Policy _policy;
