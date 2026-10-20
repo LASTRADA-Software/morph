@@ -280,6 +280,7 @@ public:
     void setTabs(std::vector<std::string> const& labels) override;
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
+    void setBarShown(bool shown) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;
 };

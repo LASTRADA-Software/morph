@@ -148,6 +148,25 @@ TEST_CASE("workspace: opening an identity that is open focuses its tab; a single
     CHECK(shell.tabs()[1].identity == Value{std::int64_t{2}});
 }
 
+// Mutation: never call setBarShown (the bar keeps the backend's default, shown, with one tab).
+TEST_CASE("workspace: the bar shows with two tabs or more, and hides with one", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}) == 0U);
+    harness.settle();
+    int const bar = harness.backend.find("Tabs", "layout", "stretch(1)/stretch(1)").value();
+    CHECK(harness.backend.prop(bar, "barShown") == "false");
+    REQUIRE(shell.open("note", note(1)) == 1U);
+    harness.settle();
+    CHECK(harness.backend.prop(bar, "barShown") == "true");
+    std::optional<bool> closed;
+    shell.close(1, [&closed](bool done) { closed = done; });
+    harness.settle();
+    REQUIRE(closed == true);
+    CHECK(harness.backend.prop(bar, "barShown") == "false");
+}
+
 // Mutation: leave the pages content-sized (a stretching screen cannot fill the page).
 TEST_CASE("workspace: the bar and each page stretch, so a stretching screen fills the page", "[ui][workspace]") {
     Harness harness;

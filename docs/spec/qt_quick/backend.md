@@ -149,7 +149,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
 | Splitter | `MorphSplitter` | a `SplitView` whose handles are made from its `handle` part (`MorphSplitterHandle`); the splitter sets each handle's `axis` and `scheme`, and leaves a handle's implicit extent along the axis between two panes | the panes' sizes once a drag ends |
 | Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
-| Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
+| Tabs | `MorphTabs` | a `TabBar` over the page slots, `Theme.spaceOf(3)` above them; `barShown` false hides the bar and gives its height to the pages, and its `focusTarget` is then the pages, so a hidden bar never holds the keyboard focus | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |

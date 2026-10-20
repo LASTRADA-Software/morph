@@ -368,6 +368,11 @@ public:
     /// @brief Sets what a user's tab choice calls, with its index.
     /// @param onSelect The handler; empty does nothing.
     virtual void setOnSelect(std::function<void(std::size_t)> onSelect) = 0;
+
+    /// @brief Shows or hides the strip of tab buttons. The selected page shows either way. A new tabs widget shows
+    ///        its strip.
+    /// @param shown Whether the strip is drawn.
+    virtual void setBarShown(bool shown) = 0;
 };
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.

@@ -165,7 +165,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
-| `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none) | `setOnSelect(index)` |
+| `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
@@ -235,7 +235,7 @@ The headless reference backend and the test double for everything above the cont
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap` (Column, Row); `columns`,
   `gap`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
-  `axis` (Scroll); `tabs`, `selected` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
+  `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);

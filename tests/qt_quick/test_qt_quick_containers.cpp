@@ -3,6 +3,7 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
 #include <QStringList>
@@ -149,6 +150,52 @@ TEST_CASE("qt_quick containers: tabs show their labels, highlight on request and
     CHECK(picks == std::vector<std::size_t>{0});
     CHECK(impl.highlighted() == 0);
     CHECK(containerCore(*tabs).children().size() == 1);
+}
+
+// Mutation: never bind the TabBar's visible to barShown (it shows with one tab); or keep `focusTarget: bar`, so a
+// tabs widget focused while its bar is hidden gives the keyboard focus to the hidden bar.
+TEST_CASE("qt_quick containers: a hidden tab bar is not drawn and takes no focus; a shown one sits a step above the page",
+          "[qt_quick]") {
+    Scene scene;
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    std::vector<std::string> chords;
+    tabs->setKeys({"Ctrl+Tab"}, [&chords](std::string const& chord) { chords.push_back(chord); });
+    tabs->setTabs({"One"});
+    auto page = scene.backend().createSlot(tabs.get());
+    page->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto inside = scene.backend().createText(page.get());
+    inside->setText("page");
+    tabs->setSelected(0);
+    tabs->setBarShown(false);
+    scene.settle();
+    QList<QQuickItem*> const bars = Scene::itemsOf(Scene::itemOf(*tabs), "QQuickTabBar");
+    REQUIRE(bars.size() == 1);
+    QQuickItem const& bar = *bars.at(0);
+    CHECK_FALSE(bar.isVisible());
+    CHECK(std::abs(Scene::itemOf(*page).mapToScene(QPointF{0, 0}).y() -
+                   Scene::itemOf(*tabs).mapToScene(QPointF{0, 0}).y()) < 1.0);
+
+    // Focused with its bar hidden, the widget holds the focus in its pages, not in the hidden bar, and its chords
+    // arrive.
+    tabs->focus();
+    scene.settle();
+    QQuickItem const* const focused = scene.window().activeFocusItem();
+    REQUIRE(focused != nullptr);
+    CHECK(focused->isVisible());
+    scene.key(Qt::Key_Tab, Qt::ControlModifier);
+    CHECK(chords == std::vector<std::string>{"Ctrl+Tab"});
+
+    tabs->setTabs({"One", "Two"});
+    tabs->setBarShown(true);
+    scene.settle();
+    CHECK(bar.isVisible());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 3)));
+    qreal const barBottom = bar.mapToScene(QPointF{0, bar.height()}).y();
+    CHECK(Scene::itemOf(*page).mapToScene(QPointF{0, 0}).y() >= barBottom + step - 0.5);
 }
 
 TEST_CASE("qt_quick containers: a splitter takes its panes through the split view and applies sizes", "[qt_quick]") {

@@ -419,6 +419,8 @@ private:
         }
         _bar->setTabs(captions);
         _bar->setSelected(shown ? indexOf(*shown) : kNone);
+        // One tab needs no strip to choose it by; the chords still work with the strip hidden.
+        _bar->setBarShown(captions.size() > 1);
         if (_onChanged) {
             _onChanged();
         }

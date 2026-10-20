@@ -91,8 +91,9 @@ A defect in `morph::client`; no vocabulary change.
   one-tab bar.
 - **Qt Quick.** `MorphTabs` gains `property bool barShown: true`, binding the `TabBar`'s `visible`; while shown, the
   pages sit `Theme.spaceOf(3)` below the bar (the `ColumnLayout`'s spacing), so the page no longer touches it.
-  `focusTarget` becomes `bar.visible ? bar : pages`, so a hidden bar never holds the focus the workspace's chords
-  rely on when a second tab arrives.
+  `focusTarget` becomes `bar.visible ? bar : pages`, so a hidden bar never holds the keyboard focus. (Measured: with
+  `focusTarget: bar`, focusing the tabs widget gives the active focus to the invisible `TabBar`; a chord still reaches
+  the widget's root from there, so the defect is a hidden item holding the focus, not a lost chord.)
 - **Terminal.** A hidden bar gives its row to the pages (`TabsImpl::childAreas` starts at row 0); a shown one keeps
   today's single row with no blank row under it, since a terminal row costs more than the separation earns.
 - **`RecordingBackend`** stores `barShown`.
@@ -396,9 +397,9 @@ Each test is run once against its named mutation before its commit, and must fai
   *Mutation: restore `showSignedIn(!entries.empty())`; the first assertion fails.*
 - **§4 bar.** `RecordingBackend`: one tab, `barShown=false`; two, `true`; closing back to one, `false`. Qt: the
   `TabBar` is invisible with one tab, and with two the page's top is at least `Theme.spaceOf(3)` below the bar's
-  bottom. Terminal: with one tab the page's first row is row 0. Qt: with focus in the only tab's page, opening a second tab and
-  pressing `Ctrl+Tab` activates the other one. *Mutations: never call `setBarShown`; for the chord case, keep
-  `focusTarget: bar`.*
+  bottom. Terminal: with one tab the page's first row is row 0. Qt: a tabs widget focused while its bar is hidden
+  holds the focus in a visible item, and its `Ctrl+Tab` chord arrives. *Mutations: never call `setBarShown`; for the
+  focus case, keep `focusTarget: bar`.*
 - **§5 presentation.** Interpreter on `RecordingBackend`: a form with `title: "Deposit"`, `submitLabel: "Deposit"`,
   `showStatus: false`, `columns: 2` has a `form_title` text "Deposit", a `form_submit` labelled "Deposit", no
   `form_status`, and its implicit grid `columns=2`; with `showStatus` left out the status reads `ready: press

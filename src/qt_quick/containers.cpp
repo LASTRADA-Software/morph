@@ -88,6 +88,8 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
     });
 }
 
+void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
+
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
 
 // ── Splitter ──────────────────────────────────────────────────────────────

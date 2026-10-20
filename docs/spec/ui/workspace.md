@@ -49,7 +49,10 @@ answers them by index over its order.
   `unmountPage` destroys the page; `model()` answers it. It makes a `TabsWidget` appended to `parent` (a backend root
   when it is null): the shell's root, which the host places. Each tab is a page slot of that bar, and its screen is
   mounted into it with `DocumentScreenHost::mountInto`. On each change of the model the bar shows its tabs in order,
-  with their captions, the active one selected and its page alone visible, and moves a page the model moved. The bar
+  with their captions, the active one selected and its page alone visible, and moves a page the model moved. The
+  strip of tab buttons shows with two tabs or more and hides with one (`setBarShown(tabs > 1)`): one tab needs no
+  strip to choose it by, and the chords work with it hidden. There is no option to show it for one tab; an
+  application that wants a strip of its own builds it over `WorkspaceModel`. The bar
   and every page stretch both ways, so a screen whose root stretches fills the page; a content-sized one keeps its
   own size.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,

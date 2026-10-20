@@ -1064,7 +1064,7 @@ public:
     void setOnPicked(std::function<void(std::string)> onPicked) override { callbacks().picked = std::move(onPicked); }
 };
 
-/// @brief A fake `TabsWidget`: properties `tabs`, `selected`.
+/// @brief A fake `TabsWidget`: properties `tabs`, `selected`, `barShown`.
 class FakeTabs final : public FakeContainer<TabsWidget> {
 public:
     using FakeContainer<TabsWidget>::FakeContainer;
@@ -1073,6 +1073,7 @@ public:
     }
     void setSelected(std::size_t index) override { set("selected", std::to_string(index)); }
     void setOnSelect(std::function<void(std::size_t)> onSelect) override { callbacks().index = std::move(onSelect); }
+    void setBarShown(bool shown) override { set("barShown", shown ? "true" : "false"); }
 };
 
 /// @brief A fake overlay's footer: a `Footer` child, made when it is first asked for, so an overlay that never shows

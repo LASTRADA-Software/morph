@@ -707,6 +707,13 @@ void TabsImpl::setSelected(std::size_t index) {
 
 void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) { _onSelect = std::move(onSelect); }
 
+void TabsImpl::setBarShown(bool shown) {
+    if (shown != _barShown) {
+        _barShown = shown;
+        refresh();
+    }
+}
+
 std::string TabsImpl::labelText(std::size_t index) const {
     auto const& label = _labels.at(index);
     return index == _selected ? "[" + label + "]" : " " + label + " ";
@@ -718,13 +725,19 @@ std::string TabsImpl::labelText(std::size_t index) const {
         bar += displayWidth(labelText(index));
     }
     auto const body = stackNaturalSize(children(), ui::Axis::Vertical, 0);
+    if (!_barShown) {
+        return body;
+    }
     return {.width = std::max(bar, body.width), .height = 1 + body.height};
 }
 
 std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _labels.at(_selected) : std::string{}; }
 
+// A shown bar keeps its one row, with no blank row under it: a terminal row costs more than the separation earns.
 std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) const {
-    return stackAreas(children(), {.x = 0, .y = 1, .width = size.width, .height = std::max(0, size.height - 1)},
+    int const barRows = _barShown ? 1 : 0;
+    return stackAreas(children(),
+                      {.x = 0, .y = barRows, .width = size.width, .height = std::max(0, size.height - barRows)},
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
@@ -735,7 +748,7 @@ void TabsImpl::paint(::core::tui::Canvas& canvas) {
         marked = hasFocus() ? &theme.buttonFocused : &theme.textBold;
     }
     int column = 0;
-    for (std::size_t index = 0; index < _labels.size(); ++index) {
+    for (std::size_t index = 0; _barShown && index < _labels.size(); ++index) {
         column += canvas.putString(0, column, labelText(index), index == _selected ? *marked : theme.textMuted);
     }
     placeChildren(childAreas(canvas.size()));
@@ -769,7 +782,7 @@ EventResult TabsImpl::key(::core::tui::KeyEvent const& key) {
 // A press anywhere on the tabs that no page widget takes bubbles here, so only a tab's label focuses and selects.
 // Taking the focus may run a handler (a field committing) that destroys the tabs.
 void TabsImpl::click(::core::tui::Point cell) {
-    if (cell.y != 0 || !focusable()) {
+    if (!_barShown || cell.y != 0 || !focusable()) {
         return;
     }
     int right = 0;
