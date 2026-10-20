@@ -821,3 +821,26 @@ TEST_CASE(
     REQUIRE(h.diagnostics.size() == 1);  // once for the path, though two rows lowered it
     CHECK(h.diagnostics.front().reason.starts_with(R"(sizing is "wide"; a sizing is)"));
 }
+
+// Mutation: lower `align`, `justify` and `alignSelf` to their defaults (the recording loses them).
+TEST_CASE("align, justify and alignSelf: a document's alignment reaches the stacks, the grid and the child",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "aligned",
+      "view": { "kind": "column", "testId": "root", "align": "center", "justify": "end", "children": [
+        { "kind": "row", "testId": "bar", "align": "end", "justify": "between", "children": [
+          { "kind": "text", "testId": "own", "text": "x", "alignSelf": "start" } ] },
+        { "kind": "grid", "testId": "cells", "columns": 2, "align": "center", "children": [
+          { "kind": "text", "text": "y" } ] },
+        { "kind": "row", "testId": "plain", "children": [] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "align") == "center");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "justify") == "end");
+    CHECK(h.backend.prop(h.byTestId("Row", "bar"), "align") == "end");
+    CHECK(h.backend.prop(h.byTestId("Row", "bar"), "justify") == "between");
+    CHECK(h.backend.prop(h.byTestId("Text", "own"), "layout") == "content/content self=start");
+    CHECK(h.backend.prop(h.byTestId("Grid", "cells"), "align") == "center");
+    CHECK(h.backend.prop(h.byTestId("Row", "plain"), "align").empty());  // the default makes no call
+    CHECK(h.backend.prop(h.byTestId("Row", "plain"), "justify").empty());
+    CHECK(h.diagnostics.empty());
+}

@@ -142,8 +142,8 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
 | Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |
 | Menu | `MorphMenu` | a bar of top-level entries; a submenu opens in a popup, one level at a time | the chosen entry's path |
-| Column, Row | `MorphStack` | a `GridLayout` flowing on the axis | — |
-| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan` | — |
+| Column, Row | `MorphStack` | a `GridLayout` flowing on the axis; `align` and `justify` (the `ui::Align` and `ui::Justify` indices) | — |
+| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align` | — |
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
 | Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
@@ -241,6 +241,19 @@ height), a splitter and a table row (neither, since they size their own children
 `Layout.fillWidth` to a stretch width, or a content width with `fillsWidth`, and the same for height. Along its axis a
 `MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
 start: a `GridLayout` given more length hands the spare to the gaps between its cells.
+
+**Alignment.** `ContainerCore::adopt` also offers each child `alignAcross` (1 for a column's child, placed
+horizontally; 2 for a row's or a grid's, placed vertically; 0 elsewhere) and `crossAlign`, the container's
+`ui::Align` index; `setAlign` re-offers `crossAlign` to every child already held (`alignChildren`), since a child is
+adopted in its constructor, before its container can be aligned. `showLayout` writes a node's `alignSelf` (−1 for
+none, offered). `MorphWidget` places itself by `alignSelf`, else `crossAlign`: under start, centre or end it sets
+`Layout.alignment` (`AlignLeft`, `AlignHCenter`, `AlignRight` in a column; `AlignTop`, `AlignVCenter`, `AlignBottom`
+in a row or grid) and drops the cross fill of a content-sized dimension, while a `stretch` one keeps its fill and its
+maximum places it. Along the axis, while no shown child stretches, `MorphStack` sizes its layout to its natural length
+and offsets it by `justify`: none, half the spare length or all of it. For `between` the layout keeps the full length
+and its spacing is `max(gap, spare / (shown − 1))`, the spare computed from each shown child's preferred (else
+implicit) length clamped into its `Layout` minimum and maximum, because a `GridLayout` given more length gives it to
+its cells, not its gaps.
 
 **Surfaces.** `Theme.scheme(name)` is the colour scheme of a surface (`MorphScheme`: the colour roles, each the
 theme's unless the surface sets it), and the theme itself for the empty name. Every `MorphWidget` draws with

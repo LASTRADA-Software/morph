@@ -250,7 +250,10 @@ struct LayoutHints {
   whose other children fill; without it the author nests a stack per child.
 - **Load-time refusals.** An unknown value of any of the three (`checkChoice`: "`middle` is not one of the values of
   `align`"); `justify` on a `grid`; `alignSelf` on a node whose parent is not a `row`, `column`, `grid` or `forEach`
-  (the view root, a panel's or a dialog's content): "`alignSelf` places a node in its row, column or grid".
+  (the view root, a panel's or a dialog's content): "`alignSelf` places a node in its row, column or grid". And
+  `align` or `justify` on the `column` or `row` an `arrange` point orders, which is drawn as a keyed list ("an
+  arranged `column` is drawn as a list, which takes no `align` or `justify`"). Through the C++ view tree the mount
+  throws `std::logic_error` for an `alignSelf` whose parent widget is not a stack or a grid.
 - **`document.md` rows.** `column`, `row`: "`children`, `gap`, `align`, `justify`"; `grid`: "`children`, `gap`,
   `columns`, `align`"; "Every node takes" gains `alignSelf`; Shape gains the three closed choices.
 

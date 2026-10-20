@@ -387,6 +387,32 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// Mutation: drop the align branch of stackNode (the column's `align` is not written).
+TEST_CASE("align, justify and alignSelf are written by name, and a screen using them validates", "[ui][author]") {
+    CHECK(text(ui::column({ui::text({.text = "a"}).alignSelf(morph::ui::Align::End)},
+                          {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Between})
+                   .json()) ==
+          R"({"kind":"column","children":[{"kind":"text","text":"a","alignSelf":"end"}],"align":"center",)"
+          R"("justify":"between"})");
+    CHECK(text(ui::row(ui::Nodes{}, {.align = morph::ui::Align::Stretch, .justify = morph::ui::Justify::Start})
+                   .json()) == R"({"kind":"row","align":"stretch","justify":"start"})");
+    CHECK(text(ui::grid(ui::Nodes{}, {.align = morph::ui::Align::Start}).json()) ==
+          R"({"kind":"grid","align":"start"})");
+    CHECK(text(ui::row(ui::Nodes{}).json()) == R"({"kind":"row"})");
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.aligned", [](ui::Scope&) {
+        return ui::column({ui::row(ui::Nodes{ui::text({.text = "x"}).alignSelf(morph::ui::Align::Start)},
+                                   {.align = morph::ui::Align::End})},
+                          {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Center});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    CHECK(added.has_value());
+    auto const refused = screens.add(ui::screen(
+        "author.alignedRoot", [](ui::Scope&) { return ui::column(ui::Nodes{}).alignSelf(morph::ui::Align::Center); }));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().message().contains("`alignSelf` places a node in its row, column or grid"));
+}
+
 // The checks are templates: a requires-expression outside one makes a deleted call a hard error.
 template <typename M>
 concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };

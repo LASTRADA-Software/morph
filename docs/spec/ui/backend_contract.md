@@ -121,8 +121,8 @@ reorders children, and only through this.
 
 | Container | Children |
 |---|---|
-| `StackWidget` | In order along the axis fixed at creation, `setGap` apart |
-| `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told |
+| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
+| `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
@@ -147,10 +147,22 @@ natural width at the line's start, on Qt Quick as on the terminal. Along the axi
 start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
 size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
 
+**Alignment.** All of the above is the default, `Align::Stretch` and `Justify::Start`; the mount calls `setAlign` and
+`setJustify` only for another value, as it does `setEmphasis`, so a screen that says nothing of alignment records
+nothing new. `StackWidget::setAlign(Align)` places every child across the axis, and a child's `alignSelf` (in its
+`LayoutHints`) places that child instead: under `Start`, `Center` or `End` a content child keeps its own extent across
+(a text is one line tall in a row, its natural width in a column) and sits at the start, centred (rounded down on the
+terminal) or at the end; a `fixed` or `stretch` child keeps its extent, clamped into its bounds, and is placed the
+same way, so a `stretch` card with `maxWidth: 44` in a 70-unit column under `Center` is 44 units wide with 13 either
+side. `StackWidget::setJustify(Justify)` places the spare length along the axis while no shown child stretches (one
+that stretches takes it all): packed at the start, centred, at the end, or for `Between` in equal gaps, each at least
+`setGap`'s, the first child at the start and the last at the end. `GridWidget::setAlign` places each cell's content
+vertically in its row as a row places its children; a grid's columns share its width, so it has no `setJustify`.
+
 **Bounds.** A bound clamps the extent the sizing rule gives, in backend units. Along a stack's axis a `stretch`
 child's share stops at its maximum and the rest goes to the other `stretch` children; a content or fixed child takes
 at least its minimum and at most its maximum; a stack whose minimums do not fit overflows and clips, as a fixed
-child does. Across, a child its maximum stops from filling is placed at the start: a card sized `stretch` with
+child does. Across, a child its maximum stops from filling is placed by its alignment, at the start by default: a card sized `stretch` with
 `maxWidth: 44` in a 70-unit column is 44 units wide, on both backends.
 
 ## Interfaces
@@ -166,8 +178,8 @@ child does. Across, a child its maximum stops from filling is placed at the star
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
-| `StackWidget` | `setGap` | — |
-| `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)` | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
+| `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
@@ -236,12 +248,12 @@ The headless reference backend and the test double for everything above the cont
   order, children indented two spaces per depth, every line ending in a newline. A child whose
   parent was destroyed first becomes a root.
 - **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
-  and ` max=<n>` for its bounds), `dragKey`, `drop`, `a11yName`,
+  and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
   inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
-  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap` (Column, Row); `columns`,
-  `gap`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
+  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
+  `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
@@ -333,6 +345,11 @@ the container it measures inside another, since a root fills the window or scree
 2. Along a row, a content child is at least its minimum wide.
 3. Across a column, a `stretch` child stops at its maximum, at the start.
 4. Down a column, a `stretch` child's height stops at its maximum and its sibling takes the rest.
+5. A row 3 units tall with `align: center` places a one-unit text one unit down.
+6. A column with `justify: end` places its last child's end at its own end; with `between`, its first child at the
+   start and its last at the end.
+7. A `stretch` child capped at 20 in a 70-unit column with `alignSelf: center`, and one capped at 44 under the
+   column's `align: center`, each have equal space either side.
 
 ### The probe
 

@@ -3,7 +3,6 @@
 #include "tui/widget.hpp"
 
 #include <algorithm>
-#include <numeric>
 #include <core/tui/Buffer.hpp>
 #include <core/tui/Cell.hpp>
 #include <core/tui/HoverState.hpp>
@@ -13,6 +12,7 @@
 #include <core/tui/Unicode.hpp>
 #include <iterator>
 #include <memory>
+#include <numeric>
 #include <ranges>
 #include <stdexcept>
 #include <variant>

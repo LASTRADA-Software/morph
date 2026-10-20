@@ -485,3 +485,35 @@ TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28
     // The content sits right of the sidebar, inside the page's padding (step 4, 16 px).
     CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x() >= sidebar.width() + 16.0);
 }
+
+// The inner items, not the widget roots: each root fills the bar's height whatever the alignment, so the roots share
+// a centre either way, while the label and the button inside them are centred only when the bar centres them.
+// Mutation: drop the top bar's setAlign(Align::Center) in ShellFrame (the principal's label sits at the top).
+TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-out button", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.onSignOut = [] {};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.setPrincipal("alice");
+    scene.settle();
+    auto const innerOf = [](char const* testId, char const* className) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        QList<QQuickItem*> const inner = widget->item()->findChildren<QQuickItem*>();
+        auto const found =
+            std::ranges::find_if(inner, [className](QQuickItem const* item) { return item->inherits(className); });
+        REQUIRE(found != inner.end());
+        return **found;
+    };
+    QQuickItem const& label = innerOf("shell_principal", "QQuickText");
+    QQuickItem const& button = innerOf("shell_signOut", "QQuickAbstractButton");
+    REQUIRE(label.height() > 0.0);
+    REQUIRE(button.height() > label.height());
+    qreal const labelCentre = label.mapToScene(QPointF{0, label.height() / 2}).y();
+    qreal const buttonCentre = button.mapToScene(QPointF{0, button.height() / 2}).y();
+    INFO("label centre " << labelCentre << ", button centre " << buttonCentre);
+    CHECK(std::abs(labelCentre - buttonCentre) <= 1.0);
+}

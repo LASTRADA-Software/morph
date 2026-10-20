@@ -441,10 +441,10 @@ public:
 
 /// How `arrangeStack` places children.
 struct StackSpec {
-    ui::Axis axis = ui::Axis::Vertical;      ///< The main axis.
-    int gap = 0;                             ///< Cells between neighbours.
-    std::span<int const> extents;            ///< When non-empty, the main-axis extents to use, in order (table columns).
-    ui::Align align = ui::Align::Stretch;    ///< Where a child sits across the axis, unless its `alignSelf` says.
+    ui::Axis axis = ui::Axis::Vertical;    ///< The main axis.
+    int gap = 0;                           ///< Cells between neighbours.
+    std::span<int const> extents;          ///< When non-empty, the main-axis extents to use, in order (table columns).
+    ui::Align align = ui::Align::Stretch;  ///< Where a child sits across the axis, unless its `alignSelf` says.
     ui::Justify justify = ui::Justify::Start;  ///< Where the spare length goes while no shown child stretches.
 };
 

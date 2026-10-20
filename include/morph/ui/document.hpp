@@ -2817,6 +2817,14 @@ private:
                            "` has none");
             }
         }
+        // An arranged container is drawn as a keyed list, which places its children as a list does.
+        std::string const asList =
+            "an arranged `" + found->second->kind + "` is drawn as a list, which takes no `align` or `justify`";
+        for (std::string_view const key : {"align", "justify"}) {
+            if (!found->second->name(key).empty()) {
+                refuse(pointerAppend(found->second->path, key), asList);
+            }
+        }
         if (!arranged.insert(point.of).second) {
             refuse(pointerAppend(point.path, "of"), "`" + point.of + "` is arranged by another point");
         }

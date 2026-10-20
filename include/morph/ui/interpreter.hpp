@@ -6069,10 +6069,6 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "column" || kind == "row") {
         int const gap = static_cast<int>(onceInt("gap", 0));
         if (std::string const arrangement = arrangedBy(node.id); !arrangement.empty()) {
-            if (!node.name("align").empty() || !node.name("justify").empty()) {
-                report(node.path, "an arranged `" + std::string{kind} +
-                                      "` is drawn as a list, which takes no `align` or `justify`");
-            }
             return lowerArranged(node, ctx, element, arrangement, kind == "column" ? Axis::Vertical : Axis::Horizontal,
                                  gap);
         }

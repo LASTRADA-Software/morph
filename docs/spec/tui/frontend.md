@@ -133,6 +133,15 @@ of a panel, slot or scroll area, fills its width the same way, and a grid row is
 requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
 is its natural size clamped into its bounds.
 
+**Alignment.** Across the axis a child's `alignSelf`, else its stack's `align`, places it (`slotOf`): under `start`,
+`center` or `end` a Content child takes its requested extent instead of the stack's (`alignedExtent`), every other
+child its `crossExtent`, and one narrower than the space is offset to the start, the centre (rounded down) or the end
+(`alignedOffset`). Along the axis, while no shown child is Stretch, `solvedAreas` places the spare length by
+`justify`: before the first child, half of it for `center` and all of it for `end`; for `between`, `spare / (shown −
+1)` cells added to every gap and the remainder one cell to each gap from the first. A grid places each cell in its row
+the same way by the cell's `alignSelf`, else the grid's `align`; across its column the cell fills the width as
+before.
+
 **Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
 cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many
 rows as columns:

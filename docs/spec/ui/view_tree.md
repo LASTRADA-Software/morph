@@ -45,7 +45,7 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 |---|---|---|---|
 | `visible` | `Prop<bool>` | `true` | Shown |
 | `enabled` | `Prop<bool>` | `true` | Accepts input |
-| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight}` | content × content, unbounded | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum and a fixed amount outside its bounds |
+| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight, alignSelf}` | content × content, unbounded, the container's alignment | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing; `alignSelf`, an optional `Align` that places the widget across its stack's or grid row's axis in place of the container's. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum, a fixed amount outside its bounds, and an `alignSelf` on a node whose parent is not a stack or a grid |
 | `dragKey` | `Prop<std::optional<Key>>` | `nullopt` | Engaged: the widget can be dragged, and a drop delivers this key |
 | `accepts` | `std::function<bool(Key const&)>` | empty | Which keys a drop target takes; empty takes every key. Used only when `onDrop` is set |
 | `onDrop` | `std::function<void(Key)>` | empty | Set: the widget is a drop target, called with the dropped key |
@@ -107,8 +107,8 @@ lowers them to the kinds below.
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
-| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once); a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
-| `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
+| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
+| `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
 | `Spacer` | `spacer` | none |
 | `Panel` | `panel` | `title`, `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
 | `Scroll` | `scroll` | `child`, `axis` (`Axis{Vertical, Horizontal}`, set once) |
@@ -139,7 +139,7 @@ Every node but `Custom` also carries `Common`:
 | Field | Meaning |
 |---|---|
 | `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
-| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, and the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`), set once |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, and `alignSelf`), set once |
 | `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
 | `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
 | `testId` | The stable identifier an automated test finds the widget by, set once |

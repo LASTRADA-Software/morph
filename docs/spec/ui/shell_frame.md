@@ -18,12 +18,13 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a row, stretch × stretch | `shell` | the whole frame |
 | a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading) and a `ui::Navigator` over `ShellFrameOptions::navigator` |
 | a column, stretch × stretch | — | the main column |
-| a row, surface `toolbar`, gap 3, padded by spacers at both ends | `shell_topbar` | the shown screen's title (`shell_title`, a heading that stretches), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
+| a row, surface `toolbar`, gap 3, `align: center`, padded by spacers at both ends | `shell_topbar` | the shown screen's title (`shell_title`, a heading that stretches), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
-- `setTitle` and `setPrincipal` set the top bar's texts.
+- `setTitle` and `setPrincipal` set the top bar's texts. The bar centres its children across it, so the principal's
+  line sits level with the sign-out button's label rather than on the bar's top edge.
 - The sign-out button calls `ShellFrameOptions::onSignOut`; with none, it is hidden.
 
 ## Signed in and signed out

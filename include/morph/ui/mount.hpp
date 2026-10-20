@@ -189,8 +189,14 @@ public:
         if (!node) {
             return nullptr;
         }
-        return std::visit([&](auto const& spec) -> Widget* { return &this->mountKind(scope, spec, parent); },
-                          node->kind);
+        return std::visit(
+            [&](auto const& spec) -> Widget* {
+                if constexpr (requires { spec.common.layout.alignSelf; }) {
+                    checkPlacement(spec.common, parent);
+                }
+                return &this->mountKind(scope, spec, parent);
+            },
+            node->kind);
     }
 
     /// @brief Mounts @p node as `mount` does, as a mount of its own: the first `autofocus` widget it mounts, in
@@ -453,6 +459,18 @@ private:
         };
         check(hints.width, hints.minWidth, hints.maxWidth, "width");
         check(hints.height, hints.minHeight, hints.maxHeight, "height");
+    }
+
+    // The loader's rule for `alignSelf`, for a view tree built in C++: only a stack's or a grid's child has a cross
+    // axis to be placed on.
+    static void checkPlacement(Common const& common, ContainerWidget const* parent) {
+        if (common.layout.alignSelf && dynamic_cast<StackWidget const*>(parent) == nullptr &&
+            dynamic_cast<GridWidget const*>(parent) == nullptr) {
+            std::string const named = common.testId.empty() ? std::string{} : " `" + common.testId + "`";
+            throw std::logic_error{
+                "morph::ui::mount: `alignSelf` places a node in its row, column or grid, and the node" + named +
+                " is not in one"};
+        }
     }
 
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {

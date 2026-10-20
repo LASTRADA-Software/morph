@@ -149,12 +149,15 @@ options second. `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
 `id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface`,
 `a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
-`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
+`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
 `sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
 `content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
 `{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, align, justify}`; an absent
+  `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
+  a grid's `justify` is written so the loader refuses it rather than dropped.
 - **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,
   `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list)), and optionally a row-scope builder that returns the

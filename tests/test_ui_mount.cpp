@@ -170,6 +170,61 @@ TEST_CASE("ui::Mounted: bounds reach the backend, and the loader's bound rules h
     }
 }
 
+// Mutation: never call setAlign/setJustify in mountStack and the grid's mountKind (the first dump loses them).
+TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the default", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text placed{.text = "c"};
+    placed.common.layout.alignSelf = ui::Align::End;
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column(
+                {.children = {ui::row({.children = {ui::text({.text = "a"})},
+                                       .align = ui::Align::Center,
+                                       .justify = ui::Justify::Between}),
+                              ui::grid({.cells = {{.node = ui::text(std::move(placed))}}, .align = ui::Align::Start})},
+                 .justify = ui::Justify::End})};
+        CHECK(backend.dump() ==
+              "Column#1 gap=0 justify=end\n"
+              "  Row#2 align=center gap=0 justify=between\n"
+              "    Text#3 role=Normal text=a\n"
+              "  Grid#4 align=start columns=1 gap=0\n"
+              "    Text#5 layout=content/content self=end role=Normal text=c\n");
+    }
+    // The default-only guard: a stack and a grid that say nothing of alignment record as they did without it.
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain,
+                           ui::column({.children = {ui::row({.children = {ui::text({.text = "a"})}}),
+                                                    ui::grid({.cells = {{.node = ui::text({.text = "b"})}}})}})};
+    CHECK(plain.dump() ==
+          "Column#1 gap=0\n"
+          "  Row#2 gap=0\n"
+          "    Text#3 role=Normal text=a\n"
+          "  Grid#4 columns=1 gap=0\n"
+          "    Text#5 role=Normal text=b\n");
+}
+
+// Mutation: skip checkPlacement (the panel's child mounts).
+TEST_CASE("ui::Mounted: alignSelf outside a row, column or grid throws, as the loader refuses it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const placed = [] {
+        ui::Text text{.text = "x"};
+        text.common.layout.alignSelf = ui::Align::Center;
+        text.common.testId = "placed";
+        return ui::text(std::move(text));
+    };
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::panel({.child = placed()})}),
+                      Catch::Matchers::ContainsSubstring("`alignSelf` places a node in its row, column or grid, "
+                                                         "and the node `placed` is not in one"));
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, placed()}),
+                      Catch::Matchers::ContainsSubstring("the node `placed` is not in one"));
+    CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::row({.children = {placed()}})});
+}
+
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {
     Owner owner;
     Runtime runtime{owner};
