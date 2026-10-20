@@ -14,7 +14,10 @@
 namespace morph::qt_quick::detail {
 
 TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
-    : ContainerItemWidget{context, QStringLiteral("MorphTable"), parent} {}
+    : ContainerItemWidget{context, QStringLiteral("MorphTable"), parent,
+                         QVariantMap{{QStringLiteral("headerBackground"),
+                                      QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {
+}
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     QVariantList list;

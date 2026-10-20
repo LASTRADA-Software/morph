@@ -860,6 +860,9 @@ struct TableColumn {
     std::string label;
     /// @brief The column's width request.
     Sizing width = Sizing::content();
+    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on a column
+    ///        with its own `.cell`, or on a `Table` constructed directly without going through the interpreter.
+    TextRole role = TextRole::Normal;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one

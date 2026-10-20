@@ -177,7 +177,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
-| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, cell ⓘ}`, or an expression), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
+| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, cell ⓘ}`, or an expression — `role` styles the column's default cell and has no effect on one with its own `cell`), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
 | `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |

@@ -71,6 +71,8 @@ QtObject {
     property color infoBg: "#e3f2fd"
     property color infoBorder: "#90caf9"
     property color infoDot: "#1565c0"
+    // A table's header background; transparent draws no fill, matching a table with no theme-set header.
+    property color tableHeader: "#00000000"
     property real staleOpacity: 0.55
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
@@ -150,6 +152,7 @@ QtObject {
         infoBg: theme.infoBg
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
     }
     readonly property MorphScheme pageScheme: MorphScheme {
         surface: theme.background
@@ -176,6 +179,7 @@ QtObject {
         infoBg: theme.infoBg
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
     }
     readonly property MorphScheme cardScheme: MorphScheme {
         surface: theme.surface
@@ -202,6 +206,7 @@ QtObject {
         infoBg: theme.infoBg
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
     }
     readonly property MorphScheme sidebarScheme: MorphScheme {
         surface: "#1f2430"
@@ -228,6 +233,7 @@ QtObject {
         infoBg: theme.infoBg
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
     }
     readonly property MorphScheme toolbarScheme: MorphScheme {
         surface: theme.surface
@@ -254,6 +260,7 @@ QtObject {
         infoBg: theme.infoBg
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
     }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {

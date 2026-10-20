@@ -153,7 +153,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
-| Table | `MorphTable`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
+| Table | `MorphTable`, a header over a `MorphTableHeaderBackground`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
@@ -211,6 +211,12 @@ height is the larger of its cells' and the background's `implicitHeight`; the st
 fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`. A toned
 row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
 the selection colour and keeps the bar.
+
+The header row draws its own background part (`headerBackground`, the `tableHeader` part restyle) behind the column
+labels, and hands it only `scheme`: the header has no selection, hover, focus or tone of its own. The stock
+background fills with `scheme.tableHeader` (`color.table.header`, transparent by default), so a table draws no
+header fill until a theme sets one. A document-authored column's `role` (a `TextRole`) styles its default cell's
+text and has no effect on a column with its own `cell`.
 
 ## Keys
 
@@ -307,6 +313,7 @@ surface is `Theme.background`.
   | Restyle kind | `MorphUi` base | What it replaces | Base API (beyond its Qt type's) |
   |---|---|---|---|
   | `tableRow` | `MorphTableRowBackground` | a table row's background: selection, hover, focus, zebra, tone, and the row's minimum height | `selected`, `hovered`, `current`, `alternate`, `tone` (−1 none, else a `ui::Tone` index), `scheme` |
+  | `tableHeader` | `MorphTableHeaderBackground` | a table's header row background | `scheme` |
   | `scrollBar` | `MorphScrollBar` (a `ScrollBar`) | the bar a scroll area attaches on its axis | `scheme` |
   | `splitterHandle` | `MorphSplitterHandle` | the handle between two panes of a splitter | `axis`, `scheme`; the handle reads `SplitHandle.pressed` and `.hovered` |
 

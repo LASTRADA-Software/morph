@@ -6981,6 +6981,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     std::vector<TableColumn> columns;
     std::vector<DocNode const*> cells;
     std::vector<std::string> fields;
+    // One entry per column, in the same order as `cells`/`fields`. Captured by `cellsOf` below (not `columns`
+    // itself, which is moved into `ui::table<Value>(...)` further down and so cannot be read from inside a lambda
+    // that outlives this function) so the default-cell closure can apply each column's role to its generated cell.
+    std::vector<TextRole> roles;
     FormatContext const& format = session.formatting();
     if (ExprPtr const derived = node.prop("columns")) {
         Value const list = once(ctx, derived);
@@ -6992,21 +6996,26 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 columns.push_back(
                     TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format)});
                 cells.push_back(nullptr);
+                roles.push_back(TextRole::Normal);
             }
         }
     }
     for (DocNodePtr const& part : node.partList("columns")) {
         ExprPtr const label = part->prop("label");
         ExprPtr const width = part->prop("width");
+        ExprPtr const role = part->prop("role");
+        TextRole const columnRole = role ? roleOf(once(ctx, role), format) : TextRole::Normal;
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
-                                      .width = width ? sizingOf(once(ctx, width)) : Sizing::content()});
+                                      .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
+                                      .role = columnRole});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
+        roles.push_back(columnRole);
     }
     auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
     // A value that names no tone is reported once for the table, whichever row and value it was.
     auto toneReported = std::make_shared<bool>(false);
-    auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn,
+    auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn,
                     toneReported](reactive::Signal<Value> const& row) {
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
@@ -7031,7 +7040,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                             Value const* const value = row.get().field(field);
                                             return value == nullptr ? std::string{}
                                                                     : textOf(*value, session.formatting());
-                                        })}));
+                                        }),
+                                        .role = roles.at(index)}));
         }
         if (!out.empty()) {
             out.front() = holding({out.front()}, scope);

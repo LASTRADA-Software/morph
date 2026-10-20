@@ -175,6 +175,40 @@ TEST_CASE("qt_quick theme: a tone's bg, border and dot reach Theme, its surfaces
     CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#234567"});
 }
 
+TEST_CASE("qt_quick theme: a table header's colour reaches Theme, a surface's scheme and the table it draws under",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "table": {"header": {"$value": "#102030"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    auto const sidebarTokens =
+        ui::parseTokens(R"({"color": {"$type": "color", "table": {"header": {"$value": "#405060"}}}})");
+    REQUIRE(sidebarTokens);
+    auto const sidebarResolved = ui::resolveTokens({&*sidebarTokens});
+    REQUIRE(sidebarResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*sidebarResolved)}};
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("tableHeader").value<QColor>() == QColor{"#102030"});
+    auto* const own = theme->property("themeScheme").value<QObject*>();
+    REQUIRE(own != nullptr);
+    CHECK(own->property("tableHeader").value<QColor>() == QColor{"#102030"});  // the theme's scheme follows Theme
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("tableHeader").value<QColor>() == QColor{"#405060"});
+
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Name"}});
+    scene.settle();
+    auto* const background = Scene::itemOf(*table).property("headerBackgroundItem").value<QObject*>();
+    REQUIRE(background != nullptr);
+    auto const* const fill = background->findChild<QQuickItem*>();
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == QColor{"#102030"});
+}
+
 namespace {
 
 /// The background a surface draws: the widget's direct child Rectangle at z -1.
