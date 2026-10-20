@@ -687,8 +687,9 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
-        if ((hasUnit || spec.decimals >= 0) && spec.mode == TextInputMode::Multiline) {
-            throw std::logic_error{"morph::ui: a multiline text input holds no number, so it takes no unit or places"};
+        if ((hasUnit || spec.decimals >= 0 || !spec.icon.empty()) && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{
+                "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon"};
         }
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
@@ -701,6 +702,9 @@ private:
         }
         if (spec.decimals >= 0) {
             widget.setDecimals(spec.decimals);
+        }
+        if (!spec.icon.empty()) {
+            widget.setIcon(spec.icon);
         }
         applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));

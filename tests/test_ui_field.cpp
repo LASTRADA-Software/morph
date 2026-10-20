@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <cstdint>
 #include <morph/reactive/runtime.hpp>
@@ -175,4 +176,15 @@ TEST_CASE("ui::Mounted: a text input commits on Enter, before the submit, and wh
     backend.commit(1);
     backend.submit(1, "done");
     CHECK(ran == Lines{"commit first", "commit two\nlines", "commit done", "submit done"});
+}
+
+// A multiline input holds no unit, places or icon: the same text box as a unit, for the same reason (the multiline
+// component declares none of those properties).
+TEST_CASE("ui::Mounted: a multiline text input refuses an icon", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend, ui::textInput({.mode = ui::TextInputMode::Multiline, .icon = "search"})}),
+        "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon");
 }

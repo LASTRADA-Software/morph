@@ -894,7 +894,7 @@ public:
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `caption`,
 ///        `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
@@ -937,6 +937,7 @@ public:
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
     void setCaption(std::string_view label, bool shown) override {
         set("caption", formatText(label));
         set("captionShown", formatBool(shown));

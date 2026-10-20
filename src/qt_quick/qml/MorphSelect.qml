@@ -50,6 +50,22 @@ MorphField {
             scheme: root.scheme
             focused: combo.visualFocus || combo.popup.visible
         }
+        indicator: Image {
+            objectName: "indicator"
+            x: combo.width - width - Theme.spaceOf(2)
+            y: (combo.height - height) / 2
+            readonly property string chevron: combo.popup.visible ? "nav.collapse" : "nav.expand"
+            readonly property string themedSource: Theme.iconSource(chevron)
+            source: themedSource !== "" ? themedSource : ""
+
+            Text {
+                // The chevron the theme draws as a path when it names neither nav icon.
+                anchors.centerIn: parent
+                visible: parent.themedSource === ""
+                text: combo.popup.visible ? "▴" : "▾"
+                color: root.scheme.text
+            }
+        }
         model: root.options
         currentIndex: -1
         // Declared, as the text input's field declares them.

@@ -41,6 +41,7 @@ public:
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
     void setDecimals(int decimals) override;
+    void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
