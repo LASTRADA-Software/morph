@@ -258,7 +258,8 @@
                                      "optimistic": { "query": "q", "at": "notes", "key": 1, "with": { "obj": { "a": 1 } } },
                                      "onSuccess": [{ "refetch": "q" }] } },
                "view": { "kind": "text", "text": "x" } }
-    }
+    },
+    { "name": "form, collection and wizard presentation keys", "doc": { "vocab": "ui/1", "id": "t", "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "column", "children": [ { "kind": "form", "model": "m", "action": "Lims_Save", "title": { "t": "deposit.title", "fallback": "Deposit" }, "submitLabel": "Deposit", "showStatus": false, "columns": 12 }, { "kind": "collection", "model": "m", "action": "Lims_ListSamples", "title": "Samples", "columns": 1, "showStatus": true }, { "kind": "wizard", "model": "m", "action": "Lims_Save", "submitLabel": "Next step" } ] } } }
   ],
   "invalid": [
     { "name": "not an object", "raw": [1], "at": "", "reason": "a document is a JSON object" },
@@ -474,6 +475,12 @@
     { "name": "a form field component given a prop it does not declare", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "components": { "G": { "host": "G", "version": 1, "props": { "value": "json", "rows": "int" }, "events": { "change": "any" }, "fallback": { "kind": "text", "text": "x" } } }, "view": { "kind": "form", "model": "m", "action": "A", "fields": { "items": { "component": "G", "props": { "cols": 2 } } } } }, "at": "/view/fields/items/props/cols", "reason": "declares no prop `cols`" },
     { "name": "a form field component that is not a name", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "fields": { "items": { "component": 3 } } } }, "at": "/view/fields/items/component", "reason": "`component` is a name" },
     { "name": "an unknown form submit mode", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "submit": "Apply" } }, "at": "/view/submit", "reason": "not one of the values of `submit`" },
+    { "name": "form columns of 0", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "columns": 0 } }, "at": "/view/columns", "reason": "`columns` is 1 to 12; a form lays its fields in at least one column" },
+    { "name": "form columns of 13", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "columns": 13 } }, "at": "/view/columns", "reason": "`columns` is 1 to 12" },
+    { "name": "form columns that are not a literal", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "state": { "n": { "init": 2 } }, "view": { "kind": "form", "model": "m", "action": "A", "columns": { "ref": "n" } } }, "at": "/view/columns", "reason": "`columns` is a literal integer" },
+    { "name": "collection columns of 0", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "collection", "model": "m", "action": "A", "columns": 0 } }, "at": "/view/columns", "reason": "`columns` is 1 to 12" },
+    { "name": "a form showStatus that is not a literal bool", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "form", "model": "m", "action": "A", "showStatus": "no" } }, "at": "/view/showStatus", "reason": "`showStatus` is a literal `true` or `false`" },
+    { "name": "a wizard showStatus that is not a literal bool", "doc": { "models": { "m": { "type": "Lims_SampleModel" } }, "view": { "kind": "wizard", "model": "m", "action": "A", "showStatus": 1 } }, "at": "/view/showStatus", "reason": "`showStatus` is a literal `true` or `false`" },
     { "name": "a table with neither rows nor a model", "doc": { "view": { "kind": "table" } }, "at": "/view", "reason": "a table takes `rows`" },
     { "name": "a table with a model and no action", "doc": { "models": { "m": { "type": "T" } }, "view": { "kind": "table", "model": "m" } }, "at": "/view", "reason": "names its `action`" },
     { "name": "a form without a model", "doc": { "view": { "kind": "form", "action": "A" } }, "at": "/view", "reason": "`model` is required on `form`" },

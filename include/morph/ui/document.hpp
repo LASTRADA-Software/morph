@@ -872,7 +872,7 @@ inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-inline constexpr std::array<KeySpec, 10> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 14> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                        {"action", Shape::Text, {}, kRequired},
                                                        {"prefill", Shape::Expr},
                                                        {"key", Shape::Expr},
@@ -881,10 +881,19 @@ inline constexpr std::array<KeySpec, 10> kFormKeys = {{{"model", Shape::Name, {}
                                                        {"fields", Shape::ExprRecord, "fields"},
                                                        {"onSubmit", Shape::Commands},
                                                        {"onSuccess", Shape::Commands},
-                                                       {"onError", Shape::Commands}}};
-/// @brief The keys of `collection` and `wizard`.
-inline constexpr std::array<KeySpec, 2> kCollectionKeys = {
-    {{"model", Shape::Name, {}, kRequired}, {"action", Shape::Text, {}, kRequired}}};
+                                                       {"onError", Shape::Commands},
+                                                       {"title", Shape::Expr},
+                                                       {"submitLabel", Shape::Expr},
+                                                       {"showStatus", Shape::Flag},
+                                                       {"columns", Shape::Expr}}};
+/// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
+///        form the view draws.
+inline constexpr std::array<KeySpec, 6> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
+                                                            {"action", Shape::Text, {}, kRequired},
+                                                            {"title", Shape::Expr},
+                                                            {"submitLabel", Shape::Expr},
+                                                            {"showStatus", Shape::Flag},
+                                                            {"columns", Shape::Expr}}};
 /// @brief The keys of `custom`.
 inline constexpr std::array<KeySpec, 3> kCustomKeys = {
     {{"name", Shape::Text, {}, kRequired}, {"props", Shape::ExprRecord}, {"on", Shape::CommandRecord}}};
@@ -2906,6 +2915,9 @@ private:
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
         }
+        if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
+            checkFormColumns(node);
+        }
         std::string_view const model = node.name("model");
         if (!model.empty()) {
             if (node.name("action").empty()) {
@@ -2974,6 +2986,22 @@ private:
                        "the action id `" + button->id + "` is used twice in " + path + "; each action has its own");
             }
             checkChoice(*button, "emphasis", kEmphasis);
+        }
+    }
+
+    // A form's `columns`: a literal integer, 1 to 12, the `x-colspan` convention's full row.
+    static void checkFormColumns(DocNode const& node) {
+        ExprPtr const columns = node.prop("columns");
+        if (columns == nullptr) {
+            return;
+        }
+        std::int64_t const* const count =
+            columns->kind == ExprKind::Literal ? columns->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+        if (count == nullptr) {
+            refuse(columns->path, "`columns` is a literal integer");
+        }
+        if (*count < 1 || *count > 12) {
+            refuse(columns->path, "`columns` is 1 to 12; a form lays its fields in at least one column");
         }
     }
 

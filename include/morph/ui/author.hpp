@@ -3984,6 +3984,36 @@ private:
     FieldSettings _settings;
 };
 
+/// @brief How a `form`, `collection` or `wizard` presents its forms: the keys every one of them takes.
+struct FormPresentation {
+    /// @brief A heading over the fields; on a collection or a wizard, the view's heading in place of the schema's.
+    ///        Absent shows none on a form.
+    AnyHandle title;
+    /// @brief The explicit-mode button's label, which the status line names; absent is `Submit`.
+    AnyHandle submitLabel;
+    /// @brief Whether the status line shows; absent shows it.
+    std::optional<bool> showStatus;
+    /// @brief The columns of every group's grid, 1 to 12; absent keeps the engine's.
+    std::optional<int> columns;
+};
+
+namespace detail {
+
+/// @brief Writes @p presentation's keys on @p node.
+/// @param node         The node being written.
+/// @param presentation The keys.
+inline void present(NodeWriter& node, FormPresentation const& presentation) {
+    node.put("title", presentation.title).put("submitLabel", presentation.submitLabel);
+    if (presentation.showStatus) {
+        node.raw("showStatus", AnyHandle{*presentation.showStatus}.json());
+    }
+    if (presentation.columns) {
+        node.raw("columns", AnyHandle{std::int64_t{*presentation.columns}}.json());
+    }
+}
+
+}  // namespace detail
+
 /// @brief Options of `form`.
 /// @tparam Action The form's action.
 template <typename Action>
@@ -4005,6 +4035,8 @@ struct FormOptions {
     Commands onSuccess;
     /// @brief Commands run after a failed submit.
     Commands onError;
+    /// @brief The title, button label, status line and columns.
+    FormPresentation presentation{};
 };
 
 /// @brief A `form` node: a schema form of the forms engine over an action (spec 2); each field takes its label
@@ -4036,6 +4068,7 @@ template <typename Action, typename Model>
         }
         node.raw("fields", std::move(overlay));
     }
+    detail::present(node, options.presentation);
     return node.put("onSubmit", options.onSubmit)
         .put("onSuccess", options.onSuccess)
         .put("onError", options.onError)
@@ -4046,35 +4079,35 @@ template <typename Action, typename Model>
 /// @brief A `collection` node: the forms engine's list screen over an action.
 /// @tparam Action The action.
 /// @tparam Model  The model type of the alias; it must run the action.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every form the view draws; its title replaces the view's heading.
 /// @return The node.
 template <typename Action, typename Model>
     requires Runs<Model, Action>
-[[nodiscard]] Node collection(ModelHandle<Model> const& model) {
+[[nodiscard]] Node collection(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     CatalogFacts facts;
     facts.action<Model, Action>();
-    return detail::NodeWriter{"collection"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<Action>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"collection"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<Action>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 /// @brief A `wizard` node: the forms engine's wizard over an action.
 /// @tparam Action The action.
 /// @tparam Model  The model type of the alias; it must run the action.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every step's form; its title replaces the view's heading.
 /// @return The node.
 template <typename Action, typename Model>
     requires Runs<Model, Action>
-[[nodiscard]] Node wizard(ModelHandle<Model> const& model) {
+[[nodiscard]] Node wizard(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     CatalogFacts facts;
     facts.action<Model, Action>();
-    return detail::NodeWriter{"wizard"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<Action>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"wizard"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<Action>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 /// @brief Options of `custom`.

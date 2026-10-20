@@ -157,9 +157,12 @@ input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)`
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).
-- **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError})`**:
-  the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit, ...}}`.
-- **`collection<View>(model)` and `wizard<Wizard>(model)`** (`ui/author_forms.hpp`) take a view
+- **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError,
+  .presentation})`**: the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit,
+  ...}}`. `FormPresentation{title, submitLabel, showStatus, columns}` writes the presentation keys a form, a
+  collection and a wizard share; an absent one is left out.
+- **`collection<View>(model, presentation)` and `wizard<Wizard>(model, presentation)`** (`ui/author_forms.hpp`),
+  like `collection<A>` and `wizard<A>`, take a `FormPresentation` (default none) and a view
   descriptor or a `flows::Wizard` instead of an action. The node names the view's `v-query` or the
   wizard's first step, and the node's facts carry `views::viewSchemaJson<View>()` or
   `flows::wizardSchemaJson<Wizard>()` under that action. The bundle serves the document with the

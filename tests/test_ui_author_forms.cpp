@@ -96,6 +96,19 @@ TEST_CASE("collection<View> and wizard<Wizard> name their action and carry their
     CHECK(wizard.facts().wizards.at("Af_AddRow") == morph::flows::wizardSchemaJson<af::AddWizard>());
 }
 
+// Mutation: write no presentation keys in detail::present (the nodes carry only their model and action).
+TEST_CASE("collection<View> and wizard<Wizard> write the presentation keys they are given", "[ui][author]") {
+    auto const model = ui::ModelHandle<af::Model>{"rows"};
+    ui::Node const collection = ui::collection<af::RowsView>(
+        model, {.title = "Rows", .submitLabel = "Save", .showStatus = false, .columns = 3});
+    CHECK(glz::write_json(collection.json()).value_or("") ==
+          R"({"kind":"collection","model":"rows","action":"Af_ListRows","title":"Rows","submitLabel":"Save",)"
+          R"("showStatus":false,"columns":3})");
+    ui::Node const wizard = ui::wizard<af::AddWizard>(model, {.showStatus = true});
+    CHECK(glz::write_json(wizard.json()).value_or("") ==
+          R"({"kind":"wizard","model":"rows","action":"Af_AddRow","showStatus":true})");
+}
+
 // Mutation: leave the bundle's views out of the catalog reply (the client's view lookup is empty).
 TEST_CASE("a collection's and a wizard's documents reach the client's catalog through the ui-catalog reply",
           "[ui][author][ui-service]") {

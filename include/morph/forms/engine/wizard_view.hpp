@@ -45,20 +45,23 @@ struct WizardViewOptions {
     std::string nextLabel = "Next";
     /// @brief The note shown on the last step, which has no Next.
     std::string lastStepText = "Last step — fill it in to finish";
+    /// @brief The built-in header's title (`wizard_title`, before the step's position); empty shows the schema's.
+    ui::Prop<std::string> title{};
 };
 
 namespace detail::engine {
 
 /// @brief The built-in header: the title with the step's position (`Flow  (1 / 2)`) and a step indicator (done,
-/// current,
-///        pending).
+///        current, pending).
 /// @param session The session.
+/// @param heading The title in place of the schema's; empty shows the schema's.
 /// @return The header.
-[[nodiscard]] inline ui::Node wizardHeader(WizardSession const& session) {
+[[nodiscard]] inline ui::Node wizardHeader(WizardSession const& session, ui::Prop<std::string> const& heading = {}) {
     WizardSession const* const wizard = &session;
     ui::Text title{.text =
-                       [wizard] {
-                           return wizard->title() + "  (" + std::to_string(wizard->current() + 1) + " / " +
+                       [wizard, heading] {
+                           std::string const named = isSet(heading) ? heading.evaluate() : wizard->title();
+                           return named + "  (" + std::to_string(wizard->current() + 1) + " / " +
                                   std::to_string(wizard->stepCount()) + ")";
                        },
                    .role = ui::TextRole::Heading};
@@ -131,7 +134,8 @@ namespace detail::engine {
         .cases = std::move(cases),
     });
     return ui::column(ui::Column{
-        .children = {options.chrome.header ? options.chrome.header(session) : detail::engine::wizardHeader(session),
+        .children = {options.chrome.header ? options.chrome.header(session)
+                                           : detail::engine::wizardHeader(session, options.title),
                      std::move(body),
                      options.chrome.nav ? options.chrome.nav(session) : detail::engine::wizardNav(session, options)},
         .gap = 4});

@@ -262,13 +262,17 @@ before it.
   control's alone, so a required field shows it once on every backend, and the control is told the field's label
   with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, and the field's error as its
   one message. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
-  `add_<path>`, `remove_<path>#<key>`, `form_submit`, `form_status`, `form_result`.
+  `add_<path>`, `remove_<path>#<key>`, `form_title`, `form_submit`, `form_status`, `form_result`.
 - **Layout.** A section is a `Panel`, consecutive tab groups one `Tabs`, an accordion a collapsible `Panel`, the
   implicit group a flat grid; each group is a `Grid` of `gridColumns` columns (the flat one 1 while `gridColumns`
   is 2), every cell spanning its `x-colspan` clamped to the grid. Tab selection and collapse are the session's
   signals, so switching tabs keeps what was typed.
-- **Chrome.** The status line, a Submit button in explicit mode (enabled while ready and not in flight), and the
-  last reply or error.
+- **Chrome.** A heading over the fields: `FormViewOptions::title` when it is set (bound, or a constant that is not
+  empty, shown whatever `showTitle` says, since a title given is a title wanted; test id `form_title`), else the
+  schema's title while `showTitle`. The status line while `showStatus`; a button in explicit mode labelled
+  `submitLabel` (default `Submit`; a `ui::Prop`, so a host may bind it), enabled while ready and not in flight;
+  and the last reply or error. The status line names the label: `ready: press Deposit` for a form whose button
+  says *Deposit*.
 - **Overrides** replace a field's control, resolved by field path, widget hint, unit, then kind. The replacement
   is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
   as the built-in control does.
@@ -347,6 +351,9 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   leaving a step loses nothing), and Back and Next, enabled by `canBack()` and `canNext()`, with a note on the
   last step. Test ids: `wizard_title`, `wizard_steps`, `wizard_step_<index>`, `wizardBack`, `wizardNext`,
   `wizard_last`.
+- **Titles.** `CollectionViewOptions::title` and `WizardViewOptions::title` replace the schema's title in the
+  built-in header (`collection_title`; the wizard's before the step's position); empty shows the schema's. A
+  header chrome draws its own.
 - **Chrome.** `CollectionChrome` and `WizardChrome` replace the view's own parts with a host's: the collection's
   header, each row (the rows are then a list of the chrome's nodes rather than a table), the confirm (mounted only
   while an action waits) and the editor dialog (handed the editor's form view to place); the wizard's header and

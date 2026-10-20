@@ -2574,6 +2574,7 @@ private:
     [[nodiscard]] forms::FormSessionOptions engineOptions() const;
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
@@ -6378,6 +6379,8 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
         });
     }
     forms::FormViewOptions options{.showTitle = false};
+    presentForm(node, ctx, options);
+    options.title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf);
     // A field whose overlay names a component is drawn by it; only top-level fields take one, as every overlay.
     for (DocNodePtr const& record : node.partList("fields")) {
         for (DocNodePtr const& overlay : record->partList("fields")) {
@@ -6645,18 +6648,39 @@ inline void ScreenCore::wireComposite(ElementState& element) {
     }
 }
 
+// The presentation keys a form, a collection and a wizard share, but the title: the label of the explicit-mode button
+// and the status line naming it, bound in the node's scope; whether the status line shows, and the grid's columns, as
+// read at load.
+inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options) {
+    if (ExprPtr const label = node.prop("submitLabel")) {
+        options.submitLabel = bindProp<std::string>(ctx, label, std::string{}, stringOf);
+    }
+    if (auto const shown = node.flags.find("showStatus"); shown != node.flags.end()) {
+        options.showStatus = shown->second;
+    }
+    if (ExprPtr const columns = node.prop("columns"); columns != nullptr && columns->literal.asInt() != nullptr) {
+        options.gridColumns = static_cast<int>(*columns->literal.asInt());
+        options.flatGridColumns = options.gridColumns;
+    }
+}
+
 inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
-    // The editor's and the steps' titles are the dialog's and the header's; the forms do not repeat them.
+    // The editor's and the steps' titles are the dialog's and the header's; the forms do not repeat them. A `title`
+    // replaces the view's own heading.
     forms::FormViewOptions form{};
     form.showTitle = false;
+    presentForm(node, ctx, form);
+    Prop<std::string> title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf);
     Node view;
     if (element != nullptr && element->collection != nullptr) {
         forms::CollectionViewOptions options{};
         options.form = std::move(form);
+        options.title = std::move(title);
         view = forms::collectionView(*element->collection, std::move(options));
     } else if (element != nullptr && element->wizard != nullptr) {
         forms::WizardViewOptions options{};
         options.form = std::move(form);
+        options.title = std::move(title);
         view = forms::wizardView(*element->wizard, options);
     } else {
         return ui::text(Text{.text = std::string{node.name("action")}, .role = TextRole::Muted});

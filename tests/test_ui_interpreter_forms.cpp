@@ -2,6 +2,7 @@
 //
 // The `form` node: a document's schema form, lowered through the forms engine (spec 5 §9, spec 2).
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -10,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -108,6 +110,43 @@ TEST_CASE("form node: an explicit form submits only from its button", "[ui][inte
     CHECK(h.dispatcher.count("Lims_CaptureConcentration") == 1);
 }
 
+// Mutation: drop the presentation options in lowerForm (the title, the label, the status line and the columns are the
+// engine's defaults).
+TEST_CASE("form node: title, submitLabel, showStatus and columns present the form", "[ui][interpreter][forms]") {
+    std::string document{kCapture};
+    document.replace(document.find(R"("prefill")"), 0,
+                     R"("submit": "explicit", "title": "Deposit", "submitLabel": "Deposit", "columns": 2, )");
+    SECTION("the status line hidden") {
+        Harness h;
+        std::string hidden = document;
+        hidden.replace(hidden.find(R"("prefill")"), 0, R"("showStatus": false, )");
+        auto const screen = h.mount(hidden);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        CHECK(h.text("form_title") == "Deposit");
+        CHECK(h.backend.prop(h.byTestId("Button", "form_submit"), "label") == "Deposit");
+        CHECK_FALSE(h.backend.find("Text", "testId", "form_status").has_value());
+        int const cell = h.byTestId("Column", "cell_sampleId");
+        std::optional<int> grid;
+        for (int const candidate : h.backend.all("Grid")) {
+            if (std::ranges::contains(h.backend.children(candidate), cell)) {
+                grid = candidate;
+            }
+        }
+        REQUIRE(grid.has_value());
+        CHECK(h.backend.prop(*grid, "columns") == "2");
+    }
+    SECTION("the status line names the label") {
+        Harness h;
+        auto const screen = h.mount(document);
+        CHECK(h.text("form_status") == "fill the required (*) fields");
+        h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
+        h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
+        h.settle();
+        CHECK(h.text("form_status") == "ready: press Deposit");
+    }
+}
+
 TEST_CASE("form node: an action the catalog has no schema for is reported and shown muted",
           "[ui][interpreter][forms]") {
     Harness h;
@@ -173,6 +212,20 @@ TEST_CASE("collection node: the catalog's view document lists rows through the m
     h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
     CHECK(h.backend.prop(h.byTestId("Dialog", "editorDialog"), "open") == "false");
     CHECK(h.dispatcher.count("Lims_ListSamples") == 3);
+}
+
+TEST_CASE("collection and wizard nodes: a title replaces the view's heading", "[ui][interpreter][forms]") {
+    for (auto const& [document, testId, expected] :
+         {std::tuple{std::string{kSamples}, "collection_title", "Our samples"},
+          std::tuple{std::string{kCaptureFlow}, "wizard_title", "Our samples  (1 / 2)"}}) {
+        Harness h;
+        std::string titled = document;
+        titled.replace(titled.find(R"("model")"), 0, R"("title": "Our samples", )");
+        auto const screen = h.mount(titled);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        CHECK(h.text(testId) == expected);
+    }
 }
 
 TEST_CASE("wizard node: the catalog's wizard document steps through the model alias", "[ui][interpreter][forms]") {

@@ -154,8 +154,9 @@ TEST_CASE("qt_quick containers: tabs show their labels, highlight on request and
 
 // Mutation: never bind the TabBar's visible to barShown (it shows with one tab); or keep `focusTarget: bar`, so a
 // tabs widget focused while its bar is hidden gives the keyboard focus to the hidden bar.
-TEST_CASE("qt_quick containers: a hidden tab bar is not drawn and takes no focus; a shown one sits a step above the page",
-          "[qt_quick]") {
+TEST_CASE(
+    "qt_quick containers: a hidden tab bar is not drawn and takes no focus; a shown one sits a step above the page",
+    "[qt_quick]") {
     Scene scene;
     auto tabs = scene.backend().createTabs(nullptr);
     tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});

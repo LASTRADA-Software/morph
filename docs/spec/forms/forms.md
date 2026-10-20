@@ -785,7 +785,8 @@ implicit flat group (one column, no chrome) when the schema carries no
 `x-layout`, and the trailing group of fields no group names. Unset, it is `1`
 while `gridColumns` is `2` and follows `gridColumns` as soon as a host sets that
 to anything else, so one option puts the whole form on the host's grid
-(`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full).
+(`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full). A document sets both at once with a
+`form`'s, `collection`'s or `wizard`'s `columns` key (1 to 12; `docs/spec/ui/document.md`).
 
 A field spans `x-colspan` columns (1 when absent), **clamped to its grid's
 column count**, so a span wider than the grid takes one full row rather than

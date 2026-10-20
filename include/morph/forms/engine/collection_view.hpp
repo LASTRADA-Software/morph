@@ -61,6 +61,8 @@ struct CollectionViewOptions {
     std::string acceptLabel = "OK";
     /// @brief The confirm dialog's cancel button.
     std::string cancelLabel = "Cancel";
+    /// @brief The built-in header's title (`collection_title`); empty shows the schema's.
+    ui::Prop<std::string> title{};
 };
 
 namespace detail::engine {
@@ -92,10 +94,12 @@ namespace detail::engine {
 
 /// @brief The built-in header: the title, a busy indicator while the list loads, and the collection actions.
 /// @param session The session.
+/// @param heading The title in place of the schema's; empty shows the schema's.
 /// @return The header.
-[[nodiscard]] inline ui::Node collectionHeader(CollectionSession& session) {
+[[nodiscard]] inline ui::Node collectionHeader(CollectionSession& session, ui::Prop<std::string> const& heading = {}) {
     CollectionSession* const view = &session;
-    ui::Text title{.text = std::string{session.model().title()}, .role = ui::TextRole::Heading};
+    ui::Text title{.text = isSet(heading) ? heading : ui::Prop<std::string>{std::string{session.model().title()}},
+                   .role = ui::TextRole::Heading};
     title.common.testId = "collection_title";
     std::vector<ui::Node> children{
         ui::text(std::move(title)),
@@ -279,7 +283,8 @@ namespace detail::engine {
     auto const shared = std::make_shared<CollectionViewOptions const>(std::move(options));
     CollectionSession* const view = &session;
     std::vector<ui::Node> list;
-    list.push_back(shared->chrome.header ? shared->chrome.header(session) : detail::engine::collectionHeader(session));
+    list.push_back(shared->chrome.header ? shared->chrome.header(session)
+                                         : detail::engine::collectionHeader(session, shared->title));
     ui::Text error{.text = [view] { return detail::engine::collectionErrorText(*view); }, .role = ui::TextRole::Error};
     error.common.visible = [view] { return view->listError() != nullptr || view->actionError() != nullptr; };
     error.common.testId = "collection_error";

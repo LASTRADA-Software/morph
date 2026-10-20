@@ -40,8 +40,8 @@ struct FormViewOptions {
     int gridColumns = 2;
     /// @brief Columns of the implicit group's grid; unset is 1 while `gridColumns` is 2, else `gridColumns`.
     std::optional<int> flatGridColumns;
-    /// @brief The explicit-mode button's label.
-    std::string submitLabel = "Submit";
+    /// @brief The explicit-mode button's label, which the status line names (`ready: press <label>`).
+    ui::Prop<std::string> submitLabel = "Submit";
     /// @brief The caption of a collection's Add button.
     std::string addLabel = "Add";
     /// @brief The caption of a collection row's Remove button.
@@ -50,6 +50,9 @@ struct FormViewOptions {
     bool showTitle = true;
     /// @brief Whether the status line ("fill the required (*) fields", …) is shown.
     bool showStatus = true;
+    /// @brief A heading over the fields (test id `form_title`) in place of the schema's title; empty shows none.
+    ///        A title given is shown whatever `showTitle` says.
+    ui::Prop<std::string> title{};
 };
 
 namespace detail::engine {
@@ -58,14 +61,23 @@ namespace detail::engine {
 using ViewOptions = std::shared_ptr<FormViewOptions const>;
 
 /// @brief The status line under a form.
-/// @param session The session.
+/// @param session     The session.
+/// @param submitLabel The explicit-mode button's label, which the line names.
 /// @return The line: what is missing, or how the form submits.
 // NOLINTNEXTLINE(modernize-use-string-view): the line is a bound text property, which holds a string.
-[[nodiscard]] inline std::string statusText(FormSession const& session) {
+[[nodiscard]] inline std::string statusText(FormSession const& session, std::string_view submitLabel) {
     if (!session.ready()) {
         return "fill the required (*) fields";
     }
-    return session.submitMode() == SubmitMode::Explicit ? "ready: press Submit" : "submits as you type";
+    return session.submitMode() == SubmitMode::Explicit ? "ready: press " + std::string{submitLabel}
+                                                        : "submits as you type";
+}
+
+/// @brief Whether a text property says something: bound, or a constant that is not empty.
+/// @param text The property.
+/// @return Whether it is set.
+[[nodiscard]] inline bool isSet(ui::Prop<std::string> const& text) {
+    return text.isBound() || !text.constant().empty();
 }
 
 /// @brief The last reply or failure.
@@ -426,9 +438,10 @@ inline ui::Node FieldView::defaultControl() const {
     return detail::engine::fieldControl(*_session, *_state, _options);
 }
 
-/// @brief Renders @p session: its fields laid out by group (sections as panels, consecutive tab groups as one tab
-///        bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in
-///        explicit mode, and the last reply or error.
+/// @brief Renders @p session: the title (the options' `title`, else the schema's while `showTitle`), its fields laid
+///        out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels,
+///        the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or
+///        error.
 ///
 /// The nodes bind to the session and its fields by pointer: mount the result after the session and destroy the
 /// mount before it.
@@ -442,7 +455,11 @@ inline ui::Node FieldView::defaultControl() const {
     int const flatColumns = shared->flatGridColumns.value_or(columns == 2 ? 1 : columns);
     FormSession* const form = &session;
     std::vector<ui::Node> children;
-    if (shared->showTitle) {
+    if (detail::engine::isSet(shared->title)) {
+        ui::Text title{.text = shared->title, .role = ui::TextRole::Heading};
+        title.common.testId = "form_title";
+        children.push_back(ui::text(std::move(title)));
+    } else if (shared->showTitle) {
         children.push_back(
             ui::text(ui::Text{.text = std::string{session.model().title()}, .role = ui::TextRole::Heading}));
     }
@@ -483,7 +500,9 @@ inline ui::Node FieldView::defaultControl() const {
         }
     }
     if (shared->showStatus) {
-        ui::Text status{.text = [form] { return detail::engine::statusText(*form); }, .role = ui::TextRole::Muted};
+        ui::Text status{
+            .text = [form, shared] { return detail::engine::statusText(*form, shared->submitLabel.evaluate()); },
+            .role = ui::TextRole::Muted};
         status.common.testId = "form_status";
         children.push_back(ui::text(std::move(status)));
     }

@@ -39,42 +39,42 @@ using FirstStepAction = std::tuple_element_t<0, typename W::steps>::action;
 ///        document travels with the node's catalog facts.
 /// @tparam View  The view descriptor.
 /// @tparam Model The model type of the alias; it must run the view's query.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every form the view draws; its title replaces the view's heading.
 /// @return The node.
 template <ViewDescriptor View, typename Model>
     requires Runs<Model, typename View::query>
-[[nodiscard]] Node collection(ModelHandle<Model> const& model) {
+[[nodiscard]] Node collection(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     using Query = View::query;
     CatalogFacts facts;
     facts.action<Model, Query>();
     facts.views.emplace(std::string{::morph::model::ActionTraits<Query>::typeId()},
                         ::morph::views::viewSchemaJson<View>());
-    return detail::NodeWriter{"collection"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<Query>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"collection"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<Query>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 /// @brief A `wizard` node over a `flows::Wizard`: the node names the first step's action, and the wizard's document
 ///        travels with the node's catalog facts.
 /// @tparam Wizard The wizard.
 /// @tparam Model  The model type of the alias; it must run the first step.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every step's form; its title replaces the view's heading.
 /// @return The node.
 template <WizardDescriptor Wizard, typename Model>
     requires Runs<Model, FirstStepAction<Wizard>>
-[[nodiscard]] Node wizard(ModelHandle<Model> const& model) {
+[[nodiscard]] Node wizard(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     using First = FirstStepAction<Wizard>;
     CatalogFacts facts;
     facts.action<Model, First>();
     facts.wizards.emplace(std::string{::morph::model::ActionTraits<First>::typeId()},
                           ::morph::flows::wizardSchemaJson<Wizard>());
-    return detail::NodeWriter{"wizard"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<First>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"wizard"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<First>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 }  // namespace morph::ui::author

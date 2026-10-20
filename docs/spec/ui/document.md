@@ -187,8 +187,8 @@ place a kind is described.
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
-| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions; an overlay may also name a `component` that draws the field, with `props`, a record of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
-| `collection`, `wizard` | `model`, `action` (required) | |
+| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions; an overlay may also name a `component` that draws the field, with `props`, a record of expressions), `onSubmit`, `onSuccess`, `onError`, `title`, `submitLabel`, `showStatus` (a literal `bool`; default `true`), `columns` (a literal integer, 1 to 12) | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
+| `collection`, `wizard` | `model`, `action` (required), and `submitLabel`, `showStatus` and `columns` as on `form`, reaching every form the view draws; `title` replaces its heading | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
 `gap` and `padding` are spacing steps, 0 to 5 ([`view_tree.md`](view_tree.md)); the mount clamps any other value.
