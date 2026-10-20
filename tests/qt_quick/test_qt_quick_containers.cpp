@@ -73,7 +73,10 @@ QQuickItem const* textItemOf(char const* testId, QString const& text) {
     auto const found = std::ranges::find_if(inner, [&text](QQuickItem const* item) {
         return item->inherits("QQuickText") && item->property("text").toString() == text;
     });
-    REQUIRE(found != inner.end());
+    // A bool, not the iterators themselves: Catch2's REQUIRE decomposes a comparison's operands for its failure
+    // message, and stringifying a QList<QQuickItem*>::const_iterator hits a deprecated implicit pointer conversion.
+    bool const isFound = found != inner.end();
+    REQUIRE(isFound);
     return *found;
 }
 
@@ -530,7 +533,9 @@ TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-o
         QList<QQuickItem*> const inner = widget->item()->findChildren<QQuickItem*>();
         auto const found =
             std::ranges::find_if(inner, [className](QQuickItem const* item) { return item->inherits(className); });
-        REQUIRE(found != inner.end());
+        // A bool, not the iterators themselves: see textItemOf's own note above on why.
+        bool const isFound = found != inner.end();
+        REQUIRE(isFound);
         return **found;
     };
     QQuickItem const& label = *textItemOf("shell_principal", QStringLiteral("alice"));
@@ -599,7 +604,9 @@ TEST_CASE("qt_quick containers: a navigator entry fills the sidebar, and the cur
         QList<QQuickItem*> const inner = itemOf(testId).findChildren<QQuickItem*>();
         auto const button =
             std::ranges::find_if(inner, [](QQuickItem const* item) { return item->inherits("QQuickAbstractButton"); });
-        REQUIRE(button != inner.end());
+        // A bool, not the iterators themselves: see textItemOf's own note above on why.
+        bool const isFound = button != inner.end();
+        REQUIRE(isFound);
         auto* const background = (*button)->property("background").value<QQuickItem*>();
         REQUIRE(background != nullptr);
         return background->property("color").value<QColor>();
