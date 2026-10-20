@@ -418,7 +418,7 @@ TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "
     Workspace shell{harness.runtime, harness.backend, host, catalog()};
     REQUIRE(shell.open("home", {}) == 0U);
     harness.settle();
-    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    morph::ui::ScreenHead const* const head = shell.handleOf(0)->head();
     REQUIRE(head != nullptr);
     CHECK(head->subtitle().peek().empty());
     CHECK(head->status().peek().empty());
@@ -434,12 +434,12 @@ using morph::ui::WorkspaceTabId;
 
 /// A model over the harness whose pages are slots it counts: what an application's own tab strip has.
 struct ModelPages {
-    explicit ModelPages(Harness& harness, Host& host, WorkspaceOptions options = catalog()) : _harness{&harness} {
+    explicit ModelPages(Harness& harness, Host& host, WorkspaceOptions options = catalog()) {
         WorkspaceModelOptions made{std::move(options), {}, {}};
-        made.mountPage = [this, &host](WorkspaceTabId tab, std::string_view screenId, ParamMap const& params)
+        made.mountPage = [this, &harness, &host](WorkspaceTabId tab, std::string_view screenId, ParamMap const& params)
             -> std::expected<std::unique_ptr<ScreenHandle>, morph::ui::MountError> {
             ++mounted;
-            auto page = _harness->backend.createSlot(nullptr);
+            auto page = harness.backend.createSlot(nullptr);
             auto handle = host.mountInto(screenId, params, *page);
             if (handle) {
                 pages.insert_or_assign(tab.value, std::move(page));
@@ -465,9 +465,6 @@ struct ModelPages {
     std::vector<bool> unmountedAfterHandle;
     std::map<std::uint64_t, std::unique_ptr<morph::ui::SlotWidget>> pages;
     std::unique_ptr<WorkspaceModel> model;
-
-private:
-    Harness* _harness;
 };
 
 }  // namespace

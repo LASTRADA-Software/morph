@@ -2555,6 +2555,12 @@ private:
     /// A form field's control drawn by the host component its overlay names, with the built-in control as the
     /// fallback.
     Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
+    /// A custom node's prop of a declared type over @p read, converted as `lowerCustom` converts a document's.
+    CustomProp componentProp(std::string const& prop, std::string const& type, std::function<Value()> read);
+    /// A field component's `change`: the payload read as the `value` prop's type and written as the user's edit, or
+    /// reported when it does not decode, does not fit the field, or is over the inline cap for a base64 member.
+    void changeField(forms::FieldState& state, forms::FieldSpec const& spec, std::string const& path,
+                     std::string_view valueType, std::string const& payload);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
     [[nodiscard]] std::string arrangedBy(std::string const& elementId) const;
     Node lowerArranged(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::string const& point,
@@ -2586,6 +2592,9 @@ private:
     void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
     void runDownload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
+    // A download's inline bytes, decoded and under the cap, with its name and type; nothing, reported, otherwise.
+    std::optional<InlineFile> inlineDownload(Command const& command, CommandCtx const& ctx, Value const& file,
+                                             Value const& name);
     void runUpload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
     bool unsupported(Command const& command, std::string_view what) {
         report(command.path, std::string{what} + " is not supported by the host");
@@ -2766,13 +2775,13 @@ public:
     }
 
     /// @brief Runs a head action's `onClick` as a user event in the screen scope, in one batch.
-    /// @param id The action's id.
+    /// @param actionId The action's id.
     /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
     ///         disabled.
-    bool runAction(std::string_view id) {
-        auto const found = std::ranges::find(_headActions, id, &detail::ActionModel::id);
+    bool runAction(std::string_view actionId) {
+        auto const found = std::ranges::find(_headActions, actionId, &detail::ActionModel::id);
         if (found == _headActions.end()) {
-            _core->report("/actions", "head action " + std::string{id} + " is unknown");
+            _core->report("/actions", "head action " + std::string{actionId} + " is unknown");
             return false;
         }
         auto const [visible, enabled] =
@@ -5040,11 +5049,11 @@ private:
         for (std::size_t offset = 0; offset < 3; ++offset) {
             group <<= 8U;
             if (offset < left) {
-                group |= static_cast<unsigned char>(bytes[index + offset]);
+                group |= static_cast<unsigned char>(bytes.at(index + offset));
             }
         }
         for (std::size_t digit = 0; digit < 4; ++digit) {
-            out.push_back(digit <= left ? kAlphabet[(group >> (18U - (6U * digit))) & 0x3FU] : '=');
+            out.push_back(digit <= left ? kAlphabet.at((group >> (18U - (6U * digit))) & 0x3FU) : '=');
         }
     }
     return out;
@@ -5181,31 +5190,12 @@ inline void ScreenCore::runDownload(Command const& command, CommandCtx const& ct
         });
     };
     if (command.bytes) {
-        // Inline bytes are checked before the host is asked: content over the cap, or that does not decode, never
-        // reaches it.
-        std::size_t const cap = session.options().maxInlineFileBytes;
-        std::string const* const text = file.asString();
-        std::size_t const size = text != nullptr ? base64Size(*text) : file.asList() ? file.asList()->size() : 0;
-        std::expected<std::string, std::string> bytes =
-            size > cap ? std::unexpected(std::string{}) : inlineBytes(file);
-        if (size > cap || (bytes && bytes->size() > cap)) {
-            report(command.path, "download: " + sizeText(bytes ? bytes->size() : size) + " is over the " +
-                                     sizeText(cap) + " inline cap; serve it through the file store");
+        std::optional<InlineFile> const inlined = inlineDownload(command, ctx, file, name);
+        if (!inlined) {
             done(false);
             return;
         }
-        if (!bytes) {
-            report(command.path, "download: " + bytes.error());
-            done(false);
-            return;
-        }
-        InlineFile const inlined{
-            .name = textOf(name, session.formatting()),
-            .mediaType = command.mediaType
-                             ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), session.formatting())
-                             : std::string{},
-            .bytes = *std::move(bytes)};
-        if (host == nullptr || !host->saveFile(inlined, command.option, settled)) {
+        if (host == nullptr || !host->saveFile(*inlined, command.option, settled)) {
             unsupported(command, "`download`");
             done(false);
             return;
@@ -5219,6 +5209,36 @@ inline void ScreenCore::runDownload(Command const& command, CommandCtx const& ct
         return;
     }
     hold->take();
+}
+
+// Inline bytes are checked before the host is asked: content over the cap, or that does not decode, never reaches it.
+inline std::optional<InlineFile> ScreenCore::inlineDownload(
+    Command const& command, CommandCtx const& ctx,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the command's `file` and `name`, in its order.
+    Value const& file, Value const& name) {
+    std::size_t const cap = session.options().maxInlineFileBytes;
+    std::size_t size = 0;
+    if (std::string const* const text = file.asString()) {
+        size = base64Size(*text);
+    } else if (ValueList const* const list = file.asList()) {
+        size = list->size();
+    }
+    std::expected<std::string, std::string> bytes = size > cap ? std::unexpected(std::string{}) : inlineBytes(file);
+    if (size > cap || (bytes && bytes->size() > cap)) {
+        report(command.path, "download: " + sizeText(bytes ? bytes->size() : size) + " is over the " + sizeText(cap) +
+                                 " inline cap; serve it through the file store");
+        return std::nullopt;
+    }
+    if (!bytes) {
+        report(command.path, "download: " + bytes.error());
+        return std::nullopt;
+    }
+    return InlineFile{
+        .name = textOf(name, session.formatting()),
+        .mediaType = command.mediaType
+                         ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), session.formatting())
+                         : std::string{},
+        .bytes = *std::move(bytes)};
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome an upload can have.
@@ -5284,13 +5304,13 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
         request.modelType = target->mutation->typeId();
         request.action = target->mutation->decl().action;
     }
-    std::string const as = command.binding.empty() ? std::string{"file"} : command.binding;
+    std::string const member = command.binding.empty() ? std::string{"file"} : command.binding;
     bool started = false;
     if (command.bytes) {
         std::size_t const cap = session.options().maxInlineFileBytes;
         started = host->readFile(
             file, cap,
-            [this, settled, progress, cap, as, command = &command](std::expected<InlineFile, std::string> read) {
+            [this, settled, progress, cap, member, command = &command](std::expected<InlineFile, std::string> read) {
                 if (!read) {
                     settled(std::unexpected(read.error()));
                     return;
@@ -5305,7 +5325,7 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
                 }
                 progress(Value{std::int64_t{1}});
                 ValueRecord added;
-                added.insert_or_assign(as, Value{base64Encode(read->bytes)});
+                added.insert_or_assign(member, Value{base64Encode(read->bytes)});
                 if (!command->nameAs.empty()) {
                     added.insert_or_assign(command->nameAs, Value{read->name});
                 }
@@ -5315,13 +5335,13 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
                 settled(std::move(added));
             });
     } else {
-        started = host->uploadFor(request, progress, [settled, as](std::expected<Value, std::string> reference) {
+        started = host->uploadFor(request, progress, [settled, member](std::expected<Value, std::string> reference) {
             if (!reference) {
                 settled(std::unexpected(reference.error()));
                 return;
             }
             ValueRecord added;
-            added.insert_or_assign(as, *std::move(reference));
+            added.insert_or_assign(member, *std::move(reference));
             settled(std::move(added));
         });
     }
@@ -6404,6 +6424,76 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
     return *std::move(json);
 }
 
+/// @brief What a form fills of a field component's props: the field's value, errors, read-only and required state,
+///        and label, each a tracked read of the field.
+/// @param prop  The prop's name.
+/// @param state The field.
+/// @return The read, or empty for a prop the form does not fill.
+[[nodiscard]] inline std::function<Value()> formFilled(std::string const& prop, forms::FieldState* state) {
+    if (prop == "value") {
+        return [state] {
+            forms::Encoding const& encoding = state->encoded().get();
+            if (!encoding.has_value() || !encoding->has_value()) {
+                return Value{};
+            }
+            return (*encoding)->value.isNull() ? jsonTextValue((*encoding)->json) : (*encoding)->value;
+        };
+    }
+    if (prop == "errors") {
+        return [state] {
+            std::optional<forms::FieldError> const& error = state->error().get();
+            return error.has_value() ? Value{ValueList{Value{error->message}}} : Value{ValueList{}};
+        };
+    }
+    if (prop == "readonly") {
+        return [state] { return Value{state->readonly().get()}; };
+    }
+    if (prop == "required") {
+        return [state] { return Value{state->required().get()}; };
+    }
+    if (prop == "label") {
+        return [state] { return Value{state->label()}; };
+    }
+    return {};
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its declared type.
+inline CustomProp ScreenCore::componentProp(std::string const& prop, std::string const& type,
+                                            std::function<Value()> read) {
+    if (type == "bool") {
+        return CustomProp{.name = prop, .value = slotProp<bool>([this, read = std::move(read)] {
+                                            return boolOf(read(), session.formatting());
+                                        })};
+    }
+    if (type == "number") {
+        return CustomProp{.name = prop,
+                          .value = slotProp<double>([read = std::move(read)] { return componentNumber(read()); })};
+    }
+    return CustomProp{.name = prop, .value = slotProp<std::string>([this, read = std::move(read), type] {
+                                        return componentText(read(), type, session.formatting());
+                                    })};
+}
+
+inline void ScreenCore::changeField(forms::FieldState& state, forms::FieldSpec const& spec, std::string const& path,
+                                    std::string_view valueType, std::string const& payload) {
+    auto wire = changeWire(payload, valueType);
+    // A base64 member holds a file's bytes, which a document moves inline only under the session's cap.
+    if (std::size_t const cap = session.options().maxInlineFileBytes;
+        wire && spec.bytes && wire->is_string() && base64Size(wire->get_string()) > cap) {
+        report(path, "field " + spec.name + ": " + std::to_string(base64Size(wire->get_string())) +
+                         " bytes is over the " + std::to_string(cap) + " inline cap");
+        return;
+    }
+    if (wire) {
+        if (auto edited = state.edit(*wire); !edited) {
+            wire = std::unexpected(edited.error());
+        }
+    }
+    if (!wire) {
+        report(path, "field " + spec.name + ": the component's change does not decode: " + wire.error());
+    }
+}
+
 inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx) {
     std::string const name{overlay.name("component")};
     // A loaded document's field component is declared, with a `value` prop and a `change` event.
@@ -6415,36 +6505,18 @@ inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode con
                 .minVersion =
                     static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
                 .onEvent = {}};
-    // What the form fills: the field's value, errors, read-only and required state, and label.
-    auto filled = [state](std::string const& prop) -> std::function<Value()> {
-        if (prop == "value") {
-            return [state] {
-                forms::Encoding const& encoding = state->encoded().get();
-                if (!encoding.has_value() || !encoding->has_value()) {
-                    return Value{};
-                }
-                return (*encoding)->value.isNull() ? jsonTextValue((*encoding)->json) : (*encoding)->value;
-            };
-        }
-        if (prop == "errors") {
-            return [state] {
-                std::optional<forms::FieldError> const& error = state->error().get();
-                return error.has_value() ? Value{ValueList{Value{error->message}}} : Value{ValueList{}};
-            };
-        }
-        if (prop == "readonly") {
-            return [state] { return Value{state->readonly().get()}; };
-        }
-        if (prop == "required") {
-            return [state] { return Value{state->required().get()}; };
-        }
-        if (prop == "label") {
-            return [state] { return Value{state->label()}; };
-        }
-        return {};
-    };
     for (auto const& [prop, type] : component.props) {
-        std::function<Value()> read = filled(prop);
+        if (prop == "value" && type == "json") {
+            // The wire JSON itself, so an object's or a collection's every digit reaches the component.
+            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([state] {
+                                                              forms::Encoding const& encoding = state->encoded().get();
+                                                              return encoding.has_value() && encoding->has_value()
+                                                                         ? (*encoding)->json
+                                                                         : std::string{"null"};
+                                                          })});
+            continue;
+        }
+        std::function<Value()> read = formFilled(prop, state);
         if (!read) {
             ExprPtr given;
             for (DocNodePtr const& record : overlay.partList("props")) {
@@ -6456,46 +6528,12 @@ inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode con
                 return given ? evalIn(*scope, bindings.get(), given) : Value{};
             };
         }
-        if (prop == "value" && type == "json") {
-            // The wire JSON itself, so an object's or a collection's every digit reaches the component.
-            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([state] {
-                                                              forms::Encoding const& encoding = state->encoded().get();
-                                                              return encoding.has_value() && encoding->has_value()
-                                                                         ? (*encoding)->json
-                                                                         : std::string{"null"};
-                                                          })});
-        } else if (type == "bool") {
-            spec.props.push_back(CustomProp{
-                .name = prop, .value = slotProp<bool>([this, read] { return boolOf(read(), session.formatting()); })});
-        } else if (type == "number") {
-            spec.props.push_back(
-                CustomProp{.name = prop, .value = slotProp<double>([read] { return componentNumber(read()); })});
-        } else {
-            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([this, read, type] {
-                                                              return componentText(read(), type, session.formatting());
-                                                          })});
-        }
+        spec.props.push_back(componentProp(prop, type, std::move(read)));
     }
-    spec.onEvent = [this, state, path = overlay.path, field = view.spec().name, bytes = view.spec().bytes,
+    spec.onEvent = [this, state, path = overlay.path, fieldSpec = &view.spec(),
                     valueType = component.props.at("value")](std::string const& event, std::string const& payload) {
-        if (event != "change") {
-            return;
-        }
-        auto wire = changeWire(payload, valueType);
-        // A base64 member holds a file's bytes, which a document moves inline only under the session's cap.
-        if (std::size_t const cap = session.options().maxInlineFileBytes;
-            wire && bytes && wire->is_string() && base64Size(wire->get_string()) > cap) {
-            report(path, "field " + field + ": " + std::to_string(base64Size(wire->get_string())) +
-                             " bytes is over the " + std::to_string(cap) + " inline cap");
-            return;
-        }
-        if (wire) {
-            if (auto edited = state->edit(*wire); !edited) {
-                wire = std::unexpected(edited.error());
-            }
-        }
-        if (!wire) {
-            report(path, "field " + field + ": the component's change does not decode: " + wire.error());
+        if (event == "change") {
+            changeField(*state, *fieldSpec, path, valueType, payload);
         }
     };
     return ui::custom(std::move(spec));
@@ -6628,6 +6666,8 @@ inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx,
     return ui::column(std::move(column));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): an overlay's scope, content, actions and keys are one lowering.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): an overlay's scope, content, actions and keys are one lowering.
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Prop<bool> open = node.prop("open") ? bindProp<bool>(ctx, node.prop("open"), false, boolOf)
                                         : slotProp<bool>([element] { return element->open.get(); });

@@ -2370,7 +2370,7 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
 /// @param item The item.
 inline void append(Json& json, char const* key, Json item) {
     auto& object = std::get<Json::object_t>(json.data);
-    auto found = object.find(key);
+    Json::object_t::iterator found = object.find(key);
     if (found == object.end()) {
         detail::put(json, key, Json::array_t{});
         found = object.find(key);

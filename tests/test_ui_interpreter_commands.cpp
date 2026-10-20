@@ -590,12 +590,15 @@ TEST_CASE("table: rowTone tones each row in its own scope, follows the row, and 
 namespace {
 
 /// Whether @p widget or anything under it has the test id @p testId.
+// NOLINTNEXTLINE(misc-no-recursion): one level per nesting of the recorded widgets.
 bool holds(ui::testing::RecordingBackend const& backend, int widget, std::string const& testId) {
     if (backend.prop(widget, "testId") == testId) {
         return true;
     }
     auto const children = backend.children(widget);
-    return std::ranges::any_of(children, [&](int child) { return holds(backend, child, testId); });
+    return std::ranges::any_of(children, [&](int child) {  // NOLINT(misc-no-recursion)
+        return holds(backend, child, testId);
+    });
 }
 
 }  // namespace

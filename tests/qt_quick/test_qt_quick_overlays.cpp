@@ -81,7 +81,7 @@ TEMPLATE_TEST_CASE("qt_quick overlays: a footer's children are laid out under th
     inside->setText("Body");
     overlay->setOpen(true);
     scene.settle();
-    QQuickItem& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
+    QQuickItem const& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
     auto* const footerItem = qvariant_cast<QQuickItem*>(overlayItem.property("footer"));
     REQUIRE(footerItem != nullptr);
     CHECK_FALSE(footerItem->isVisible());  // nothing in it: it takes no room

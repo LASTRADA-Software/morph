@@ -288,9 +288,11 @@ std::vector<std::string> applyIndex(QQmlEngine& engine,
 
 }  // namespace
 
-std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
-                                          std::map<std::string, std::string, std::less<>> const& themes,
-                                          std::map<std::string, std::string, std::less<>> const& icons) {
+std::vector<std::string> applyBundleTheme(
+    QQmlEngine& engine,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the bundle's two maps, in its order.
+    std::map<std::string, std::string, std::less<>> const& themes,
+    std::map<std::string, std::string, std::less<>> const& icons) {
     std::vector<std::string> problems = setIcons(engine, icons);
     auto applied = applyIndex(engine, themes);
     problems.insert(problems.end(), applied.begin(), applied.end());

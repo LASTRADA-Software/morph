@@ -1218,6 +1218,7 @@ private:
     }
 
     // A top-level list of parts: the screen head's `status` and `actions`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document key, then its part kind, at every call.
     [[nodiscard]] std::vector<DocNodePtr> topParts(Json::object_t const& object, std::string_view key,
                                                    std::string_view kind) {
         std::vector<DocNodePtr> parts;
@@ -1680,7 +1681,7 @@ private:
                         if (!cmd.bytes) {
                             refuse(pointerAppend(path, key),
                                    "`" + std::string{key} +
-                                       "` names a body member for inline bytes; give `\"into\": \"bytes\"`");
+                                       R"(` names a body member for inline bytes; give `"into": "bytes"`)");
                         }
                         *slot = nameOf(*name, pointerAppend(path, key), "a body member is a name");
                     }
@@ -1729,8 +1730,7 @@ private:
             cmd.extra = optionalExpr(fields, "name", path);
             cmd.mediaType = optionalExpr(fields, "type", path);
         } else if (member(fields, "type") != nullptr) {
-            refuse(pointerAppend(path, "type"),
-                   "`type` is the media type of inline bytes; give `\"from\": \"bytes\"`");
+            refuse(pointerAppend(path, "type"), R"(`type` is the media type of inline bytes; give `"from": "bytes"`)");
         }
         std::string const save = text(fields, "save", path, false);
         std::string const destination = text(fields, "to", path, false);
@@ -1926,37 +1926,42 @@ private:
         }
         if (made.kind == "fields") {
             for (auto const& [field, overlay] : object) {
-                std::string const where = pointerAppend(path, field);
-                auto const& settings = objectOf(overlay, where, "a field overlay is an object");
-                auto part = std::make_shared<DocNode>();
-                part->kind = "field";
-                part->id = field;
-                part->path = where;
-                for (auto const& [key, value] : settings) {
-                    std::string const at = pointerAppend(where, key);
-                    if (key == "component") {
-                        // The host component that draws the field, and the props it is given beside the field's.
-                        auto const* const name = std::get_if<std::string>(&value.data);
-                        if (name == nullptr || !isName(*name)) {
-                            refuse(at, "`component` is a name");
-                        }
-                        part->names.emplace(key, *name);
-                    } else if (key == "props") {
-                        auto record = std::make_shared<DocNode>();
-                        record->kind = "props";
-                        record->path = at;
-                        for (auto const& [prop, propValue] :
-                             objectOf(value, at, "`props` is a record of expressions")) {
-                            record->props.emplace(prop, expr(propValue, pointerAppend(at, prop)));
-                        }
-                        part->parts["props"].push_back(std::move(record));
-                    } else {
-                        part->props.emplace(key, expr(value, at));
-                    }
-                }
-                made.parts["fields"].push_back(std::move(part));
+                made.parts["fields"].push_back(fieldOverlay(field, overlay, pointerAppend(path, field)));
             }
         }
+    }
+
+    // One field overlay of a form's `fields`: expressions by key, and the host `component` that draws the field with
+    // its `props`.
+    [[nodiscard]] static DocNodePtr fieldOverlay(std::string const& field, Json const& overlay,
+                                                 std::string const& where) {
+        auto const& settings = objectOf(overlay, where, "a field overlay is an object");
+        auto part = std::make_shared<DocNode>();
+        part->kind = "field";
+        part->id = field;
+        part->path = where;
+        for (auto const& [key, value] : settings) {
+            std::string const keyPath = pointerAppend(where, key);
+            if (key == "component") {
+                // The host component that draws the field, and the props it is given beside the field's.
+                auto const* const name = std::get_if<std::string>(&value.data);
+                if (name == nullptr || !isName(*name)) {
+                    refuse(keyPath, "`component` is a name");
+                }
+                part->names.emplace(key, *name);
+            } else if (key == "props") {
+                auto record = std::make_shared<DocNode>();
+                record->kind = "props";
+                record->path = keyPath;
+                for (auto const& [prop, propValue] : objectOf(value, keyPath, "`props` is a record of expressions")) {
+                    record->props.emplace(prop, expr(propValue, pointerAppend(keyPath, prop)));
+                }
+                part->parts["props"].push_back(std::move(record));
+            } else {
+                part->props.emplace(key, expr(value, keyPath));
+            }
+        }
+        return part;
     }
 
     [[nodiscard]] DocNodePtr part(Json const& json, std::string_view kind, std::string const& path) {
@@ -2847,6 +2852,9 @@ private:
         if (!part) {
             checkFlags(node);
             checkKindRules(node, outer);
+            // An overlay's footer actions; a form's field components.
+            checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
+            checkFieldComponents(node);
         }
     }
 
@@ -2897,10 +2905,6 @@ private:
             // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
-            checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
-            if (node.kind == "form") {
-                checkFieldComponents(node);
-            }
         }
         std::string_view const model = node.name("model");
         if (!model.empty()) {
@@ -2913,35 +2917,41 @@ private:
         }
     }
 
-    // A form field drawn by a host component: a declared one with a `value` prop and a `change` event, given only
-    // props it declares, and not beside a `widget`, which would choose the control too.
+    // Each form field drawn by a host component.
     void checkFieldComponents(DocNode const& form) const {
+        if (form.kind != "form") {
+            return;
+        }
         for (DocNodePtr const& record : form.partList("fields")) {
             for (DocNodePtr const& field : record->partList("fields")) {
-                std::string_view const name = field->name("component");
-                if (name.empty()) {
-                    continue;
+                if (!field->name("component").empty()) {
+                    checkFieldComponent(*field);
                 }
-                std::string const at = pointerAppend(field->path, "component");
-                auto const found = _doc->components.find(name);
-                if (found == _doc->components.end()) {
-                    refuse(at, "`" + std::string{name} + "` is not a component of this document");
-                }
-                Component const& component = found->second;
-                if (!component.props.contains("value") || !component.events.contains("change")) {
-                    refuse(at, "the component `" + component.name +
-                                   "` draws a form field, so it declares a prop `value` and an event `change`");
-                }
-                if (field->prop("widget") != nullptr) {
-                    refuse(at, "`component` and `widget` both choose the field's control; give one");
-                }
-                for (DocNodePtr const& props : field->partList("props")) {
-                    for (auto const& [prop, value] : props->props) {
-                        if (!component.props.contains(prop)) {
-                            refuse(value->path,
-                                   "the component `" + component.name + "` declares no prop `" + prop + "`");
-                        }
-                    }
+            }
+        }
+    }
+
+    // A form field drawn by a host component: a declared one with a `value` prop and a `change` event, given only
+    // props it declares, and not beside a `widget`, which would choose the control too.
+    void checkFieldComponent(DocNode const& field) const {
+        std::string_view const name = field.name("component");
+        std::string const where = pointerAppend(field.path, "component");
+        auto const found = _doc->components.find(name);
+        if (found == _doc->components.end()) {
+            refuse(where, "`" + std::string{name} + "` is not a component of this document");
+        }
+        Component const& component = found->second;
+        if (!component.props.contains("value") || !component.events.contains("change")) {
+            refuse(where, "the component `" + component.name +
+                              "` draws a form field, so it declares a prop `value` and an event `change`");
+        }
+        if (field.prop("widget") != nullptr) {
+            refuse(where, "`component` and `widget` both choose the field's control; give one");
+        }
+        for (DocNodePtr const& props : field.partList("props")) {
+            for (auto const& [prop, value] : props->props) {
+                if (!component.props.contains(prop)) {
+                    refuse(value->path, "the component `" + component.name + "` declares no prop `" + prop + "`");
                 }
             }
         }

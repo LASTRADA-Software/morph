@@ -75,6 +75,7 @@ std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
 /// Writes @p bytes under the suggested name, else @p own, in @p directory, and answers the saved path. Only the name's
 /// last component is kept: a file never lands outside the downloads directory.
 std::expected<ui::Value, std::string> save(std::filesystem::path const& directory, std::string const& suggested,
+                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): names, then bytes.
                                            std::string const& own, std::string const& bytes) {
     auto const leaf = std::filesystem::path{suggested.empty() ? own : suggested}.filename();
     auto const target = directory / (leaf.empty() ? std::filesystem::path{"download"} : leaf);

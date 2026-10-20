@@ -396,10 +396,12 @@ TEST_CASE("qt_quick components: a splitterHandle restyle is every handle between
     REQUIRE(dir.isValid());
     components.addHost(
         "BrandHandle", 1,
-        writeFile(dir, QStringLiteral("BrandHandle.qml"),
-                  "import QtQuick\nimport MorphUi\nMorphSplitterHandle { property bool brand: true; implicitWidth: 12 }\n"));
-    components.addHost("PlainHandle", 1,
-                       writeFile(dir, QStringLiteral("PlainHandle.qml"), "import QtQuick\nItem { property int axis }\n"));
+        writeFile(
+            dir, QStringLiteral("BrandHandle.qml"),
+            "import QtQuick\nimport MorphUi\nMorphSplitterHandle { property bool brand: true; implicitWidth: 12 }\n"));
+    components.addHost(
+        "PlainHandle", 1,
+        writeFile(dir, QStringLiteral("PlainHandle.qml"), "import QtQuick\nItem { property int axis }\n"));
     QQmlEngine probeEngine;
     auto refused = components.restyle(probeEngine, "splitterHandle", "PlainHandle");
     REQUIRE_FALSE(refused.has_value());

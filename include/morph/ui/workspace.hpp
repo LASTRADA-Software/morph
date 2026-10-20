@@ -62,7 +62,13 @@ public:
     Workspace(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND,
               DocumentScreenHost& host MORPH_LIFETIMEBOUND, WorkspaceOptions options = {},
               ContainerWidget* parent = nullptr)
-        : _runtime{&runtime}, _backend{&backend}, _host{&host}, _bar{backend.createTabs(parent)} {
+        : _runtime{&runtime},
+          _backend{&backend},
+          _host{&host},
+          _bar{backend.createTabs(parent)},
+          _hosts{options.hosts},
+          _screens{options.screens},
+          _onChanged{std::move(options.onChanged)} {
         // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
         _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _bar->setTabs({});
@@ -82,9 +88,6 @@ public:
                 close(*shown, {});
             }
         });
-        _hosts = options.hosts;
-        _screens = options.screens;
-        _onChanged = std::move(options.onChanged);
         WorkspaceModelOptions modelOptions{std::move(options), {}, {}};
         modelOptions.onChanged = [this] { showTabs(); };
         modelOptions.mountPage = [this](WorkspaceTabId tab, std::string_view screenId, ParamMap const& params) {
@@ -207,7 +210,7 @@ public:
 
     /// @brief The active tab's screen handle.
     /// @return It, or null while no tab is open.
-    [[nodiscard]] ScreenHandle* activeHandle() const noexcept {
+    [[nodiscard]] ScreenHandle* activeHandle() const {
         std::optional<std::size_t> const shown = active();
         return shown ? handleOf(*shown) : nullptr;
     }
@@ -372,10 +375,10 @@ private:
                 Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
                               .emphasis = action.peek().emphasis,
                               .onClick =
-                                  [this, tab, id = action.peek().id] {
+                                  [this, tab, actionId = action.peek().id] {
                                       ScreenHandle* const handle = _model->handleOf(tab);
                                       if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
-                                          head->run(id);
+                                          head->run(actionId);
                                       }
                                   },
                               .common = {}};

@@ -698,6 +698,37 @@ private:
     return std::nullopt;
 }
 
+/// @brief Reads a theme index's `icons`: an object of icon name (`isIconName`) to icon file id, at most
+///        `kMaxThemeIcons` names.
+/// @param index The index.
+/// @param out   Where the set is read into.
+/// @return Why it is refused, or nothing; nothing for an index without `icons`.
+[[nodiscard]] inline std::optional<std::string> readIcons(Json::object_t const& index,
+                                                          std::map<std::string, std::string, std::less<>>& out) {
+    Json const* const icons = memberOf(index, "icons");
+    if (icons == nullptr) {
+        return std::nullopt;
+    }
+    auto const* const set = std::get_if<Json::object_t>(&icons->data);
+    if (set == nullptr) {
+        return std::string{"`icons` is an object of icon name to icon file"};
+    }
+    if (set->size() > kMaxThemeIcons) {
+        return "an icon set holds at most " + std::to_string(kMaxThemeIcons) + " names";
+    }
+    for (auto const& [name, file] : *set) {
+        if (!isIconName(name)) {
+            return "`" + name + "` is not an icon name: icon names match [a-z][a-z0-9.-]{0,63}";
+        }
+        auto const* const fileId = std::get_if<std::string>(&file.data);
+        if (fileId == nullptr || fileId->empty()) {
+            return "`icons." + name + "` names an icon file";
+        }
+        out.insert_or_assign(name, *fileId);
+    }
+    return std::nullopt;
+}
+
 }  // namespace detail
 
 /// @brief Whether a theme file is a theme index rather than a token file: its top level has a string `vocab`.
@@ -804,24 +835,8 @@ private:
     if (auto reason = detail::readThemeMap(*object, "surfaces", index.surfaces)) {
         return std::unexpected(std::move(*reason));
     }
-    if (Json const* const icons = detail::memberOf(*object, "icons")) {
-        auto const* const set = std::get_if<Json::object_t>(&icons->data);
-        if (set == nullptr) {
-            return std::unexpected(std::string{"`icons` is an object of icon name to icon file"});
-        }
-        if (set->size() > kMaxThemeIcons) {
-            return std::unexpected("an icon set holds at most " + std::to_string(kMaxThemeIcons) + " names");
-        }
-        for (auto const& [name, file] : *set) {
-            if (!isIconName(name)) {
-                return std::unexpected("`" + name + "` is not an icon name: icon names match [a-z][a-z0-9.-]{0,63}");
-            }
-            auto const* const fileId = std::get_if<std::string>(&file.data);
-            if (fileId == nullptr || fileId->empty()) {
-                return std::unexpected("`icons." + name + "` names an icon file");
-            }
-            index.icons.insert_or_assign(name, *fileId);
-        }
+    if (auto reason = detail::readIcons(*object, index.icons)) {
+        return std::unexpected(std::move(*reason));
     }
     if (index.variants.size() > kMaxThemeVariants || index.densities.size() > kMaxThemeVariants ||
         index.surfaces.size() > kMaxThemeVariants) {
@@ -1095,6 +1110,34 @@ namespace detail {
 
 }  // namespace detail
 
+namespace detail {
+
+/// @brief A resolved theme's token at a path.
+/// @param resolved The resolved tokens.
+/// @param path     The token's path.
+/// @return It, or null when the theme does not have it.
+[[nodiscard]] inline Token const* tokenAt(TokenSet const& resolved, std::string_view path) {
+    auto const found = resolved.find(path);
+    return found == resolved.end() ? nullptr : &found->second;
+}
+
+/// @brief A `font.family` token's value: the theme's names when it has the token as a `fontFamily`, else the default.
+/// @param spec  The token of the set.
+/// @param found The theme's token at that path, or null.
+/// @return The names, in order; empty for none.
+[[nodiscard]] inline std::vector<std::string> familyValue(ThemeTokenSpec const& spec, Token const* found) {
+    if (found != nullptr && found->type == "fontFamily") {
+        return familiesOf(found->value);
+    }
+    std::vector<std::string> names;
+    if (!spec.family.empty()) {
+        names.emplace_back(spec.family);
+    }
+    return names;
+}
+
+}  // namespace detail
+
 /// @brief Fills the closed `ui-theme/1` set from a resolved theme.
 ///
 /// A path of the set takes the theme's value when the theme has it with the set's type, and its default otherwise; a
@@ -1104,18 +1147,18 @@ namespace detail {
 [[nodiscard]] inline ThemeValues themeValues(TokenSet const& resolved = {}) {
     ThemeValues values;
     for (ThemeTokenSpec const& spec : kThemeTokens) {
-        auto const found = resolved.find(spec.path);
+        Token const* const token = detail::tokenAt(resolved, spec.path);
         if (spec.kind == ThemeTokenKind::Color) {
             std::optional<Rgba> color;
-            if (found != resolved.end() && found->second.type == "color") {
-                color = colorOf(found->second.value);
+            if (token != nullptr && token->type == "color") {
+                color = colorOf(token->value);
             }
             values.colors.insert_or_assign(std::string{spec.path},
                                            color.value_or(detail::hexColor(spec.color).value_or(Rgba{})));
         } else if (spec.kind == ThemeTokenKind::Shadow) {
             std::optional<ThemeShadow> shadow;
-            if (found != resolved.end() && found->second.type == "shadow") {
-                shadow = detail::shadowOf(found->second.value);
+            if (token != nullptr && token->type == "shadow") {
+                shadow = detail::shadowOf(token->value);
             }
             values.shadows.insert_or_assign(
                 std::string{spec.path},
@@ -1125,23 +1168,17 @@ namespace detail {
                                             .blur = spec.shadow.blur,
                                             .spread = spec.shadow.spread}));
         } else if (spec.kind == ThemeTokenKind::FontFamily) {
-            std::vector<std::string> names;
-            if (found != resolved.end() && found->second.type == "fontFamily") {
-                names = detail::familiesOf(found->second.value);
-            } else if (!spec.family.empty()) {
-                names.emplace_back(spec.family);
-            }
-            values.families.insert_or_assign(std::string{spec.path}, std::move(names));
+            values.families.insert_or_assign(std::string{spec.path}, detail::familyValue(spec, token));
         } else if (spec.kind == ThemeTokenKind::Dimension) {
             std::optional<double> pixels;
-            if (found != resolved.end() && found->second.type == "dimension") {
-                pixels = detail::pixelsOf(found->second.value);
+            if (token != nullptr && token->type == "dimension") {
+                pixels = detail::pixelsOf(token->value);
             }
             values.dimensions.insert_or_assign(std::string{spec.path}, pixels.value_or(spec.number));
         } else {
             std::optional<double> number;
-            if (found != resolved.end() && found->second.type == "number") {
-                number = detail::numberOf(found->second.value);
+            if (token != nullptr && token->type == "number") {
+                number = detail::numberOf(token->value);
             }
             values.numbers.insert_or_assign(std::string{spec.path}, number.value_or(spec.number));
         }

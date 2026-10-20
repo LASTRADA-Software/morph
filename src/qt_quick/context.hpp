@@ -72,7 +72,7 @@ public:
 private:
     void widthChanged();
     // A problem of a widget: through the components' failure callback, or on `std::cerr` without components.
-    void report(std::string name, std::string reason);
+    void report(std::string name, std::string reason) const;
 
     QQmlEngine* _engine;
     BackendOptions _options;

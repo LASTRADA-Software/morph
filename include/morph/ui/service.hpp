@@ -5,6 +5,7 @@
 #include <compare>
 #include <cstddef>
 #include <expected>
+#include <format>
 #include <functional>
 #include <map>
 #include <memory>
@@ -442,8 +443,9 @@ private:
                 if (!held) {
                     return Refusal{.document = indexId,
                                    .path = {},
-                                   .reason = "the theme index names the icon `" + name + "` as `" + fileId +
-                                             "`, which is not an icon file of the bundle"};
+                                   .reason = std::format("the theme index names the icon `{}` as `{}`, which is not "
+                                                         "an icon file of the bundle",
+                                                         name, fileId)};
                 }
             }
         }
@@ -480,8 +482,8 @@ private:
     // An icon is SVG text, small enough for a theme to carry a set of them.
     [[nodiscard]] static std::expected<void, Refusal> checkIcon(BundleFile const& file) {
         if (file.bytes.size() > kMaxIconBytes) {
-            return refuse(file.id, "an icon is at most " + std::to_string(kMaxIconBytes) +
-                                       " bytes of SVG; this one is " + std::to_string(file.bytes.size()));
+            return refuse(file.id, std::format("an icon is at most {} bytes of SVG; this one is {}", kMaxIconBytes,
+                                               file.bytes.size()));
         }
         if (!file.bytes.contains("<svg")) {
             return refuse(file.id, "an icon is SVG text, and this one has no <svg> element");

@@ -153,7 +153,7 @@ void Context::checkIcon(std::string_view icon) {
     report(std::string{icon}, "icon " + std::string{icon} + " is not in the theme's icon set");
 }
 
-void Context::report(std::string name, std::string reason) {
+void Context::report(std::string name, std::string reason) const {
     if (_options.components != nullptr) {
         _options.components->report(ComponentFailure{.name = std::move(name), .reason = std::move(reason)});
         return;

@@ -61,13 +61,13 @@ struct LayoutKind {
 
 // The layout kinds, refused as kinds with a reason that names the part kind where there is one.
 constexpr std::array<LayoutKind, 8> kLayoutKinds = {{{"scroll", "bar", "scrollBar"},
-                                                    {"splitter", "handle", "splitterHandle"},
-                                                    {"column", "", ""},
-                                                    {"row", "", ""},
-                                                    {"grid", "", ""},
-                                                    {"spacer", "", ""},
-                                                    {"slot", "", ""},
-                                                    {"dropZone", "", ""}}};
+                                                     {"splitter", "handle", "splitterHandle"},
+                                                     {"column", "", ""},
+                                                     {"row", "", ""},
+                                                     {"grid", "", ""},
+                                                     {"spacer", "", ""},
+                                                     {"slot", "", ""},
+                                                     {"dropZone", "", ""}}};
 // NOLINTEND(modernize-use-designated-initializers)
 
 /// Why @p kind cannot be restyled: a layout kind's reason, naming its part kind when it has one, or the generic one.
