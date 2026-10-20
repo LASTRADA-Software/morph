@@ -112,6 +112,8 @@ public:
     [[nodiscard]] std::unique_ptr<ui::TabsWidget> createTabs(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createDialog
     [[nodiscard]] std::unique_ptr<ui::DialogWidget> createDialog(ui::ContainerWidget* parent) override;
+    /// @copydoc ui::IViewBackend::createToast
+    [[nodiscard]] std::unique_ptr<ui::ToastWidget> createToast(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createBusy
     [[nodiscard]] std::unique_ptr<ui::BusyWidget> createBusy(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createTable

@@ -171,6 +171,12 @@ public:
     void setLabel(std::string_view label) override;
 };
 
+class ToastImpl final : public ItemWidget<ui::ToastWidget> {
+public:
+    ToastImpl(Context& context, ui::ContainerWidget* parent);
+    void show(std::string_view text, ui::Tone tone) override;
+};
+
 class BannerImpl final : public ItemWidget<ui::BannerWidget> {
 public:
     BannerImpl(Context& context, ui::ContainerWidget* parent);

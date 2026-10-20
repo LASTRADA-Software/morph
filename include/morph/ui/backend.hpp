@@ -569,6 +569,18 @@ public:
     virtual void setOnDismiss(Action onDismiss) = 0;
 };
 
+/// @brief A passive, transient message outside the normal flow: non-modal, dims nothing, and never takes keyboard
+/// focus. Auto-dismisses after a backend-chosen interval.
+class ToastWidget : public Widget {
+public:
+    /// @brief Shows the message, replacing any shown or dismissing, and (re)starts the dismissal interval regardless
+    ///        of whether the toast is already on-screen — a second call while one is showing replaces its text and
+    ///        tone and restarts the interval, rather than being a no-op or stacking a second message.
+    /// @param text The message, UTF-8.
+    /// @param tone The tone, mapped to the backend's theme.
+    virtual void show(std::string_view text, Tone tone) = 0;
+};
+
 /// @brief A short label marking a state.
 class BadgeWidget : public Widget {
 public:
@@ -837,6 +849,11 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<DialogWidget> createDialog(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a transient message.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) = 0;
 
     /// @brief Makes a progress indicator.
     /// @param parent The container to append to, or null for a root.

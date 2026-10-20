@@ -62,6 +62,21 @@ private:
     std::function<void(std::string, ui::ParamMap)> _navigate;
 };
 
+// notify's role ("info", "success", "warning", "error"; empty for the default) as a Tone, matching Banner::tone's
+// own default for an unknown or empty role.
+ui::Tone roleToTone(std::string const& role) {
+    if (role == "success") {
+        return ui::Tone::Ok;
+    }
+    if (role == "warning") {
+        return ui::Tone::Warn;
+    }
+    if (role == "error") {
+        return ui::Tone::Err;
+    }
+    return ui::Tone::Info;
+}
+
 /// The path a picked file is: the path itself, or the first of a pick of several.
 std::optional<std::filesystem::path> pickedPath(ui::Value const& file) {
     ui::ValueList const* const list = file.asList();
@@ -312,6 +327,15 @@ private:
         };
         frame.onSignOut = [this] { signOut(); };
         _frame = std::make_unique<ui::ShellFrame>(*_backend, nullptr, std::move(frame));
+        // Re-wired on every rebuild, since _frame is replaced here but _application is not: the sink must
+        // dereference _frame at call time, never capture it directly, so it keeps working across a rebuild.
+        _application->setNotifySink([this](std::string const& text, std::string const& role) {
+            if (_frame == nullptr) {
+                return false;
+            }
+            _frame->showToast(text, roleToTone(role));
+            return true;
+        });
         // Whether a sign-in happened is the shell's own fact: a local source's signed-out principal is its `--user`
         // name, and its signed-out catalog lists the screens, so neither tells signed in from signed out.
         showSignedIn();
@@ -739,6 +763,14 @@ bool ApplicationHost::saveFile(ui::InlineFile const& file, std::string const& op
     }
     done(save(_downloads, file.name, file.name, file.bytes));
     return true;
+}
+
+void ApplicationHost::setNotifySink(std::function<bool(std::string const&, std::string const&)> sink) {
+    _notifySink = std::move(sink);
+}
+
+bool ApplicationHost::notify(std::string const& text, std::string const& role) {
+    return _notifySink ? _notifySink(text, role) : InterpreterHost::notify(text, role);
 }
 
 std::unique_ptr<ui::MountedShell> mountShell(ui::AppContext& context, ui::IViewBackend& backend,

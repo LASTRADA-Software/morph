@@ -123,6 +123,10 @@ public:
         created();
         return _recording.createDialog(parent);
     }
+    std::unique_ptr<::morph::ui::ToastWidget> createToast(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createToast(parent);
+    }
     std::unique_ptr<::morph::ui::BusyWidget> createBusy(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createBusy(parent);

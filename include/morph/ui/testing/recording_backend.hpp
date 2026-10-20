@@ -1189,6 +1189,21 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
+/// @brief A fake `ToastWidget`: properties `text`, `tone`, and `shown` (incremented on every `show`, so a test can
+///        tell a replace from a no-op).
+class FakeToast final : public FakeLeaf<ToastWidget> {
+public:
+    using FakeLeaf<ToastWidget>::FakeLeaf;
+    void show(std::string_view text, Tone tone) override {
+        set("text", formatText(text));
+        set("tone", enumName(tone));
+        set("shown", std::to_string(++_shown));
+    }
+
+private:
+    int _shown = 0;
+};
+
 /// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`.
 class FakeBadge final : public FakeLeaf<BadgeWidget> {
 public:
@@ -1544,6 +1559,9 @@ public:
     }
     [[nodiscard]] std::unique_ptr<DialogWidget> createDialog(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeDialog>(_store, "Dialog", parent);
+    }
+    [[nodiscard]] std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeToast>(_store, "Toast", parent);
     }
     [[nodiscard]] std::unique_ptr<BusyWidget> createBusy(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);

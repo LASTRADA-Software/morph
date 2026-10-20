@@ -57,6 +57,7 @@ public:
     [[nodiscard]] std::unique_ptr<ui::SlotWidget> createSlot(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::TabsWidget> createTabs(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::DialogWidget> createDialog(ui::ContainerWidget* parent) override;
+    [[nodiscard]] std::unique_ptr<ui::ToastWidget> createToast(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::BusyWidget> createBusy(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::TableWidget> createTable(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::DateTimeInputWidget> createDateTimeInput(ui::ContainerWidget* parent,

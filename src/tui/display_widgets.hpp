@@ -57,6 +57,22 @@ private:
     ui::Action _onDismiss;
 };
 
+/// Toast: one row in its tone, in flow where it is mounted. The terminal has no floating/overlay concept and no
+/// per-widget timer to dismiss it on, so `show` only replaces the shown text and tone; an application wanting it
+/// to disappear again calls `setVisible(false)` itself.
+class ToastImpl final : public TuiWidget<ui::ToastWidget> {
+public:
+    explicit ToastImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
+    void show(std::string_view text, ui::Tone tone) override;
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::string probeText() const override { return _text; }
+    void paint(::core::tui::Canvas& canvas) override;
+
+private:
+    ui::Tone _tone = ui::Tone::Neutral;
+    std::string _text;
+};
+
 /// Badge: `[text]` in its tone. A terminal has no icon map: a framework icon is drawn as its glyph before the text,
 /// and any other is kept and not drawn.
 class BadgeImpl final : public TuiWidget<ui::BadgeWidget> {
