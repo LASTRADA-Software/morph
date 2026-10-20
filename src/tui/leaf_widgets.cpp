@@ -103,12 +103,25 @@ void ButtonImpl::setIcon(std::string_view icon) {
     refresh();
 }
 
+void ButtonImpl::setStyle(ui::ButtonStyle style) {
+    _style = style;
+    refresh();
+}
+
+void ButtonImpl::setSelected(bool selected) {
+    _selected = selected;
+    refresh();
+}
+
 std::string ButtonImpl::caption() const {
     std::string_view const glyph = ui::iconGlyph(_icon);
     return glyph.empty() ? _label : std::string{glyph} + " " + _label;
 }
 
-::core::tui::Size ButtonImpl::naturalSize() const { return {.width = displayWidth(caption()) + 4, .height = 1}; }
+// A push button's brackets and their spaces, or an item's space either side.
+::core::tui::Size ButtonImpl::naturalSize() const {
+    return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : 4), .height = 1};
+}
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     // Primary is bold, danger bold in the error colour; neither changes a disabled button's look.
@@ -118,6 +131,19 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
         if (_emphasis == ui::ButtonEmphasis::Danger) {
             style.fg = canvas.theme().error.fg;
         }
+    }
+    if (_style == ui::ButtonStyle::Item) {
+        // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as
+        // a highlighted row. Focus wins over selection, as the cursor row of a list does.
+        ::core::tui::Theme const& theme = canvas.theme();
+        ::core::tui::Style line = !actionable() ? theme.buttonDisabled
+                                  : hasFocus()  ? theme.buttonFocused
+                                  : _selected   ? theme.listItemSelected
+                                                : theme.textNormal;
+        std::string text = " " + caption();
+        text.append(static_cast<std::size_t>(std::max(0, canvas.width() - displayWidth(text))), ' ');
+        canvas.putString(0, 0, text, line);
+        return;
     }
     canvas.putString(0, 0, "[ " + caption() + " ]", style);
 }

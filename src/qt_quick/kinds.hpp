@@ -136,6 +136,8 @@ public:
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
+    void setStyle(ui::ButtonStyle style) override;
+    void setSelected(bool selected) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

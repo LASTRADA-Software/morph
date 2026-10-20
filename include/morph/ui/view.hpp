@@ -20,6 +20,7 @@
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
 #include "button_emphasis.hpp"
+#include "button_style.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -424,6 +425,11 @@ struct Button {
     Common common{};
     /// @brief The name of an icon in the theme's icon set, drawn beside the caption; empty shows none. Set once.
     std::string icon;
+    /// @brief A push button or a list entry; set once.
+    ButtonStyle style = ButtonStyle::Push;
+    /// @brief Whether a list entry is the current one. Only an `Item` takes it: the mount refuses a bound or `true`
+    ///        value on a push button.
+    Prop<bool> selected = false;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.

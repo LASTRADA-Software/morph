@@ -413,6 +413,17 @@ TEST_CASE("align, justify and alignSelf are written by name, and a screen using 
     CHECK(refused.error().message().contains("`alignSelf` places a node in its row, column or grid"));
 }
 
+// Mutation: leave `style` out of button() (the item is written as a push button).
+TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
+    auto const current = ui::ref<std::string>("current");
+    CHECK(text(ui::button({.label = "A", .style = morph::ui::ButtonStyle::Item, .selected = ui::eq(current, "a")})
+                   .json()) ==
+          R"({"kind":"button","style":"item","label":"A","selected":{"fn":"eq","args":[{"ref":"current"},"a"]}})");
+    CHECK(text(ui::button({.label = "P", .style = morph::ui::ButtonStyle::Push}).json()) ==
+          R"({"kind":"button","style":"push","label":"P"})");
+    CHECK(text(ui::button({.label = "P"}).json()) == R"({"kind":"button","label":"P"})");
+}
+
 // The checks are templates: a requires-expression outside one makes a deleted call a hard error.
 template <typename M>
 concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };

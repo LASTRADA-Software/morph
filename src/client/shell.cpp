@@ -343,7 +343,8 @@ private:
         _frame->setPrincipal(_signedIn ? _source->principal() : std::string{});
     }
 
-    // The top bar follows the active tab: its caption is the screen's title.
+    // The top bar and the navigator follow the active tab: the bar's caption is the screen's title, and its entry is
+    // the navigator's current one.
     void showActiveTitle() {
         if (!_frame || !_workspace) {
             return;
@@ -351,6 +352,7 @@ private:
         std::optional<std::size_t> const shown = _workspace->active();
         auto const tabs = _workspace->tabs();
         _frame->setTitle(shown && *shown < tabs.size() ? tabs.at(*shown).caption : std::string{});
+        _frame->navigator().setCurrent(activeScreen());
     }
 
     // The screen id of the active tab; empty with none.

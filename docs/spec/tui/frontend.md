@@ -73,7 +73,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Widget | Shows | Input |
 |---|---|---|
 | Text | one row per line, styled by role | — |
-| Button | `[ label ]`, a framework icon's glyph before the label | Enter, Space, click |
+| Button | `[ label ]`, a framework icon's glyph before the label; a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
 | TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Enter, Space, click |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |

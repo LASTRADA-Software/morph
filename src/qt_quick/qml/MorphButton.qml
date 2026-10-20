@@ -2,18 +2,24 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
-// A button: a click, Space or Enter activates it.
+// A button: a click, Space or Enter activates it. A list item (`style` 1) is the same button drawn as a line of a
+// list: as wide as its line, its label at the start, unframed, and marked while `selected`.
 MorphWidget {
     id: root
 
-    fillsAcross: false
+    fillsAcross: root.style === 1
 
     property string label: ""
     // An icon of the theme's icon set, drawn beside the label when the set names it; set once.
     property string icon: ""
     // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled); set once.
     property int emphasis: 0
+    // 0 push, 1 item; set once.
+    property int style: 0
+    // Whether an item is the current entry of its list; a push button is never told.
+    property bool selected: false
     readonly property color fill: emphasis === 1 ? root.scheme.accent : emphasis === 2 ? root.scheme.error
                                                                                        : root.scheme.surface
 
@@ -27,12 +33,44 @@ MorphWidget {
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
 
+    // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push
+    // button keeps its style's own centred content.
+    onStyleChanged: {
+        if (root.style === 1)
+            button.contentItem = itemContent.createObject(button)
+    }
+
+    Component {
+        id: itemContent
+
+        RowLayout {
+            spacing: Theme.spaceOf(2)
+
+            Image {
+                source: Theme.iconSource(root.icon)
+                visible: root.icon !== "" && source.toString() !== ""
+                Layout.preferredWidth: Theme.bodyPixels
+                Layout.preferredHeight: Theme.bodyPixels
+            }
+            Label {
+                text: root.label
+                font: Theme.bodyFont
+                color: root.selected ? root.scheme.accent : root.scheme.text
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignVCenter
+                Layout.fillWidth: true
+                Accessible.ignored: true
+            }
+        }
+    }
+
     Button {
         id: button
         anchors.fill: parent
         text: root.label
-        leftPadding: Theme.spaceOf(4)
-        rightPadding: Theme.spaceOf(4)
+        leftPadding: root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        rightPadding: root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         palette.buttonText: root.emphasis === 0 ? root.scheme.text : "white"
         font: root.emphasis === 0 ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.icon)
@@ -41,6 +79,8 @@ MorphWidget {
             scheme: root.scheme
             fill: root.fill
             filled: root.emphasis !== 0
+            item: root.style === 1
+            selected: root.selected
             hovered: button.hovered
             pressed: button.down
             focused: button.visualFocus

@@ -844,3 +844,27 @@ TEST_CASE("align, justify and alignSelf: a document's alignment reaches the stac
     CHECK(h.backend.prop(h.byTestId("Row", "plain"), "justify").empty());
     CHECK(h.diagnostics.empty());
 }
+
+// Mutation: lower `style` to a push button (the item records no style, and `selected` is not bound).
+TEST_CASE("button: style item draws a list entry, and selected follows its condition", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "listed", "state": { "on": { "init": "a" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "a", "label": "A", "style": "item",
+          "selected": { "fn": "eq", "args": [ { "ref": "on" }, "a" ] }, "onClick": [ { "set": "on", "value": "b" } ] },
+        { "kind": "button", "testId": "b", "label": "B", "style": "item",
+          "selected": { "fn": "eq", "args": [ { "ref": "on" }, "b" ] } },
+        { "kind": "button", "testId": "plain", "label": "P", "style": "push" } ] } })");
+    int const a = h.byTestId("Button", "a");
+    int const b = h.byTestId("Button", "b");
+    CHECK(h.backend.prop(a, "style") == "Item");
+    CHECK(h.backend.prop(a, "selected") == "true");
+    CHECK(h.backend.prop(b, "selected") == "false");
+    CHECK(h.backend.prop(h.byTestId("Button", "plain"), "style").empty());
+    h.backend.click(a);
+    h.settle();
+    CHECK(h.backend.prop(a, "selected") == "false");
+    CHECK(h.backend.prop(b, "selected") == "true");
+    CHECK(h.diagnostics.empty());
+}

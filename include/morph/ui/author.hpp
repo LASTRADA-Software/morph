@@ -36,6 +36,7 @@
 #include "../util/rational.hpp"
 #include "alignment.hpp"
 #include "button_emphasis.hpp"
+#include "button_style.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
@@ -3140,6 +3141,11 @@ struct ButtonOptions {
     Commands onClick;
     /// @brief Commands run on activation by keyboard.
     Commands onActivate;
+    /// @brief A push button or a list entry; absent writes no key, a push button.
+    std::optional<ButtonStyle> style;
+    /// @brief Whether a list entry is the current one, a condition; only with `ButtonStyle::Item`, which the loader
+    ///        checks.
+    AnyHandle selected;
 };
 
 /// @brief A `button` node.
@@ -3152,9 +3158,13 @@ struct ButtonOptions {
     } else if (options.emphasis == ButtonEmphasis::Danger) {
         writer.put("emphasis", std::string{"danger"});
     }
+    if (options.style) {
+        writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
+    }
     return std::move(writer)
         .put("label", options.label)
         .put("icon", options.icon)
+        .put("selected", options.selected)
         .put("onClick", options.onClick)
         .put("onActivate", options.onActivate)
         .done();

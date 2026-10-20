@@ -163,6 +163,15 @@ public:
     /// @brief Sets the icon drawn beside the caption; called once, and only for a button that has one.
     /// @param icon The name of an icon in the theme's icon set.
     virtual void setIcon(std::string_view icon) = 0;
+
+    /// @brief Sets how the button is drawn. A new button is a push button; the mount calls it once, only for `Item`.
+    /// @param style The style.
+    virtual void setStyle(ButtonStyle style) = 0;
+
+    /// @brief Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount
+    ///        calls it only for an `Item`, when bound or `true`.
+    /// @param selected Whether it is the current one.
+    virtual void setSelected(bool selected) = 0;
 };
 
 /// @brief An editable text field.

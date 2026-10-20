@@ -447,8 +447,9 @@ TEST_CASE(
     }
 }
 
-// Mutation: hide the frame whenever no sign-in happened (the probe has none, so its sidebar would never show).
-TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[client][shell]") {
+// Mutation: hide the frame whenever no sign-in happened (the probe has none, so its sidebar would never show); or
+// drop the navigator's setCurrent from showActiveTitle (no entry is selected).
+TEST_CASE("Client shell: the frame's navigator opens a screen as a tab and marks it current", "[client][shell]") {
     FakeAppContext context;
     morph::ui::testing::RecordingBackend backend;
     LocalSource source{probe::app(), LocalSetup{}};
@@ -461,9 +462,16 @@ TEST_CASE("Client shell: the frame's navigator opens a screen as a tab", "[clien
         CHECK(backend.prop(*sidebar, "visible") != "false");
         auto const entry = backend.find("Button", "testId", "nav_probe.other");
         REQUIRE(entry.has_value());
+        auto const home = backend.find("Button", "testId", "nav_probe.home");
+        REQUIRE(home.has_value());
+        CHECK(backend.prop(*home, "selected") == "true");  // the start screen's entry is the current one
+        CHECK(backend.prop(*entry, "style") == "Item");
         backend.click(*entry);
         CHECK(pumpUntil(context.owner(), [&] { return textOf(backend, "other").has_value(); }));
         CHECK(log.mounted == std::vector<std::string>{"probe.home", "probe.other"});
+        // Opening a screen makes its entry the current one.
+        CHECK(backend.prop(*entry, "selected") == "true");
+        CHECK(backend.prop(*home, "selected") == "false");
         CHECK(log.problems.empty());
     }
     source.close();

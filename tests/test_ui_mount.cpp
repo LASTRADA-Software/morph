@@ -206,6 +206,37 @@ TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the
           "    Text#5 role=Normal text=b\n");
 }
 
+// Mutation: drop the setStyle call in the button's mountKind (the item records no style).
+TEST_CASE("ui::Mounted: an item button records its style and its selection; a push button neither", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> current{runtime, false};
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column({.children = {ui::button({.label = "Plain"}),
+                                     ui::button({.label = "Here", .style = ui::ButtonStyle::Item, .selected = true}),
+                                     ui::button({.label = "There",
+                                                 .style = ui::ButtonStyle::Item,
+                                                 .selected = [&current] { return current.get(); }}),
+                                     ui::button({.label = "Else", .style = ui::ButtonStyle::Item})}})};
+        CHECK(backend.dump() ==
+              "Column#1 gap=0\n"
+              "  Button#2 label=Plain\n"
+              "  Button#3 label=Here selected=true style=Item\n"
+              "  Button#4 label=There selected=false style=Item\n"
+              "  Button#5 label=Else style=Item\n");
+        current.set(true);
+        owner.runAll();
+        CHECK(backend.prop(4, "selected") == "true");
+    }
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = true})}),
+                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = [] { return false; }})}),
+                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+}
+
 // Mutation: skip checkPlacement (the panel's child mounts).
 TEST_CASE("ui::Mounted: alignSelf outside a row, column or grid throws, as the loader refuses it", "[ui]") {
     Owner owner;

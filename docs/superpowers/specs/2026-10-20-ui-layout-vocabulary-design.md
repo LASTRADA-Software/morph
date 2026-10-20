@@ -339,11 +339,11 @@ The cell rule of the host design §4 stands: the cell draws the caption, the con
   label left-aligned with `Theme.spaceOf(3)` padding and no border, a `scheme.neutral` fill on hover, and while
   selected an accent tint (`Qt.alpha(scheme.accent, 0.12)`), the label in the accent and a 3 px leading bar. Both
   properties join `button`'s restyle API, so a from-scratch `button` restyle is refused until it declares them.
-- **Terminal.** An item draws its label without brackets, padded to its slot's width; selected, in the table's
-  selected-row style, focused, in the focus style as today.
+- **Terminal.** An item draws its label without brackets, padded to its slot's width; selected, in the list's
+  selected-item style (`listItemSelected`, which a table's cursor row uses), focused, in the focus style as today.
 - **Navigator.** Entries are created with `setStyle(ButtonStyle::Item)` and a stretch width. A new
   `Navigator::setCurrent(std::string_view screenId)` marks that entry selected and clears the previous one (an id
-  the navigator does not list clears the mark; pins stay push buttons). The client shell calls
+  the navigator does not list clears the mark; pins stay push buttons), and `current()` answers it. The client shell calls
   `_frame->navigator().setCurrent(activeScreen())` where it follows the active tab (`showActiveTitle`).
 - **Author API.** `ButtonOptions` gains `std::optional<ButtonStyle> style` and `AnyHandle selected`.
 - **Specs.** `ui/document.md`, `ui/view_tree.md`, `ui/backend_contract.md` (Button emphasis gains style and

@@ -508,6 +508,7 @@ target_sources(morph
         include/morph/ui/bundle.hpp
         include/morph/ui/alignment.hpp
         include/morph/ui/button_emphasis.hpp
+        include/morph/ui/button_style.hpp
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp

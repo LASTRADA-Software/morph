@@ -139,6 +139,13 @@ calls it only for another value than `Normal`, so a document without the `emphas
 `danger`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error colour;
 the terminal draws both bold, a danger one in the error colour.
 
+**Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
+behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its
+label at the start and unframed. The mount calls it once, only for `Item`. `setSelected(bool)` marks an item as the
+current entry, or clears the mark; the mount calls it only for an item whose `selected` is bound or `true`, and a new
+button is a push button and not selected. Qt Quick tints the current item in the accent with a bar at its leading
+edge; the terminal draws it in the list's selected-item style.
+
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
@@ -173,7 +180,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
-| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon) | `setOnClick` (Enter, Space or a click) |
+| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
@@ -250,7 +257,7 @@ The headless reference backend and the test double for everything above the cont
 - **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
   and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
-  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
+  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
   `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);

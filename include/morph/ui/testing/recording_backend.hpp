@@ -255,6 +255,11 @@ template <typename T, typename F>
     }
 }
 
+/// @brief A button style's name.
+/// @param style The style.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(ButtonStyle style) { return style == ButtonStyle::Item ? "Item" : "Push"; }
+
 /// @brief A text role's name.
 /// @param role The role.
 /// @return The enumerator's name.
@@ -875,7 +880,7 @@ public:
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
-/// @brief A fake `ButtonWidget`: properties `label`, `emphasis` and `icon`.
+/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style` and `selected`.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
@@ -883,6 +888,8 @@ public:
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
     void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+    void setStyle(ButtonStyle style) override { set("style", enumName(style)); }
+    void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
 };
 
 /// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,

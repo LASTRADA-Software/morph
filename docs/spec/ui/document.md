@@ -162,7 +162,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
 | `text` | `text`, `role` | |
-| `button` | `label`, `icon`, `onClick`, `onActivate` | |
+| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
 | `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
@@ -231,8 +231,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   points at the key and says that effects replace it.
 - **Shape.** Each key has the shape its kind gives it; required keys are present; names match
   `[A-Za-z_][A-Za-z0-9_]*`; closed choices (`showErrors`, `concurrency`, `source`, `offline`,
-  `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`, `align`, `justify`, `alignSelf`) take one of their
-  values; chords are
+  `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`, `align`, `justify`, `alignSelf`, a button's
+  `emphasis` and `style`) take one of their values; chords are
   modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`, once each) and a key name, and are not the workspace
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
   `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
@@ -240,7 +240,7 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
-  evaluates to none of the forms is reported once and lowers to content. A `grid` takes no `justify` (its columns
+  evaluates to none of the forms is reported once and lowers to content. A `button`'s `selected` needs `"style": "item"` (it marks a list item). A `grid` takes no `justify` (its columns
   share its width; there is no spare length to justify); `alignSelf` is given only on a child of a `row`, `column`,
   `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,
   a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as

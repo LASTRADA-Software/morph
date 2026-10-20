@@ -76,7 +76,8 @@ used by the principal the source opened with. While it is signed out, opening a 
 route the history holds at start, a move back or forward) signs it in the same way. Whether a sign-in happened is the
 shell's own fact, not read from the source: a local source's signed-out principal is its `--user` name and its
 signed-out catalog lists the screens, so neither tells signed in from signed out. The navigator lists the catalog's
-screens either way.
+screens either way. The top bar's title and the navigator's current entry follow the active tab: each change of the
+workspace sets the title to the tab's caption and `Navigator::setCurrent` to its screen.
 
 ## Sign-in mapping
 

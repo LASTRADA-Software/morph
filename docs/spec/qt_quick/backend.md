@@ -137,7 +137,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Kind | Component | Shows | Reports |
 |---|---|---|---|
 | Text | `MorphText` | a label in a text role | — |
-| Button | `MorphButton` | a `Button`; its `icon` drawn as the control's icon when the theme's icon set names it ([`../ui/theme.md`](../ui/theme.md#icons)) | click, Space or Enter |
+| Button | `MorphButton` | a `Button`; its `icon` drawn as the control's icon when the theme's icon set names it ([`../ui/theme.md`](../ui/theme.md#icons)). `style` 1, a list item: it fills its line (`fillsAcross`), its content an icon and a left-aligned label padded by `Theme.spaceOf(3)`, no border, a clear background that is `scheme.neutral` while hovered or pressed; while `selected`, an accent tint (`Qt.alpha(scheme.accent, 0.12)`), the label in the accent and a 3 px accent bar at its leading edge. `style` and `selected` are part of the button's restyle API | click, Space or Enter |
 | TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
 | Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |

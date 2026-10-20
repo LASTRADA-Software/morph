@@ -26,7 +26,7 @@ private:
     ui::TextRole _role = ui::TextRole::Normal;
 };
 
-/// Button: `[ label ]`, activated by Enter, Space or a click.
+/// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot.
 class ButtonImpl final : public TuiWidget<ui::ButtonWidget> {
 public:
     explicit ButtonImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
@@ -34,6 +34,8 @@ public:
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
+    void setStyle(ui::ButtonStyle style) override;
+    void setSelected(bool selected) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
@@ -48,6 +50,8 @@ private:
     std::string _icon;
     ui::Action _onClick;
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
+    ui::ButtonStyle _style = ui::ButtonStyle::Push;
+    bool _selected = false;
 };
 
 /// Checkbox: `[x] label`; Enter, Space or a click flips it and reports the new state.

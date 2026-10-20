@@ -3,6 +3,7 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QColor>
 #include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
@@ -564,4 +565,38 @@ TEST_CASE("qt_quick containers: an inline form field's label sits left of its co
     INFO("label at " << labelAt.x() << "," << labelAt.y() << "; control at " << controlAt.x() << "," << controlAt.y());
     CHECK(labelAt.x() + label.width() <= controlAt.x() + 1.0);
     CHECK(std::abs(labelAt.y() - controlAt.y()) <= 1.0);
+}
+
+// Mutation: create the navigator's entries without setStyle (an entry is as wide as its label, and is not tinted).
+TEST_CASE("qt_quick containers: a navigator entry fills the sidebar, and the current one is tinted", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {morph::ui::CatalogEntry{.id = "a", .title = "Samples", .module = "Lab"},
+                                 morph::ui::CatalogEntry{.id = "b", .title = "Results", .module = "Lab"}};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.navigator().setCurrent("b");
+    scene.settle();
+    auto const itemOf = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    auto const fillOf = [&itemOf](char const* testId) {
+        QList<QQuickItem*> const inner = itemOf(testId).findChildren<QQuickItem*>();
+        auto const button =
+            std::ranges::find_if(inner, [](QQuickItem const* item) { return item->inherits("QQuickAbstractButton"); });
+        REQUIRE(button != inner.end());
+        auto* const background = (*button)->property("background").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        return background->property("color").value<QColor>();
+    };
+    QQuickItem const& list = itemOf("navigator");
+    QQuickItem const& entry = itemOf("nav_a");
+    INFO("navigator " << list.width() << " wide, its entry " << entry.width());
+    CHECK(std::abs(entry.width() - list.width()) < 1.0);
+    CHECK(fillOf("nav_b") != fillOf("nav_a"));
+    CHECK(fillOf("nav_a").alpha() == 0);  // an item that is not current, and not hovered, is clear
 }

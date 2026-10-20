@@ -5887,6 +5887,10 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         } else if (node.name("emphasis") == "danger") {
             spec.emphasis = ButtonEmphasis::Danger;
         }
+        if (node.name("style") == "item") {
+            spec.style = ButtonStyle::Item;
+            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+        }
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");
         if (onClick != nullptr || onActivate != nullptr) {

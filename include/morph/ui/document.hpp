@@ -711,9 +711,11 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 /// @brief The keys of `text`.
 inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 5> kButtonKeys = {{{"label", Shape::Expr},
+inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"icon", Shape::Expr},
                                                         {"emphasis", Shape::Text},
+                                                        {"style", Shape::Text},
+                                                        {"selected", Shape::Condition},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
@@ -2946,6 +2948,12 @@ private:
         } else if (node.kind == "button") {
             static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
             checkChoice(node, "emphasis", kEmphasis);
+            static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
+            checkChoice(node, "style", kStyles);
+            if (node.prop("selected") != nullptr && node.name("style") != "item") {
+                refuse(pointerAppend(node.path, "selected"),
+                       "`selected` marks a list item; give the button `style: item`");
+            }
         } else if (node.kind == "grid" && !node.name("justify").empty()) {
             refuse(pointerAppend(node.path, "justify"),
                    "a grid's columns share its width; there is no spare length to justify");
