@@ -62,7 +62,7 @@ saw before, and an old client reading a new reply ignores the key.
 - A hello handled with no connection behind it is still answered `events: true` when it offers them, and the
   acceptance is recorded nowhere: there is no connection to send events on.
 - `UiService` therefore overrides both `handle` overloads; the two-parameter one answers with throwaway facts.
-- The generic client (`examples/common/app`'s `clientHello()`) offers events on every `ui-hello` it sends. `UiClient`
+- The generic client (`morph::client`'s `clientHello()`, [`../client/client.md`](../client/client.md)) offers events on every `ui-hello` it sends. `UiClient`
   sends the `HelloRequest` it was given, unchanged.
 
 ## Content addressing
@@ -73,7 +73,8 @@ saw before, and an old client reading a new reply ignores the key.
   vectors, so no dependency is added.
 - The **manifest** is `{application, version, files: [{id, kind, hash, size, public}]}`, its files sorted by kind
   then id, written by glaze. Equal bundles therefore have equal manifests and equal digests. The kinds are
-  `screen`, `app` (the app document), `theme`, `messages` and `component`.
+  `screen`, `app` (the app document), `theme`, `messages`, `component` and `icon` (SVG text of a theme's icon set, at
+  most `kMaxIconBytes`).
 - The **digest** is the content hash of the manifest's text, and travels in the `ui-hello` reply.
 - The client hashes what it received: a `ui-fetch` reply's `body` is the file's bytes, not a re-encoding of
   them. It checks the manifest against the digest, and each file against its manifest entry, before it keeps or
@@ -187,8 +188,9 @@ server, never a surprise on a client.
   ([`catalogue.md`](catalogue.md)). A theme file is a theme index or a DTCG token file, refused when it does not
   parse; `build` refuses a theme some combination of which does not resolve ([`theme.md`](theme.md)).
 - `requireVocabulary(v)` adds a vocabulary the bundle needs.
-- `build()` refuses a screen that names a delivered component (`qml`) whose hash no `component` file has, and a
-  bundle over the bounds. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
+- `build()` refuses a screen that names a delivered component (`qml`) whose hash no `component` file has, a theme
+  index whose icon set names a file that is not an `icon` file of the bundle ([`theme.md`](theme.md#icons)), and a
+  bundle over the bounds. `addFile` refuses an `icon` that is not SVG text or is larger than `kMaxIconBytes`. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
   by hash, the screens with their top-level queries and named actions, and the facts.
 
 `UiService(bundle)` serves one built bundle and never changes it, so it needs no lock on the server strand.
@@ -277,6 +279,11 @@ beside its evaluator and hands it to the shell as `SessionOptions::watcher`.
 
 ## Files
 
+The file store is the path for large files. A document may also move a file's bytes inline, in a mutation's body or
+a value it holds (`upload` into bytes, `download` from bytes), under the session's cap
+(`SessionOptions::maxInlineFileBytes`, 1 MiB by default, at most `kMaxInlineFileBytes`); above it, the file goes
+through the store, whose chunked transfer has no such bound (`docs/spec/ui/interpreter.md`, "Commands").
+
 `ui-file` is the file side channel of `files/1` (spec 6 §18). A server serves it when its `UiService` is built with
 an `IFileStore` (`ui/file_store.hpp`); without one, `ui-file` is an unknown kind.
 
@@ -344,7 +351,7 @@ switch are the client's.
      mounts. Matching it to the old screen's would need the two documents compared node by node, not by name.
    - A remount is refused while a close or a save is waiting, and on a closed screen.
 
-**The generic client.** `--dev`, or `MORPH_UI_DEV=1` in the environment, turns development mode on
+**The generic client** ([`../client/client.md`](../client/client.md)). `--dev`, or `MORPH_UI_DEV=1` in the environment, turns development mode on
 (`ClientArgs::dev`, `ClientShellOptions::dev`). The shell then calls `ClientSource::poll` every second. The source
 keeps one poll in flight at a time, and once a changed bundle and its schemas are current, the shell hands the changed
 ids to `reloadDocuments` with the shown screen and reports each refusal as a problem. Without development mode

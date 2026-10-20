@@ -403,6 +403,9 @@ struct FieldMeta {
     std::string_view unit{};                     // "" = no display unit (plain members only)
     std::optional<math::DecimalPlaces> decimals{};  // disengaged = no display precision
     BlankAs blankAs{BlankAs::Omit};              // Empty = a cleared string submits "" (strings only)
+    std::string_view optionsAction{};            // "" = no options; see below
+    std::string_view valueField{};               // the options row's value field
+    std::string_view labelField{};               // the options row's label field
 };
 
 struct RecordMeasurement {
@@ -427,6 +430,17 @@ property node that already carries `x-order` and the `Choice`/`Quantity`
 keys (see "Where the keys physically land" below). An entry naming a field
 that does not exist on the action is silently ignored: no crash, no stray
 property.
+
+`optionsAction`, `valueField` and `labelField` turn a plain member (an
+`std::optional<std::int64_t>` id, say) into a lookup select: the member is
+emitted with the same `x-optionsAction`, `x-optionValue` and `x-optionLabel`
+a `Choice<…>` carries, so the forms engine reads it as a `Choice` field and
+no client changes. The three are set together; schema generation throws
+`IncompleteOptionsError` (a `std::logic_error`, at registration, as
+`UnsatisfiableFormError` is) when one is set without the others, and
+`ConflictingOptionsError` when the member is a `Choice<…>` and its meta also
+sets `optionsAction`. `x-optionsDependsOn` stays `Choice`-only (see
+[choice.md](choice.md)).
 
 ### Label inference
 
@@ -771,7 +785,8 @@ implicit flat group (one column, no chrome) when the schema carries no
 `x-layout`, and the trailing group of fields no group names. Unset, it is `1`
 while `gridColumns` is `2` and follows `gridColumns` as soon as a host sets that
 to anything else, so one option puts the whole form on the host's grid
-(`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full).
+(`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full). A document sets both at once with a
+`form`'s, `collection`'s or `wizard`'s `columns` key (1 to 12; `docs/spec/ui/document.md`).
 
 A field spans `x-colspan` columns (1 when absent), **clamped to its grid's
 column count**, so a span wider than the grid takes one full row rather than

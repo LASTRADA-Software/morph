@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -140,6 +141,119 @@ TEST_CASE("ui::Mounted: a button's emphasis reaches the backend only when it is 
           "  Button#2 label=Plain\n"
           "  Button#3 emphasis=Primary label=Go\n"
           "  Button#4 emphasis=Danger label=Drop\n");
+}
+
+// Mutation: skip checkLayout (every node below mounts).
+TEST_CASE("ui::Mounted: bounds reach the backend, and the loader's bound rules hold for a C++ tree", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const sized = [](ui::LayoutHints layout) {
+        ui::Text text{.text = "x"};
+        text.common.layout = layout;
+        text.common.testId = "sized";
+        return ui::text(std::move(text));
+    };
+    {
+        ui::Mounted const view{runtime, backend,
+                               sized({.width = ui::Sizing::stretch(), .maxWidth = 44, .minHeight = 1})};
+        CHECK(backend.prop(backend.find("Text", "testId", "sized").value(), "layout") ==
+              "stretch(1) max=44/content min=1");
+    }
+    for (ui::LayoutHints const& refused :
+         {ui::LayoutHints{.minWidth = -1}, ui::LayoutHints{.maxHeight = -2},
+          ui::LayoutHints{.minWidth = 50, .maxWidth = 40}, ui::LayoutHints{.minHeight = 5, .maxHeight = 4},
+          ui::LayoutHints{.width = ui::Sizing::fixed(50), .maxWidth = 40},
+          ui::LayoutHints{.height = ui::Sizing::fixed(2), .minHeight = 3}}) {
+        CHECK_THROWS_WITH((ui::Mounted{runtime, backend, sized(refused)}),
+                          Catch::Matchers::ContainsSubstring("on the node `sized`"));
+    }
+}
+
+// Mutation: never call setAlign/setJustify in mountStack and the grid's mountKind (the first dump loses them).
+TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the default", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text placed{.text = "c"};
+    placed.common.layout.alignSelf = ui::Align::End;
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column(
+                {.children = {ui::row({.children = {ui::text({.text = "a"})},
+                                       .align = ui::Align::Center,
+                                       .justify = ui::Justify::Between}),
+                              ui::grid({.cells = {{.node = ui::text(std::move(placed))}}, .align = ui::Align::Start})},
+                 .justify = ui::Justify::End})};
+        CHECK(backend.dump() ==
+              "Column#1 gap=0 justify=end\n"
+              "  Row#2 align=center gap=0 justify=between\n"
+              "    Text#3 role=Normal text=a\n"
+              "  Grid#4 align=start columns=1 gap=0\n"
+              "    Text#5 layout=content/content self=end role=Normal text=c\n");
+    }
+    // The default-only guard: a stack and a grid that say nothing of alignment record as they did without it.
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain,
+                           ui::column({.children = {ui::row({.children = {ui::text({.text = "a"})}}),
+                                                    ui::grid({.cells = {{.node = ui::text({.text = "b"})}}})}})};
+    CHECK(plain.dump() ==
+          "Column#1 gap=0\n"
+          "  Row#2 gap=0\n"
+          "    Text#3 role=Normal text=a\n"
+          "  Grid#4 columns=1 gap=0\n"
+          "    Text#5 role=Normal text=b\n");
+}
+
+// Mutation: drop the setStyle call in the button's mountKind (the item records no style).
+TEST_CASE("ui::Mounted: an item button records its style and its selection; a push button neither", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> current{runtime, false};
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column({.children = {ui::button({.label = "Plain"}),
+                                     ui::button({.label = "Here", .style = ui::ButtonStyle::Item, .selected = true}),
+                                     ui::button({.label = "There",
+                                                 .style = ui::ButtonStyle::Item,
+                                                 .selected = [&current] { return current.get(); }}),
+                                     ui::button({.label = "Else", .style = ui::ButtonStyle::Item})}})};
+        CHECK(backend.dump() ==
+              "Column#1 gap=0\n"
+              "  Button#2 label=Plain\n"
+              "  Button#3 label=Here selected=true style=Item\n"
+              "  Button#4 label=There selected=false style=Item\n"
+              "  Button#5 label=Else style=Item\n");
+        current.set(true);
+        owner.runAll();
+        CHECK(backend.prop(4, "selected") == "true");
+    }
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = true})}),
+                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = [] { return false; }})}),
+                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+}
+
+// Mutation: skip checkPlacement (the panel's child mounts).
+TEST_CASE("ui::Mounted: alignSelf outside a row, column or grid throws, as the loader refuses it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const placed = [] {
+        ui::Text text{.text = "x"};
+        text.common.layout.alignSelf = ui::Align::Center;
+        text.common.testId = "placed";
+        return ui::text(std::move(text));
+    };
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::panel({.child = placed()})}),
+                      Catch::Matchers::ContainsSubstring("`alignSelf` places a node in its row, column or grid, "
+                                                         "and the node `placed` is not in one"));
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, placed()}),
+                      Catch::Matchers::ContainsSubstring("the node `placed` is not in one"));
+    CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::row({.children = {placed()}})});
 }
 
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {

@@ -364,7 +364,9 @@ TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui
         { "kind": "text", "testId": "muted", "text": "m", "role": "muted" },
         { "kind": "text", "testId": "heading", "text": "h", "role": "heading" },
         { "kind": "text", "testId": "error", "text": "e", "role": "error" },
-        { "kind": "text", "testId": "normal", "text": "n", "role": "plain" },
+        { "kind": "text", "testId": "normal", "text": "n", "role": "normal" },
+        { "kind": "text", "testId": "section", "text": "s", "role": "section" },
+        { "kind": "text", "testId": "title", "text": "t", "role": "title" },
         { "kind": "badge", "testId": "info", "tone": "info" },
         { "kind": "badge", "testId": "success", "tone": "success" },
         { "kind": "badge", "testId": "warning", "tone": "warning" },
@@ -378,6 +380,8 @@ TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui
     CHECK(h.backend.prop(h.byTestId("Text", "heading"), "role") == "Heading");
     CHECK(h.backend.prop(h.byTestId("Text", "error"), "role") == "Error");
     CHECK(h.backend.prop(h.byTestId("Text", "normal"), "role") == "Normal");
+    CHECK(h.backend.prop(h.byTestId("Text", "section"), "role") == "Section");
+    CHECK(h.backend.prop(h.byTestId("Text", "title"), "role") == "Heading");
     CHECK(h.backend.prop(h.byTestId("Badge", "info"), "tone") == "Info");
     CHECK(h.backend.prop(h.byTestId("Badge", "success"), "tone") == "Ok");
     CHECK(h.backend.prop(h.byTestId("Badge", "warning"), "tone") == "Warn");
@@ -552,4 +556,343 @@ TEST_CASE("interpreter commands: a field's label is its accessible name unless `
     h.backend.click(h.byTestId("Button", "rename"));
     h.settle();
     CHECK(name("TextInput", "text") == "Volume");
+}
+
+// Mutation: never call setRowTone (the rows show no tone).
+TEST_CASE("table: rowTone tones each row in its own scope, follows the row, and reports a value that is no tone",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "toned",
+      "state": { "items": { "init": { "lit": [ { "id": 1, "status": "ok" }, { "id": 2, "status": "err" },
+                                              { "id": 3, "status": null }, { "id": 4, "status": "purple" },
+                                              { "id": 5, "status": "purple" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "rows": { "ref": "items" }, "rowTone": { "row": "status" },
+          "columns": [ { "id": "id", "label": "Id" } ] },
+        { "kind": "button", "testId": "retone", "label": "retone",
+          "onClick": [ { "set": "items", "value": { "lit": [ { "id": 1, "status": "warn" }, { "id": 2, "status": "err" },
+                                                          { "id": 3, "status": "info" }, { "id": 4, "status": "purple" },
+                                                          { "id": 5, "status": "purple" } ] } } ] } ] } })");
+    auto const tones = [&h] {
+        std::vector<std::string> out;
+        for (int const row : h.backend.all("Row")) {
+            out.push_back(h.backend.prop(row, "tone"));
+        }
+        return out;
+    };
+    CHECK(tones() == std::vector<std::string>{"Ok", "Err", "none", "none", "none"});
+    auto const purple = std::ranges::count_if(h.diagnostics, [](morph::ui::Refusal const& refusal) {
+        return refusal.reason.contains(R"(rowTone is "purple")");
+    });
+    CHECK(purple == 1);
+    h.backend.click(h.byTestId("Button", "retone"));
+    h.settle();
+    CHECK(tones() == std::vector<std::string>{"Warn", "Err", "Info", "none", "none"});
+}
+
+namespace {
+
+/// Whether @p widget or anything under it has the test id @p testId.
+// NOLINTNEXTLINE(misc-no-recursion): one level per nesting of the recorded widgets.
+bool holds(ui::testing::RecordingBackend const& backend, int widget, std::string const& testId) {
+    if (backend.prop(widget, "testId") == testId) {
+        return true;
+    }
+    auto const children = backend.children(widget);
+    return std::ranges::any_of(children, [&](int child) {  // NOLINT(misc-no-recursion)
+        return holds(backend, child, testId);
+    });
+}
+
+}  // namespace
+
+// Mutation: mount the action bar in place, in the content, instead of in the overlay's footer.
+TEST_CASE("interpreter commands: a dialog's actions are buttons in its footer, run in the dialog's scope",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "overlay.actions", "state": { "saved": { "init": "no" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "text", "testId": "saved", "text": { "ref": "saved" } },
+        { "kind": "dialog", "id": "dlg", "scope": { "state": { "draft": { "init": "inner" } } },
+          "default": [ { "set": "saved", "value": "by enter" } ],
+          "actions": [
+            { "id": "save", "label": "Save", "emphasis": "primary", "onClick": [ { "set": "saved", "value": { "ref": "draft" } } ] },
+            { "id": "later", "label": "Later", "enabled": false } ],
+          "children": [ { "kind": "text", "testId": "body", "text": "Body" } ] } ] } })");
+    CHECK(h.backend.all("Footer").empty());  // closed, its content and its actions are not mounted
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const dialog = h.backend.all("Dialog").front();
+    std::vector<int> const footers = h.backend.all("Footer");
+    REQUIRE(footers.size() == 1);
+    CHECK(holds(h.backend, footers.front(), "action_save"));
+    CHECK(holds(h.backend, footers.front(), "action_later"));
+    for (int const child : h.backend.children(dialog)) {
+        if (child != footers.front()) {
+            CHECK(holds(h.backend, child, "body"));
+            CHECK_FALSE(holds(h.backend, child, "action_save"));
+        }
+    }
+    CHECK(h.backend.prop(h.byTestId("Button", "action_later"), "enabled") == "false");
+    CHECK(h.backend.prop(h.byTestId("Button", "action_save"), "emphasis") == "Primary");
+
+    h.backend.click(h.byTestId("Button", "action_save"));
+    h.settle();
+    CHECK(h.text("saved") == "inner");
+    REQUIRE(h.backend.find("Column", "keys", "Enter").has_value());
+    CHECK(h.backend.press(*h.backend.find("Column", "keys", "Enter"), "Enter"));
+    h.settle();
+    CHECK(h.text("saved") == "by enter");
+}
+
+// Mutation: let an action bar mount wherever it is (it would show in the column, under no overlay).
+TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refused", "[ui][interpreter]") {
+    Harness h;
+    ui::Node const bar = ui::actionBar(ui::ActionBar{.children = {ui::button(ui::Button{.label = "Save"})}});
+    CHECK_THROWS_AS(ui::Mounted(h.runtime, h.backend, ui::column(ui::Column{.children = {bar}})), std::logic_error);
+}
+
+namespace {
+
+/// Files moved inline: three downloads from bytes and an upload into bytes.
+constexpr char const* kInline = R"({
+  "vocab": "ui/1", "id": "inline", "params": { "blob": "string?" },
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "picked": { "init": "/data/readings.csv" }, "saved": { "init": 0 } },
+  "mutations": { "attach": { "model": "sample", "action": "Lims_Attach", "body": { "obj": { "kind": "csv" } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "save", "label": "save",
+      "onClick": [ { "download": "AQID", "from": "bytes", "save": "dialog", "name": "three.bin",
+                     "type": "application/octet-stream" } ] },
+    { "kind": "button", "testId": "saveList", "label": "saveList",
+      "onClick": [ { "download": { "lit": [ 1, 2, 255 ] }, "from": "bytes", "save": "dialog", "name": "list.bin" } ] },
+    { "kind": "button", "testId": "saveBig", "label": "saveBig",
+      "onClick": [ { "download": { "ref": "blob" }, "from": "bytes", "save": "dialog", "name": "big.bin" } ] },
+    { "kind": "button", "testId": "send", "label": "send",
+      "onClick": [ { "upload": { "ref": "picked" }, "to": "attach", "into": "bytes", "as": "content",
+                     "nameAs": "fileName", "id": "up" } ] },
+    { "kind": "text", "testId": "progress",
+      "text": { "fn": "format", "args": [ "{0}/{1}", { "ref": "up.progress" }, { "ref": "up.pending" } ] } } ] } })";
+
+}  // namespace
+
+// Mutation: skip the cap check (the oversize download reaches the host).
+TEST_CASE("interpreter commands: a download from bytes reaches saveFile decoded, and one over the cap never does",
+          "[ui][interpreter]") {
+    Harness h;
+    std::string const big(((ui::kDefaultInlineFileBytes + 3) / 3) * 4, 'A');
+    auto screen = h.mount(kInline, ui::ValueRecord{{"blob", ui::Value{big}}});
+    h.backend.click(h.byTestId("Button", "save"));
+    h.backend.click(h.byTestId("Button", "saveList"));
+    h.settle();
+    REQUIRE(h.host.saved.size() == 2);
+    CHECK(h.host.saved.at(0).name == "three.bin");
+    CHECK(h.host.saved.at(0).mediaType == "application/octet-stream");
+    CHECK(h.host.saved.at(0).bytes == std::string{"\x01\x02\x03", 3});
+    CHECK(h.host.saved.at(1).bytes == std::string{"\x01\x02\xff", 3});
+    CHECK(h.diagnostics.empty());
+
+    h.backend.click(h.byTestId("Button", "saveBig"));
+    h.settle();
+    CHECK(h.host.saved.size() == 2);
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason ==
+          "download: 1 MiB is over the 1 MiB inline cap; serve it through the file store");
+}
+
+// Mutation: skip the cap check on the host's reply (the oversize file runs the mutation).
+TEST_CASE("interpreter commands: an upload into bytes runs its mutation with the base64 and the name",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kInline);
+    h.backend.click(h.byTestId("Button", "send"));
+    h.settle();
+    CHECK(h.host.readCap == ui::kDefaultInlineFileBytes);
+    CHECK(h.text("progress") == "0/true");
+    h.host.readDone(ui::InlineFile{.name = "readings.csv", .mediaType = "text/csv", .bytes = "a,b"});
+    h.settle();
+    CHECK(h.text("progress") == "1/false");
+    REQUIRE(h.dispatcher.count("Lims_Attach") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_Attach")).body ==
+          R"({"content":"YSxi","fileName":"readings.csv","kind":"csv"})");
+
+    // A host that answers more than the cap is refused all the same.
+    h.backend.click(h.byTestId("Button", "send"));
+    h.settle();
+    h.host.readDone(ui::InlineFile{
+        .name = "huge.csv", .mediaType = {}, .bytes = std::string(ui::kDefaultInlineFileBytes + 1, 'x')});
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_Attach") == 1);
+    CHECK(readJson(*screen, R"({"ref": "up.error"})") ==
+          R"("upload: 1 MiB is over the 1 MiB inline cap; send it through the file store")");
+}
+
+TEST_CASE("interpreter commands: the session's inline cap is 1 to kMaxInlineFileBytes", "[ui][interpreter]") {
+    STATIC_REQUIRE(ui::kMaxInlineFileBytes == 6'242'304);
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    CHECK_THROWS_AS(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = 0}), std::invalid_argument);
+    CHECK_THROWS_AS(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = ui::kMaxInlineFileBytes + 1}),
+                    std::invalid_argument);
+    CHECK_NOTHROW(ui::Session(runtime, ui::SessionOptions{.maxInlineFileBytes = ui::kMaxInlineFileBytes}));
+}
+
+namespace {
+
+/// A table whose rows a button empties, fills and nulls, with an empty state in its place while they are an empty
+/// list.
+constexpr std::string_view kEmptyTable = R"({
+  "vocab": "ui/1", "id": "empty",
+  "state": { "rows": { "init": { "lit": [] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "table", "id": "list", "testId": "list", "rows": { "ref": "rows" },
+      "columns": [ { "id": "name", "label": "Name" } ],
+      "empty": [ { "kind": "emptyState", "testId": "nothing", "title": "No rows yet" } ] },
+    { "kind": "button", "testId": "fill", "label": "fill", "onClick": { "set": "rows", "value": { "lit": [ { "id": 1, "name": "a" } ] } } },
+    { "kind": "button", "testId": "none", "label": "none", "onClick": { "set": "rows", "value": null } },
+    { "kind": "button", "testId": "focus", "label": "focus", "onClick": { "focus": "list" } } ] }
+})";
+
+/// Whether @p widget shows: it and every column around it are visible.
+bool shownThroughColumns(morph::ui::testing::RecordingBackend const& backend, int widget) {
+    for (std::optional<int> current = widget; current;) {
+        if (backend.prop(*current, "visible") == "false") {
+            return false;
+        }
+        std::optional<int> parent;
+        for (int const column : backend.all("Column")) {
+            if (std::ranges::contains(backend.children(column), *current)) {
+                parent = column;
+            }
+        }
+        current = parent;
+    }
+    return true;
+}
+
+}  // namespace
+
+// Mutation: lower `table` without `empty` (no empty state is drawn, and the table shows with no rows).
+TEST_CASE("table: its empty content shows while the rows are an empty list, the table otherwise",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kEmptyTable);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    REQUIRE(h.diagnostics.empty());
+    int const table = h.byTestId("Table", "list");
+    int const nothing = h.byTestId("EmptyState", "nothing");
+    CHECK_FALSE(shownThroughColumns(h.backend, table));
+    CHECK(shownThroughColumns(h.backend, nothing));
+    CHECK(h.backend.prop(nothing, "title") == "No rows yet");
+
+    h.backend.click(h.byTestId("Button", "fill"));
+    h.settle();
+    CHECK(shownThroughColumns(h.backend, table));
+    CHECK_FALSE(shownThroughColumns(h.backend, nothing));
+
+    h.backend.click(h.byTestId("Button", "none"));
+    h.settle();
+    CHECK(shownThroughColumns(h.backend, table));  // not answered yet: the table, not the empty state
+    CHECK_FALSE(shownThroughColumns(h.backend, nothing));
+
+    // The table, not the column around it, is the element `focus` finds.
+    h.backend.click(h.byTestId("Button", "focus"));
+    h.settle();
+    CHECK(h.backend.focused() == table);
+}
+
+// Mutation: lower `sizing` to the width alone (the record's height is lost); or drop the bounds in commonOf.
+TEST_CASE(
+    "sizing: a record sizes both dimensions, the bounds reach the widget, and a computed sizing of no known "
+    "form is reported once",
+    "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sized", "state": { "w": { "init": "wide" } },
+      "view": { "kind": "column", "testId": "root",
+                "sizing": { "lit": { "width": { "stretch": 1 }, "height": { "stretch": 1 } } },
+                "children": [
+        { "kind": "text", "testId": "tall", "text": "x", "sizing": { "lit": { "height": { "stretch": 2 } } },
+          "maxWidth": 44, "minHeight": 1 },
+        { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [
+          { "kind": "text", "testId": "odd", "text": "y", "sizing": { "ref": "w" } } ] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "layout") == "stretch(1)/stretch(1)");
+    CHECK(h.backend.prop(h.byTestId("Text", "tall"), "layout") == "content max=44/stretch(2) min=1");
+    CHECK(h.backend.prop(h.byTestId("Text", "odd"), "layout").empty());  // content, so no setLayout call
+    REQUIRE(h.diagnostics.size() == 1);  // once for the path, though two rows lowered it
+    CHECK(h.diagnostics.front().reason.starts_with(R"(sizing is "wide"; a sizing is)"));
+}
+
+// Mutation: lower `align`, `justify` and `alignSelf` to their defaults (the recording loses them).
+TEST_CASE("align, justify and alignSelf: a document's alignment reaches the stacks, the grid and the child",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "aligned",
+      "view": { "kind": "column", "testId": "root", "align": "center", "justify": "end", "children": [
+        { "kind": "row", "testId": "bar", "align": "end", "justify": "between", "children": [
+          { "kind": "text", "testId": "own", "text": "x", "alignSelf": "start" } ] },
+        { "kind": "grid", "testId": "cells", "columns": 2, "align": "center", "children": [
+          { "kind": "text", "text": "y" } ] },
+        { "kind": "row", "testId": "plain", "children": [] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "align") == "center");
+    CHECK(h.backend.prop(h.byTestId("Column", "root"), "justify") == "end");
+    CHECK(h.backend.prop(h.byTestId("Row", "bar"), "align") == "end");
+    CHECK(h.backend.prop(h.byTestId("Row", "bar"), "justify") == "between");
+    CHECK(h.backend.prop(h.byTestId("Text", "own"), "layout") == "content/content self=start");
+    CHECK(h.backend.prop(h.byTestId("Grid", "cells"), "align") == "center");
+    CHECK(h.backend.prop(h.byTestId("Row", "plain"), "align").empty());  // the default makes no call
+    CHECK(h.backend.prop(h.byTestId("Row", "plain"), "justify").empty());
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: lower `style` to a push button (the item records no style, and `selected` is not bound).
+TEST_CASE("button: style item draws a list entry, and selected follows its condition", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "listed", "state": { "on": { "init": "a" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "a", "label": "A", "style": "item",
+          "selected": { "fn": "eq", "args": [ { "ref": "on" }, "a" ] }, "onClick": [ { "set": "on", "value": "b" } ] },
+        { "kind": "button", "testId": "b", "label": "B", "style": "item",
+          "selected": { "fn": "eq", "args": [ { "ref": "on" }, "b" ] } },
+        { "kind": "button", "testId": "plain", "label": "P", "style": "push" } ] } })");
+    int const a = h.byTestId("Button", "a");
+    int const b = h.byTestId("Button", "b");
+    CHECK(h.backend.prop(a, "style") == "Item");
+    CHECK(h.backend.prop(a, "selected") == "true");
+    CHECK(h.backend.prop(b, "selected") == "false");
+    CHECK(h.backend.prop(h.byTestId("Button", "plain"), "style").empty());
+    h.backend.click(a);
+    h.settle();
+    CHECK(h.backend.prop(a, "selected") == "false");
+    CHECK(h.backend.prop(b, "selected") == "true");
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
+TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "roles", "state": { "r": { "init": "big" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "x", "text": "x", "role": { "ref": "r" } },
+        { "kind": "button", "testId": "fix", "label": "fix", "onClick": [ { "set": "r", "value": "section" } ] },
+        { "kind": "button", "testId": "break", "label": "break", "onClick": [ { "set": "r", "value": "huge" } ] } ] } })");
+    int const text = h.byTestId("Text", "x");
+    CHECK(h.backend.prop(text, "role") == "Normal");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().path == "/view/children/0/role");
+    CHECK(h.diagnostics.front().reason.starts_with(R"(role is "big"; a role is)"));
+    h.backend.click(h.byTestId("Button", "fix"));
+    h.settle();
+    CHECK(h.backend.prop(text, "role") == "Section");
+    h.backend.click(h.byTestId("Button", "break"));
+    h.settle();
+    CHECK(h.backend.prop(text, "role") == "Normal");
+    CHECK(h.diagnostics.size() == 2);  // a second unknown name is a second reason for the path
 }

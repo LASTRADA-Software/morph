@@ -3,11 +3,14 @@
 // The table on the real Qt Quick engine: cells placed by column, selection by key in each mode, activation without
 // toggling, and keys that cross into QML as text, an int64 above 2^53 unchanged.
 
+#include <QColor>
+#include <QObject>
 #include <QQuickItem>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
 #include <morph/ui/backend.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -138,4 +141,42 @@ TEST_CASE("qt_quick table: Enter on a focused row activates it", "[qt_quick]") {
     Scene::itemOf(*table.rows.at(0)).forceActiveFocus();
     scene.key(Qt::Key_Return);
     CHECK(activated == std::vector<ui::Key>{ui::Key{std::int64_t{4}}});
+}
+
+// Mutation: write no tone on the row (the backgrounds stay clear).
+TEST_CASE("qt_quick table: a toned row's background fills with the tone's bg and keeps its bar when selected",
+          "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::string{"a"}}, ui::Key{std::string{"b"}}, ui::Key{std::string{"c"}}},
+                           ui::SelectionMode::Single);
+    table.table->setRowTone(*table.rows.at(0), ui::Tone::Ok);
+    table.table->setRowTone(*table.rows.at(1), ui::Tone::Err);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const part = [](ui::StackWidget const& row, char const* name) -> QQuickItem& {
+        auto* const background = Scene::itemOf(row).property("backgroundItem").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        auto* const found = background->findChild<QQuickItem*>(QString::fromLatin1(name));
+        REQUIRE(found != nullptr);
+        return *found;
+    };
+    CHECK(part(*table.rows.at(0), "fill").property("color").value<QColor>() ==
+          theme->property("successBg").value<QColor>());
+    CHECK(part(*table.rows.at(1), "fill").property("color").value<QColor>() ==
+          theme->property("errorBg").value<QColor>());
+    CHECK(part(*table.rows.at(0), "toneBar").isVisible());
+    CHECK(part(*table.rows.at(0), "toneBar").property("color").value<QColor>() ==
+          theme->property("successDot").value<QColor>());
+    CHECK_FALSE(part(*table.rows.at(2), "toneBar").isVisible());
+    // Selected, the row shows the selection and keeps its bar.
+    table.table->setSelection({ui::Key{std::string{"a"}}});
+    scene.settle();
+    CHECK(part(*table.rows.at(0), "fill").property("color").value<QColor>() ==
+          theme->property("selection").value<QColor>());
+    CHECK(part(*table.rows.at(0), "toneBar").isVisible());
+    // No tone again.
+    table.table->setRowTone(*table.rows.at(1), std::nullopt);
+    scene.settle();
+    CHECK_FALSE(part(*table.rows.at(1), "toneBar").isVisible());
 }

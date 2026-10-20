@@ -204,6 +204,23 @@ struct UploadRequest {
     std::string action;
 };
 
+/// @brief A file whose bytes a document moves inline: `download` from bytes, `upload` into bytes.
+struct InlineFile {
+    /// @brief The file's name.
+    std::string name;
+    /// @brief Its media type; empty when unknown.
+    std::string mediaType;
+    /// @brief Its bytes.
+    std::string bytes;
+};
+
+/// @brief The inline cap a session has unless it is given another: 1 MiB.
+inline constexpr std::size_t kDefaultInlineFileBytes = std::size_t{1024} * 1024;
+
+/// @brief The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for
+///        the rest of the body, so the encoded file still fits `wire::kMaxEnvelopeBytes`.
+inline constexpr std::size_t kMaxInlineFileBytes = (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4;
+
 /// @brief What the application answers for the commands a document cannot carry out alone (spec 6). Every default
 ///        answers "not supported", which the interpreter reports as a diagnostic.
 class InterpreterHost {
@@ -348,6 +365,33 @@ public:
         return false;
     }
 
+    /// @brief Reads a file's bytes for `upload` into bytes. A host reads the file's size first and refuses one over
+    ///        @p maxBytes without reading it; the interpreter refuses a reply over the cap as well.
+    /// @param file     What the user picked or dropped.
+    /// @param maxBytes The session's inline cap.
+    /// @param done     Called once with the file, or the failure's text.
+    /// @return Whether the host can read files.
+    virtual bool readFile(Value const& file, std::size_t maxBytes,
+                          std::function<void(std::expected<InlineFile, std::string>)> done) {
+        static_cast<void>(file);
+        static_cast<void>(maxBytes);
+        static_cast<void>(done);
+        return false;
+    }
+
+    /// @brief Saves a file a document holds the bytes of, for `download` from bytes.
+    /// @param file   The file.
+    /// @param option `dialog` to save, `preview` for a local reference.
+    /// @param done   Called once with the local reference (`preview`) or `null` (`dialog`), or the failure.
+    /// @return Whether the host can save files.
+    virtual bool saveFile(InlineFile const& file, std::string const& option,
+                          std::function<void(std::expected<Value, std::string>)> done) {
+        static_cast<void>(file);
+        static_cast<void>(option);
+        static_cast<void>(done);
+        return false;
+    }
+
     /// @brief The user chose at a customization point through a `customize` editor; the host stores the choice.
     /// @param screen The screen's id.
     /// @param point  The point.
@@ -392,6 +436,9 @@ struct SessionOptions {
     /// @brief Sends the cache's watch changes to the server. Empty: the session still counts what its cache holds,
     ///        and sends nothing, which is right for a local source, whose replies carry every change it sees.
     Watcher watcher;
+    /// @brief The most bytes a document moves inline in one file (`download` from bytes, `upload` into bytes, a
+    ///        field component writing a base64 member); 1 to `kMaxInlineFileBytes`.
+    std::size_t maxInlineFileBytes = kDefaultInlineFileBytes;
 };
 
 namespace detail {
@@ -841,10 +888,11 @@ class Session {
 public:
     /// @brief An empty session.
     /// @param runtime The runtime. Borrowed.
-    /// @param options Timers, clock and catalog.
+    /// @param options Timers, clock, catalog and the inline cap.
+    /// @throws std::invalid_argument when `maxInlineFileBytes` is 0 or above `kMaxInlineFileBytes`.
     explicit Session(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, SessionOptions options = {})
         : _runtime{&runtime},
-          _options{std::move(options)},
+          _options{checkedOptions(std::move(options))},
           _permitted{runtime},
           _format{runtime, std::make_shared<FormatContext const>()},
           _env{runtime},
@@ -1235,6 +1283,16 @@ public:
     }
 
 private:
+    // A cap of 0 moves nothing inline, and one above the largest would not fit an envelope once encoded.
+    [[nodiscard]] static SessionOptions checkedOptions(SessionOptions options) {
+        if (options.maxInlineFileBytes == 0 || options.maxInlineFileBytes > kMaxInlineFileBytes) {
+            throw std::invalid_argument{"morph::ui::Session: maxInlineFileBytes is " +
+                                        std::to_string(options.maxInlineFileBytes) + "; it is 1 to " +
+                                        std::to_string(kMaxInlineFileBytes) + " (kMaxInlineFileBytes)"};
+        }
+        return options;
+    }
+
     void settleReply(detail::CacheEntry& entry, std::string const& reply) {
         auto json = parseJson(reply);
         auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
@@ -2080,6 +2138,42 @@ struct LowerCtx {
     std::shared_ptr<BoundaryRuntime> boundary;
 };
 
+/// @brief An `actionButton` part, lowered in the scope of the list it belongs to: what a screen's head shows and
+///        an overlay's footer draws as buttons.
+struct ActionModel {
+    /// @brief The action's id, unique in its list.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief The label.
+    Prop<std::string> label;
+    /// @brief The name of an icon; empty for none.
+    Prop<std::string> icon;
+    /// @brief How much it stands out.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run.
+    Prop<bool> enabled = true;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+    /// @brief Runs its `onClick` as a user event, in one batch; empty when it declares none.
+    Action run;
+};
+
+/// @brief A list of lowered `actionButton` parts, in document order.
+using ActionModels = std::vector<ActionModel>;
+
+/// @brief A `headBadge` part, lowered in the screen scope.
+struct BadgeModel {
+    /// @brief The badge's text.
+    Prop<std::string> text;
+    /// @brief Its tone.
+    Prop<Tone> tone = Tone::Neutral;
+    /// @brief The name of an icon; empty for none.
+    Prop<std::string> icon;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+};
+
 /// @brief A kind's key spec, from the kind table.
 /// @param kind The kind spec.
 /// @param key  The key.
@@ -2319,6 +2413,25 @@ public:
         session.asUser([&] { runtime().batch([&] { runList(*commands, command, {}); }); });
     }
 
+    /// @brief Lowers a list of `actionButton` parts into reactive models: label, icon, enabled and visible bound in
+    ///        @p ctx's scope, and a run function that runs the part's `onClick` there as a user event.
+    /// @param parts The parts, in order.
+    /// @param ctx   The scope the list belongs to.
+    /// @return The models, in the parts' order.
+    [[nodiscard]] ActionModels lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
+    /// @brief An overlay's actions as the action bar its footer shows: a button per action, test id
+    ///        `action_<id>`, shown and enabled as the action is.
+    /// @param actions The lowered actions, in order.
+    /// @return The `ActionBar` node.
+    [[nodiscard]] static Node actionBarOf(ActionModels actions);
+
+    /// @brief Lowers a screen head's `headBadge` parts, bound in @p ctx's scope.
+    /// @param parts The parts, in order.
+    /// @param ctx   The screen scope.
+    /// @return The badges, in the parts' order.
+    [[nodiscard]] std::vector<BadgeModel> lowerBadgeParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
     // --- Lowering ----------------------------------------------------------------------------------------------
 
     /// @brief Lowers a document node to a view node.
@@ -2434,8 +2547,20 @@ private:
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
+    /// reported, at @p path, while @p noted is still false, and shows no tone.
+    std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
+    /// A form field's control drawn by the host component its overlay names, with the built-in control as the
+    /// fallback.
+    Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
+    /// A custom node's prop of a declared type over @p read, converted as `lowerCustom` converts a document's.
+    CustomProp componentProp(std::string const& prop, std::string const& type, std::function<Value()> read);
+    /// A field component's `change`: the payload read as the `value` prop's type and written as the user's edit, or
+    /// reported when it does not decode, does not fit the field, or is over the inline cap for a base64 member.
+    void changeField(forms::FieldState& state, forms::FieldSpec const& spec, std::string const& path,
+                     std::string_view valueType, std::string const& payload);
     Node lowerCustomize(DocNode const& node, LowerCtx const& ctx);
     [[nodiscard]] std::string arrangedBy(std::string const& elementId) const;
     Node lowerArranged(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::string const& point,
@@ -2449,9 +2574,11 @@ private:
     [[nodiscard]] forms::FormSessionOptions engineOptions() const;
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
+    void layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout);
     void fieldOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, FieldState& field);
     std::vector<MenuItem> menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
     void ownQueries(DocNode const& node, RtScope const& scope, BoundaryRuntime& boundary,
@@ -2467,6 +2594,9 @@ private:
     void runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done);
     void runTransfer(Command const& command, CommandCtx const& ctx, Done done);
     void runDownload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
+    // A download's inline bytes, decoded and under the cap, with its name and type; nothing, reported, otherwise.
+    std::optional<InlineFile> inlineDownload(Command const& command, CommandCtx const& ctx, Value const& file,
+                                             Value const& name);
     void runUpload(Command const& command, CommandCtx const& ctx, Value const& file, Done done);
     bool unsupported(Command const& command, std::string_view what) {
         report(command.path, std::string{what} + " is not supported by the host");
@@ -2487,6 +2617,10 @@ private:
                 return convert(evalIn(*scope, bindings.get(), expr), session->formatting());
             })};
     }
+
+    /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
+    ///        name of no role is reported once for its path and drawn `Normal`.
+    Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
 
     /// @brief A property read through @p read, as a numbered slot.
     template <typename T, typename Read>
@@ -2522,6 +2656,38 @@ private:
 
 }  // namespace detail
 
+/// @brief A status badge of a screen's head, as its handle answers it.
+struct HeadBadge {
+    /// @brief The badge's text.
+    std::string text;
+    /// @brief Its tone.
+    Tone tone = Tone::Neutral;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadBadge const&) const = default;
+};
+
+/// @brief An action of a screen's head, as its handle answers it.
+struct HeadAction {
+    /// @brief The action's id, what `ScreenHead::run` takes.
+    std::string id;
+    /// @brief The label.
+    std::string label;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+    /// @brief How much it stands out.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run now.
+    bool enabled = true;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadAction const&) const = default;
+};
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2543,6 +2709,8 @@ public:
         }
         _core->focusElement = {};
         _mounted.reset();
+        _headActions.clear();
+        _headStatus.clear();
         _scope.reset();
     }
 
@@ -2578,6 +2746,61 @@ public:
     /// @brief Evaluates the document's `identity`.
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
+
+    /// @brief Evaluates the document's `subtitle`, the head's line under the title.
+    /// @return It, or `null`.
+    [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
+
+    /// @brief The head's status badges that are visible now, in order. A tracked read.
+    /// @return They.
+    [[nodiscard]] std::vector<HeadBadge> status() const {
+        std::vector<HeadBadge> shown;
+        for (detail::BadgeModel const& badge : _headStatus) {
+            if (badge.visible.evaluate()) {
+                shown.push_back(HeadBadge{
+                    .text = badge.text.evaluate(), .tone = badge.tone.evaluate(), .icon = badge.icon.evaluate()});
+            }
+        }
+        return shown;
+    }
+
+    /// @brief The head's actions that are visible now, in order, each with whether it is enabled. A tracked read.
+    /// @return They.
+    [[nodiscard]] std::vector<HeadAction> actions() const {
+        std::vector<HeadAction> shown;
+        for (detail::ActionModel const& action : _headActions) {
+            if (action.visible.evaluate()) {
+                shown.push_back(HeadAction{.id = action.id,
+                                           .label = action.label.evaluate(),
+                                           .icon = action.icon.evaluate(),
+                                           .emphasis = action.emphasis,
+                                           .enabled = action.enabled.evaluate()});
+            }
+        }
+        return shown;
+    }
+
+    /// @brief Runs a head action's `onClick` as a user event in the screen scope, in one batch.
+    /// @param actionId The action's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled.
+    bool runAction(std::string_view actionId) {
+        auto const found = std::ranges::find(_headActions, actionId, &detail::ActionModel::id);
+        if (found == _headActions.end()) {
+            _core->report("/actions", "head action " + std::string{actionId} + " is unknown");
+            return false;
+        }
+        auto const [visible, enabled] =
+            runtime().untracked([&] { return std::pair{found->visible.evaluate(), found->enabled.evaluate()}; });
+        if (!visible || !enabled) {
+            _core->report(found->path, "head action " + found->id + (visible ? " is disabled" : " is hidden"));
+            return false;
+        }
+        if (found->run) {
+            found->run();
+        }
+        return true;
+    }
 
     /// @brief Evaluates the document's `dirty`.
     /// @return Whether it is `true`.
@@ -2714,6 +2937,9 @@ private:
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
     std::optional<Mounted> _mounted;
+    // The head's parts, bound in the screen scope.
+    std::vector<detail::BadgeModel> _headStatus;
+    detail::ActionModels _headActions;
 };
 
 /// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
@@ -4816,6 +5042,127 @@ private:
     State _state = State::NotTaken;
 };
 
+/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file.
+/// @param bytes The bytes.
+/// @return The text.
+[[nodiscard]] inline std::string base64Encode(std::string_view bytes) {
+    static constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((bytes.size() + 2) / 3) * 4);
+    for (std::size_t index = 0; index < bytes.size(); index += 3) {
+        std::size_t const left = std::min<std::size_t>(3, bytes.size() - index);
+        std::uint32_t group = 0;
+        for (std::size_t offset = 0; offset < 3; ++offset) {
+            group <<= 8U;
+            if (offset < left) {
+                group |= static_cast<unsigned char>(bytes.at(index + offset));
+            }
+        }
+        for (std::size_t digit = 0; digit < 4; ++digit) {
+            out.push_back(digit <= left ? kAlphabet.at((group >> (18U - (6U * digit))) & 0x3FU) : '=');
+        }
+    }
+    return out;
+}
+
+/// @brief Base64 text as bytes (RFC 4648, with or without padding).
+/// @param text The text.
+/// @return The bytes, or `std::nullopt` for text that is not base64.
+[[nodiscard]] inline std::optional<std::string> base64Decode(std::string_view text) {
+    while (!text.empty() && text.back() == '=') {
+        text.remove_suffix(1);
+    }
+    if (text.size() % 4 == 1) {
+        return std::nullopt;
+    }
+    auto digitOf = [](char chr) -> int {
+        if (chr >= 'A' && chr <= 'Z') {
+            return chr - 'A';
+        }
+        if (chr >= 'a' && chr <= 'z') {
+            return chr - 'a' + 26;
+        }
+        if (chr >= '0' && chr <= '9') {
+            return chr - '0' + 52;
+        }
+        if (chr == '+') {
+            return 62;
+        }
+        return chr == '/' ? 63 : -1;
+    };
+    std::string out;
+    out.reserve((text.size() * 3) / 4);
+    std::uint32_t group = 0;
+    int bits = 0;
+    for (char const chr : text) {
+        int const digit = digitOf(chr);
+        if (digit < 0) {
+            return std::nullopt;
+        }
+        group = (group << 6U) | static_cast<std::uint32_t>(digit);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((group >> static_cast<std::uint32_t>(bits)) & 0xFFU));
+        }
+    }
+    return out;
+}
+
+/// @brief How many bytes base64 text decodes to, read from its length alone.
+/// @param text The text.
+/// @return The byte count.
+[[nodiscard]] inline std::size_t base64Size(std::string_view text) {
+    while (!text.empty() && text.back() == '=') {
+        text.remove_suffix(1);
+    }
+    return (text.size() * 3) / 4;
+}
+
+/// @brief A byte count as a person reads it: `512 bytes`, `2.4 KiB`, `1 MiB`.
+/// @param bytes The count.
+/// @return The text.
+[[nodiscard]] inline std::string sizeText(std::size_t bytes) {
+    constexpr std::size_t kKiB = 1024;
+    if (bytes < kKiB) {
+        return std::to_string(bytes) + " bytes";
+    }
+    bool const mebi = bytes >= kKiB * kKiB;
+    std::size_t const unit = mebi ? kKiB * kKiB : kKiB;
+    // One decimal place, rounded half up, and none when it is zero.
+    std::size_t const tenths = ((bytes * 10) + (unit / 2)) / unit;
+    std::string text = std::to_string(tenths / 10);
+    if (tenths % 10 != 0) {
+        text += "." + std::to_string(tenths % 10);
+    }
+    return text + (mebi ? " MiB" : " KiB");
+}
+
+/// @brief A document's inline file content as bytes: base64 text, or a list of integers 0 to 255.
+/// @param value The value.
+/// @return The bytes, or why the value is neither.
+[[nodiscard]] inline std::expected<std::string, std::string> inlineBytes(Value const& value) {
+    if (std::string const* const text = value.asString()) {
+        if (std::optional<std::string> bytes = base64Decode(*text)) {
+            return *std::move(bytes);
+        }
+        return std::unexpected(std::string{"the text is not base64"});
+    }
+    if (ValueList const* const list = value.asList()) {
+        std::string bytes;
+        bytes.reserve(list->size());
+        for (Value const& item : *list) {
+            std::int64_t const* const byte = item.asInt();
+            if (byte == nullptr || *byte < 0 || *byte > 255) {
+                return std::unexpected(std::string{"a byte list holds integers 0 to 255"});
+            }
+            bytes.push_back(static_cast<char>(static_cast<unsigned char>(*byte)));
+        }
+        return bytes;
+    }
+    return std::unexpected(std::string{"inline bytes are base64 text or a list of bytes"});
+}
+
 inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
     Value const file = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
     if (command.kind == CommandKind::Download) {
@@ -4848,12 +5195,56 @@ inline void ScreenCore::runDownload(Command const& command, CommandCtx const& ct
             hold->release();
         });
     };
+    if (command.bytes) {
+        std::optional<InlineFile> const inlined = inlineDownload(command, ctx, file, name);
+        if (!inlined) {
+            done(false);
+            return;
+        }
+        if (host == nullptr || !host->saveFile(*inlined, command.option, settled)) {
+            unsupported(command, "`download`");
+            done(false);
+            return;
+        }
+        hold->take();
+        return;
+    }
     if (host == nullptr || !host->download(file, command.option, name, settled)) {
         unsupported(command, "`download`");
         done(false);
         return;
     }
     hold->take();
+}
+
+// Inline bytes are checked before the host is asked: content over the cap, or that does not decode, never reaches it.
+inline std::optional<InlineFile> ScreenCore::inlineDownload(
+    Command const& command, CommandCtx const& ctx,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the command's `file` and `name`, in its order.
+    Value const& file, Value const& name) {
+    std::size_t const cap = session.options().maxInlineFileBytes;
+    std::size_t size = 0;
+    if (std::string const* const text = file.asString()) {
+        size = base64Size(*text);
+    } else if (ValueList const* const list = file.asList()) {
+        size = list->size();
+    }
+    std::expected<std::string, std::string> bytes = size > cap ? std::unexpected(std::string{}) : inlineBytes(file);
+    if (size > cap || (bytes && bytes->size() > cap)) {
+        report(command.path, "download: " + sizeText(bytes ? bytes->size() : size) + " is over the " + sizeText(cap) +
+                                 " inline cap; serve it through the file store");
+        return std::nullopt;
+    }
+    if (!bytes) {
+        report(command.path, "download: " + bytes.error());
+        return std::nullopt;
+    }
+    return InlineFile{
+        .name = textOf(name, session.formatting()),
+        .mediaType = command.mediaType
+                         ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), session.formatting())
+                         : std::string{},
+        .bytes = *std::move(bytes)};
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome an upload can have.
@@ -4869,8 +5260,10 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
             transfer->progress.set(std::move(fraction));
         }
     };
+    // Settles with the members the mutation's body gets beside its own (the reference or the inline file), or the
+    // failure.
     auto const settled = [this, weak, kept = detached(ctx), transfer, command = &command, done,
-                          hold](std::expected<Value, std::string> reply) {
+                          hold](std::expected<ValueRecord, std::string> reply) {
         auto const held = weak.lock();
         if (!held) {
             hold->release();
@@ -4892,7 +5285,9 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
             MutationRuntime& mutation = *found->mutation;
             Value const base = evalIn(*held, kept.bindings.get(), mutation.decl().body);
             ValueRecord fields = base.asRecord() == nullptr ? ValueRecord{} : *base.asRecord();
-            fields.insert_or_assign(command->binding.empty() ? std::string{"file"} : command->binding, *reply);
+            for (auto& [member, value] : *reply) {
+                fields.insert_or_assign(member, std::move(value));
+            }
             // The run takes its own count before this one is given back, so pending never reads zero in between.
             mutation.run(Value{std::move(fields)}, std::make_shared<Bindings const>(*kept.bindings),
                          [done](bool succeeded, Value const&) { done(succeeded); });
@@ -4915,7 +5310,48 @@ inline void ScreenCore::runUpload(Command const& command, CommandCtx const& ctx,
         request.modelType = target->mutation->typeId();
         request.action = target->mutation->decl().action;
     }
-    if (!host->uploadFor(request, progress, settled)) {
+    std::string const member = command.binding.empty() ? std::string{"file"} : command.binding;
+    bool started = false;
+    if (command.bytes) {
+        std::size_t const cap = session.options().maxInlineFileBytes;
+        started = host->readFile(
+            file, cap,
+            [this, settled, progress, cap, member, command = &command](std::expected<InlineFile, std::string> read) {
+                if (!read) {
+                    settled(std::unexpected(read.error()));
+                    return;
+                }
+                if (read->bytes.size() > cap) {
+                    // The host should have refused it; the cap holds whether or not it did.
+                    std::string why = "upload: " + sizeText(read->bytes.size()) + " is over the " + sizeText(cap) +
+                                      " inline cap; send it through the file store";
+                    report(command->path, why);
+                    settled(std::unexpected(std::move(why)));
+                    return;
+                }
+                progress(Value{std::int64_t{1}});
+                ValueRecord added;
+                added.insert_or_assign(member, Value{base64Encode(read->bytes)});
+                if (!command->nameAs.empty()) {
+                    added.insert_or_assign(command->nameAs, Value{read->name});
+                }
+                if (!command->typeAs.empty()) {
+                    added.insert_or_assign(command->typeAs, Value{read->mediaType});
+                }
+                settled(std::move(added));
+            });
+    } else {
+        started = host->uploadFor(request, progress, [settled, member](std::expected<Value, std::string> reference) {
+            if (!reference) {
+                settled(std::unexpected(reference.error()));
+                return;
+            }
+            ValueRecord added;
+            added.insert_or_assign(member, *std::move(reference));
+            settled(std::move(added));
+        });
+    }
+    if (!started) {
         if (transfer != nullptr) {
             transfer->pending.set(false);
             transfer->progress.set(Value{});
@@ -5036,24 +5472,36 @@ namespace detail {
 }
 
 /// @brief A text role by name.
-/// @param value  `normal`, `muted`, `heading` (or `title`), `error`, `success`.
-/// @param format Unused.
-/// @return The role; `Normal` for anything else.
-[[nodiscard]] inline TextRole roleOf(Value const& value, FormatContext const& format) {
-    std::string const text = textOf(value, format);
-    if (text == "muted") {
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`.
+/// @return The role; `nullopt` for any other name.
+[[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
+    if (name == "normal") {
+        return TextRole::Normal;
+    }
+    if (name == "muted") {
         return TextRole::Muted;
     }
-    if (text == "heading" || text == "title") {
+    if (name == "heading" || name == "title") {
         return TextRole::Heading;
     }
-    if (text == "error") {
+    if (name == "section") {
+        return TextRole::Section;
+    }
+    if (name == "error") {
         return TextRole::Error;
     }
-    if (text == "success") {
+    if (name == "success") {
         return TextRole::Success;
     }
-    return TextRole::Normal;
+    return std::nullopt;
+}
+
+/// @brief A text role by name, as `roleNamed` reads it.
+/// @param value  The name.
+/// @param format Unused.
+/// @return The role; `Normal` for any other name.
+[[nodiscard]] inline TextRole roleOf(Value const& value, FormatContext const& format) {
+    return roleNamed(textOf(value, format)).value_or(TextRole::Normal);
 }
 
 /// @brief A tone by name.
@@ -5088,6 +5536,50 @@ namespace detail {
         return Sizing::stretch(static_cast<int>(intOf(*stretch, 1)));
     }
     return Sizing::content();
+}
+
+/// @brief Whether a value is a sizing of one dimension: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+/// @param value The value.
+/// @return Whether `sizingOf` reads it as written rather than as content by default.
+[[nodiscard]] inline bool isSizing(Value const& value) {
+    if (std::string const* const text = value.asString()) {
+        return *text == "content";
+    }
+    ValueRecord const* const record = value.asRecord();
+    return record != nullptr && record->size() == 1 && (record->contains("fixed") || record->contains("stretch")) &&
+           record->begin()->second.asInt() != nullptr;
+}
+
+/// @brief An alignment by name, as the loader checked it: `start`, `center`, `end`, or stretch for none.
+/// @param name The name; empty for none.
+/// @return The alignment.
+[[nodiscard]] inline Align alignOf(std::string_view name) {
+    if (name == "start") {
+        return Align::Start;
+    }
+    if (name == "center") {
+        return Align::Center;
+    }
+    if (name == "end") {
+        return Align::End;
+    }
+    return Align::Stretch;
+}
+
+/// @brief A justification by name, as the loader checked it: `center`, `end`, `between`, or start for none.
+/// @param name The name; empty for none.
+/// @return The justification.
+[[nodiscard]] inline Justify justifyOf(std::string_view name) {
+    if (name == "center") {
+        return Justify::Center;
+    }
+    if (name == "end") {
+        return Justify::End;
+    }
+    if (name == "between") {
+        return Justify::Between;
+    }
+    return Justify::Start;
 }
 
 /// @brief An axis by name: `horizontal`, or vertical for anything else.
@@ -5161,14 +5653,62 @@ inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
 }
 
+inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& expr) {
+    if (!expr || expr->kind == ExprKind::Literal) {
+        return bindProp<TextRole>(ctx, expr, TextRole::Normal, roleOf);
+    }
+    return slotProp<TextRole>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
+        Value const value = evalIn(*scope, bindings.get(), expr);
+        std::optional<TextRole> const role = roleNamed(textOf(value, session.formatting()));
+        if (!role) {
+            report(expr->path, "role is " + canonicalJson(value) +
+                                   "; a role is normal, muted, heading, section, error or success");
+        }
+        return role.value_or(TextRole::Normal);
+    });
+}
+
+// The size request: `sizing` (the width, or both dimensions), `alignSelf`, and the bounds.
+inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout) {
+    if (ExprPtr const sizing = node.prop("sizing")) {
+        // The width, or both dimensions from a `{width, height}` record, one left out being content. The loader
+        // refuses a literal of another form; a computed one that is none is reported and lowers to content.
+        Value const value = once(ctx, sizing);
+        Value const* const width = value.field("width");
+        Value const* const height = value.field("height");
+        bool const record = width != nullptr || height != nullptr;
+        bool const valid = record ? (width == nullptr || isSizing(*width)) && (height == nullptr || isSizing(*height))
+                                  : isSizing(value);
+        if (!valid) {
+            report(sizing->path, "sizing is " + canonicalJson(value) +
+                                     "; a sizing is \"content\", {\"fixed\": n}, {\"stretch\": w}, or a record of "
+                                     "width and height of them");
+        } else if (record) {
+            layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
+            layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
+        } else {
+            layout.width = sizingOf(value);
+        }
+    }
+    if (std::string_view const placed = node.name("alignSelf"); !placed.empty()) {
+        layout.alignSelf = alignOf(placed);
+    }
+    // Literal integers, checked at load.
+    for (auto const& [key, bound] :
+         {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
+          std::pair{"minHeight", &LayoutHints::minHeight}, std::pair{"maxHeight", &LayoutHints::maxHeight}}) {
+        if (ExprPtr const expr = node.prop(key); expr != nullptr && expr->literal.asInt() != nullptr) {
+            layout.*bound = static_cast<int>(*expr->literal.asInt());
+        }
+    }
+}
+
 inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
     static_cast<void>(element);
     common.visible = bindProp<bool>(ctx, node.prop("visible"), true, boolOf);
     common.enabled = bindProp<bool>(ctx, node.prop("enabled"), true, boolOf);
     common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
-    if (ExprPtr const sizing = node.prop("sizing")) {
-        common.layout.width = sizingOf(once(ctx, sizing));
-    }
+    layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
     common.focusId = node.id;
     common.surface = std::string{node.name("surface")};
@@ -5250,6 +5790,58 @@ inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> p
     return items;
 }
 
+inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    ActionModels models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        ActionModel model{.id = part->id,
+                          .path = part->path,
+                          .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+                          .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                          .emphasis = ButtonEmphasis::Normal,
+                          .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+                          .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+                          .run = {}};
+        if (part->name("emphasis") == "primary") {
+            model.emphasis = ButtonEmphasis::Primary;
+        } else if (part->name("emphasis") == "danger") {
+            model.emphasis = ButtonEmphasis::Danger;
+        }
+        if (Commands const* const commands = part->event("onClick")) {
+            model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+        }
+        models.push_back(std::move(model));
+    }
+    return models;
+}
+
+inline Node ScreenCore::actionBarOf(ActionModels actions) {
+    ActionBar bar;
+    for (ActionModel& action : actions) {
+        Button button{.label = std::move(action.label),
+                      .emphasis = action.emphasis,
+                      .onClick = std::move(action.run),
+                      .common = {}};
+        button.common.visible = std::move(action.visible);
+        button.common.enabled = std::move(action.enabled);
+        button.common.testId = "action_" + action.id;
+        bar.children.push_back(ui::button(std::move(button)));
+    }
+    return ui::actionBar(std::move(bar));
+}
+
+inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    std::vector<BadgeModel> badges;
+    badges.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        badges.push_back(BadgeModel{.text = bindProp<std::string>(ctx, part->prop("text"), std::string{}, stringOf),
+                                    .tone = bindProp<Tone>(ctx, part->prop("tone"), Tone::Neutral, toneOf),
+                                    .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                                    .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf)});
+    }
+    return badges;
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
@@ -5289,6 +5881,13 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             common.a11y.name = textProp("label");
         }
     };
+    // A standalone input draws its label as a caption only when the document asks for it (`showLabel`).
+    auto captionOf = [&](auto& spec) {
+        if (node.prop("label")) {
+            spec.label = textProp("label");
+        }
+        spec.showLabel = node.flag("showLabel");
+    };
     auto action = [&](std::string_view key) -> Action {
         Commands const* const commands = node.event(key);
         if (commands == nullptr) {
@@ -5311,18 +5910,22 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     };
 
     if (kind == "text") {
-        Text spec{.text = textProp("text"),
-                  .role = bindProp<TextRole>(ctx, node.prop("role"), TextRole::Normal, roleOf)};
+        Text spec{.text = textProp("text"), .role = roleProp(ctx, node.prop("role"))};
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));
     }
     if (kind == "button") {
         Button spec{.label = textProp("label")};
+        spec.icon = onceText("icon");
         if (node.name("emphasis") == "primary") {
             spec.emphasis = ButtonEmphasis::Primary;
         } else if (node.name("emphasis") == "danger") {
             spec.emphasis = ButtonEmphasis::Danger;
+        }
+        if (node.name("style") == "item") {
+            spec.style = ButtonStyle::Item;
+            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
         }
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");
@@ -5379,6 +5982,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
@@ -5426,6 +6030,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::select(std::move(spec));
     }
     if (kind == "slider") {
@@ -5475,6 +6080,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
+        captionOf(spec);
         return ui::dateTimeInput(std::move(spec));
     }
     if (kind == "filePicker") {
@@ -5507,16 +6113,24 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                                  gap);
         }
         if (kind == "column") {
-            Column spec{.children = children("children"), .gap = gap};
+            Column spec{.children = children("children"),
+                        .gap = gap,
+                        .align = alignOf(node.name("align")),
+                        .justify = justifyOf(node.name("justify"))};
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
-        Row spec{.children = children("children"), .gap = gap};
+        Row spec{.children = children("children"),
+                 .gap = gap,
+                 .align = alignOf(node.name("align")),
+                 .justify = justifyOf(node.name("justify"))};
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }
     if (kind == "grid") {
-        Grid spec{.columns = static_cast<int>(onceInt("columns", 1)), .gap = static_cast<int>(onceInt("gap", 0))};
+        Grid spec{.columns = static_cast<int>(onceInt("columns", 1)),
+                  .gap = static_cast<int>(onceInt("gap", 0)),
+                  .align = alignOf(node.name("align"))};
         for (DocNodePtr const& cell : node.nodes("children")) {
             ExprPtr const span = cell->prop("span");
             spec.cells.push_back(
@@ -5884,9 +6498,168 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
             runtime().untracked([&] { runEvent(onError, attached(held), Value{failureText(error)}); });
         });
     }
-    Column column{.children = {forms::formView(*form, forms::FormViewOptions{.showTitle = false})}};
+    forms::FormViewOptions options{.showTitle = false};
+    presentForm(node, ctx, options);
+    options.title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf);
+    // A field whose overlay names a component is drawn by it; only top-level fields take one, as every overlay.
+    for (DocNodePtr const& record : node.partList("fields")) {
+        for (DocNodePtr const& overlay : record->partList("fields")) {
+            if (!overlay->name("component").empty()) {
+                options.overrides.byField(overlay->id,
+                                          [this, ctx, field = overlay.get()](forms::FieldView const& view) {
+                                              return fieldComponent(view, *field, ctx);
+                                          });
+            }
+        }
+    }
+    Column column{.children = {forms::formView(*form, std::move(options))}};
     commonOf(node, ctx, element, column.common);
     return ui::column(std::move(column));
+}
+
+/// @brief A component's `change` payload as the wire value of the field it draws, read as the `value` prop's
+///        declared type.
+/// @param payload The payload, as the backend reports it.
+/// @param type    The `value` prop's type.
+/// @return The wire value, or why the payload is not one.
+[[nodiscard]] inline std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,
+                                                                                        std::string_view type) {
+    std::string_view text{payload};
+    if (type == "string") {
+        if (text.starts_with("s:")) {
+            text.remove_prefix(2);
+        }
+        return forms::detail::engine::Json{std::string{text}};
+    }
+    if (text.starts_with("i:")) {
+        text.remove_prefix(2);
+    }
+    std::optional<forms::detail::engine::Json> json = forms::detail::engine::parseJson(text);
+    if (!json) {
+        return std::unexpected(std::string{"it is not JSON"});
+    }
+    bool const fits = type == "json" || json->is_null() || (type == "bool" && json->is_boolean()) ||
+                      ((type == "int" || type == "number") && json->is_number()) ||
+                      (type == "exact" && (json->is_number() || json->is_string()));
+    if (!fits) {
+        return std::unexpected("it is not " + std::string{type == "int" ? "an " : "a "} + std::string{type});
+    }
+    return *std::move(json);
+}
+
+/// @brief What a form fills of a field component's props: the field's value, errors, read-only and required state,
+///        and label, each a tracked read of the field.
+/// @param prop  The prop's name.
+/// @param state The field.
+/// @return The read, or empty for a prop the form does not fill.
+[[nodiscard]] inline std::function<Value()> formFilled(std::string const& prop, forms::FieldState* state) {
+    if (prop == "value") {
+        return [state] {
+            forms::Encoding const& encoding = state->encoded().get();
+            if (!encoding.has_value() || !encoding->has_value()) {
+                return Value{};
+            }
+            return (*encoding)->value.isNull() ? jsonTextValue((*encoding)->json) : (*encoding)->value;
+        };
+    }
+    if (prop == "errors") {
+        return [state] {
+            std::optional<forms::FieldError> const& error = state->error().get();
+            return error.has_value() ? Value{ValueList{Value{error->message}}} : Value{ValueList{}};
+        };
+    }
+    if (prop == "readonly") {
+        return [state] { return Value{state->readonly().get()}; };
+    }
+    if (prop == "required") {
+        return [state] { return Value{state->required().get()}; };
+    }
+    if (prop == "label") {
+        return [state] { return Value{state->label()}; };
+    }
+    return {};
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its declared type.
+inline CustomProp ScreenCore::componentProp(std::string const& prop, std::string const& type,
+                                            std::function<Value()> read) {
+    if (type == "bool") {
+        return CustomProp{.name = prop, .value = slotProp<bool>([this, read = std::move(read)] {
+                                            return boolOf(read(), session.formatting());
+                                        })};
+    }
+    if (type == "number") {
+        return CustomProp{.name = prop,
+                          .value = slotProp<double>([read = std::move(read)] { return componentNumber(read()); })};
+    }
+    return CustomProp{.name = prop, .value = slotProp<std::string>([this, read = std::move(read), type] {
+                                        return componentText(read(), type, session.formatting());
+                                    })};
+}
+
+inline void ScreenCore::changeField(forms::FieldState& state, forms::FieldSpec const& spec, std::string const& path,
+                                    std::string_view valueType, std::string const& payload) {
+    auto wire = changeWire(payload, valueType);
+    // A base64 member holds a file's bytes, which a document moves inline only under the session's cap.
+    if (std::size_t const cap = session.options().maxInlineFileBytes;
+        wire && spec.bytes && wire->is_string() && base64Size(wire->get_string()) > cap) {
+        report(path, "field " + spec.name + ": " + std::to_string(base64Size(wire->get_string())) +
+                         " bytes is over the " + std::to_string(cap) + " inline cap");
+        return;
+    }
+    if (wire) {
+        if (auto edited = state.edit(*wire); !edited) {
+            wire = std::unexpected(edited.error());
+        }
+    }
+    if (!wire) {
+        report(path, "field " + spec.name + ": the component's change does not decode: " + wire.error());
+    }
+}
+
+inline Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx) {
+    std::string const name{overlay.name("component")};
+    // A loaded document's field component is declared, with a `value` prop and a `change` event.
+    Component const& component = _doc->components.at(name);
+    forms::FieldState* const state = &view.state();
+    Custom spec{.name = name,
+                .fallback = view.defaultControl(),
+                .props = {},
+                .minVersion =
+                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+                .onEvent = {}};
+    for (auto const& [prop, type] : component.props) {
+        if (prop == "value" && type == "json") {
+            // The wire JSON itself, so an object's or a collection's every digit reaches the component.
+            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([state] {
+                                                              forms::Encoding const& encoding = state->encoded().get();
+                                                              return encoding.has_value() && encoding->has_value()
+                                                                         ? (*encoding)->json
+                                                                         : std::string{"null"};
+                                                          })});
+            continue;
+        }
+        std::function<Value()> read = formFilled(prop, state);
+        if (!read) {
+            ExprPtr given;
+            for (DocNodePtr const& record : overlay.partList("props")) {
+                if (ExprPtr const expr = record->prop(prop)) {
+                    given = expr;
+                }
+            }
+            read = [scope = ctx.scope, bindings = ctx.bindings, given] {
+                return given ? evalIn(*scope, bindings.get(), given) : Value{};
+            };
+        }
+        spec.props.push_back(componentProp(prop, type, std::move(read)));
+    }
+    spec.onEvent = [this, state, path = overlay.path, fieldSpec = &view.spec(),
+                    valueType = component.props.at("value")](std::string const& event, std::string const& payload) {
+        if (event == "change") {
+            changeField(*state, *fieldSpec, path, valueType, payload);
+        }
+    };
+    return ui::custom(std::move(spec));
 }
 
 // Every call goes through the alias's channel, bound for its current instance when the call is made.
@@ -5995,18 +6768,42 @@ inline void ScreenCore::wireComposite(ElementState& element) {
     }
 }
 
+// The presentation keys a form, a collection and a wizard share, but the title: the label of the explicit-mode button
+// and the status line naming it, bound in the node's scope; whether the status line shows, the grid's columns and the
+// field layout, as read at load.
+inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options) {
+    if (ExprPtr const label = node.prop("submitLabel")) {
+        options.submitLabel = bindProp<std::string>(ctx, label, std::string{}, stringOf);
+    }
+    if (auto const shown = node.flags.find("showStatus"); shown != node.flags.end()) {
+        options.showStatus = shown->second;
+    }
+    if (ExprPtr const columns = node.prop("columns"); columns != nullptr && columns->literal.asInt() != nullptr) {
+        options.gridColumns = static_cast<int>(*columns->literal.asInt());
+        options.flatGridColumns = options.gridColumns;
+    }
+    if (node.name("fieldLayout") == "inline") {
+        options.fieldLayout = forms::FieldLayout::Inline;
+    }
+}
+
 inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
-    // The editor's and the steps' titles are the dialog's and the header's; the forms do not repeat them.
+    // The editor's and the steps' titles are the dialog's and the header's; the forms do not repeat them. A `title`
+    // replaces the view's own heading.
     forms::FormViewOptions form{};
     form.showTitle = false;
+    presentForm(node, ctx, form);
+    Prop<std::string> title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf);
     Node view;
     if (element != nullptr && element->collection != nullptr) {
         forms::CollectionViewOptions options{};
         options.form = std::move(form);
+        options.title = std::move(title);
         view = forms::collectionView(*element->collection, std::move(options));
     } else if (element != nullptr && element->wizard != nullptr) {
         forms::WizardViewOptions options{};
         options.form = std::move(form);
+        options.title = std::move(title);
         view = forms::wizardView(*element->wizard, options);
     } else {
         return ui::text(Text{.text = std::string{node.name("action")}, .role = TextRole::Muted});
@@ -6016,6 +6813,8 @@ inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx,
     return ui::column(std::move(column));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): an overlay's scope, content, actions and keys are one lowering.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): an overlay's scope, content, actions and keys are one lowering.
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Prop<bool> open = node.prop("open") ? bindProp<bool>(ctx, node.prop("open"), false, boolOf)
                                         : slotProp<bool>([element] { return element->open.get(); });
@@ -6035,6 +6834,11 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 lists.push_back(commands);
             }
         }
+        for (DocNodePtr const& action : node.partList("actions")) {
+            if (Commands const* const commands = action->event("onClick")) {
+                lists.push_back(commands);
+            }
+        }
         declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
         element->inner.set(inner.get());
         LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
@@ -6042,6 +6846,10 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         children.reserve(content.size());
         for (DocNode const* const child : content) {
             children.push_back(lower(*child, innerCtx));
+        }
+        // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its footer.
+        if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
+            children.push_back(actionBarOf(std::move(actions)));
         }
         std::vector<KeyBinding> keys;
         if (Commands const* const commands = node.event("default")) {
@@ -6196,7 +7004,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         fields.emplace_back(part->id);
     }
     auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
-    auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn](reactive::Signal<Value> const& row) {
+    // A value that names no tone is reported once for the table, whichever row and value it was.
+    auto toneReported = std::make_shared<bool>(false);
+    auto cellsOf = [this, ctx, &node, cells, fields, registry, keyFn,
+                    toneReported](reactive::Signal<Value> const& row) {
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
             if (column != nullptr) {
@@ -6225,7 +7036,14 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         if (!out.empty()) {
             out.front() = holding({out.front()}, scope);
         }
-        return out;
+        TableRowView view{.cells = std::move(out), .tone = std::nullopt};
+        if (ExprPtr const toneExpr = node.prop("rowTone")) {
+            view.tone = slotProp<std::optional<Tone>>(
+                [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
+                    return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
+                });
+        }
+        return view;
     };
     TableOptions options;
     std::string const mode =
@@ -6267,8 +7085,56 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         runEvent(commands, rowCtx, activated);
     };
     commonOf(node, ctx, element, options.common);
-    return ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn), std::move(cellsOf),
-                            std::move(options));
+    std::span<DocNodePtr const> const empty = node.nodes("empty");
+    if (empty.empty()) {
+        return ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn), std::move(cellsOf),
+                                std::move(options));
+    }
+    // With `empty`, a column holds the table and the content shown in its place while `rows` is an empty list; a
+    // `null` (a query not answered yet) shows the table. The column is placed as the table would be: it takes the
+    // node's visibility and layout, and every other common property stays on the table, so its test id and the
+    // element id `focus` finds name the table.
+    auto const listed = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
+        ValueList const* const items = evalIn(*scope, bindings.get(), rowsExpr).asList();
+        return items == nullptr || !items->empty();
+    };
+    Column wrapper;
+    wrapper.common.visible = std::move(options.common.visible);
+    wrapper.common.layout = options.common.layout;
+    options.common.visible = slotProp<bool>(listed);
+    Column content{.children = {lowerAll(empty, ctx)}};
+    content.common.visible = slotProp<bool>([listed] { return !listed(); });
+    wrapper.children.push_back(ui::table<Value>(std::move(columns), std::move(rows), std::move(keyFn),
+                                                std::move(cellsOf), std::move(options)));
+    wrapper.children.push_back(ui::column(std::move(content)));
+    return ui::column(std::move(wrapper));
+}
+
+inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (std::string const* const text = value.asString()) {
+        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
+        // others, so `auto` there reads differently to each.
+        for (auto const& [name, tone] : kTones) {
+            if (name == *text) {
+                return tone;
+            }
+        }
+    }
+    if (!noted) {
+        noted = true;
+        report(path, "rowTone is " + canonicalJson(value) + "; a tone is neutral, info, ok, warn or err");
+    }
+    return std::nullopt;
 }
 
 inline void ScreenCore::ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,
@@ -6737,11 +7603,18 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         static_cast<void>(chord);
         lists.push_back(&commands);
     }
+    for (DocNodePtr const& action : doc->actions) {
+        if (Commands const* const commands = action->event("onClick")) {
+            lists.push_back(commands);
+        }
+    }
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
             .scope = screen->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
         Node lowered = core.lower(*doc->view, ctx);
+        screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
+        screen->_headActions = core.lowerActionParts(doc->actions, ctx);
         if (!doc->keys.empty()) {
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {

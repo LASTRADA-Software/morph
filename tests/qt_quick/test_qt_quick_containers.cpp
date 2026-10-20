@@ -3,19 +3,30 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QColor>
+#include <QFont>
+#include <QFontInfo>
+#include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
+#include <QString>
 #include <QStringList>
 #include <QVariantList>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <memory>
+#include <morph/core/completion.hpp>
+#include <morph/forms/engine/form_session.hpp>
+#include <morph/forms/engine/form_view.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/theme.hpp>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/kinds.hpp"
@@ -49,6 +60,21 @@ std::vector<std::string> laidOut(Scene& scene, std::vector<std::unique_ptr<ui::T
         order.push_back(entry.second);
     }
     return order;
+}
+
+// The text item inside a widget that shows @p text: a field's root also holds its caption and its message, so the
+// first text item found need not be the one drawn.
+// A pointer, not a reference: GCC reads a reference returned from a call given a temporary as possibly dangling.
+QQuickItem const* textItemOf(char const* testId, QString const& text) {
+    detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+    REQUIRE(widget != nullptr);
+    REQUIRE(widget->item() != nullptr);
+    QList<QQuickItem*> const inner = widget->item()->findChildren<QQuickItem*>();
+    auto const found = std::ranges::find_if(inner, [&text](QQuickItem const* item) {
+        return item->inherits("QQuickText") && item->property("text").toString() == text;
+    });
+    REQUIRE(found != inner.end());
+    return *found;
 }
 
 }  // namespace
@@ -149,6 +175,53 @@ TEST_CASE("qt_quick containers: tabs show their labels, highlight on request and
     CHECK(picks == std::vector<std::size_t>{0});
     CHECK(impl.highlighted() == 0);
     CHECK(containerCore(*tabs).children().size() == 1);
+}
+
+// Mutation: never bind the TabBar's visible to barShown (it shows with one tab); or keep `focusTarget: bar`, so a
+// tabs widget focused while its bar is hidden gives the keyboard focus to the hidden bar.
+TEST_CASE(
+    "qt_quick containers: a hidden tab bar is not drawn and takes no focus; a shown one sits a step above the page",
+    "[qt_quick]") {
+    Scene scene;
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    std::vector<std::string> chords;
+    tabs->setKeys({"Ctrl+Tab"}, [&chords](std::string const& chord) { chords.push_back(chord); });
+    tabs->setTabs({"One"});
+    auto page = scene.backend().createSlot(tabs.get());
+    page->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto inside = scene.backend().createText(page.get());
+    inside->setText("page");
+    tabs->setSelected(0);
+    tabs->setBarShown(false);
+    scene.settle();
+    QList<QQuickItem*> const bars = Scene::itemsOf(Scene::itemOf(*tabs), "QQuickTabBar");
+    REQUIRE(bars.size() == 1);
+    QQuickItem const& bar = *bars.at(0);
+    CHECK_FALSE(bar.isVisible());
+    CHECK(std::abs(Scene::itemOf(*page).mapToScene(QPointF{0, 0}).y() -
+                   Scene::itemOf(*tabs).mapToScene(QPointF{0, 0}).y()) < 1.0);
+
+    // Focused with its bar hidden, the widget holds the focus in its pages, not in the hidden bar, and its chords
+    // arrive.
+    tabs->focus();
+    scene.settle();
+    QQuickItem const* const focused = scene.window().activeFocusItem();
+    REQUIRE(focused != nullptr);
+    CHECK(focused->isVisible());
+    scene.key(Qt::Key_Tab, Qt::ControlModifier);
+    CHECK(chords == std::vector<std::string>{"Ctrl+Tab"});
+
+    tabs->setTabs({"One", "Two"});
+    tabs->setBarShown(true);
+    scene.settle();
+    CHECK(bar.isVisible());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 3)));
+    qreal const barBottom = bar.mapToScene(QPointF{0, bar.height()}).y();
+    CHECK(Scene::itemOf(*page).mapToScene(QPointF{0, 0}).y() >= barBottom + step - 0.5);
 }
 
 TEST_CASE("qt_quick containers: a splitter takes its panes through the split view and applies sizes", "[qt_quick]") {
@@ -436,4 +509,169 @@ TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28
     CHECK(std::abs(sidebar.height() - scene.window().height()) < 1.0);
     // The content sits right of the sidebar, inside the page's padding (step 4, 16 px).
     CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x() >= sidebar.width() + 16.0);
+}
+
+// The inner items, not the widget roots: each root fills the bar's height whatever the alignment, so the roots share
+// a centre either way, while the label and the button inside them are centred only when the bar centres them.
+// Mutation: drop the top bar's setAlign(Align::Center) in ShellFrame (the principal's label sits at the top).
+TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-out button", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.onSignOut = [] {};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.setPrincipal("alice");
+    scene.settle();
+    auto const innerOf = [](char const* testId, char const* className) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        QList<QQuickItem*> const inner = widget->item()->findChildren<QQuickItem*>();
+        auto const found =
+            std::ranges::find_if(inner, [className](QQuickItem const* item) { return item->inherits(className); });
+        REQUIRE(found != inner.end());
+        return **found;
+    };
+    QQuickItem const& label = *textItemOf("shell_principal", QStringLiteral("alice"));
+    QQuickItem const& button = innerOf("shell_signOut", "QQuickAbstractButton");
+    REQUIRE(label.height() > 0.0);
+    REQUIRE(button.height() > label.height());
+    qreal const labelCentre = label.mapToScene(QPointF{0, label.height() / 2}).y();
+    qreal const buttonCentre = button.mapToScene(QPointF{0, button.height() / 2}).y();
+    INFO("label centre " << labelCentre << ", button centre " << buttonCentre);
+    CHECK(std::abs(labelCentre - buttonCentre) <= 1.0);
+}
+
+// Mutation: ignore `fieldLayout` in fieldCell (the label sits above its control).
+TEST_CASE("qt_quick containers: an inline form field's label sits left of its control, level with it", "[qt_quick]") {
+    Scene scene;
+    auto const model = morph::forms::FormModel::fromSchema(
+        "Probe", R"({"properties":{"name":{"type":"string","title":"Name"}},"required":["name"]})");
+    REQUIRE(model.has_value());
+    morph::forms::FormSession session{
+        scene.runtime(), *model,
+        [&scene](std::string_view, std::string const&) {
+            return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
+        },
+        [&scene](std::string_view, std::string const&) {
+            return morph::async::Completion<std::string>::makeSettleable(&scene.owner()).first;
+        }};
+    morph::forms::FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    ui::Mounted const view{scene.runtime(), scene.backend(), morph::forms::formView(session, std::move(options))};
+    scene.settle();
+    auto const itemOf = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    QQuickItem const& label = *textItemOf("label_name", QStringLiteral("Name"));
+    QQuickItem const& control = itemOf("field_name");
+    REQUIRE(label.height() > 0.0);
+    REQUIRE(control.height() > label.height());
+    QPointF const labelAt = label.mapToScene(QPointF{0, label.height() / 2});
+    QPointF const controlAt = control.mapToScene(QPointF{0, control.height() / 2});
+    INFO("label at " << labelAt.x() << "," << labelAt.y() << "; control at " << controlAt.x() << "," << controlAt.y());
+    CHECK(labelAt.x() + label.width() <= controlAt.x() + 1.0);
+    CHECK(std::abs(labelAt.y() - controlAt.y()) <= 1.0);
+}
+
+// Mutation: create the navigator's entries without setStyle (an entry is as wide as its label, and is not tinted).
+TEST_CASE("qt_quick containers: a navigator entry fills the sidebar, and the current one is tinted", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {morph::ui::CatalogEntry{.id = "a", .title = "Samples", .module = "Lab"},
+                                 morph::ui::CatalogEntry{.id = "b", .title = "Results", .module = "Lab"}};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.navigator().setCurrent("b");
+    scene.settle();
+    auto const itemOf = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    auto const fillOf = [&itemOf](char const* testId) {
+        QList<QQuickItem*> const inner = itemOf(testId).findChildren<QQuickItem*>();
+        auto const button =
+            std::ranges::find_if(inner, [](QQuickItem const* item) { return item->inherits("QQuickAbstractButton"); });
+        REQUIRE(button != inner.end());
+        auto* const background = (*button)->property("background").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        return background->property("color").value<QColor>();
+    };
+    QQuickItem const& list = itemOf("navigator");
+    QQuickItem const& entry = itemOf("nav_a");
+    INFO("navigator " << list.width() << " wide, its entry " << entry.width());
+    CHECK(std::abs(entry.width() - list.width()) < 1.0);
+    CHECK(fillOf("nav_b") != fillOf("nav_a"));
+    CHECK(fillOf("nav_a").alpha() == 0);  // an item that is not current, and not hovered, is clear
+}
+
+// Mutation: draw role 5 in the body font (the section is not bold), or answer the text colour for it in textColorOf.
+TEST_CASE("qt_quick containers: the frame's type scale runs application name, section, entry", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {morph::ui::CatalogEntry{.id = "a", .title = "Samples", .module = "Lab"}};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    auto body = scene.backend().createText(&frame.page());
+    body->setText("body");
+    scene.settle();
+    body->setTestId("body");
+    scene.settle();
+    QQuickItem const& sectionLabel = *textItemOf("navigator_group_Lab/", QStringLiteral("Lab"));
+    QFontInfo const section{sectionLabel.property("font").value<QFont>()};
+    QFontInfo const name{textItemOf("shell_application", QStringLiteral("App"))->property("font").value<QFont>()};
+    QFontInfo const text{textItemOf("body", QStringLiteral("body"))->property("font").value<QFont>()};
+    INFO("section " << section.pixelSize() << " bold " << section.bold() << ", name " << name.pixelSize() << ", body "
+                    << text.pixelSize());
+    CHECK(section.bold());
+    CHECK(section.pixelSize() == text.pixelSize());
+    CHECK(name.pixelSize() > section.pixelSize());
+    auto const color = sectionLabel.property("color").value<QColor>();
+    // The heading draws in its own scheme, the sidebar's.
+    detail::ItemBase const* const heading = detail::findWidget(QStringLiteral("navigator_group_Lab/"));
+    auto* const scheme = heading->item()->property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(color == scheme->property("muted").value<QColor>());
+    CHECK_FALSE(color == scheme->property("text").value<QColor>());
+}
+
+// The stack's length comes from its parent here: a `between` spacing taken from that length must not feed the
+// stack's implicit length back to the parent, or each layout pass widens the row and the window never settles.
+// Mutation: make MorphStack's implicit length its layout's (the row grows past the window, and its siblings are not
+// laid out).
+TEST_CASE("qt_quick containers: a row whose width its column gives spreads its children between its ends",
+          "[qt_quick]") {
+    Scene scene;
+    auto const named = [](std::string const& text) {
+        ui::Text made{.text = text};
+        made.common.testId = "spread_" + text;
+        return ui::text(std::move(made));
+    };
+    ui::Row row{.children = {named("count"), named("a"), named("b")}, .justify = ui::Justify::Between};
+    row.common.testId = "spread";
+    ui::Text below{.text = "below"};
+    below.common.testId = "below";
+    ui::Mounted const view{scene.runtime(), scene.backend(),
+                           ui::column({.children = {ui::row(std::move(row)), ui::text(std::move(below))}})};
+    scene.settle();
+    detail::ItemBase const* const widget = detail::findWidget(QStringLiteral("spread"));
+    REQUIRE(widget != nullptr);
+    QQuickItem const& spread = *widget->item();
+    QQuickItem const& last = *textItemOf("spread_b", QStringLiteral("b"));
+    QQuickItem const& first = *textItemOf("spread_count", QStringLiteral("count"));
+    qreal const end = last.mapToScene(QPointF{last.width(), 0}).x();
+    INFO("row " << spread.width() << " wide in a window " << scene.window().width() << " wide; its last child ends at "
+                << end << ", its first starts at " << first.mapToScene(QPointF{0, 0}).x());
+    CHECK(std::abs(spread.width() - scene.window().width()) < 1.0);
+    CHECK(std::abs(first.mapToScene(QPointF{0, 0}).x()) < 1.0);
+    CHECK(end <= scene.window().width() + 1.0);
+    CHECK(end >= scene.window().width() - 4.0);
 }

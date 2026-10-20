@@ -47,7 +47,8 @@ export MORPH_CHECK_FETCHCONTENT_BASE_DIR="${scratch}/deps"
 
 # A scratch copy holding exactly the files the checker configures against:
 # with tests and examples off, morph's build reads the root CMakeLists.txt,
-# cmake/, and the headers.
+# cmake/, the headers, and src/ for the compiled morph::client it builds by
+# default.
 make_tree() {
     local dest="$1"
     rm -rf "$dest"
@@ -55,6 +56,7 @@ make_tree() {
     cp "${repo_root}/CMakeLists.txt" "$dest/"
     cp -R "${repo_root}/cmake" "$dest/cmake"
     cp -R "${repo_root}/include" "$dest/include"
+    cp -R "${repo_root}/src" "$dest/src"
     mkdir -p "$dest/scripts"
     cp "${repo_root}/${checker}" "$dest/scripts/"
 }
@@ -248,10 +250,17 @@ expect_caught "find_dependency(glaze) dropped from the package config" \
 # Vacuity guard on the exported-name check. With no optional component
 # installed there is no morph::<component> in morphTargets.cmake to inspect,
 # so that check would compare nothing and pass on any regression.
+# morph::client, exported beside net, is left out too, or it alone would keep the check fed.
 expect_caught "no optional component installed, leaving the export-name check with nothing to read" \
-    "edit CMakeLists.txt -e 's@foreach(_morph_component IN ITEMS offline_sqlite qt net)@foreach(_morph_component IN ITEMS \"\")@'" \
+    "edit CMakeLists.txt -e 's@foreach(_morph_component IN ITEMS offline_sqlite qt net)@foreach(_morph_component IN ITEMS \"\")@' -e 's@^    if(TARGET morph_client)\$@    if(FALSE)@'" \
     fast \
     "no optional component was installed"
+
+# morph::client is on by default and compiled: an install built without it must not pass for one that has it.
+expect_caught "morph::client left out of the install" \
+    "edit CMakeLists.txt -e 's@^option(MORPH_BUILD_CLIENT \(.*\) ON)\$@option(MORPH_BUILD_CLIENT \1 OFF)@'" \
+    fast \
+    "morph::client was not installed"
 
 # ── Verdict ─────────────────────────────────────────────────────────────────
 if [ "$failures" -ne 0 ]; then

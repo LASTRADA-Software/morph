@@ -16,7 +16,7 @@ using morph::examples::testing::awaitOn;
 using morph::examples::testing::pumpUntil;
 using namespace std::chrono_literals;
 
-TEST_CASE("pumpUntil: runs posted work, including work posted from another thread", "[examples-common][wait]") {
+TEST_CASE("pumpUntil: runs posted work, including work posted from another thread", "[client][wait]") {
     morph::exec::MainThreadExecutor owner;
     bool done = false;
     std::thread poster{[&owner, &done] { owner.post([&owner, &done] { owner.post([&done] { done = true; }); }); }};
@@ -24,14 +24,14 @@ TEST_CASE("pumpUntil: runs posted work, including work posted from another threa
     poster.join();
 }
 
-TEST_CASE("pumpUntil: gives up when the budget runs out", "[examples-common][wait]") {
+TEST_CASE("pumpUntil: gives up when the budget runs out", "[client][wait]") {
     morph::exec::MainThreadExecutor owner;
     CHECK_FALSE(pumpUntil(owner, [] { return false; }, 20ms));
     morph::ladder::testkit::StepExecutor stepped;
     CHECK_FALSE(pumpUntil(stepped, [] { return false; }, 20ms));
 }
 
-TEST_CASE("pumpUntil: steps a StepExecutor until the predicate holds", "[examples-common][wait]") {
+TEST_CASE("pumpUntil: steps a StepExecutor until the predicate holds", "[client][wait]") {
     morph::ladder::testkit::StepExecutor owner;
     std::atomic<bool> done{false};
     std::thread poster{[&owner, &done] { owner.post([&done] { done = true; }); }};
@@ -39,7 +39,7 @@ TEST_CASE("pumpUntil: steps a StepExecutor until the predicate holds", "[example
     poster.join();
 }
 
-TEST_CASE("awaitOn: returns the value, rethrows the failure, and gives up at the budget", "[examples-common][wait]") {
+TEST_CASE("awaitOn: returns the value, rethrows the failure, and gives up at the budget", "[client][wait]") {
     morph::exec::MainThreadExecutor owner;
     {
         auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&owner);

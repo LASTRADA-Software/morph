@@ -215,7 +215,7 @@ TEST_CASE("UiRegistry::addEntry lists only host screens and unavailable ones", "
 TEST_CASE("UiRegistry::addFile refuses what it cannot serve", "[ui-service][registry]") {
     UiRegistry registry = emptyRegistry();
     REQUIRE(refused(registry.addFile(uiservice::file(morph::ui::kScreenFile, "s", "{}"))) ==
-            "a file is an app document, a theme, a message catalogue or a component, not `screen`");
+            "a file is an app document, a theme, a message catalogue, a component or an icon, not `screen`");
     REQUIRE(refused(registry.addFile(uiservice::file(morph::ui::kThemeFile, "", "{}"))) == "a file has an id");
     REQUIRE(refused(registry.addFile(uiservice::file(morph::ui::kThemeFile, std::string(257, 't'), "{}"))) ==
             "a file id is longer than 256 bytes");

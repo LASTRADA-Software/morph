@@ -167,7 +167,9 @@ every digit.
 sense of `docs/spec/reactive/control.md`. Non-copyable and non-movable: fields and in-flight replies point into
 it. A view mounted on it is destroyed first.
 
-- **Fields.** `FieldState`: the `text`, `unit` and `engaged` signals (a write to `text` is a user edit); the
+- **Fields.** `FieldState`: the `text`, `unit` and `engaged` signals (a write to `text` is a user edit, as is
+  `edit(json)`, a load of a wire value the session does not mark programmatic, refused for an object field given
+  anything but an object and a list field given anything but an array); the
   `encoded`, `error`, `visible`, `readonly` and `required` computeds; the resolved label, help and placeholder.
   `field(path)` takes `name`, `parent.member` and `rows[i].member`.
 - **Nesting.** An `Object` owns a `FieldState` per member and encodes them with their own encoders; a blank
@@ -245,8 +247,8 @@ before it.
 | Kind | Control |
 |---|---|
 | Text, Multiline | `TextInput` (single-line, multiline) |
-| Integer, Number, Decimal | `TextInput`, with the unit beside it |
-| Quantity | `TextInput` and a unit `Select` (with alternatives); switching converts the draft exactly |
+| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the entry unit's, the display places or the declared places) |
+| Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
 | DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date) |
@@ -255,24 +257,45 @@ before it.
 | Object | `Panel` of its members' cells |
 | ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
 
-- **A cell** is the label (with ` *` while required, live), the control and the help text, visible while the
-  field is. Each control carries the view tree's field state: read-only, required, and the field's error as its
+- **A cell** is the label, the control (which marks a required field, live) and the help text, visible while the
+  field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
+  control's alone, so a required field shows it once on every backend, and the control is told the field's label
+  with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, and the field's error as its
   one message. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
-  `add_<path>`, `remove_<path>#<key>`, `form_submit`, `form_status`, `form_result`.
+  `add_<path>`, `remove_<path>#<key>`, `form_title`, `form_submit`, `form_status`, `form_result`.
+- **Where the caption goes** is `FormViewOptions::fieldLayout` (`forms::FieldLayout`, in
+  `forms/engine/field_layout.hpp` so the authoring API names it without the engine). `Stacked`, the default, is the
+  column above: label, control, help. `Inline` makes the cell a row centred across (`align: center`, gap step 3): the
+  label at `fixed(inlineLabelWidth)` (default 16 units) and the control in a column that stretches, so the control
+  fills the rest of the line; a Boolean, whose checkbox carries its label, gets a spacer of the label's width in the
+  label's place, so its box lines up with the other controls. A field with help is a column of that row and a second
+  row, the help indented by a spacer of the label's width; `cell_<path>` is on the column then. An Object's panel and
+  an ObjectArray's rows stay stacked, and their members follow the form's layout. `formView` throws
+  `std::invalid_argument` for an `inlineLabelWidth` below 1. While a field shows an error, an inline label centres on
+  the control and its message together: centring on the control alone needs a baseline the view tree does not carry.
 - **Layout.** A section is a `Panel`, consecutive tab groups one `Tabs`, an accordion a collapsible `Panel`, the
   implicit group a flat grid; each group is a `Grid` of `gridColumns` columns (the flat one 1 while `gridColumns`
   is 2), every cell spanning its `x-colspan` clamped to the grid. Tab selection and collapse are the session's
   signals, so switching tabs keeps what was typed.
-- **Chrome.** The status line, a Submit button in explicit mode (enabled while ready and not in flight), and the
-  last reply or error.
+- **Chrome.** A heading over the fields: `FormViewOptions::title` when it is set (bound, or a constant that is not
+  empty, shown whatever `showTitle` says, since a title given is a title wanted; test id `form_title`), else the
+  schema's title while `showTitle`. The status line while `showStatus`; a button in explicit mode labelled
+  `submitLabel` (default `Submit`; a `ui::Prop`, so a host may bind it), enabled while ready and not in flight;
+  and the last reply or error. The status line names the label: `ready: press Deposit` for a form whose button
+  says *Deposit*.
 - **Overrides** replace a field's control, resolved by field path, widget hint, unit, then kind. The replacement
   is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
   as the built-in control does.
 - **Through a document.** The interpreter lowers a `form` node to `formView` over a session it builds from
   `Catalog::schema`, the node's overlay and its model alias (`docs/spec/ui/interpreter.md`, "Lowering").
 
+- **A host component per field.** A document's field overlay may name a `component` that draws the field
+  (`docs/spec/ui/interpreter.md`, "Lowering"): the interpreter adds it as a field-path override, and the cell
+  around it (caption, help, visibility) is drawn as for every override.
+
 **Not here yet:** the grid widget (`x-widget: grid`, spec 2 §7), whose keyboard model needs a way for the view
-tree to move focus, which it does not have; and a document's `overrides`.
+tree to move focus, which it does not have (a kit's grid is reached through a host component); and a document's
+subtree overrides.
 
 ## Collections
 
@@ -338,6 +361,9 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   leaving a step loses nothing), and Back and Next, enabled by `canBack()` and `canNext()`, with a note on the
   last step. Test ids: `wizard_title`, `wizard_steps`, `wizard_step_<index>`, `wizardBack`, `wizardNext`,
   `wizard_last`.
+- **Titles.** `CollectionViewOptions::title` and `WizardViewOptions::title` replace the schema's title in the
+  built-in header (`collection_title`; the wizard's before the step's position); empty shows the schema's. A
+  header chrome draws its own.
 - **Chrome.** `CollectionChrome` and `WizardChrome` replace the view's own parts with a host's: the collection's
   header, each row (the rows are then a list of the chrome's nodes rather than a table), the confirm (mounted only
   while an action waits) and the editor dialog (handed the editor's form view to place); the wizard's header and

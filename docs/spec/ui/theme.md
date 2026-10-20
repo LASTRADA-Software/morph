@@ -78,7 +78,8 @@ A theme index is a `theme` bundle file whose top level has a string `vocab`:
 ```
 
 `base` is required; every other string member is a named variant; `density` and `surfaces` map names to files;
-`icons` is accepted and not read. Each list holds at most 16 names. `resolveTheme(index, files, variant, density,
+`icons` maps icon names to `icon` files ([Icons](#icons)). Each list holds at most 16 names, and the icon set at most
+256. `resolveTheme(index, files, variant, density,
 surface)` layers `base`, then the variant, the density and the surface, each optional, and resolves.
 
 ## At registration
@@ -104,7 +105,9 @@ replaces one, and declares any other:
 
 **In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
 shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the index's `base`, and each of its surfaces
-resolved with its layer; a bundle without a theme index restores the defaults. No variant or density is chosen yet.
+resolved with its layer; a bundle without a theme index restores the defaults. It does so unless the frontend is told
+to ignore the bundle's theme (`FrontendConfig::bundleTheme`), for an application that applies its own. No variant or
+density is chosen yet.
 
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
 is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither
@@ -123,12 +126,13 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
+| `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
 its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
 (`kPixelsPerRem`): the renderers do not change the root font size. `ThemeValues` keeps colours, numbers and
-dimensions in three maps, and shadows in a fourth.
+dimensions in three maps, shadows in a fourth, and font family lists (`families`) in a fifth.
 
 The six `space` tokens are the spacing scale: `space.<step>` is how far apart a `gap` or `padding` of that step puts
 things (`docs/spec/ui/view_tree.md`, the spacing step). Other `space.*` paths, `control.*`, `font.*` and
@@ -143,19 +147,58 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 |---|---|
 | `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus` | `color.<same name>` |
 | `error`, `success`, `info`, `warn` | `color.err`, `color.ok`, `color.info`, `color.warn` |
+| `successBg`, `successBorder`, `successDot` | `color.ok.bg`, `color.ok.border`, `color.ok.dot` |
+| `warnBg`, `warnBorder`, `warnDot` | `color.warn.bg`, `color.warn.border`, `color.warn.dot` |
+| `errorBg`, `errorBorder`, `errorDot` | `color.err.bg`, `color.err.border`, `color.err.dot` |
+| `infoBg`, `infoBorder`, `infoDot` | `color.info.bg`, `color.info.border`, `color.info.dot` |
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
 | `radiusControl`, `radiusCard`, `controlHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `font.size.body`, `font.size.heading` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
+| `fontFamilies` | `font.family` |
 
 `Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
-platform font, the body its size and a heading 1.3 times the body.
+platform font (`Theme.platformMetrics`), the body its size and a heading 1.3 times the body. Every `MorphUi` text and
+control draws in `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also
+muted, `headingFont` for a heading): the theme's
+families at the body size, or the platform font untouched while `fontFamilies` is empty. A family Qt cannot resolve
+falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
+comparing `QFontInfo`'s family against the list.
+
+**Units follow the theme's font, opt-in.** `Theme.metrics`, which the units read, is the theme's families at
+`bodyPixels` while `fontFamilies` is set and the platform font otherwise, so the units and every `fixed(n)` are
+unchanged until a theme names a family. `bodyPixels` derives from the platform metrics rather than from `metrics`, so
+the size never depends on the metrics it feeds.
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
-properties it could not set. The semantic `bg`, `border` and `dot` colours have no `Theme` property yet: no built-in
-component draws them.
+properties it could not set. Every colour row is also a role of each surface's `MorphScheme`, so a surface's own
+tokens set it there. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and
+marker in a widget's scheme (neutral: the muted colour, faint for the fill); a badge and a banner fill and outline
+with them.
+
+## Icons
+
+A theme index's `icons` is the bundle's icon set: icon name (`isIconName`: `[a-z][a-z0-9.-]{0,63}`) to the id of an
+`icon` file, SVG text of at most 64 KiB (`kMaxIconBytes`). `UiRegistry::build` refuses an index whose set names a
+file the bundle lacks or one that is not an `icon` file, naming the index and the icon. The client loader fills
+`ui::Bundle::icons` with each named icon's SVG.
+
+- **Framework names.** The built-in components draw `empty` (an empty state without an icon of its own),
+  `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
+  and a panel's chevron) and `close` (a dismissible banner's close button), from the set when it names them, and as
+  today's glyph or nothing otherwise, so a bundle without a set keeps today's look. `nav.back` and `nav.forward` are
+  framework names no built-in component draws yet (`kFrameworkIcons`).
+- **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a
+  `data:image/svg+xml` URL) and sets `Theme.iconSet`; `Theme.iconSource(name)` is the URL, or empty. A button, a
+  badge, an empty state and a menu entry draw a node's icon from the set when it names it, and today's text otherwise
+  (a badge's and a menu entry's name before the label, a button nothing). While the bundle declares a set, a node
+  icon it does not name is reported once per name through the `Components` callback (`icon <name> is not in the
+  theme's icon set`); without a set nothing is reported.
+- **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`
+  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `close` ×) before a badge's or a button's text,
+  and any other name is not drawn.
 
 ## Design decisions
 
@@ -172,6 +215,6 @@ component draws them.
 ## Not yet
 
 - `{"pref": "density"}` choosing a density at runtime.
-- Units from the scale tokens rather than from the default font; `control.*`, `font.*` and `elevation.*` in the closed
-  set.
-- Icons, the terminal renderer's palette mapping.
+- Units from the scale tokens rather than from the body font; `control.*` and `elevation.*` beyond those above in the
+  closed set.
+- The terminal renderer's palette mapping.

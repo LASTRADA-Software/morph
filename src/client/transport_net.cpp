@@ -3,12 +3,11 @@
 #include <exception>
 #include <expected>
 #include <memory>
+#include <morph/client/transport.hpp>
 #include <morph/net/socket_backend.hpp>
 #include <string>
 
-#include "app/transport.hpp"
-
-namespace morph::examples::detail {
+namespace morph::client::detail {
 
 std::expected<RemoteTransport, std::string> socketTransport(ui::AppContext& context, std::string const& url) {
     try {
@@ -20,4 +19,4 @@ std::expected<RemoteTransport, std::string> socketTransport(ui::AppContext& cont
     }
 }
 
-}  // namespace morph::examples::detail
+}  // namespace morph::client::detail

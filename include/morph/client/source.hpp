@@ -2,60 +2,37 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <map>
 #include <memory>
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/reactive/scheduler.hpp>
-#include <morph/session/session.hpp>
-#include <morph/ui/document.hpp>
-#include <morph/ui/explorer.hpp>
-#include <morph/ui/frontend.hpp>
-#include <morph/ui/interpreter.hpp>
-#include <morph/ui/queueing_dispatcher.hpp>
-#include <morph/ui/service.hpp>
-#include <morph/ui/service_client.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "../core/backend.hpp"
+#include "../core/bridge.hpp"
+#include "../core/executor.hpp"
+#include "../reactive/scheduler.hpp"
+#include "../session/session.hpp"
+#include "../ui/document.hpp"
+#include "../ui/explorer.hpp"
+#include "../ui/frontend.hpp"
+#include "../ui/interpreter.hpp"
+#include "../ui/queueing_dispatcher.hpp"
+#include "../ui/service.hpp"
+#include "../ui/service_client.hpp"
+#include "args.hpp"
+
 /// @file
-/// Where the generic client's screens and models come from: the command line it reads, a server (remote) or an
-/// application linked in-process (local). Spec 4 §3.
-
-namespace morph::examples {
-
-/// @brief What the generic client reads from its command line.
-struct ClientArgs {
-    /// @brief `--server URL`: the server to fetch the screens from.
-    std::optional<std::string> server;
-    /// @brief `--app NAME`: the linked application to run in-process.
-    std::optional<std::string> app;
-    /// @brief `--db PATH`: the database a local application opens.
-    std::string db;
-    /// @brief `--user NAME`: the development principal a local application signs in.
-    std::string user;
-    /// @brief `--screen ID`: the screen mounted first; empty for the catalog's first.
-    std::string screen;
-    /// @brief `--exit-after-mount`: quit once the first screen mounted, with 0 when it mounted cleanly.
-    bool exitAfterMount = false;
-    /// @brief `--dev`, or `MORPH_UI_DEV=1`: development mode, which reloads the screens when the server's documents
-    ///        change (spec 5 §12). A client built without the development tools ignores it.
-    bool dev = false;
-};
-
-/// @brief Reads the client's options from @p args and removes them, leaving the rest for the frontend.
+/// @brief Where the generic client's screens and models come from: a server (remote) or an application linked
+///        in-process (local). Spec 4 §3.
 ///
-/// Each value option is `--name value` or `--name=value`, and the last one given wins. `args[0]` is the program
-/// name, and nothing after a `--` is read.
-/// @param args The command line; what was read is removed.
-/// @return The options, or why they are refused: a value option without its value, or not exactly one of
-///         `--server` and `--app`. @p args is unchanged on a refusal.
-[[nodiscard]] std::expected<ClientArgs, std::string> readClientArgs(std::vector<std::string>& args);
+/// Specified in `docs/spec/client/client.md`.
+
+namespace morph::client {
 
 /// @brief What a local application is set up with.
 struct LocalSetup {
@@ -80,17 +57,19 @@ struct LocalApp {
 };
 
 /// @brief The vocabularies the generic client speaks.
+/// @return Their names: `ui/1` and the expression vocabulary.
 [[nodiscard]] std::vector<std::string> clientVocabularies();
 
 /// @brief The `ui-hello` the generic client opens with, and sends again on each poll: its vocabularies, and the
 ///        offer of server-sent events on the connection.
+/// @return The request.
 [[nodiscard]] ui::HelloRequest clientHello();
 
 /// @brief An `AppSource` that also hands the shell what it mounts screens with, once it delivered a bundle.
 ///
 /// Opened, it holds a bridge over its backend, owned by the context's executor, and the verified bundle with its
 /// catalog. Everything it hands out is valid from a successful `ready` until `close`.
-class ClientSource : public ui::AppSource {
+class Source : public ui::AppSource {
 public:
     /// @brief Where the screens' model calls go.
     /// @return The dispatcher over the source's bridge.
@@ -136,6 +115,15 @@ public:
     ///        for it.
     /// @param done As `signIn`'s.
     void signOut(std::function<void(bool)> done);
+
+    /// @brief The lookup a `DocumentScreenHost` takes (`DocumentScreenHostOptions::documents`), over the loaded
+    ///        bundle: each screen the source lists, loaded against the current catalog facts the first time it is
+    ///        asked for after a load, so a shell of an application's own mounts with the same source.
+    /// @param onRefused Called with each document that does not load; may be empty.
+    /// @return The lookup, valid while the source lives; it answers null for a screen the source does not list or
+    ///         whose document does not load.
+    [[nodiscard]] std::function<std::shared_ptr<ui::Document const>(std::string_view)> documents(
+        std::function<void(ui::Refusal const&)> onRefused = {});
 
     /// @brief The bundle the catalog currently lists.
     /// @return It; null before a bundle was delivered.
@@ -223,6 +211,15 @@ protected:
     [[nodiscard]] session::Context& requestSession() noexcept { return _session; }
 
 private:
+    // The documents `documents()` loaded, by screen id, each with the text and the catalog load it was loaded for.
+    struct LoadedDocument {
+        std::string text;
+        std::uint64_t catalogLoad = 0;
+        std::shared_ptr<ui::Document const> document;
+    };
+    std::map<std::string, LoadedDocument, std::less<>> _documents;
+    // Counts the catalogs loaded, so a document loaded against an older one is loaded again.
+    std::uint64_t _catalogLoads = 0;
     session::Context _session;
     std::shared_ptr<bool> _alive;
     std::unique_ptr<bridge::Bridge> _bridge;
@@ -267,12 +264,12 @@ private:
 };
 
 /// @brief Fetches the screens from a server (`--server`), over the transport the frontend calls for.
-class RemoteAppSource final : public ClientSource {
+class RemoteSource final : public Source {
 public:
     /// @brief A source for @p url.
     /// @param url     `ws://host:port`.
     /// @param timeout How long to wait for the bundle before reporting the server unreachable.
-    explicit RemoteAppSource(std::string url, std::chrono::milliseconds timeout = std::chrono::seconds{10});
+    explicit RemoteSource(std::string url, std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
@@ -285,17 +282,17 @@ private:
 
 /// @brief Runs a linked application in-process (`--app`): its models over a `LocalBackend`, its bundle answered by
 ///        a `UiService` in the same process, and verified by the same client as a remote one.
-class LocalAppSource final : public ClientSource {
+class LocalSource final : public Source {
 public:
     /// @brief A source for @p app.
     /// @param app   The application.
     /// @param setup Its set-up options.
-    LocalAppSource(LocalApp app, LocalSetup setup);
-    ~LocalAppSource() override;
-    LocalAppSource(LocalAppSource const&) = delete;
-    LocalAppSource& operator=(LocalAppSource const&) = delete;
-    LocalAppSource(LocalAppSource&&) = delete;
-    LocalAppSource& operator=(LocalAppSource&&) = delete;
+    LocalSource(LocalApp app, LocalSetup setup);
+    ~LocalSource() override;
+    LocalSource(LocalSource const&) = delete;
+    LocalSource& operator=(LocalSource const&) = delete;
+    LocalSource(LocalSource&&) = delete;
+    LocalSource& operator=(LocalSource&&) = delete;
 
     /// @brief The development user, from `--user`.
     /// @return It.
@@ -319,7 +316,7 @@ private:
 /// @param args The client's options.
 /// @param apps The applications linked in-process.
 /// @return The source, or why there is none: an `--app` that names no linked application.
-[[nodiscard]] std::expected<std::unique_ptr<ClientSource>, std::string> makeSource(ClientArgs const& args,
-                                                                                   std::vector<LocalApp> const& apps);
+[[nodiscard]] std::expected<std::unique_ptr<Source>, std::string> makeSource(Args const& args,
+                                                                             std::vector<LocalApp> const& apps);
 
-}  // namespace morph::examples
+}  // namespace morph::client

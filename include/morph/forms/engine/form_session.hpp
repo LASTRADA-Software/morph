@@ -435,6 +435,24 @@ public:
         return out;
     }
 
+    /// @brief Replaces the draft with a wire value as the user's own edit, in one batch: a `load` the session does
+    ///        not mark programmatic, so the field counts as changed and is validated as an edit is.
+    /// @param value The wire value; null is blank.
+    /// @return Nothing, or why the value does not fit the field: an Object takes a JSON object, a collection a JSON
+    ///         array. Then nothing changes.
+    std::expected<void, std::string> edit(detail::engine::Json const& value) {
+        if (!value.is_null() && !_spec->truncated) {
+            if (_spec->kind == FieldKind::Object && !value.is_object()) {
+                return std::unexpected(std::string{"an object field takes a JSON object"});
+            }
+            if (_spec->kind == FieldKind::ObjectArray && !value.is_array()) {
+                return std::unexpected(std::string{"a list field takes a JSON array"});
+            }
+        }
+        _core->runtime().batch([&] { load(&value); });
+        return {};
+    }
+
     /// @brief Replaces the draft with the decoded wire value; null or absent is blank. Does not
     ///        mark the change programmatic — the caller does, in the same batch.
     /// @param value The wire value, or null.

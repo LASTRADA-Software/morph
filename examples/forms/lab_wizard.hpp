@@ -22,7 +22,7 @@ namespace lab {
 using IntakeWizard =
     morph::flows::Wizard<"Register & measure a sample", morph::flows::WizardStep<RegisterSample, "New sample">,
                          morph::flows::WizardStep<RecordMeasurement, "First measurement",
-                                                  morph::flows::Bind<"sampleId", "RegisterSample.id">>>;
+                                                  morph::flows::Bind<"sampleId", "RegisterLabSample.id">>>;
 
 /// @brief The demo's app shell: a density calculator, a standalone measurement
 ///        form, and the intake wizard.

@@ -12,11 +12,13 @@
 #include <core/tui/Unicode.hpp>
 #include <iterator>
 #include <memory>
+#include <numeric>
 #include <ranges>
 #include <stdexcept>
 #include <variant>
 
 #include "tui/container_widgets.hpp"
+#include "tui/display_widgets.hpp"
 #include "tui/drag.hpp"
 #include "tui/layout.hpp"
 
@@ -195,6 +197,15 @@ std::string const& WidgetBase::effectiveSurface() const noexcept {
     return widget->_surface;
 }
 
+std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
+    for (WidgetBase const* widget = this; widget != nullptr; widget = widget->_container) {
+        if (widget->_rowTone) {
+            return widget->_rowTone;
+        }
+    }
+    return std::nullopt;
+}
+
 namespace {
 
 /// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
@@ -214,6 +225,18 @@ void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
     }
 }
 
+/// Draws every cell of @p area in @p foreground: what a toned table row does to what its cells painted. A selected
+/// row's inverse, and every other attribute, stays.
+void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Color foreground) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.tryAt(row, col)) {
+                cell->style.fg = foreground;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 // A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
@@ -227,6 +250,9 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     } else {
         _drawShift = {.x = drawn.x - laidOut.x, .y = drawn.y - laidOut.y};
         paintClipped(canvas, laidOut.size());
+    }
+    if (auto const tone = effectiveRowTone()) {
+        colour(canvas.buffer(), drawn, toneStyle(canvas.theme(), *tone).fg);
     }
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);
@@ -359,6 +385,23 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
         return;
     }
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
+}
+
+::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption) {
+    if (caption.empty()) {
+        return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});
+    }
+    if (canvas.height() > 0) {
+        canvas.putString(0, 0, caption, canvas.theme().textNormal);
+    }
+    return canvas.subcanvas({.x = 0, .y = 1, .width = canvas.width(), .height = std::max(0, canvas.height() - 1)});
+}
+
+::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption) {
+    if (caption.empty()) {
+        return control;
+    }
+    return {.width = std::max(control.width, displayWidth(caption)), .height = control.height + 1};
 }
 
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
@@ -547,6 +590,11 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
     if (hints.height.kind == ui::Sizing::Kind::Fixed) {
         size.height = std::max(0, hints.height.amount);
     }
+    auto const clamp = [](int extent, layout::Bounds bounds) {
+        return std::clamp(extent, bounds.minimum, std::max(bounds.minimum, bounds.maximum));
+    };
+    size.width = clamp(size.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+    size.height = clamp(size.height, layout::boundsOf(hints.minHeight, hints.maxHeight));
     return size;
 }
 
@@ -582,19 +630,28 @@ struct Placement {
 /// @p size along the main axis.
 int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.height : size.width; }
 
-/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing decides.
-::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent) {
+/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing, bounds and alignment
+/// (its own, else the stack's @p align) decide its extent and where it sits.
+::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent,
+                         ui::Align align) {
     auto const& area = placement.area;
+    ui::LayoutHints const& hints = child.layout();
+    ui::Align const placed = hints.alignSelf.value_or(align);
+    ::core::tui::Size const requested = requestedSize(child);
     if (placement.vertical) {
-        return {.x = area.x,
+        int const width = alignedExtent(placed, hints.width, requested.width, area.width,
+                                        layout::boundsOf(hints.minWidth, hints.maxWidth));
+        return {.x = area.x + alignedOffset(placed, width, area.width),
                 .y = area.y + offset,
-                .width = layout::crossExtent(child.layout().width, area.width),
+                .width = width,
                 .height = extent};
     }
+    int const height = alignedExtent(placed, hints.height, requested.height, area.height,
+                                     layout::boundsOf(hints.minHeight, hints.maxHeight));
     return {.x = area.x + offset,
-            .y = area.y,
+            .y = area.y + alignedOffset(placed, height, area.height),
             .width = extent,
-            .height = layout::crossExtent(child.layout().height, area.height)};
+            .height = height};
 }
 
 /// The solver's mode: the shown children share the area; the hidden ones get none of it.
@@ -616,16 +673,42 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
         }
         placed.push_back(child);
         slots.push_back(&area);
-        items.push_back(
-            layout::Item{.sizing = sizing, .natural = mainExtent(child->naturalSize(), placement.vertical)});
+        ui::LayoutHints const& hints = child->layout();
+        layout::Bounds const bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
+                                                         : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        items.push_back(layout::Item{.sizing = sizing,
+                                     .natural = mainExtent(child->naturalSize(), placement.vertical),
+                                     .minimum = bounds.minimum,
+                                     .maximum = bounds.maximum});
     }
     auto const length = placement.vertical ? placement.area.height : placement.area.width;
     auto const extents = layout::distribute(items, layout::Track{.length = length, .gap = spec.gap});
 
-    int offset = 0;
+    // The spare length, placed by `justify` while no shown child stretches: before the first child for `center`
+    // and `end`, or in the gaps for `between`, the remainder one cell at a time from the first gap.
+    int lead = 0;
+    int extraGap = 0;
+    int remainder = 0;
+    bool const stretches = std::ranges::any_of(
+        items, [](layout::Item const& item) { return item.sizing.kind == ui::Sizing::Kind::Stretch; });
+    int const used = std::accumulate(extents.begin(), extents.end(), 0) +
+                     (spec.gap * std::max(0, static_cast<int>(extents.size()) - 1));
+    if (int const spare = length - used; !stretches && spare > 0) {
+        if (spec.justify == ui::Justify::Center) {
+            lead = spare / 2;
+        } else if (spec.justify == ui::Justify::End) {
+            lead = spare;
+        } else if (spec.justify == ui::Justify::Between && extents.size() > 1) {
+            int const gaps = static_cast<int>(extents.size()) - 1;
+            extraGap = spare / gaps;
+            remainder = spare % gaps;
+        }
+    }
+    int offset = lead;
     for (auto const [child, slot, extent] : std::views::zip(placed, slots, extents)) {
-        *slot = slotOf(*child, placement, offset, extent);
-        offset += extent + spec.gap;
+        *slot = slotOf(*child, placement, offset, extent, spec.align);
+        offset += extent + spec.gap + extraGap + (remainder > 0 ? 1 : 0);
+        remainder = std::max(0, remainder - 1);
     }
 }
 
@@ -643,13 +726,34 @@ void columnAreas(std::span<WidgetBase* const> children, Placement const& placeme
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
         if (child->shown()) {
-            area = slotOf(*child, placement, offset, extent);
+            area = slotOf(*child, placement, offset, extent, spec.align);
         }
         offset += extent + spec.gap;
     }
 }
 
 }  // namespace
+
+int alignedOffset(ui::Align align, int extent, int space) noexcept {
+    int const spare = std::max(0, space - extent);
+    switch (align) {
+        case ui::Align::Center:
+            return spare / 2;
+        case ui::Align::End:
+            return spare;
+        case ui::Align::Start:
+        case ui::Align::Stretch:
+        default:
+            return 0;
+    }
+}
+
+int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, layout::Bounds bounds) noexcept {
+    if (align != ui::Align::Stretch && sizing.kind == ui::Sizing::Kind::Content) {
+        return std::clamp(requested, 0, std::max(0, space));
+    }
+    return layout::crossExtent(sizing, space, bounds);
+}
 
 std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                           StackSpec const& spec) {

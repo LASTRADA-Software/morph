@@ -24,6 +24,7 @@ MorphWidget {
         }
 
         Label {
+            font: Theme.bodyFont
             id: caption
             visible: root.label !== ""
             text: root.label

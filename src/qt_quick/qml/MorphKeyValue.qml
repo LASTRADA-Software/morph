@@ -24,6 +24,7 @@ MorphWidget {
             model: root.items.length * 2
 
             Label {
+                font: Theme.bodyFont
                 required property int index
                 readonly property var pair: root.items[Math.floor(index / 2)]
                 text: pair ? (index % 2 === 0 ? pair.label : pair.value) : ""

@@ -234,6 +234,9 @@ struct FieldSpec {
     /// @brief An Object or ObjectArray whose members are not described: its `$ref` is already on
     ///        the path, it is deeper than `kMaxNestingDepth`, or its schema states no members.
     bool truncated = false;
+    /// @brief A `string` member whose schema says `contentEncoding: base64`: its wire value is a file's bytes, which a
+    ///        document moves inline only under the session's inline cap.
+    bool bytes = false;
 };
 
 /// @brief What a document (or an application) changes about one top-level field before the session is built: a
@@ -765,6 +768,7 @@ private:
             textOf(raw, prop, "x-blankAs") == "empty") {
             spec.blankAs = BlankAs::Empty;
         }
+        spec.bytes = spec.jsonType == "string" && textOf(raw, prop, "contentEncoding") == "base64";
         return spec;
     }
 

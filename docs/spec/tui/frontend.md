@@ -72,9 +72,9 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 
 | Widget | Shows | Input |
 |---|---|---|
-| Text | one row per line, styled by role | — |
-| Button | `[ label ]` | Enter, Space, click |
-| TextInput | `core::tui::InputField`; single-line, multiline or masked | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
+| Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles | — |
+| Button | `[ label ]`, a framework icon's glyph before the label; a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
+| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Enter, Space, click |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
@@ -83,16 +83,16 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
-| Tabs | a bar over the page slots | Left, Right, click on a label |
-| Dialog | a centred box over everything | Esc dismisses |
-| Drawer | a box against its side, the screen's height | Esc dismisses |
+| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a hidden bar gives its row to the pages and takes no focus | Left, Right, click on a label |
+| Dialog | a centred box over everything; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again | Esc dismisses |
+| Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
-| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor | arrows, Space selects or toggles, Enter activates, click and double click |
+| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; a toned row's cells draw in the tone's style, keeping any inverse | arrows, Space selects or toggles, Enter activates, click and double click |
 | DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone | typing; Up/Down step |
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
 | Banner | its text in its tone, `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
-| Badge | `[text]` in its tone | — |
+| Badge | `[text]` in its tone, a framework icon's glyph before the text | — |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
 | KeyValue | captions, then the values lined up after the widest | — |
@@ -100,6 +100,10 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Splitter | the panes and a handle between each two | dragging a handle; the release reports every size |
 | Collapsible | `▾ title` with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
+
+A text input, select or date-time input whose caption is shown (`setCaption(label, true)`) draws it on its own row
+above the control, one row taller; without it nothing changes. A radio select's rows, and a dropdown's list, keep
+to the rows below the caption.
 
 A terminal has no icon map and no assistive technology: icons, accessible names and roles are kept and not drawn,
 and a widget draws on its surface, its own or else its nearest container's: `sidebar` and `toolbar` draw every cell
@@ -114,14 +118,29 @@ refuse the drop whole.
 
 ## Layout
 
-A cell-based solver. A stack gives Fixed children their amount, Content children their natural extent, and shares
-what is left among Stretch children by weight; an overflow is taken from the last child first. A grid places cells
+A cell-based solver. A stack gives Fixed children their amount, Content children their natural extent, each clamped
+into its bounds, and shares what is left among Stretch children by weight (`layout::distribute`). A share stops at
+its child's maximum, and what a capped child leaves goes to the Stretch children not capped, at most one pass per
+Stretch child; a share below its minimum is raised to it. An overflow is taken from the last child first, down to
+each child's minimum, and then the stack overflows and clips. A grid places cells
 row-major in equal columns. Several roots share the screen as a column, in the order they were made: each takes the
 height it asks for, and the last shown one what is left; a single root takes the whole screen.
 
-Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, at most
-the space there is (`layout::crossExtent`): in a column every content child is as wide as the column, in a row as tall
-as the row. A grid cell, and the one child of a panel, slot or scroll area, fills its width the same way.
+Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, clamped
+into its bounds and then into the space there is (`layout::crossExtent`): in a column every content child is as wide
+as the column, in a row as tall as the row, and one its maximum stops sits at the start. A grid cell, and the one child
+of a panel, slot or scroll area, fills its width the same way, and a grid row is as tall as its tallest cell's
+requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
+is its natural size clamped into its bounds.
+
+**Alignment.** Across the axis a child's `alignSelf`, else its stack's `align`, places it (`slotOf`): under `start`,
+`center` or `end` a Content child takes its requested extent instead of the stack's (`alignedExtent`), every other
+child its `crossExtent`, and one narrower than the space is offset to the start, the centre (rounded down) or the end
+(`alignedOffset`). Along the axis, while no shown child is Stretch, `solvedAreas` places the spare length by
+`justify`: before the first child, half of it for `center` and all of it for `end`; for `between`, `spare / (shown −
+1)` cells added to every gap and the remainder one cell to each gap from the first. A grid places each cell in its row
+the same way by the cell's `alignSelf`, else the grid's `align`; across its column the cell fills the width as
+before.
 
 **Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
 cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many

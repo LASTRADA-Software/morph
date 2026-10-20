@@ -29,11 +29,14 @@
 #include "../core/registry.hpp"
 #include "../detail/fixed_string.hpp"
 #include "../detail/reflected_member.hpp"
+#include "../forms/engine/field_layout.hpp"
 #include "../ui/document.hpp"
 #include "../ui/value.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
+#include "alignment.hpp"
 #include "button_emphasis.hpp"
+#include "button_style.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
@@ -510,6 +513,39 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     return json;
 }
 
+/// @brief An alignment's document name.
+/// @param align The alignment.
+/// @return `start`, `center`, `end` or `stretch`.
+[[nodiscard]] inline std::string alignName(Align align) {
+    static constexpr std::array<char const*, 4> kNames = {"stretch", "start", "center", "end"};
+    return kNames.at(static_cast<std::size_t>(align));
+}
+
+/// @brief A justification's document name.
+/// @param justify The justification.
+/// @return `start`, `center`, `end` or `between`.
+[[nodiscard]] inline std::string justifyName(Justify justify) {
+    static constexpr std::array<char const*, 4> kNames = {"start", "center", "end", "between"};
+    return kNames.at(static_cast<std::size_t>(justify));
+}
+
+/// @brief The value of a constant expression, as `constant` writes one.
+/// @param expression The expression's JSON.
+/// @return A scalar as itself, the inside of `{"lit": v}`; `nullopt` for an expression that is not a constant.
+[[nodiscard]] inline std::optional<Json> literalOf(Json const& expression) {
+    if (auto const* const object = std::get_if<Json::object_t>(&expression.data)) {
+        auto const* const found = object->find("lit");
+        if (object->size() == 1 && found != object->end()) {
+            return found->second;
+        }
+        return std::nullopt;
+    }
+    if (std::holds_alternative<Json::array_t>(expression.data)) {
+        return std::nullopt;
+    }
+    return expression;
+}
+
 /// @brief A call of an `expr/1` library function.
 /// @param function The function's name.
 /// @param args     The argument expressions.
@@ -939,6 +975,25 @@ template <typename R = Any>
     return call<std::string>("format", operands);
 }
 
+/// @brief `concatLists`: the lists, one after another; `null` while any of them is `null`.
+/// @param lists The lists, in order.
+/// @return The joined list.
+[[nodiscard]] inline AnyHandle concatLists(std::vector<AnyHandle> const& lists) { return call("concatLists", lists); }
+
+/// @brief `concatLists` of lists of one element type.
+/// @tparam T The element type.
+/// @param lists The lists, in order.
+/// @return The joined list.
+template <typename T>
+[[nodiscard]] Handle<std::vector<T>> concatLists(std::vector<Handle<std::vector<T>>> const& lists) {
+    std::vector<Json> json;
+    json.reserve(lists.size());
+    for (Handle<std::vector<T>> const& list : lists) {
+        json.push_back(list.json());
+    }
+    return Handle<std::vector<T>>::raw(detail::call("concatLists", std::move(json)));
+}
+
 /// @brief `count`: a list's length.
 /// @param list The list.
 /// @return The count.
@@ -1042,6 +1097,24 @@ template <typename T>
         detail::put(record, name, value.json());
     }
     return AnyHandle::raw(detail::single("obj", std::move(record)));
+}
+
+/// @brief The content sizing, `"content"`: as much as the content needs.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle content() { return AnyHandle{std::string{"content"}}; }
+
+/// @brief A fixed sizing, `{"lit": {"fixed": units}}`.
+/// @param units The size in backend units, 0 or more.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle fixed(int units) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{{"fixed", Value{std::int64_t{units}}}}}));
+}
+
+/// @brief A stretch sizing, `{"lit": {"stretch": weight}}`: a share of the leftover space.
+/// @param weight The share's weight, 1 or more.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle stretch(int weight = 1) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{{"stretch", Value{std::int64_t{weight}}}}}));
 }
 
 /// @brief `{"list": [...]}`: a list built from expressions.
@@ -1312,6 +1385,36 @@ private:
     std::string _name;
 };
 
+/// @brief A mutation's result: a `Handle` with no field reads.
+///
+/// A result is not a named read, so a field of it cannot be read in place: the screen binds it first,
+/// `auto r = screen.let("r", m.result());`, and reads `r.at(...)`. The `at` overloads are deleted, so the mistake is
+/// a compile error at the call rather than a refusal when the screen is registered. It converts to `Handle<T>`
+/// wherever a handle is taken.
+/// @tparam T The result's C++ type.
+template <typename T>
+class ResultHandle : public Handle<T> {
+public:
+    /// @brief The result read.
+    /// @param handle The `{"result": name}` expression.
+    explicit ResultHandle(Handle<T> const& handle) : Handle<T>{handle} {}
+
+    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
+    ///        `r.at(...)`.
+    /// @tparam Class  The class of the member.
+    /// @tparam Member The member's type.
+    /// @param member The member.
+    /// @return Nothing; the overload is deleted.
+    template <typename Class, typename Member>
+    [[nodiscard]] Handle<Member> at(Member Class::* member) const = delete;
+
+    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
+    ///        `r.at(...)`.
+    /// @param field The field.
+    /// @return Nothing; the overload is deleted.
+    [[nodiscard]] Handle<Any> at(std::string_view field) const = delete;
+};
+
 /// @brief A mutation declared by a scope.
 /// @tparam Action The action it runs; `::morph::model::ActionTraits<Action>::Result` is the result's type.
 template <typename Action>
@@ -1328,9 +1431,11 @@ public:
     /// @return The name.
     [[nodiscard]] std::string const& name() const noexcept { return _name; }
 
-    /// @brief The last run's result.
-    /// @return `{"result": name}`.
-    [[nodiscard]] Handle<Result> result() const { return Handle<Result>::raw(detail::single("result", _name)); }
+    /// @brief The last run's result; bind it with `let` to read its fields.
+    /// @return `{"result": name}`, with no `at`.
+    [[nodiscard]] ResultHandle<Result> result() const {
+        return ResultHandle<Result>{Handle<Result>::raw(detail::single("result", _name))};
+    }
 
     /// @brief Whether a run is in flight.
     /// @return `{"pending": name}`.
@@ -1727,10 +1832,64 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node tooltip(AnyHandle const& text) const { return with("tooltip", text); }
 
-    /// @brief The sizing: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+    /// @brief The width's sizing: `"content"`, `{"fixed": n}` or `{"stretch": w}`, such as `content()`, `fixed(n)`
+    ///        or `stretch()` give.
     /// @param sizing The sizing.
     /// @return The node with it.
     [[nodiscard]] Node sizing(AnyHandle const& sizing) const { return with("sizing", sizing); }
+
+    /// @brief The sizing of both dimensions, as a `{width, height}` record; an absent one is content. Literal
+    ///        sizings (`content()`, `fixed(n)`, `stretch(w)`) make a literal record, which the loader checks; another
+    ///        is evaluated at mount.
+    /// @param width  The width's sizing.
+    /// @param height The height's sizing.
+    /// @return The node with it.
+    [[nodiscard]] Node sizing(AnyHandle const& width, AnyHandle const& height) const {
+        std::optional<Json> const literalWidth = width.present() ? detail::literalOf(width.json()) : Json{};
+        std::optional<Json> const literalHeight = height.present() ? detail::literalOf(height.json()) : Json{};
+        Json record = Json::object_t{};
+        if (literalWidth && literalHeight) {
+            if (width.present()) {
+                detail::put(record, "width", *literalWidth);
+            }
+            if (height.present()) {
+                detail::put(record, "height", *literalHeight);
+            }
+            return with("sizing", AnyHandle::raw(detail::single("lit", std::move(record))));
+        }
+        if (width.present()) {
+            detail::put(record, "width", width.json());
+        }
+        if (height.present()) {
+            detail::put(record, "height", height.json());
+        }
+        return with("sizing", AnyHandle::raw(detail::single("obj", std::move(record))));
+    }
+
+    /// @brief Where the node sits in its row, column or grid, in place of the container's `align`.
+    /// @param align The alignment.
+    /// @return The node with it.
+    [[nodiscard]] Node alignSelf(Align align) const { return withText("alignSelf", detail::alignName(align)); }
+
+    /// @brief The least width, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node minWidth(int units) const { return with("minWidth", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The most width, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node maxWidth(int units) const { return with("maxWidth", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The least height, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node minHeight(int units) const { return with("minHeight", AnyHandle{std::int64_t{units}}); }
+
+    /// @brief The most height, in backend units.
+    /// @param units The bound, 0 or more.
+    /// @return The node with it.
+    [[nodiscard]] Node maxHeight(int units) const { return with("maxHeight", AnyHandle{std::int64_t{units}}); }
 
     /// @brief The grid columns the node spans.
     /// @param columns The span.
@@ -2238,6 +2397,97 @@ private:
     std::string _name;
 };
 
+/// @brief A status badge of the screen's head (`screen.status`).
+struct HeadBadgeOptions {
+    /// @brief The badge's text.
+    AnyHandle text;
+    /// @brief Its tone: `neutral`, `info`, `ok`, `warn` or `err`.
+    AnyHandle tone;
+    /// @brief The name of an icon.
+    AnyHandle icon;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+};
+
+/// @brief A button of a screen's head (`screen.action`), or of a dialog's or drawer's footer.
+struct ActionButtonOptions {
+    /// @brief The action's id, unique in its list: a name.
+    std::string id;
+    /// @brief The label; required.
+    AnyHandle label;
+    /// @brief The name of an icon.
+    AnyHandle icon;
+    /// @brief How much it stands out; `Normal` writes no key.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief Whether it can be run; absent enables it.
+    AnyHandle enabled;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Commands run when it is clicked, in the scope its list belongs to.
+    Commands onClick;
+};
+
+namespace detail {
+
+/// @brief An expression key of a part, left out when absent.
+/// @param json  The part.
+/// @param key   The key.
+/// @param value The expression.
+inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
+    if (value.present()) {
+        detail::put(json, key, value.json());
+    }
+}
+
+/// @brief A `headBadge` part's JSON.
+/// @param badge The badge.
+/// @return The JSON.
+[[nodiscard]] inline Json headBadge(HeadBadgeOptions const& badge) {
+    Json json = Json::object_t{};
+    putPresent(json, "tone", badge.tone);
+    putPresent(json, "text", badge.text);
+    putPresent(json, "icon", badge.icon);
+    putPresent(json, "visible", badge.visible);
+    return json;
+}
+
+/// @brief An `actionButton` part's JSON.
+/// @param action The button.
+/// @return The JSON.
+[[nodiscard]] inline Json actionButton(ActionButtonOptions const& action) {
+    Json json = Json::object_t{};
+    detail::put(json, "id", action.id);
+    putPresent(json, "label", action.label);
+    putPresent(json, "icon", action.icon);
+    if (action.emphasis == ButtonEmphasis::Primary) {
+        detail::put(json, "emphasis", std::string{"primary"});
+    } else if (action.emphasis == ButtonEmphasis::Danger) {
+        detail::put(json, "emphasis", std::string{"danger"});
+    }
+    putPresent(json, "enabled", action.enabled);
+    putPresent(json, "visible", action.visible);
+    if (!action.onClick.empty()) {
+        detail::put(json, "onClick", action.onClick.json());
+    }
+    return json;
+}
+
+/// @brief Appends @p item to the array at @p key of @p json, making the array on first use.
+/// @param json The object.
+/// @param key  The key.
+/// @param item The item.
+inline void append(Json& json, char const* key, Json item) {
+    auto& object = std::get<Json::object_t>(json.data);
+    Json::object_t::iterator found = object.find(key);
+    if (found == object.end()) {
+        detail::put(json, key, Json::array_t{});
+        found = object.find(key);
+    }
+    std::get<Json::array_t>(found->second.data).push_back(std::move(item));
+}
+
+}  // namespace detail
+
 /// @brief The screen's own scope: its declarations, params, lifecycle keys, components and customization points.
 class Scope : public DeclScope {
 public:
@@ -2262,6 +2512,18 @@ public:
     /// @brief Whether the screen has unsaved changes.
     /// @param dirty The condition.
     void dirty(AnyHandle const& dirty) { detail::put(_head, "dirty", dirty.json()); }
+
+    /// @brief The head's line under the title.
+    /// @param subtitle The expression.
+    void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }
+
+    /// @brief Appends a status badge to the head.
+    /// @param badge The badge.
+    void status(HeadBadgeOptions const& badge) { detail::append(_head, "status", detail::headBadge(badge)); }
+
+    /// @brief Appends an action to the head, run in the screen scope.
+    /// @param action The action; its id is unique among the head's actions.
+    void action(ActionButtonOptions const& action) { detail::append(_head, "actions", detail::actionButton(action)); }
 
     /// @brief Commands run when the screen mounts.
     /// @param commands The commands.
@@ -2879,6 +3141,11 @@ struct ButtonOptions {
     Commands onClick;
     /// @brief Commands run on activation by keyboard.
     Commands onActivate;
+    /// @brief A push button or a list entry; absent writes no key, a push button.
+    std::optional<ButtonStyle> style;
+    /// @brief Whether a list entry is the current one, a condition; only with `ButtonStyle::Item`, which the loader
+    ///        checks.
+    AnyHandle selected;
 };
 
 /// @brief A `button` node.
@@ -2891,9 +3158,13 @@ struct ButtonOptions {
     } else if (options.emphasis == ButtonEmphasis::Danger) {
         writer.put("emphasis", std::string{"danger"});
     }
+    if (options.style) {
+        writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
+    }
     return std::move(writer)
         .put("label", options.label)
         .put("icon", options.icon)
+        .put("selected", options.selected)
         .put("onClick", options.onClick)
         .put("onActivate", options.onActivate)
         .done();
@@ -3080,34 +3351,64 @@ struct ContainerOptions {
     AnyHandle gap;
     /// @brief A grid's columns; adaptive layouts read `env("widthClass")`.
     AnyHandle columns;
+    /// @brief Where the children sit across the axis; absent stretches them.
+    std::optional<Align> align;
+    /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
+    ///        columns share its width.
+    std::optional<Justify> justify;
 };
+
+namespace detail {
+
+/// @brief A row or column with its options.
+/// @param kind     `row` or `column`.
+/// @param children The children.
+/// @param options  The gap and the alignment.
+/// @return The node.
+[[nodiscard]] inline Node stackNode(char const* kind, Nodes const& children, ContainerOptions const& options) {
+    NodeWriter node{kind};
+    node.put("children", children).put("gap", options.gap);
+    if (options.align) {
+        node.text("align", alignName(*options.align));
+    }
+    if (options.justify) {
+        node.text("justify", justifyName(*options.justify));
+    }
+    return node.done();
+}
+
+}  // namespace detail
 
 /// @brief A `column` node.
 /// @param children The children.
-/// @param options  The gap.
+/// @param options  The gap and the alignment.
 /// @return The node.
 [[nodiscard]] inline Node column(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"column"}.put("children", children).put("gap", options.gap).done();
+    return detail::stackNode("column", children, options);
 }
 
 /// @brief A `row` node.
 /// @param children The children.
-/// @param options  The gap.
+/// @param options  The gap and the alignment.
 /// @return The node.
 [[nodiscard]] inline Node row(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"row"}.put("children", children).put("gap", options.gap).done();
+    return detail::stackNode("row", children, options);
 }
 
 /// @brief A `grid` node.
 /// @param children The children.
-/// @param options  The gap and columns.
+/// @param options  The gap, columns and alignment; a `justify` is written, and the loader refuses it.
 /// @return The node.
 [[nodiscard]] inline Node grid(Nodes const& children, ContainerOptions const& options = {}) {
-    return detail::NodeWriter{"grid"}
-        .put("children", children)
-        .put("gap", options.gap)
-        .put("columns", options.columns)
-        .done();
+    detail::NodeWriter node{"grid"};
+    node.put("children", children).put("gap", options.gap).put("columns", options.columns);
+    if (options.align) {
+        node.text("align", detail::alignName(*options.align));
+    }
+    if (options.justify) {
+        node.text("justify", detail::justifyName(*options.justify));
+    }
+    return node.done();
 }
 
 /// @brief A `spacer` node.
@@ -3248,6 +3549,8 @@ struct DialogOptions {
     Commands cancel;
     /// @brief Commands run when the user dismisses it.
     Commands onDismiss;
+    /// @brief The buttons of its footer, run in its scope; each id once.
+    std::vector<ActionButtonOptions> actions;
 };
 
 namespace detail {
@@ -3266,6 +3569,14 @@ namespace detail {
     node.text("id", element.name()).put("title", options.title).put("open", options.open);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));
+    }
+    if (!options.actions.empty()) {
+        Json::array_t actions;
+        actions.reserve(options.actions.size());
+        for (ActionButtonOptions const& action : options.actions) {
+            actions.push_back(actionButton(action));
+        }
+        node.raw("actions", std::move(actions));
     }
     return node.put("side", options.side)
         .scope(scope)
@@ -3398,6 +3709,9 @@ struct TableOptions {
     AnyHandle highlightKey;
     /// @brief Commands run when a row is activated, in its row scope.
     Commands onActivate;
+    /// @brief Shown instead of the table while its rows are an empty list, in the table's scope; empty shows the
+    ///        table always.
+    Nodes empty;
 };
 
 namespace detail {
@@ -3442,6 +3756,7 @@ namespace detail {
         .put("rowTone", options.rowTone)
         .put("highlightKey", options.highlightKey)
         .put("onActivate", options.onActivate)
+        .put("empty", options.empty)
         .scope(scope)
         .done();
 }
@@ -3820,6 +4135,42 @@ private:
     FieldSettings _settings;
 };
 
+/// @brief How a `form`, `collection` or `wizard` presents its forms: the keys every one of them takes.
+struct FormPresentation {
+    /// @brief A heading over the fields; on a collection or a wizard, the view's heading in place of the schema's.
+    ///        Absent shows none on a form.
+    AnyHandle title;
+    /// @brief The explicit-mode button's label, which the status line names; absent is `Submit`.
+    AnyHandle submitLabel;
+    /// @brief Whether the status line shows; absent shows it.
+    std::optional<bool> showStatus;
+    /// @brief The columns of every group's grid, 1 to 12; absent keeps the engine's.
+    std::optional<int> columns;
+    /// @brief Where every cell puts its caption; absent stacks it over the control.
+    std::optional<::morph::forms::FieldLayout> fieldLayout;
+};
+
+namespace detail {
+
+/// @brief Writes @p presentation's keys on @p node.
+/// @param node         The node being written.
+/// @param presentation The keys.
+inline void present(NodeWriter& node, FormPresentation const& presentation) {
+    node.put("title", presentation.title).put("submitLabel", presentation.submitLabel);
+    if (presentation.showStatus) {
+        node.raw("showStatus", AnyHandle{*presentation.showStatus}.json());
+    }
+    if (presentation.columns) {
+        node.raw("columns", AnyHandle{std::int64_t{*presentation.columns}}.json());
+    }
+    if (presentation.fieldLayout) {
+        node.text("fieldLayout",
+                  *presentation.fieldLayout == ::morph::forms::FieldLayout::Inline ? "inline" : "stacked");
+    }
+}
+
+}  // namespace detail
+
 /// @brief Options of `form`.
 /// @tparam Action The form's action.
 template <typename Action>
@@ -3841,6 +4192,8 @@ struct FormOptions {
     Commands onSuccess;
     /// @brief Commands run after a failed submit.
     Commands onError;
+    /// @brief The title, button label, status line and columns.
+    FormPresentation presentation{};
 };
 
 /// @brief A `form` node: a schema form of the forms engine over an action (spec 2); each field takes its label
@@ -3872,6 +4225,7 @@ template <typename Action, typename Model>
         }
         node.raw("fields", std::move(overlay));
     }
+    detail::present(node, options.presentation);
     return node.put("onSubmit", options.onSubmit)
         .put("onSuccess", options.onSuccess)
         .put("onError", options.onError)
@@ -3882,35 +4236,35 @@ template <typename Action, typename Model>
 /// @brief A `collection` node: the forms engine's list screen over an action.
 /// @tparam Action The action.
 /// @tparam Model  The model type of the alias; it must run the action.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every form the view draws; its title replaces the view's heading.
 /// @return The node.
 template <typename Action, typename Model>
     requires Runs<Model, Action>
-[[nodiscard]] Node collection(ModelHandle<Model> const& model) {
+[[nodiscard]] Node collection(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     CatalogFacts facts;
     facts.action<Model, Action>();
-    return detail::NodeWriter{"collection"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<Action>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"collection"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<Action>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 /// @brief A `wizard` node: the forms engine's wizard over an action.
 /// @tparam Action The action.
 /// @tparam Model  The model type of the alias; it must run the action.
-/// @param model The alias.
+/// @param model        The alias.
+/// @param presentation The keys that reach every step's form; its title replaces the view's heading.
 /// @return The node.
 template <typename Action, typename Model>
     requires Runs<Model, Action>
-[[nodiscard]] Node wizard(ModelHandle<Model> const& model) {
+[[nodiscard]] Node wizard(ModelHandle<Model> const& model, FormPresentation const& presentation = {}) {
     CatalogFacts facts;
     facts.action<Model, Action>();
-    return detail::NodeWriter{"wizard"}
-        .text("model", model.alias())
-        .text("action", std::string{::morph::model::ActionTraits<Action>::typeId()})
-        .facts(facts)
-        .done();
+    detail::NodeWriter node{"wizard"};
+    node.text("model", model.alias()).text("action", std::string{::morph::model::ActionTraits<Action>::typeId()});
+    detail::present(node, presentation);
+    return node.facts(facts).done();
 }
 
 /// @brief Options of `custom`.

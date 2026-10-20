@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "qt_quick/context.hpp"
+#include "qt_quick/keys.hpp"
 #include "qt_quick/relay.hpp"
 
 namespace morph::qt_quick::detail {
@@ -52,8 +53,12 @@ public:
 
     /// A property of the item.
     [[nodiscard]] QVariant read(char const* name) const;
-    /// Writes a property of the item unless it already holds @p value.
+    /// Writes a property of the item unless it already holds @p value. A name the item does not declare is not
+    /// written, and is reported through the context.
     void write(char const* name, QVariant const& value) const;
+    /// As `write`, for a property the item takes part through only when it declares it (a custom component's
+    /// placement and scheme): a name it does not declare is skipped, not reported.
+    void offer(char const* name, QVariant const& value) const;
     /// The object a property of the item names (`control`, `content`), or null.
     [[nodiscard]] QObject* part(char const* name) const;
     /// Calls a QML function of the item with arguments of the types it declares (`bool`, `int`, `double` for
@@ -139,6 +144,10 @@ public:
     void release(ItemBase& child) noexcept;
     /// Moves @p child before the child now at @p index; past the end means last.
     void move(ItemBase& child, std::size_t index);
+    /// Places the children across this container's axis: writes `crossAlign` on every child it holds, and on each
+    /// one it adopts later. Adoption runs in a child's constructor, so a container aligned after its children were
+    /// made reaches them here.
+    void alignChildren(ui::Align align);
     /// The children, in order.
     [[nodiscard]] std::vector<ItemBase*> const& children() const noexcept { return _children; }
     /// How many stacking-order changes `move` has made.
@@ -155,6 +164,9 @@ protected:
     [[nodiscard]] virtual CrossFill crossFill() const noexcept { return CrossFill{.width = true, .height = false}; }
     /// The colour scheme this container's children inherit: its item's `scheme`, or null when it has none.
     [[nodiscard]] virtual QObject* scheme() const = 0;
+    /// Which way this container's alignment places a child, written on each child as `alignAcross`: 0 not at all,
+    /// 1 horizontally (a column's children), 2 vertically (a row's children, a grid cell's content in its row).
+    [[nodiscard]] virtual int alignsAcross() const noexcept { return 0; }
     /// Called once a child was appended.
     virtual void adopted(ItemBase& child) { static_cast<void>(child); }
     /// Called once a child was moved.
@@ -165,6 +177,8 @@ protected:
 private:
     std::vector<ItemBase*> _children;
     std::size_t _restacks = 0;
+    // The `ui::Align` the children are placed by, as its index.
+    int _crossAlign = 0;
 };
 
 /// Every live widget of every backend in the process, in creation order.
@@ -219,6 +233,13 @@ public:
     void setRequired(bool required) override { this->write("required", required); }
     void setErrors(std::vector<std::string> const& errors) override;
     void setStale(bool stale) override { this->write("stale", stale); }
+
+protected:
+    /// The field's label as `caption`, and `labelShown`: what `setCaption` writes for the kinds that have one.
+    void showCaption(std::string_view label, bool shown) const {
+        this->write("caption", toQString(label));
+        this->write("labelShown", shown);
+    }
 };
 
 /// The messages as a QML string list.

@@ -2,6 +2,7 @@
 //
 // The `form` node: a document's schema form, lowered through the forms engine (spec 5 §9, spec 2).
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -10,6 +11,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -108,6 +111,43 @@ TEST_CASE("form node: an explicit form submits only from its button", "[ui][inte
     CHECK(h.dispatcher.count("Lims_CaptureConcentration") == 1);
 }
 
+// Mutation: drop the presentation options in lowerForm (the title, the label, the status line and the columns are the
+// engine's defaults).
+TEST_CASE("form node: title, submitLabel, showStatus and columns present the form", "[ui][interpreter][forms]") {
+    std::string document{kCapture};
+    document.replace(document.find(R"("prefill")"), 0,
+                     R"("submit": "explicit", "title": "Deposit", "submitLabel": "Deposit", "columns": 2, )");
+    SECTION("the status line hidden") {
+        Harness h;
+        std::string hidden = document;
+        hidden.replace(hidden.find(R"("prefill")"), 0, R"("showStatus": false, )");
+        auto const screen = h.mount(hidden);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        CHECK(h.text("form_title") == "Deposit");
+        CHECK(h.backend.prop(h.byTestId("Button", "form_submit"), "label") == "Deposit");
+        CHECK_FALSE(h.backend.find("Text", "testId", "form_status").has_value());
+        int const cell = h.byTestId("Column", "cell_sampleId");
+        std::optional<int> grid;
+        for (int const candidate : h.backend.all("Grid")) {
+            if (std::ranges::contains(h.backend.children(candidate), cell)) {
+                grid = candidate;
+            }
+        }
+        REQUIRE(grid.has_value());
+        CHECK(h.backend.prop(*grid, "columns") == "2");
+    }
+    SECTION("the status line names the label") {
+        Harness h;
+        auto const screen = h.mount(document);
+        CHECK(h.text("form_status") == "fill the required (*) fields");
+        h.backend.edit(h.byTestId("TextInput", "field_sampleId"), "4");
+        h.backend.edit(h.byTestId("TextInput", "field_concentration"), "1");
+        h.settle();
+        CHECK(h.text("form_status") == "ready: press Deposit");
+    }
+}
+
 TEST_CASE("form node: an action the catalog has no schema for is reported and shown muted",
           "[ui][interpreter][forms]") {
     Harness h;
@@ -173,6 +213,20 @@ TEST_CASE("collection node: the catalog's view document lists rows through the m
     h.reply(h.dispatcher.last("Lims_CaptureConcentration"), R"({"ok":true})");
     CHECK(h.backend.prop(h.byTestId("Dialog", "editorDialog"), "open") == "false");
     CHECK(h.dispatcher.count("Lims_ListSamples") == 3);
+}
+
+TEST_CASE("collection and wizard nodes: a title replaces the view's heading", "[ui][interpreter][forms]") {
+    for (auto const& [document, testId, expected] :
+         {std::tuple{std::string{kSamples}, "collection_title", "Our samples"},
+          std::tuple{std::string{kCaptureFlow}, "wizard_title", "Our samples  (1 / 2)"}}) {
+        Harness h;
+        std::string titled = document;
+        titled.replace(titled.find(R"("model")"), 0, R"("title": "Our samples", )");
+        auto const screen = h.mount(titled);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        CHECK(h.text(testId) == expected);
+    }
 }
 
 TEST_CASE("wizard node: the catalog's wizard document steps through the model alias", "[ui][interpreter][forms]") {
@@ -398,4 +452,143 @@ TEST_CASE("form, collection and wizard nodes: a catalog document that does not b
     CHECK(reasons.at(2).starts_with("the wizard of `Lims_CaptureConcentration` does not build: "));
     CHECK(reasons.at(3) == "the wizard document of `Lims_ConfirmSample` starts with `Lims_CaptureConcentration`");
     CHECK(h.dispatcher.calls.empty());
+}
+
+// Mutation: tell the inputs their label is never shown (the standalone inputs report `captionShown=false`).
+TEST_CASE("an input shows its label as a caption only when the document asks; a form's cell draws its own",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "captions",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "textInput", "testId": "shownText", "label": "Name", "showLabel": true },
+        { "kind": "select", "testId": "shownSelect", "label": "Grade", "showLabel": true },
+        { "kind": "dateTimeInput", "testId": "shownWhen", "label": "When", "showLabel": true },
+        { "kind": "textInput", "testId": "named", "label": "Hidden caption" },
+        { "kind": "textInput", "testId": "bare" },
+        { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration" } ] } })");
+    auto const caption = [&h](std::string_view kind, std::string_view testId) {
+        int const widget = h.byTestId(kind, testId);
+        return h.backend.prop(widget, "caption") + "|" + h.backend.prop(widget, "captionShown");
+    };
+    CHECK(caption("TextInput", "shownText") == "Name|true");
+    CHECK(caption("Select", "shownSelect") == "Grade|true");
+    CHECK(caption("DateTimeInput", "shownWhen") == "When|true");
+    CHECK(caption("TextInput", "named") == "Hidden caption|false");  // the accessible name, not drawn
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("TextInput", "bare"), "caption"));
+    // In a form the cell draws the caption, and the input is told not to.
+    CHECK(caption("TextInput", "field_sampleId") == "Sample|false");
+    CHECK(h.text("label_sampleId") == "Sample");
+}
+
+namespace {
+
+/// A form whose list field is drawn by the host component `ReadingsGrid`, given a prop of the document's beside the
+/// field's own.
+constexpr std::string_view kReadings = R"({
+  "vocab": "ui/1", "id": "readings",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "components": { "ReadingsGrid": { "host": "ReadingsGrid", "version": 1,
+    "props": { "value": "json", "label": "string", "required": "bool", "errors": "json", "columns": "int" },
+    "events": { "change": "any" }, "fallback": { "kind": "text", "text": "no grid" } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "form", "id": "rec", "model": "sample", "action": "Lims_RecordReadings", "submit": "explicit",
+      "prefill": { "lit": { "sampleId": 7, "readings": [ { "at": "a", "value": 1 } ] } },
+      "fields": { "readings": { "component": "ReadingsGrid", "props": { "columns": 2 } } } },
+    { "kind": "text", "testId": "rows", "text": { "fn": "count", "args": [ { "ref": "rec.readings.value" } ] } } ] }
+})";
+
+}  // namespace
+
+// Mutation: skip the override (the field keeps its built-in rows, and no component is asked for).
+TEST_CASE("form node: a field drawn by a host component gets its value and writes it back as a user edit",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    h.backend.loadsComponents({"ReadingsGrid"});
+    auto const screen = h.mount(kReadings);
+    h.settle();
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    std::optional<int> const grid = h.backend.find("Custom", "component", "ReadingsGrid");
+    REQUIRE(grid.has_value());
+    CHECK(h.backend.prop(*grid, "prop.value") == R"([{"at":"a","value":1}])");
+    CHECK(h.backend.prop(*grid, "prop.label") == "Readings");
+    CHECK(h.backend.prop(*grid, "prop.columns") == "2");
+    CHECK(h.text("rows") == "1");
+
+    h.backend.raiseEvent(*grid, "change", R"([{"at":"a","value":1},{"at":"b","value":2}])");
+    h.settle();
+    CHECK(h.text("rows") == "2");
+    CHECK(h.backend.prop(*grid, "prop.value") == R"([{"at":"a","value":1},{"at":"b","value":2}])");
+
+    std::size_t const reported = h.diagnostics.size();
+    h.backend.raiseEvent(*grid, "change", R"({"at":"c"})");
+    h.backend.raiseEvent(*grid, "change", "not json");
+    h.settle();
+    CHECK(h.text("rows") == "2");
+    REQUIRE(h.diagnostics.size() == reported + 2);
+    CHECK(h.diagnostics.at(reported).reason ==
+          "field readings: the component's change does not decode: a list field takes a JSON array");
+    CHECK(h.diagnostics.at(reported + 1).reason ==
+          "field readings: the component's change does not decode: it is "
+          "not JSON");
+
+    h.backend.click(h.byTestId("Button", "form_submit"));
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_RecordReadings") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_RecordReadings")).body ==
+          R"({"sampleId":7,"readings":[{"at":"a","value":1},{"at":"b","value":2}]})");
+}
+
+TEST_CASE("form node: without the component loaded, the field's built-in control is drawn",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(kReadings);
+    h.settle();
+    CHECK_FALSE(h.backend.find("Custom", "component", "ReadingsGrid").has_value());
+    CHECK(h.backend.find("Button", "testId", "add_readings").has_value());
+}
+
+// Mutation: skip the cap on a field component's change (the oversize file lands in the base64 member).
+TEST_CASE("form node: a component writing a base64 member is held to the inline cap, and a plain one is not",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    h.backend.loadsComponents({"Sheet"});
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sheet", "models": { "sample": { "type": "Lims_SampleModel" } },
+      "components": { "Sheet": { "host": "Sheet", "version": 1, "props": { "value": "json" },
+                                 "events": { "change": "any" }, "fallback": { "kind": "text", "text": "-" } } },
+      "view": { "kind": "form", "id": "att", "model": "sample", "action": "Lims_AttachSheet", "submit": "explicit",
+                "fields": { "sheet": { "component": "Sheet" }, "note": { "component": "Sheet" } } } })");
+    h.settle();
+    std::vector<int> const sheets = h.backend.all("Custom");
+    REQUIRE(sheets.size() == 2);
+    std::string const big(((morph::ui::kDefaultInlineFileBytes + 3) / 3) * 4, 'A');
+    h.backend.raiseEvent(sheets.at(0), "change", "\"" + big + "\"");
+    h.backend.raiseEvent(sheets.at(1), "change", "\"" + big + "\"");
+    h.settle();
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "field sheet: 1048578 bytes is over the 1048576 inline cap");
+    CHECK(readJson(*screen, R"({"ref":"att.sheet.value"})") == "null");
+    CHECK(readJson(*screen, R"({"ref":"att.note.value"})") == "\"" + big + "\"");
+    h.backend.raiseEvent(sheets.at(0), "change", R"("AQID")");
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"att.sheet.value"})") == R"("AQID")");
+}
+
+// Mutation: drop the field layout in presentForm (each cell stays a column).
+TEST_CASE("form and wizard nodes: fieldLayout inline puts every label beside its control",
+          "[ui][interpreter][forms]") {
+    for (auto const& [source, anchor] : {std::pair{std::string_view{kCapture}, std::string_view{R"("prefill")"}},
+                                         std::pair{std::string_view{kCaptureFlow}, std::string_view{R"("model")"}}}) {
+        std::string document{source};
+        document.replace(document.find(anchor), 0, R"("fieldLayout": "inline", )");
+        Harness h;
+        auto const screen = h.mount(document);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        int const cell = h.byTestId("Row", "cell_sampleId");
+        CHECK(h.backend.children(cell).front() == h.byTestId("Text", "label_sampleId"));
+        CHECK(h.backend.prop(h.byTestId("Text", "label_sampleId"), "layout") == "fixed(16)/content");
+    }
 }

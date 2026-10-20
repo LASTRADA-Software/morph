@@ -34,14 +34,16 @@ namespace morph::qt_quick {
 std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
                                     std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces = {});
 
-/// @brief Applies a bundle's theme to @p engine's `Theme`: the theme index's base, and each of its surfaces resolved
-///        with that surface's layer. A bundle with no theme index applies the defaults, so a client that opens a
-///        second application does not keep the first one's look.
+/// @brief Applies a bundle's theme to @p engine's `Theme`: the theme index's base, each of its surfaces resolved
+///        with that surface's layer, and its icon set. A bundle with no theme index applies the defaults and no icon
+///        set, so a client that opens a second application does not keep the first one's look.
 /// @param engine The engine the backend compiles its components in.
 /// @param themes The bundle's theme files by id (`ui::Bundle::themes`).
+/// @param icons  The bundle's icon set, by icon name, as SVG text (`ui::Bundle::icons`); empty declares none.
 /// @return Why the theme could not be applied, or the `Theme` properties that could not be set; empty when it was
 ///         applied whole.
 std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
-                                          std::map<std::string, std::string, std::less<>> const& themes);
+                                          std::map<std::string, std::string, std::less<>> const& themes,
+                                          std::map<std::string, std::string, std::less<>> const& icons = {});
 
 }  // namespace morph::qt_quick

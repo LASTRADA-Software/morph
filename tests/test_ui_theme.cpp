@@ -170,7 +170,8 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     CHECK(values.colors.at("color.warn.bg").hex() == "#fff4e5");
     CHECK_FALSE(values.colors.contains("space.2"));
     CHECK(values.dimensions.at("space.2") == 8.0);
-    CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() + values.shadows.size() ==
+    CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() + values.shadows.size() +
+              values.families.size() ==
           morph::ui::kThemeTokens.size());
 
     // A path of the set with another type keeps the default.

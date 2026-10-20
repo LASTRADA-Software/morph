@@ -60,6 +60,7 @@ declare the app-only customization kinds.
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
+| `subtitle`, `status`, `actions` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -80,6 +81,23 @@ action declares what it changes in its effects, and every query holding a change
 so a document that restated it per screen could only drift from the action. A document that declares one is refused
 rather than having it ignored: the author meant a refresh the client would silently not do. `optimistic`,
 `refreshEvery` and the `refetch` command stay; `refetch` is how a document refetches for a reason no action declares.
+
+### The head
+
+A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `status` (parts
+`headBadge`: `{tone, text, icon, visible}`) and `actions` (parts `actionButton`). All are evaluated in the screen
+scope, and the app document, which has no view, refuses them.
+
+An `actionButton` part is one button of a list:
+
+| Key | Shape | Notes |
+|---|---|---|
+| `id` | name, required | unique within its list |
+| `label` | expression, required | |
+| `icon` | expression | an icon name |
+| `emphasis` | text | `normal`, `primary`, `danger`, as a `button`'s |
+| `enabled`, `visible` | conditions | default `true` |
+| `onClick` | commands | run in the scope the list belongs to |
 
 ## Declarations
 
@@ -113,6 +131,9 @@ A command list is an array of commands, or one command object. `Command` carries
 | `binding` | `run`'s and `upload`'s `as` |
 | `option` | `navigate`'s `as`; `notify`'s `role`; `download`'s `dialog` or `preview` |
 | `transfer` | `upload`'s `id`, whose `progress`, `pending` and `error` are element values |
+| `bytes` | `download`'s `"from": "bytes"` and `upload`'s `"into": "bytes"` (default `ref`): the file moves inline, under the session's cap |
+| `mediaType` | `download`'s `type`, the media type of inline bytes |
+| `nameAs`, `typeAs` | `upload`'s body members for an inline file's name and media type |
 | `commands`, `alternative` | `seq` and `all` steps; `if`'s branches; `navigate`'s `onResult` and `onCancel` |
 
 `run`'s `as` names the element of `each` inside its body when `each` is given, and the reply for
@@ -129,30 +150,35 @@ keys — `props` (expressions), `events` (command lists, a custom node's events 
 place a kind is described.
 
 **Every node** takes `id`, `visible`, `enabled` (conditions), `tooltip`, `sizing`, `span`,
-`autofocus`, `testId`, `surface` (strings), `a11y` (`{name, role}`), `drag` (`{payload}`), `drop`
-(`{accepts, onDrop}`) and `keys`. **Text and the inputs** also take `readonly`, `required`, `stale`
+`minWidth`, `maxWidth`, `minHeight`, `maxHeight` (literal integers of 0 or more, in backend units: the node's extent
+on that axis is clamped into them, whatever its sizing), `alignSelf` (`start`, `center`, `end`, `stretch`: where the
+node sits across its `row`'s, `column`'s, `grid` row's or `forEach`'s axis, in place of the container's `align`),
+`autofocus`, `testId`, `surface` (strings), `a11y`
+(`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
+`"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
+left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. **Text and the inputs** also take `readonly`, `required`, `stale`
 (conditions) and `errors`.
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
-| `text` | `text`, `role` | |
-| `button` | `label`, `icon`, `onClick`, `onActivate` | |
-| `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
+| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
+| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
+| `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
-| `select` | `options`, `selected`, `style`, `label`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
+| `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
 | `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |
-| `column`, `row` | `children`, `gap` | |
-| `grid` | `children`, `gap`, `columns` | |
+| `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
+| `grid` | `children`, `gap`, `columns`, `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
 | `panel` | `title`, `padding`, `collapsible`, `collapsed`, `children` | |
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
 | `tabs` | `tabs`: parts `{label, children}`; the node keeps the user's pick, so picking a tab mounts and shows its page | |
-| `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `onDismiss` | `open`, `ready`, `submitted` |
+| `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
-| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, cell ⓘ}`, or an expression), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
-| `dateTimeInput` | `value`, `mode`, `label`, `onChange`, `onCommit` | as `textInput` |
+| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, cell ⓘ}`, or an expression), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
+| `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
 | `banner` | `tone`, `text`, `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
@@ -166,8 +192,8 @@ place a kind is described.
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
-| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions), `onSubmit`, `onSuccess`, `onError` | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
-| `collection`, `wizard` | `model`, `action` (required) | |
+| `form` | `model`, `action` (required), `prefill`, `key` (the identity of the record `prefill` holds), `submit` (`explicit` or `auto`; absent keeps the schema's mode), `showErrors`, `fields` (field name to overlay of expressions; an overlay may also name a `component` that draws the field, with `props`, a record of expressions), `onSubmit`, `onSuccess`, `onError`, `title`, `submitLabel`, `showStatus` (a literal `bool`; default `true`), `columns` (a literal integer, 1 to 12), `fieldLayout` (`stacked`, the default, or `inline`: each label beside its control) | `ready`, `body`, `submitted`, `pending`, and each field as a record of `value`, `draft`, `valid`, `required`, `visible`, `readonly` and `errors` (`form.field.value`) |
+| `collection`, `wizard` | `model`, `action` (required), and `submitLabel`, `showStatus`, `columns` and `fieldLayout` as on `form`, reaching every form the view draws; `title` replaces its heading | |
 | `custom` | `name` (required), `props` (record of expressions), `on` (record of command lists) | |
 
 `gap` and `padding` are spacing steps, 0 to 5 ([`view_tree.md`](view_tree.md)); the mount clamps any other value.
@@ -205,9 +231,23 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   points at the key and says that effects replace it.
 - **Shape.** Each key has the shape its kind gives it; required keys are present; names match
   `[A-Za-z_][A-Za-z0-9_]*`; closed choices (`showErrors`, `concurrency`, `source`, `offline`,
-  `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`) take one of their values; chords are
+  `commitOn`, `onStale`, `navigate`'s `as`, `notify`'s `role`, `align`, `justify`, `alignSelf`, a button's
+  `emphasis` and `style`) take one of their values; chords are
   modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`, once each) and a key name, and are not the workspace
-  shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`).
+  shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
+  `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
+  minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
+  frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
+  one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
+  bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
+  evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is
+  reported once for its path and drawn `normal`. A `button`'s `selected` needs `"style": "item"` (it marks a list item). A `grid` takes no `justify` (its columns
+  share its width; there is no spare length to justify); `alignSelf` is given only on a child of a `row`, `column`,
+  `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,
+  a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as
+  a list. An `actionButton` has an `id` and a `label`, and its
+  id is used once in its list (a screen's `actions`, a dialog's or drawer's); `subtitle`, `status` and `actions` are
+  refused on the app document.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's
   statically known argument kinds are ones it takes; `visible`, `enabled`, `readonly`, `required`,
   `stale`, `open`, `when`, `dirty`, a check's `assert` and every `if` condition are `bool` where
@@ -219,7 +259,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 - **Targets.** `set` names state, an input (`textInput`, `checkbox`, `select`, `dateTimeInput`,
   `slider`) or `app.name`; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
   `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`); `focus` an element;
-  `resetPrefs` a point or `all`; a download to preview a state. A check's targets are elements;
+  `resetPrefs` a point or `all`; a download to preview a state. `from` and `into` are `ref` or `bytes`; a download
+  from bytes gives a `name`; `type` is given only with `"from": "bytes"`, and `nameAs` and `typeAs` only with
+  `"into": "bytes"`. A check's targets are elements;
   `optimistic` names a query of the document.
 - **Models.** Queries, mutations and model-backed nodes name a model alias in scope. An alias in a
   row scope names its `instance`; only a screen's own aliases borrow (`{"from": alias}`).
@@ -232,6 +274,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   all have ids, no other `arrange` point names the same container, and the app document, which has no view,
   may not declare one; `pins` belong to the app document.
 - **Prefetch.** Each name is a screen query whose body reads nothing but the screen's params.
+- **Field components.** A form field overlay's `component` is a name of a declared component that declares a prop
+  `value` and an event `change`; its `props` name only props the component declares, and an overlay with a
+  `component` gives no `widget`, since both choose the field's control.
 
 ## The catalog
 

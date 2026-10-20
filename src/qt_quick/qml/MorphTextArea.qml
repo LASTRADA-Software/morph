@@ -26,6 +26,7 @@ MorphField {
     defaultRole: Accessible.EditableText
 
     TextArea {
+        font: Theme.bodyFont
         id: area
         width: root.controlWidth
         color: root.scheme.text

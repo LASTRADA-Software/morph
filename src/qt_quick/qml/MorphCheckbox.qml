@@ -17,6 +17,7 @@ MorphField {
     defaultRole: Accessible.CheckBox
 
     CheckBox {
+        font: Theme.bodyFont
         id: box
         width: root.controlWidth
         text: root.label

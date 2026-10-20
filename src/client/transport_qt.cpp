@@ -4,12 +4,11 @@
 #include <QUrl>
 #include <expected>
 #include <memory>
+#include <morph/client/transport.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <string>
 
-#include "app/transport.hpp"
-
-namespace morph::examples::detail {
+namespace morph::client::detail {
 
 std::expected<RemoteTransport, std::string> qtTransport(std::string const& url) {
     QUrl const parsed{QString::fromStdString(url)};
@@ -21,4 +20,4 @@ std::expected<RemoteTransport, std::string> qtTransport(std::string const& url) 
     return RemoteTransport{.backend = std::move(made), .requests = requests};
 }
 
-}  // namespace morph::examples::detail
+}  // namespace morph::client::detail

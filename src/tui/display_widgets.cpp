@@ -7,6 +7,7 @@
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Theme.hpp>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <utility>
 
@@ -176,10 +177,16 @@ void BadgeImpl::setText(std::string_view text) {
     refresh();
 }
 
-::core::tui::Size BadgeImpl::naturalSize() const { return {.width = displayWidth(_text) + 2, .height = 1}; }
+// A framework icon's glyph before the text; any other icon stays undrawn, as text.
+std::string BadgeImpl::caption() const {
+    std::string_view const glyph = ui::iconGlyph(_icon);
+    return glyph.empty() ? _text : std::string{glyph} + " " + _text;
+}
+
+::core::tui::Size BadgeImpl::naturalSize() const { return {.width = displayWidth(caption()) + 2, .height = 1}; }
 
 void BadgeImpl::paint(::core::tui::Canvas& canvas) {
-    canvas.putString(0, 0, "[" + _text + "]", toneStyle(canvas.theme(), _tone));
+    canvas.putString(0, 0, "[" + caption() + "]", toneStyle(canvas.theme(), _tone));
 }
 
 void ProgressImpl::setValue(std::optional<double> value) {

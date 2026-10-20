@@ -47,7 +47,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
 }  // namespace site
 
 /// @brief Called for each newly mounted row with its widget and key; a Table tells its widget the row's key.
-using RowHook = std::function<void(Widget&, Key const&)>;
+using RowHook = std::function<void(reactive::Scope&, Node const&, Widget&, Key const&)>;
 
 /// @brief One mounted row of a ForEach or Table.
 struct KeyedRow {
@@ -189,8 +189,14 @@ public:
         if (!node) {
             return nullptr;
         }
-        return std::visit([&](auto const& spec) -> Widget* { return &this->mountKind(scope, spec, parent); },
-                          node->kind);
+        return std::visit(
+            [&](auto const& spec) -> Widget* {
+                if constexpr (requires { spec.common.layout.alignSelf; }) {
+                    checkPlacement(spec.common, parent);
+                }
+                return &this->mountKind(scope, spec, parent);
+            },
+            node->kind);
     }
 
     /// @brief Mounts @p node as `mount` does, as a mount of its own: the first `autofocus` widget it mounts, in
@@ -224,6 +230,38 @@ public:
     }
 
 private:
+    // Runs @p body with @p overlay as the overlay an ActionBar mounts into the footer of, and puts the previous one
+    // back after it.
+    template <typename F>
+    auto underOverlay(ContainerWidget* overlay, F const& body) -> std::invoke_result_t<F const&> {
+        class Restore {
+        public:
+            Restore(Mounter& self, ContainerWidget* next) : _self{&self}, _saved{std::exchange(self._overlay, next)} {}
+            Restore(Restore const&) = delete;
+            Restore& operator=(Restore const&) = delete;
+            Restore(Restore&&) = delete;
+            Restore& operator=(Restore&&) = delete;
+            ~Restore() { _self->_overlay = _saved; }
+
+        private:
+            Mounter* _self;
+            ContainerWidget* _saved;
+        };
+        Restore const restore{*this, overlay};
+        return body();
+    }
+
+    // The footer of the overlay whose content is being mounted, or null outside any.
+    [[nodiscard]] ContainerWidget* overlayFooter() const {
+        if (auto* const dialog = dynamic_cast<DialogWidget*>(_overlay)) {
+            return &dialog->footer();
+        }
+        if (auto* const drawer = dynamic_cast<DrawerWidget*>(_overlay)) {
+            return &drawer->footer();
+        }
+        return nullptr;
+    }
+
     // One mount: the root, or content, a page or a row a binding mounts later. The outermost pass focuses the first
     // autofocus widget mounted during it, in document order, after everything in it has mounted; a pass nested in
     // another (content a binding mounts while the root mounts) leaves that to the outer one. A pass that throws gives
@@ -398,6 +436,43 @@ private:
         };
     }
 
+    // The loader's rules for bounds, for a view tree built in C++: no negative bound, no minimum above its maximum,
+    // and no fixed amount outside its bounds, which would leave it no room.
+    static void checkLayout(Common const& common) {
+        LayoutHints const& hints = common.layout;
+        auto const refuse = [&common](std::string const& what) {
+            throw std::logic_error{"morph::ui::mount: " + what + " on the node" +
+                                   (common.testId.empty() ? std::string{} : " `" + common.testId + "`")};
+        };
+        auto const check = [&refuse](Sizing sizing, std::optional<int> minimum, std::optional<int> maximum,
+                                     std::string const& axis) {
+            if (minimum.value_or(0) < 0 || maximum.value_or(0) < 0) {
+                refuse("a negative " + axis + " bound");
+            }
+            if (minimum && maximum && *minimum > *maximum) {
+                refuse("a minimum " + axis + " above its maximum");
+            }
+            if (sizing.kind == Sizing::Kind::Fixed &&
+                (sizing.amount < minimum.value_or(sizing.amount) || sizing.amount > maximum.value_or(sizing.amount))) {
+                refuse("a fixed " + axis + " outside its bounds");
+            }
+        };
+        check(hints.width, hints.minWidth, hints.maxWidth, "width");
+        check(hints.height, hints.minHeight, hints.maxHeight, "height");
+    }
+
+    // The loader's rule for `alignSelf`, for a view tree built in C++: only a stack's or a grid's child has a cross
+    // axis to be placed on.
+    static void checkPlacement(Common const& common, ContainerWidget const* parent) {
+        if (common.layout.alignSelf && dynamic_cast<StackWidget const*>(parent) == nullptr &&
+            dynamic_cast<GridWidget const*>(parent) == nullptr) {
+            std::string const named = common.testId.empty() ? std::string{} : " `" + common.testId + "`";
+            throw std::logic_error{
+                "morph::ui::mount: `alignSelf` places a node in its row, column or grid, and the node" + named +
+                " is not in one"};
+        }
+    }
+
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         if (common.visible.isBound() || !common.visible.constant()) {
             bind(scope, common.visible, [&widget](bool shown) { widget.setVisible(shown); });
@@ -406,6 +481,7 @@ private:
             bind(scope, common.enabled, [&widget](bool enabled) { widget.setEnabled(enabled); });
         }
         if (common.layout != LayoutHints{}) {
+            checkLayout(common);
             widget.setLayout(common.layout);
         }
         if (common.dragKey.isBound() || common.dragKey.constant().has_value()) {
@@ -490,11 +566,20 @@ private:
         }
     }
 
+    // The alignment only when it is not the default, as for a button's emphasis, so a stack that says nothing more
+    // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
-                       Common const& common, ContainerWidget* parent) {
+                       Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
+                       Justify justify = Justify::Start) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         applyCommon(scope, widget, common);
         widget.setGap(spacingStep(gap));
+        if (align != Align::Stretch) {
+            widget.setAlign(align);
+        }
+        if (justify != Justify::Start) {
+            widget.setJustify(justify);
+        }
         mountChildren(scope, children, widget);
         return widget;
     }
@@ -542,6 +627,16 @@ private:
         return found;
     }
 
+    /// An input's label and whether it shows it: only when it has a label or shows one, so an input without a label
+    /// is told nothing.
+    template <class Widget>
+    void applyCaption(reactive::Scope& scope, Widget& widget, Prop<std::string> const& label, bool shown) {
+        if (!shown && !label.isBound() && label.constant().empty()) {
+            return;
+        }
+        bind(scope, label, [&widget, shown](std::string const& text) { widget.setCaption(text, shown); });
+    }
+
     // Like applyCommon, a constant default calls no setter.
     void applyField(reactive::Scope& scope, FieldWidget& widget, FieldState const& field) {
         if (field.readonly.isBound() || field.readonly.constant()) {
@@ -568,22 +663,46 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Button const& spec, ContainerWidget* parent) {
+        if (spec.style == ButtonStyle::Push && (spec.selected.isBound() || spec.selected.constant())) {
+            throw std::logic_error{"morph::ui: `selected` marks a list item; give the button ButtonStyle::Item"};
+        }
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
         if (spec.emphasis != ButtonEmphasis::Normal) {
             widget.setEmphasis(spec.emphasis);
         }
+        if (!spec.icon.empty()) {
+            widget.setIcon(spec.icon);
+        }
+        if (spec.style == ButtonStyle::Item) {
+            widget.setStyle(spec.style);
+            if (spec.selected.isBound() || spec.selected.constant()) {
+                bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
+            }
+        }
         widget.setOnClick(event(spec.onClick));
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
+        bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
+        if ((hasUnit || spec.decimals >= 0) && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input holds no number, so it takes no unit or places"};
+        }
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
         auto reassert = controlled(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
         bind(scope, spec.placeholder, [&widget](std::string const& text) { widget.setPlaceholder(text); });
+        // An input without a unit or places is not told any, so a backend sees only what a field declares.
+        if (hasUnit) {
+            bind(scope, spec.unit, [&widget](std::string const& unit) { widget.setUnit(unit); });
+        }
+        if (spec.decimals >= 0) {
+            widget.setDecimals(spec.decimals);
+        }
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));
         widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
         widget.setOnCommit(event(spec.onCommit));
@@ -609,6 +728,7 @@ private:
             spec.onSelect,
             controlled(scope, spec.selected, [&widget](std::optional<Key> const& key) { widget.setSelected(key); })));
         widget.setOnOpen(event(spec.onOpen));
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         return widget;
     }
 
@@ -633,11 +753,16 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
-        return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent);
+        return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
+                          spec.justify);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
-        return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent);
+        if (spec.tone && dynamic_cast<TableWidget*>(parent) == nullptr) {
+            throw std::logic_error{"morph::ui: a row's tone is a table row's; this row is not in a table"};
+        }
+        return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
+                          spec.justify);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
@@ -645,6 +770,9 @@ private:
         applyCommon(scope, widget, spec.common);
         widget.setColumns(spec.columns);
         widget.setGap(spacingStep(spec.gap));
+        if (spec.align != Align::Stretch) {
+            widget.setAlign(spec.align);
+        }
         for (GridCell const& cell : spec.cells) {
             Widget* const child = mount(scope, cell.node, &widget);
             if (child != nullptr && cell.span != 1) {
@@ -703,13 +831,13 @@ private:
         applyCommon(scope, widget, spec.common);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         bind(scope, spec.selector,
-             [this, &widget, &content, depth = scope.depth() + 1, cases = spec.cases,
-              fallback = spec.fallback](Key const& key) {
+             [this, &widget, &content, depth = scope.depth() + 1, cases = spec.cases, fallback = spec.fallback,
+              overlay = _overlay](Key const& key) {
                  content.reset();
                  auto const chosen = std::ranges::find(cases, key, &SwitchCase::key);
                  Node const& node = chosen == cases.end() ? fallback : chosen->node;
                  if (node) {
-                     content = mountContent(depth, node, widget);
+                     content = underOverlay(overlay, [&] { return mountContent(depth, node, widget); });
                  }
              });
         return widget;
@@ -748,8 +876,9 @@ private:
         }
         widget.setOnSelect(inputEvent(spec.onSelect, reassert));
         pages.onSelect = inputEvent(spec.onSelect, std::move(reassert));
-        auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs](std::size_t index) {
-            _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); });
+        auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs, overlay = _overlay](std::size_t index) {
+            underOverlay(overlay,
+                         [&] { _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); }); });
         };
         if (!spec.selected.isBound()) {
             show(spec.selected.constant());
@@ -886,7 +1015,7 @@ private:
                 content.reset();
             } else if (content == nullptr) {
                 try {
-                    content = mountContent(depth, child, widget);
+                    content = underOverlay(&widget, [&] { return mountContent(depth, child, widget); });
                 } catch (...) {
                     dismissFailed(dismiss);
                     throw;
@@ -938,7 +1067,16 @@ private:
         widget.setSelectionMode(spec.selectionMode);
         widget.setOnActivate(event(spec.onActivate));
         mountRows(scope, spec.rows, widget,
-                  [&widget](Widget& rowWidget, Key const& key) { widget.setRowKey(rowWidget, key); });
+                  [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
+                      widget.setRowKey(rowWidget, key);
+                      // A row's tone binds in the row's scope, after its key.
+                      Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
+                      if (view != nullptr && view->tone) {
+                          bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
+                              widget.setRowTone(rowWidget, tone);
+                          });
+                      }
+                  });
         widget.setOnSelectionChange(inputEvent(
             spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
                 widget.setSelection(keys);
@@ -956,11 +1094,14 @@ private:
         scope.make<std::shared_ptr<ForEachModel const>>(model);
         ForEachSession& session = scope.adopt(model->open(*_rt));
         auto& rows = scope.make<KeyedRows>();
-        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow)] {
+        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow),
+                      overlay = _overlay] {
             std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
             // Untracked: what a row view reads while it is built, or what a kept row's update touches, must not
             // become a dependency of the whole list.
-            _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+            underOverlay(overlay, [&] {
+                _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+            });
         });
     }
 
@@ -988,7 +1129,7 @@ private:
             row.slot = &row.scope->adopt(session.makeRow(index));
             row.widget = mount(*row.scope, row.slot->view(), &container);
             if (row.widget != nullptr && onRow) {
-                onRow(*row.widget, key);
+                onRow(*row.scope, row.slot->view(), *row.widget, key);
             }
             return row;
         });
@@ -1198,6 +1339,22 @@ private:
     }
 
     // The component the backend loads in the custom node's place, or the fallback when it loads none.
+    // An ActionBar is a horizontal stack in the footer of the overlay whose content holds it, not in its own parent.
+    Widget& mountKind(reactive::Scope& scope, ActionBar const& spec, ContainerWidget* parent) {
+        static_cast<void>(parent);
+        ContainerWidget* const footer = overlayFooter();
+        if (footer == nullptr) {
+            throw std::logic_error{"morph::ui: an action bar mounts only in a dialog's or drawer's content"};
+        }
+        StackWidget& widget = scope.adopt(_backend->createStack(footer, Axis::Horizontal));
+        applyCommon(scope, widget, spec.common);
+        widget.setGap(spacingStep(2));
+        for (Node const& child : spec.children) {
+            static_cast<void>(mount(scope, child, &widget));
+        }
+        return widget;
+    }
+
     Widget& mountKind(reactive::Scope& scope, Custom const& spec, ContainerWidget* parent) {
         CustomRequest request{.name = spec.name, .props = {}, .minVersion = spec.minVersion};
         request.props.reserve(spec.props.size());
@@ -1228,6 +1385,7 @@ private:
             spec.onChange,
             controlled(scope, spec.value,
                        [&widget](std::optional<morph::time::Timestamp> const& value) { widget.setValue(value); })));
+        applyCaption(scope, widget, spec.label, spec.showLabel);
         return widget;
     }
 
@@ -1253,6 +1411,10 @@ private:
 
     reactive::Runtime* _rt;
     IViewBackend* _backend;
+    // The dialog or drawer whose content is being mounted, while it is: an ActionBar mounts into its footer. A binding
+    // that mounts later (a Switch case, a Tabs page, a row) mounts under the overlay it was made under. The footer is
+    // asked for only when an ActionBar mounts, so an overlay without actions never makes one.
+    ContainerWidget* _overlay = nullptr;
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;

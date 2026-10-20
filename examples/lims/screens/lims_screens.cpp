@@ -413,12 +413,24 @@ ui::Screen loginScreen() {
             "login", auth,
             {.body = {{&LimsLogin::username, username.value()}},
              .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::navigate(std::string{kRegister})}});
+        // A card centred on the page, which shrinks with a narrow window, as the other applications' sign-ins are.
         return ui::column(
-            {ui::row({ui::textInput({.label = "Username", .placeholder = "Username"}).id(username).testId("username"),
-                      ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")},
-                     {.gap = 2}),
-             ui::text({.text = login.error()}).testId("error")},
-            {.gap = 2});
+                   {ui::panel(
+                        {ui::column({ui::text({.text = "Morph LIMS", .role = std::string{"heading"}}).testId("brand"),
+                                     ui::textInput({.label = "Username", .placeholder = "Username"})
+                                         .id(username)
+                                         .testId("username"),
+                                     ui::button({.label = "Sign in",
+                                                 .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                                 .onClick = ui::run(login)})
+                                         .testId("signIn"),
+                                     ui::text({.text = login.error(), .role = std::string{"error"}}).testId("error")},
+                                    {.gap = 3})},
+                        {.padding = 5})
+                        .sizing(ui::stretch())
+                        .maxWidth(44)},
+                   {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Center})
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

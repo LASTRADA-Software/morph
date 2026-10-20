@@ -4,9 +4,9 @@
 // the model with its units; the samples collection lists the model's rows and runs a collection action; the intake
 // wizard registers a sample and carries its id into the measurement step. The model runs in process.
 
-#include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/client/source.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,8 +16,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 

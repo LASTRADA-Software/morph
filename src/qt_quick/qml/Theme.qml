@@ -2,13 +2,46 @@
 pragma Singleton
 import QtQuick
 
-// The colours, units and spacing every MorphUi component reads. A unit is the default font's average character width
-// horizontally and its line height vertically. The colours, the stale opacity and the spacing are the ui-theme/1
-// defaults; qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its default here.
+// The colours, fonts, units and spacing every MorphUi component reads. A unit is the body font's average character
+// width horizontally and its line height vertically. The colours, the stale opacity and the spacing are the
+// ui-theme/1 defaults; qt_quick::applyTheme sets them from a theme's tokens, and a token the theme lacks keeps its
+// default here.
 QtObject {
     id: theme
 
-    readonly property FontMetrics metrics: FontMetrics {}
+    // The bundle's icon set: icon name to the URL of its SVG; empty while the theme declares none.
+    property var icons: ({})
+    // Whether the bundle's theme declares an icon set: a node icon it does not name is then reported.
+    property bool iconSet: false
+
+    // The URL an icon draws from: the bundle's set's, or empty, for which a component draws today's text or glyph.
+    function iconSource(name: string): string {
+        const source = name !== "" ? theme.icons[name] : undefined
+        return source !== undefined ? source : ""
+    }
+
+    // The families `font.family` names, in order of preference; empty draws in the platform font.
+    property list<string> fontFamilies: []
+    // The platform font: what the sizes derive from when the theme gives none, and the font while it names no family.
+    readonly property FontMetrics platformMetrics: FontMetrics {}
+    // The theme's body font while it names a family, else the platform font. It is built from the platform metrics'
+    // size rather than bound to `bodyFont`, which reads `bodyPixels`, so a unit never depends on what it feeds.
+    readonly property FontMetrics metrics: FontMetrics {
+        font: theme.fontFamilies.length > 0 ? Qt.font({
+            family: theme.fontFamilies[0],
+            families: theme.fontFamilies,
+            pixelSize: theme.bodyPixels
+        }) : theme.platformMetrics.font
+    }
+    // The families text is drawn in: the theme's, else the platform font's.
+    readonly property list<string> families: fontFamilies.length > 0 ? fontFamilies : [platformMetrics.font.family]
+    // Body text and controls: the theme's families at the body size, or the platform font untouched.
+    readonly property font bodyFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
+    // Emphasised text at the body size: a title, a header, the current step.
+    readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Bold)
+                                                               : boldOf(platformMetrics.font)
+    // A heading: the families at the heading size, bold.
+    readonly property font headingFont: fontOf(headingPixels, Font.Bold)
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
     readonly property real spacing: unitHeight / 2
@@ -25,6 +58,19 @@ QtObject {
     property color selection: "#cfe3ff"
     property color accent: "#1565c0"
     property color focus: "#1565c0"
+    // A tone's fill, outline and marker: `color.<ok|warn|err|info>.<bg|border|dot>`.
+    property color successBg: "#e8f5e9"
+    property color successBorder: "#a5d6a7"
+    property color successDot: "#2e7d32"
+    property color warnBg: "#fff4e5"
+    property color warnBorder: "#ffcc80"
+    property color warnDot: "#b26a00"
+    property color errorBg: "#fdecea"
+    property color errorBorder: "#ef9a9a"
+    property color errorDot: "#c62828"
+    property color infoBg: "#e3f2fd"
+    property color infoBorder: "#90caf9"
+    property color infoDot: "#1565c0"
     property real staleOpacity: 0.55
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
@@ -34,9 +80,33 @@ QtObject {
     property real controlHeight: 32
     property real bodySize: 0
     property real headingSize: 0
-    readonly property real bodyPixels: bodySize > 0 ? bodySize : metrics.font.pixelSize > 0 ? metrics.font.pixelSize
-                                                                                           : metrics.height * 0.75
+    readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
+                                                                   ? platformMetrics.font.pixelSize
+                                                                   : platformMetrics.height * 0.75
     readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
+
+    // @p base in bold, at its own size: a pixel size, or else a point size, whichever it was given in.
+    function boldOf(base: font): font {
+        const spec = {
+            family: base.family,
+            weight: Font.Bold
+        }
+        if (base.pixelSize > 0)
+            spec.pixelSize = base.pixelSize
+        else
+            spec.pointSize = base.pointSize
+        return Qt.font(spec)
+    }
+
+    // The text font at a size and a weight, in the families text is drawn in.
+    function fontOf(pixels: real, weight: int): font {
+        return Qt.font({
+            family: theme.families[0],
+            families: theme.families,
+            pixelSize: Math.round(pixels),
+            weight: weight
+        })
+    }
     // The card's shadow: `elevation.card`.
     property color cardShadowColor: "#14000000"
     property real cardShadowOffsetX: 0
@@ -68,6 +138,18 @@ QtObject {
         success: theme.success
         info: theme.info
         warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
     }
     readonly property MorphScheme pageScheme: MorphScheme {
         surface: theme.background
@@ -82,6 +164,18 @@ QtObject {
         success: theme.success
         info: theme.info
         warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
     }
     readonly property MorphScheme cardScheme: MorphScheme {
         surface: theme.surface
@@ -96,6 +190,18 @@ QtObject {
         success: theme.success
         info: theme.info
         warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
     }
     readonly property MorphScheme sidebarScheme: MorphScheme {
         surface: "#1f2430"
@@ -110,6 +216,18 @@ QtObject {
         success: theme.success
         info: theme.info
         warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
     }
     readonly property MorphScheme toolbarScheme: MorphScheme {
         surface: theme.surface
@@ -124,6 +242,18 @@ QtObject {
         success: theme.success
         info: theme.info
         warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
     }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {

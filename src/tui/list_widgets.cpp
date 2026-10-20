@@ -182,24 +182,27 @@ void RadioSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSe
 
 ::core::tui::Size RadioSelectImpl::naturalSize() const {
     // "▶ " or "  ", then "(•) " or "( ) ", then the label.
-    return {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))};
+    return withFieldCaption(
+        {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))}, caption());
 }
 
 std::string RadioSelectImpl::probeText() const { return labelOf(_options, _selected); }
 
 void RadioSelectImpl::paint(::core::tui::Canvas& canvas) {
-    _top = scrolledTop(*_list, {.top = _top, .rows = canvas.height()});
-    paintRows(*_list, _top, {.reachable = actionable(), .focused = hasFocus()}, canvas);
-    paintMarks(canvas);
+    auto rows = paintFieldCaption(canvas, caption());
+    _top = scrolledTop(*_list, {.top = _top, .rows = rows.height()});
+    paintRows(*_list, _top, {.reachable = actionable(), .focused = hasFocus()}, rows);
+    paintMarks(rows);
 }
 
 void RadioSelectImpl::activate() { choose(_list->selectedIndex()); }
 
 void RadioSelectImpl::click(::core::tui::Point cell) {
-    if (cell.y < 0) {
+    int const row = cell.y - captionRows();
+    if (row < 0) {
         return;
     }
-    auto const index = _top + static_cast<std::size_t>(cell.y);
+    auto const index = _top + static_cast<std::size_t>(row);
     if (index < _options.size()) {
         _list->setSelectedIndex(index);
         choose(index);
@@ -357,7 +360,9 @@ void DropdownSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _o
 
 void DropdownSelectImpl::setOnOpen(ui::Action onOpen) { _onOpen = std::move(onOpen); }
 
-::core::tui::Size DropdownSelectImpl::naturalSize() const { return {.width = widestLabel(_options) + 4, .height = 1}; }
+::core::tui::Size DropdownSelectImpl::naturalSize() const {
+    return withFieldCaption({.width = widestLabel(_options) + 4, .height = 1}, caption());
+}
 
 std::string DropdownSelectImpl::probeText() const { return labelOf(_options, _selected); }
 
@@ -368,8 +373,9 @@ void DropdownSelectImpl::paint(::core::tui::Canvas& canvas) {
     if (actionable()) {
         style = hasFocus() || _open ? &theme.buttonFocused : &theme.buttonNormal;
     }
-    canvas.putString(0, 0, "[" + labelOf(_options, _selected) + " ▾]", *style);
-    paintMarks(canvas);
+    auto control = paintFieldCaption(canvas, caption());
+    control.putString(0, 0, "[" + labelOf(_options, _selected) + " ▾]", *style);
+    paintMarks(control);
     if (_open) {
         placePopup();
     }
@@ -468,16 +474,17 @@ DropdownSelectImpl::Placement DropdownSelectImpl::placement() const {
     auto const field = view().screenBounds();
     auto const viewport = context().screen->viewportArea();
     int const count = static_cast<int>(_options.size());
-    // The field draws on its first row, whatever height it was laid out at.
-    int const below = std::max(0, viewport.y + viewport.height - (field.y + 1));
-    int const above = std::max(0, field.y - viewport.y);
+    // The field draws on its first row below its caption, whatever height it was laid out at.
+    int const top = field.y + captionRows();
+    int const below = std::max(0, viewport.y + viewport.height - (top + 1));
+    int const above = std::max(0, top - viewport.y);
     int const width = popupSize().width;
-    Placement place{.origin = {.x = std::max(viewport.x, std::min(field.x, viewport.x + viewport.width - width)),
-                               .y = field.y + 1},
-                    .rows = std::min(count, below)};
+    Placement place{
+        .origin = {.x = std::max(viewport.x, std::min(field.x, viewport.x + viewport.width - width)), .y = top + 1},
+        .rows = std::min(count, below)};
     if (below < count && above > below) {
         place.rows = std::min(count, above);
-        place.origin.y = field.y - place.rows;
+        place.origin.y = top - place.rows;
     }
     return place;
 }
@@ -700,6 +707,13 @@ void TabsImpl::setSelected(std::size_t index) {
 
 void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) { _onSelect = std::move(onSelect); }
 
+void TabsImpl::setBarShown(bool shown) {
+    if (shown != _barShown) {
+        _barShown = shown;
+        refresh();
+    }
+}
+
 std::string TabsImpl::labelText(std::size_t index) const {
     auto const& label = _labels.at(index);
     return index == _selected ? "[" + label + "]" : " " + label + " ";
@@ -711,13 +725,19 @@ std::string TabsImpl::labelText(std::size_t index) const {
         bar += displayWidth(labelText(index));
     }
     auto const body = stackNaturalSize(children(), ui::Axis::Vertical, 0);
+    if (!_barShown) {
+        return body;
+    }
     return {.width = std::max(bar, body.width), .height = 1 + body.height};
 }
 
 std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _labels.at(_selected) : std::string{}; }
 
+// A shown bar keeps its one row, with no blank row under it: a terminal row costs more than the separation earns.
 std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) const {
-    return stackAreas(children(), {.x = 0, .y = 1, .width = size.width, .height = std::max(0, size.height - 1)},
+    int const barRows = _barShown ? 1 : 0;
+    return stackAreas(children(),
+                      {.x = 0, .y = barRows, .width = size.width, .height = std::max(0, size.height - barRows)},
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
@@ -728,7 +748,7 @@ void TabsImpl::paint(::core::tui::Canvas& canvas) {
         marked = hasFocus() ? &theme.buttonFocused : &theme.textBold;
     }
     int column = 0;
-    for (std::size_t index = 0; index < _labels.size(); ++index) {
+    for (std::size_t index = 0; _barShown && index < _labels.size(); ++index) {
         column += canvas.putString(0, column, labelText(index), index == _selected ? *marked : theme.textMuted);
     }
     placeChildren(childAreas(canvas.size()));
@@ -762,7 +782,7 @@ EventResult TabsImpl::key(::core::tui::KeyEvent const& key) {
 // A press anywhere on the tabs that no page widget takes bubbles here, so only a tab's label focuses and selects.
 // Taking the focus may run a handler (a field committing) that destroys the tabs.
 void TabsImpl::click(::core::tui::Point cell) {
-    if (cell.y != 0 || !focusable()) {
+    if (!_barShown || cell.y != 0 || !focusable()) {
         return;
     }
     int right = 0;

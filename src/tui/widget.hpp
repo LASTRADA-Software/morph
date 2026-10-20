@@ -20,6 +20,7 @@
 
 #include "tui/chord.hpp"
 #include "tui/context.hpp"
+#include "tui/layout.hpp"
 
 namespace morph::tui::detail {
 
@@ -93,6 +94,10 @@ public:
     /// The surface the widget draws on: its own, or else its nearest container's. The terminal draws the `sidebar`
     /// and `toolbar` surfaces in the inverse of its colours and every other surface as it draws no surface.
     [[nodiscard]] std::string const& effectiveSurface() const noexcept;
+    /// Keeps a table row's tone, which its cells draw in.
+    void applyRowTone(std::optional<ui::Tone> tone) noexcept { _rowTone = tone; }
+    /// The tone the widget draws in: its own row tone, or else its nearest container's; none for no toned row.
+    [[nodiscard]] std::optional<ui::Tone> effectiveRowTone() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
     void applyTooltip(std::string_view text) { _tooltip = text; }
     /// What the hover shows: the tooltip, and a field adds its messages.
@@ -210,6 +215,7 @@ private:
     std::string _accessibleRole;
     std::string _testId;
     std::string _surface;
+    std::optional<ui::Tone> _rowTone;
     std::string _tooltip;
     std::vector<std::string> _chords;
     std::function<void(std::string)> _onChord;
@@ -301,6 +307,11 @@ private:
 
 /// Draws @p marks right-aligned on the canvas's first row, over what is there.
 void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
+/// Draws @p caption on the canvas's first row and answers the canvas below it, where a captioned field draws its
+/// control; the whole canvas for an empty caption.
+[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption);
+/// @p control grown by @p caption's row, and as wide as the caption needs; @p control itself for an empty caption.
+[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption);
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
 ///
@@ -368,6 +379,18 @@ public:
 protected:
     /// Draws the marks at the right edge of the canvas's first row.
     void paintMarks(::core::tui::Canvas& canvas) const { detail::paintFieldMarks(canvas, marks()); }
+    /// How many cells the marks take at the right edge.
+    [[nodiscard]] int marksWidth() const { return static_cast<int>(marks().size()); }
+    /// Takes the field's label as its caption while @p shown; otherwise the field draws none: what `setCaption`
+    /// does for the kinds that have one.
+    void showCaption(std::string_view label, bool shown) {
+        _caption = shown ? std::string{label} : std::string{};
+        this->refresh();
+    }
+    /// The caption drawn above the control; empty when there is none.
+    [[nodiscard]] std::string const& caption() const noexcept { return _caption; }
+    /// Rows the caption takes above the control: 1 while there is one.
+    [[nodiscard]] int captionRows() const noexcept { return _caption.empty() ? 0 : 1; }
 
 private:
     [[nodiscard]] std::string marks() const {
@@ -388,6 +411,7 @@ private:
     bool _required = false;
     bool _stale = false;
     std::vector<std::string> _errors;
+    std::string _caption;
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.
@@ -417,10 +441,22 @@ public:
 
 /// How `arrangeStack` places children.
 struct StackSpec {
-    ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.
-    int gap = 0;                         ///< Cells between neighbours.
-    std::span<int const> extents;        ///< When non-empty, the main-axis extents to use, in order (table columns).
+    ui::Axis axis = ui::Axis::Vertical;    ///< The main axis.
+    int gap = 0;                           ///< Cells between neighbours.
+    std::span<int const> extents;          ///< When non-empty, the main-axis extents to use, in order (table columns).
+    ui::Align align = ui::Align::Stretch;  ///< Where a child sits across the axis, unless its `alignSelf` says.
+    ui::Justify justify = ui::Justify::Start;  ///< Where the spare length goes while no shown child stretches.
 };
+
+/// Where a child of @p extent sits in @p space under @p align: its offset from the space's start, rounded down when
+/// centred; none for a child that fills the space.
+[[nodiscard]] int alignedOffset(ui::Align align, int extent, int space) noexcept;
+
+/// The extent across its container a child takes under @p align, in a @p space-cell line: a content child under a
+/// non-stretch alignment its requested extent, every other child its sizing's (`layout::crossExtent`); both clamped
+/// into the child's bounds and the space.
+[[nodiscard]] int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space,
+                                layout::Bounds bounds) noexcept;
 
 /// The size @p widget asks its container for: its natural size, but a Fixed amount where its layout hints say so.
 [[nodiscard]] ::core::tui::Size requestedSize(WidgetBase const& widget);

@@ -100,6 +100,8 @@ struct Bundle {
     /// @brief The theme's files, by id, as their JSON text: the theme index and the token files it names; empty when
     ///        the bundle has no theme.
     std::map<std::string, std::string, std::less<>> themes;
+    /// @brief The theme's icon set, by icon name, as SVG text; empty when the theme declares none.
+    std::map<std::string, std::string, std::less<>> icons;
 };
 
 /// @brief Why a source could not be opened.

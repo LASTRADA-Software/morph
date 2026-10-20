@@ -330,6 +330,11 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::engaged(ui::ref("x"))) == R"({"fn":"engaged","args":[{"ref":"x"}]})");
     CHECK(text(ui::coalesce({ui::ref("x"), 1})) == R"({"fn":"coalesce","args":[{"ref":"x"},1]})");
     CHECK(text(ui::concat({"a", ui::ref("b")})) == R"({"fn":"concat","args":["a",{"ref":"b"}]})");
+    CHECK(text(ui::concatLists({ui::ref("a"), ui::ref("b")})) ==
+          R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
+    ui::Handle<std::vector<std::int64_t>> const typed =
+        ui::concatLists(std::vector{ui::ref<std::vector<std::int64_t>>("a"), ui::ref<std::vector<std::int64_t>>("b")});
+    CHECK(text(typed) == R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
     CHECK(text(ui::format("{0} of {1}", {1, 2})) == R"({"fn":"format","args":["{0} of {1}",1,2]})");
     CHECK(text(ui::count(items)) == R"({"fn":"count","args":[{"ref":"items"}]})");
     CHECK(text(ui::sum(items)) == R"({"fn":"sum","args":[{"ref":"items"}]})");
@@ -382,6 +387,56 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// Mutation: drop the align branch of stackNode (the column's `align` is not written).
+TEST_CASE("align, justify and alignSelf are written by name, and a screen using them validates", "[ui][author]") {
+    CHECK(text(ui::column({ui::text({.text = "a"}).alignSelf(morph::ui::Align::End)},
+                          {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Between})
+                   .json()) ==
+          R"({"kind":"column","children":[{"kind":"text","text":"a","alignSelf":"end"}],"align":"center",)"
+          R"("justify":"between"})");
+    CHECK(text(ui::row(ui::Nodes{}, {.align = morph::ui::Align::Stretch, .justify = morph::ui::Justify::Start})
+                   .json()) == R"({"kind":"row","align":"stretch","justify":"start"})");
+    CHECK(text(ui::grid(ui::Nodes{}, {.align = morph::ui::Align::Start}).json()) ==
+          R"({"kind":"grid","align":"start"})");
+    CHECK(text(ui::row(ui::Nodes{}).json()) == R"({"kind":"row"})");
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.aligned", [](ui::Scope&) {
+        return ui::column({ui::row(ui::Nodes{ui::text({.text = "x"}).alignSelf(morph::ui::Align::Start)},
+                                   {.align = morph::ui::Align::End})},
+                          {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::Center});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    CHECK(added.has_value());
+    auto const refused = screens.add(ui::screen(
+        "author.alignedRoot", [](ui::Scope&) { return ui::column(ui::Nodes{}).alignSelf(morph::ui::Align::Center); }));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().message().contains("`alignSelf` places a node in its row, column or grid"));
+}
+
+// Mutation: leave `style` out of button() (the item is written as a push button).
+TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
+    auto const current = ui::ref<std::string>("current");
+    CHECK(text(ui::button({.label = "A", .style = morph::ui::ButtonStyle::Item, .selected = ui::eq(current, "a")})
+                   .json()) ==
+          R"({"kind":"button","style":"item","label":"A","selected":{"fn":"eq","args":[{"ref":"current"},"a"]}})");
+    CHECK(text(ui::button({.label = "P", .style = morph::ui::ButtonStyle::Push}).json()) ==
+          R"({"kind":"button","style":"push","label":"P"})");
+    CHECK(text(ui::button({.label = "P"}).json()) == R"({"kind":"button","label":"P"})");
+}
+
+// The checks are templates: a requires-expression outside one makes a deleted call a hard error.
+template <typename M>
+concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };
+template <typename M>
+concept ResultReadsField = requires(M mutation) { mutation.result().at("id"); };
+template <typename M>
+concept ResultBinds = requires(ui::Scope& screen, M mutation) { screen.let("r", mutation.result()); };
+
+// Mutation: drop the deleted `at` overloads of ResultHandle; the first two assertions stop holding.
+static_assert(!ResultReadsMember<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no member read");
+static_assert(!ResultReadsField<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no named read");
+static_assert(ResultBinds<ui::MutationHandle<CaptureConcentration>>, "a mutation's result binds with let");
+
 TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     ui::QueryHandle<ListResults> const results{"results"};
     CHECK(text(results.pending()) == R"({"pending":"results"})");
@@ -392,7 +447,8 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     CHECK(text(header.at(&Header::sampleNumber)) == R"({"ref":"header.sampleNumber"})");
     ui::MutationHandle<CaptureConcentration> const capture{"capture"};
     CHECK(text(capture.result()) == R"({"result":"capture"})");
-    CHECK_THROWS_AS(capture.result().at(&ResultView::id), ui::AuthoringError);
+    // A result has no field reads at compile time; one built as a plain handle is refused when it is read.
+    CHECK_THROWS_AS(ui::Handle<ResultView>{capture.result()}.at(&ResultView::id), ui::AuthoringError);
     CHECK(text(capture.pending()) == R"({"pending":"capture"})");
     CHECK(text(capture.error()) == R"({"error":"capture"})");
     CHECK(text(capture.errorKind()) == R"({"errorKind":"capture"})");
@@ -1234,4 +1290,40 @@ TEST_CASE("a local registry enrols a screen directly, and counts a maker that th
 // Mutation: spell parseDecimal's call with its arguments swapped.
 TEST_CASE("parseDecimal builds the library call over the text and its places", "[ui][author]") {
     CHECK(text(ui::parseDecimal(ui::ref("typed"), 2)) == R"({"fn":"parseDecimal","args":[{"ref":"typed"},2]})");
+}
+
+// Mutation: leave `actions` out of the head (the document carries no action, and its run has nothing to name).
+TEST_CASE("a screen's head writes its subtitle, status badges and actions beside the title", "[ui][author]") {
+    auto const emitted = ui::screen("author.head", [](ui::Scope& screen) {
+                             auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
+                             screen.title(ui::AnyHandle{"Sample"});
+                             screen.subtitle(stage);
+                             screen.status({.text = ui::AnyHandle{"Draft"}, .tone = ui::AnyHandle{"warn"}});
+                             screen.action({.id = "save",
+                                            .label = ui::AnyHandle{"Save"},
+                                            .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                            .onClick = {ui::set(stage, ui::AnyHandle{"Saved"})}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("subtitle":{"ref":"stage"})"));
+    CHECK(emitted->text.contains(R"("status":[{"tone":"warn","text":"Draft"}])"));
+    CHECK(emitted->text.contains(
+        R"("actions":[{"id":"save","label":"Save","emphasis":"primary","onClick":[{"set":"stage","value":"Saved"}]}])"));
+}
+
+// Mutation: leave the options' actions out of the overlay (the dialog carries no footer buttons).
+TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", "[ui][author]") {
+    auto const emitted = ui::screen("author.dialog.actions", [](ui::Scope& screen) {
+                             auto saved = screen.state<std::string>("saved", ui::AnyHandle{"no"});
+                             return ui::dialog(ui::element("dlg"), {ui::text({.text = saved})},
+                                               {.title = ui::AnyHandle{"Confirm"},
+                                                .actions = {{.id = "ok",
+                                                             .label = ui::AnyHandle{"OK"},
+                                                             .emphasis = morph::ui::ButtonEmphasis::Primary,
+                                                             .onClick = {ui::set(saved, ui::AnyHandle{"yes"})}}}});
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(
+        R"("actions":[{"id":"ok","label":"OK","emphasis":"primary","onClick":[{"set":"saved","value":"yes"}]}])"));
 }

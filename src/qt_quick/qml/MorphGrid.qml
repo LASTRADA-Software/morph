@@ -9,6 +9,9 @@ MorphWidget {
 
     property int columns: 1
     property int gap: 0
+    // Where each cell's content sits in its row, a `ui::Align` index, which C++ also writes on each child as its
+    // `crossAlign`.
+    property int align: 0
     readonly property Item content: layout
 
     implicitWidth: layout.implicitWidth

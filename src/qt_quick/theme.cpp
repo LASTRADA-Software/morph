@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QByteArray>
 #include <QColor>
+#include <QFont>
+#include <QFontInfo>
 #include <QList>
 #include <QMetaObject>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 #include <array>
 #include <functional>
 #include <map>
@@ -22,9 +27,8 @@ namespace morph::qt_quick {
 
 namespace {
 
-/// The `Theme` property each colour token of the set sets. The semantic `bg`, `border` and `dot` colours have no
-/// property yet: no built-in component draws them.
-constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorProperties = {{
+/// The `Theme` property each colour token of the set sets.
+constexpr std::array<std::pair<std::string_view, char const*>, 24> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -37,10 +41,22 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kColorPropert
     {"color.selection", "selection"},
     {"color.accent", "accent"},
     {"color.focus", "focus"},
+    {"color.ok.bg", "successBg"},
+    {"color.ok.border", "successBorder"},
+    {"color.ok.dot", "successDot"},
+    {"color.warn.bg", "warnBg"},
+    {"color.warn.border", "warnBorder"},
+    {"color.warn.dot", "warnDot"},
+    {"color.err.bg", "errorBg"},
+    {"color.err.border", "errorBorder"},
+    {"color.err.dot", "errorDot"},
+    {"color.info.bg", "infoBg"},
+    {"color.info.border", "infoBorder"},
+    {"color.info.dot", "infoDot"},
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 12> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 24> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -53,6 +69,18 @@ constexpr std::array<std::pair<std::string_view, char const*>, 12> kSchemeProper
     {"color.ok", "success"},
     {"color.info", "info"},
     {"color.warn", "warn"},
+    {"color.ok.bg", "successBg"},
+    {"color.ok.border", "successBorder"},
+    {"color.ok.dot", "successDot"},
+    {"color.warn.bg", "warnBg"},
+    {"color.warn.border", "warnBorder"},
+    {"color.warn.dot", "warnDot"},
+    {"color.err.bg", "errorBg"},
+    {"color.err.border", "errorBorder"},
+    {"color.err.dot", "errorDot"},
+    {"color.info.bg", "infoBg"},
+    {"color.info.border", "infoBorder"},
+    {"color.info.dot", "infoDot"},
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
@@ -92,6 +120,33 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
         if (found != values.dimensions.end() && !theme.setProperty(property, found->second)) {
             unset.emplace_back(property);
         }
+    }
+}
+
+// The families of `font.family`; one Qt resolves to none of them falls back to Qt's own substitute and is reported, so
+// a theme naming a font the machine lacks says so rather than drawing in another.
+void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    auto const found = values.families.find("font.family");
+    if (found == values.families.end()) {
+        return;
+    }
+    QStringList names;
+    std::string listed;
+    for (std::string const& name : found->second) {
+        names.append(QString::fromStdString(name));
+        listed += (listed.empty() ? "" : ", ") + name;
+    }
+    if (!theme.setProperty("fontFamilies", QVariant::fromValue(names))) {
+        unset.emplace_back("fontFamilies");
+        return;
+    }
+    if (names.isEmpty()) {
+        return;
+    }
+    QFont font;
+    font.setFamilies(names);
+    if (!names.contains(QFontInfo{font}.family(), Qt::CaseInsensitive)) {
+        unset.push_back("font.family: none of " + listed + " is installed");
     }
 }
 
@@ -161,13 +216,38 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         return unset;
     }
     setPlainTokens(*theme, values, unset);
+    setFamilies(*theme, values, unset);
     setShadowAndSpace(*theme, values, unset);
     setSurfaces(*theme, surfaces, unset);
     return unset;
 }
 
-std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
-                                          std::map<std::string, std::string, std::less<>> const& themes) {
+namespace {
+
+// The bundle's icon set on `Theme.icons`, each icon a `data:` URL of its SVG, and whether there is one.
+std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std::string, std::less<>> const& icons) {
+    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr) {
+        return {"Theme"};
+    }
+    QVariantMap urls;
+    for (auto const& [name, svg] : icons) {
+        urls.insert(QString::fromStdString(name), QStringLiteral("data:image/svg+xml;base64,") +
+                                                      QString::fromLatin1(QByteArray::fromStdString(svg).toBase64()));
+    }
+    std::vector<std::string> unset;
+    if (!theme->setProperty("icons", QVariant::fromValue(urls))) {
+        unset.emplace_back("icons");
+    }
+    if (!theme->setProperty("iconSet", !icons.empty())) {
+        unset.emplace_back("iconSet");
+    }
+    return unset;
+}
+
+// The theme index's base and surfaces, or the defaults without an index.
+std::vector<std::string> applyIndex(QQmlEngine& engine,
+                                    std::map<std::string, std::string, std::less<>> const& themes) {
     std::optional<ui::ThemeIndex> index;
     std::map<std::string, ui::TokenSet, std::less<>> files;
     for (auto const& [fileId, text] : themes) {
@@ -204,6 +284,19 @@ std::vector<std::string> applyBundleTheme(QQmlEngine& engine,
         surfaces.insert_or_assign(name, ui::themeValues(*layered));
     }
     return applyTheme(engine, ui::themeValues(*base), surfaces);
+}
+
+}  // namespace
+
+std::vector<std::string> applyBundleTheme(
+    QQmlEngine& engine,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the bundle's two maps, in its order.
+    std::map<std::string, std::string, std::less<>> const& themes,
+    std::map<std::string, std::string, std::less<>> const& icons) {
+    std::vector<std::string> problems = setIcons(engine, icons);
+    auto applied = applyIndex(engine, themes);
+    problems.insert(problems.end(), applied.begin(), applied.end());
+    return problems;
 }
 
 }  // namespace morph::qt_quick

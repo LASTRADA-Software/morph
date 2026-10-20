@@ -933,9 +933,15 @@ private:
             denominator = denominator == minValue ? -maxValue : denominator;
         }
 
+        // Flips the sign via unsigned subtraction from zero rather than
+        // signed negation: both components are already clamped off
+        // INT64_MIN above, so `-numerator`/`-denominator` would be
+        // well-defined here, but it is exactly the negate-under-sign-check
+        // shape GCC's `-Wstrict-overflow` flags once this function is
+        // inlined at `-O3`.
         if (denominator < 0) {
-            numerator = -numerator;
-            denominator = -denominator;
+            numerator = static_cast<std::int64_t>(0ULL - static_cast<std::uint64_t>(numerator));
+            denominator = static_cast<std::int64_t>(0ULL - static_cast<std::uint64_t>(denominator));
         }
         // Magnitudes via `absU64`, so the gcd never negates either component.
         // The result cannot exceed INT64_MAX: gcd(a, b) <= min(a, b) and the

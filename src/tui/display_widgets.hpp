@@ -57,18 +57,23 @@ private:
     ui::Action _onDismiss;
 };
 
-/// Badge: `[text]` in its tone. A terminal has no icon map, so the icon is kept and not drawn.
+/// Badge: `[text]` in its tone. A terminal has no icon map: a framework icon is drawn as its glyph before the text,
+/// and any other is kept and not drawn.
 class BadgeImpl final : public TuiWidget<ui::BadgeWidget> {
 public:
     explicit BadgeImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
-    void setIcon(std::string_view icon) override { _icon = std::string{icon}; }
+    void setIcon(std::string_view icon) override {
+        _icon = std::string{icon};
+        refresh();
+    }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     void paint(::core::tui::Canvas& canvas) override;
 
 private:
+    [[nodiscard]] std::string caption() const;
     ui::Tone _tone = ui::Tone::Neutral;
     std::string _text;
     std::string _icon;

@@ -3,14 +3,20 @@
 // Theme tokens on Qt Quick (spec 6 §12 "Design package"): a token set reaches a generated screen's widget and a host
 // component through the one `Theme` singleton, and a token the theme lacks takes the default.
 
+#include <QByteArray>
 #include <QColor>
 #include <QFile>
+#include <QFont>
+#include <QFontDatabase>
+#include <QFontInfo>
+#include <QFontMetricsF>
 #include <QObject>
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
 #include <functional>
 #include <map>
 #include <memory>
@@ -20,7 +26,10 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "qt_quick_harness.hpp"
 
@@ -125,6 +134,47 @@ TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
     CHECK(theme->property("cardShadowBlur").toReal() == 6.0);
 }
 
+// Mutation: drop the `color.ok.bg` row from the colour properties (Theme.successBg keeps its default).
+TEST_CASE("qt_quick theme: a tone's bg, border and dot reach Theme, its surfaces and the badge that draws them",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "ok": {"bg": {"$value": "#123456"}, "border": {"$value": "#234567"}, "dot": {"$value": "#345678"}},
+        "err": {"bg": {"$value": "#456789"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    auto const sidebarTokens =
+        ui::parseTokens(R"({"color": {"$type": "color", "warn": {"dot": {"$value": "#56789a"}}}})");
+    REQUIRE(sidebarTokens);
+    auto const sidebarResolved = ui::resolveTokens({&*sidebarTokens});
+    REQUIRE(sidebarResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*sidebarResolved)}};
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("successBg").value<QColor>() == QColor{"#123456"});
+    CHECK(theme->property("successBorder").value<QColor>() == QColor{"#234567"});
+    CHECK(theme->property("successDot").value<QColor>() == QColor{"#345678"});
+    CHECK(theme->property("errorBg").value<QColor>() == QColor{"#456789"});
+    CHECK(theme->property("infoBg").value<QColor>() == QColor{"#e3f2fd"});  // the default stands
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("warnDot").value<QColor>() == QColor{"#56789a"});
+    auto* const own = theme->property("themeScheme").value<QObject*>();
+    REQUIRE(own != nullptr);
+    CHECK(own->property("successBg").value<QColor>() == QColor{"#123456"});  // the theme's scheme follows Theme
+
+    auto badge = scene.backend().createBadge(nullptr);
+    badge->setTone(ui::Tone::Ok);
+    badge->setText("Done");
+    scene.settle();
+    auto const* const fill = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == QColor{"#123456"});
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#234567"});
+}
+
 namespace {
 
 /// The background a surface draws: the widget's direct child Rectangle at z -1.
@@ -207,4 +257,118 @@ TEST_CASE("qt_quick theme: a surface set after its children exist still colours 
     sidebar->setSurface("sidebar");
     scene.settle();
     CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("late")) == QColor{"#c9ccd6"});
+}
+
+namespace {
+
+/// An installed family whose average character width at @p pixels differs from the platform font's, so a test can see
+/// the units follow it; the CI image and a workstation ship different fonts, so it is found rather than named.
+std::optional<QString> otherFamily(QFont const& platform, int pixels) {
+    QFont sized = platform;
+    sized.setPixelSize(pixels);
+    double const platformWidth = QFontMetricsF{sized}.averageCharWidth();
+    for (QString const& family : QFontDatabase::families()) {
+        QFont candidate;
+        candidate.setFamilies({family});
+        candidate.setPixelSize(pixels);
+        if (QFontInfo{candidate}.family().compare(family, Qt::CaseInsensitive) == 0 &&
+            family.compare(platform.family(), Qt::CaseInsensitive) != 0 &&
+            std::abs(QFontMetricsF{candidate}.averageCharWidth() - platformWidth) > 0.5) {
+            return family;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+// Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).
+TEST_CASE("qt_quick theme: font.family sets the body font and the units follow it; an unknown family is reported",
+          "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const platform = theme->property("platformMetrics").value<QObject*>()->property("font").value<QFont>();
+    double const platformUnit = theme->property("unitWidth").toReal();
+    int const pixels = static_cast<int>(std::lround(theme->property("bodyPixels").toReal()));
+    CHECK(theme->property("bodyFont").value<QFont>().family() == platform.family());
+
+    std::optional<QString> const family = otherFamily(platform, pixels);
+    REQUIRE(family.has_value());
+    ui::ThemeValues values = ui::themeValues();
+    values.families.insert_or_assign("font.family", std::vector<std::string>{family->toStdString()});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    CHECK(theme->property("bodyFont").value<QFont>().families() == QStringList{*family});
+    QFont expected;
+    expected.setFamilies({*family});
+    expected.setPixelSize(pixels);
+    CHECK_FALSE(theme->property("unitWidth").toReal() == platformUnit);
+    CHECK(std::abs(theme->property("unitWidth").toReal() - QFontMetricsF{expected}.averageCharWidth()) < 0.01);
+
+    // Back to no family: the platform font and its units.
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("unitWidth").toReal() == platformUnit);
+
+    values.families.insert_or_assign("font.family", std::vector<std::string>{"Nowhere Sans", "Absent Serif"});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values) ==
+          std::vector<std::string>{"font.family: none of Nowhere Sans, Absent Serif is installed"});
+}
+
+TEST_CASE("theme: a fontFamily token is read as its names", "[qt_quick]") {
+    auto const tokens = ui::parseTokens(R"({"font": {"family": {"$type": "fontFamily", "$value": ["A Sans", "B"]}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    CHECK(ui::themeValues(*resolved).families.at("font.family") == std::vector<std::string>{"A Sans", "B"});
+    CHECK(ui::themeValues().families.at("font.family").empty());
+}
+
+// Mutation: leave Theme.icons unset (the banner draws no icon, and the badge's icon stays its name as text).
+TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a node icon outside it is reported once",
+          "[qt_quick]") {
+    std::vector<morph::qt_quick::ComponentFailure> reported;
+    morph::qt_quick::Components components{
+        [&reported](morph::qt_quick::ComponentFailure const& failure) { reported.push_back(failure); }};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    std::string const tick =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 4l2 2 4-4"/></svg>)";
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"tone.ok", tick}}).empty());
+    QString const url =
+        QStringLiteral("data:image/svg+xml;base64,") + QString::fromLatin1(QByteArray::fromStdString(tick).toBase64());
+
+    auto ok = scene.backend().createBanner(nullptr);
+    ok->setTone(ui::Tone::Ok);
+    ok->setText("Saved");
+    auto info = scene.backend().createBanner(nullptr);
+    info->setTone(ui::Tone::Info);
+    info->setText("Note");
+    auto named = scene.backend().createBadge(nullptr);
+    named->setText("Done");
+    named->setIcon("tone.ok");
+    auto missing = scene.backend().createBadge(nullptr);
+    missing->setText("Odd");
+    missing->setIcon("sparkle");
+    auto again = scene.backend().createBadge(nullptr);
+    again->setIcon("sparkle");
+    scene.settle();
+
+    auto iconOf = [](ui::Widget const& widget, char const* name) {
+        auto* const icon = Scene::itemOf(widget).findChild<QQuickItem*>(QString::fromLatin1(name));
+        REQUIRE(icon != nullptr);
+        return icon;
+    };
+    CHECK(iconOf(*ok, "toneIcon")->property("source").toUrl().toString() == url);
+    CHECK(iconOf(*ok, "toneIcon")->isVisible());
+    CHECK_FALSE(iconOf(*info, "toneIcon")->isVisible());
+    CHECK(iconOf(*named, "icon")->property("source").toUrl().toString() == url);
+    CHECK_FALSE(iconOf(*missing, "icon")->isVisible());
+    CHECK(reported == std::vector<morph::qt_quick::ComponentFailure>{
+                          {.name = "sparkle", .reason = "icon sparkle is not in the theme's icon set"}});
+
+    // Without a declared set nothing is reported: every icon is drawn as text.
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    auto plain = scene.backend().createBadge(nullptr);
+    plain->setIcon("glow");
+    scene.settle();
+    CHECK(reported.size() == 1);
 }

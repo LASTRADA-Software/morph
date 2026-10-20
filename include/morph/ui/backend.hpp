@@ -159,6 +159,19 @@ public:
     /// @brief Sets how much the button stands out. The mount calls it only for another value than `Normal`.
     /// @param emphasis The emphasis.
     virtual void setEmphasis(ButtonEmphasis emphasis) = 0;
+
+    /// @brief Sets the icon drawn beside the caption; called once, and only for a button that has one.
+    /// @param icon The name of an icon in the theme's icon set.
+    virtual void setIcon(std::string_view icon) = 0;
+
+    /// @brief Sets how the button is drawn. A new button is a push button; the mount calls it once, only for `Item`.
+    /// @param style The style.
+    virtual void setStyle(ButtonStyle style) = 0;
+
+    /// @brief Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount
+    ///        calls it only for an `Item`, when bound or `true`.
+    /// @param selected Whether it is the current one.
+    virtual void setSelected(bool selected) = 0;
 };
 
 /// @brief An editable text field.
@@ -185,6 +198,23 @@ public:
     ///        leaving the field after an edit.
     /// @param onCommit The handler; empty does nothing.
     virtual void setOnCommit(std::function<void(std::string)> onCommit) = 0;
+
+    /// @brief Sets the unit the input shows, muted, at its trailing edge, inside the field; empty shows none. Called
+    ///        only on a single-line or password input.
+    /// @param unit The unit's display text, UTF-8.
+    virtual void setUnit(std::string_view unit) = 0;
+
+    /// @brief Sets the fraction digits a number is entered with: what a backend or a kit may use to align or
+    ///        format the text. Nothing is required of a backend that draws nothing from it. Called only on a
+    ///        single-line or password input.
+    /// @param decimals The places, from 0; -1 when the input does not hold a number.
+    virtual void setDecimals(int decimals) = 0;
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief A labelled check box.
@@ -229,6 +259,12 @@ public:
     /// @param onOpen The handler; empty stops calling one.
     // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from; the default drops it.
     virtual void setOnOpen(Action onOpen) { static_cast<void>(onOpen); }
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief One entry of a menu as a `MenuWidget` shows it.
@@ -271,6 +307,14 @@ public:
     /// @brief Sets the space between children.
     /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;
+
+    /// @brief Places the children across the axis. A new stack stretches them; a child's own `alignSelf` wins.
+    /// @param align Where they sit.
+    virtual void setAlign(Align align) = 0;
+
+    /// @brief Places the spare length along the axis while no shown child stretches. A new stack packs at the start.
+    /// @param justify Where it goes.
+    virtual void setJustify(Justify justify) = 0;
 };
 
 /// @brief Children laid out row-major in columns.
@@ -288,6 +332,11 @@ public:
     /// @param child One of this grid's children.
     /// @param span The column count it occupies.
     virtual void setSpan(Widget& child, int span) = 0;
+
+    /// @brief Places each cell's content vertically in its row. A new grid stretches it; a child's own `alignSelf`
+    ///        wins.
+    /// @param align Where it sits.
+    virtual void setAlign(Align align) = 0;
 };
 
 /// @brief Empty space.
@@ -341,6 +390,11 @@ public:
     /// @brief Sets what a user's tab choice calls, with its index.
     /// @param onSelect The handler; empty does nothing.
     virtual void setOnSelect(std::function<void(std::size_t)> onSelect) = 0;
+
+    /// @brief Shows or hides the strip of tab buttons. The selected page shows either way. A new tabs widget shows
+    ///        its strip.
+    /// @param shown Whether the strip is drawn.
+    virtual void setBarShown(bool shown) = 0;
 };
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.
@@ -360,6 +414,11 @@ public:
     /// @brief Sets what a user dismissal (Esc on the TUI) of the open dialog calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief The dialog's footer: a container it lays out after its content, which shows nothing while it is empty.
+    ///        The mount puts the dialog's actions here.
+    /// @return It, owned by the dialog and valid as long as the dialog.
+    virtual ContainerWidget& footer() = 0;
 };
 
 /// @brief A progress indicator.
@@ -405,6 +464,11 @@ public:
     /// @param key The row's key.
     virtual void setRowKey(Widget& row, Key const& key) = 0;
 
+    /// @brief Sets a row's tone; called after `setRowKey` for a row given a tone, and on every change.
+    /// @param row  One of this table's rows.
+    /// @param tone The tone, or none.
+    virtual void setRowTone(Widget& row, std::optional<Tone> tone) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;
@@ -428,6 +492,12 @@ public:
     /// @brief Sets what a user edit calls, with the instant entered or `nullopt` for a cleared field.
     /// @param onChange The handler; empty does nothing.
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
+
+    /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
+    ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
+    /// @param label The label, UTF-8.
+    /// @param shown Whether the input shows it.
+    virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
 /// @brief An integer on a range.
@@ -575,6 +645,11 @@ public:
     /// @brief Sets what a user dismissal (Esc on the TUI) calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief The drawer's footer: a container it lays out after its content, which shows nothing while it is empty.
+    ///        The mount puts the drawer's actions here.
+    /// @return It, owned by the drawer and valid as long as the drawer.
+    virtual ContainerWidget& footer() = 0;
 };
 
 /// @brief Panes along the axis fixed at creation, with handles between them that the user drags.

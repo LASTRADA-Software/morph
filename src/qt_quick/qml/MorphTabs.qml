@@ -5,11 +5,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A tab bar over page slots. The mount keeps exactly the selected page's slot visible; the bar's highlight follows
-// `select` and the user's clicks.
+// `select` and the user's clicks. A hidden bar (`barShown` false) gives its height to the pages; a shown one sits a
+// spacing step above them.
 MorphWidget {
     id: root
 
     property list<string> labels: []
+    property bool barShown: true
     readonly property Item content: pages
     readonly property int highlighted: bar.currentIndex
 
@@ -18,16 +20,19 @@ MorphWidget {
         bar.currentIndex = index < bar.count ? index : -1
     }
 
-    focusTarget: bar
-    implicitWidth: Math.max(bar.implicitWidth, pages.implicitWidth)
-    implicitHeight: bar.implicitHeight + pages.implicitHeight
+    // A hidden bar never holds the focus: the workspace's chords must reach a page when a second tab arrives.
+    focusTarget: bar.visible ? bar : pages
+    implicitWidth: Math.max(bar.visible ? bar.implicitWidth : 0, pages.implicitWidth)
+    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
 
     ColumnLayout {
+        id: layout
         anchors.fill: parent
-        spacing: 0
+        spacing: Theme.spaceOf(3)
 
         TabBar {
             id: bar
+            visible: root.barShown
             Layout.fillWidth: true
             currentIndex: -1
             background: Rectangle {
@@ -45,6 +50,7 @@ MorphWidget {
                 model: root.labels
 
                 TabButton {
+                    font: Theme.bodyFont
                     id: tab
                     required property int index
                     required property string modelData

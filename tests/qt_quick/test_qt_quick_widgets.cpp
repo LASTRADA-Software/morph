@@ -117,6 +117,36 @@ TEST_CASE("qt_quick widgets: typing into a text input reports each edit, Enter c
     CHECK(log.empty());
 }
 
+// Mutation: never show the unit label (no visible `kg` inside the field).
+TEST_CASE("qt_quick widgets: a text input draws its unit inside the field, and the text stops before it",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setUnit("kg");
+    input->setDecimals(2);
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    QQuickItem const* unit = nullptr;
+    for (QQuickItem const* const text : Scene::itemsOf(control, "QQuickText")) {
+        if (text->isVisible() && text->property("text").toString() == QStringLiteral("kg")) {
+            unit = text;
+        }
+    }
+    REQUIRE(unit != nullptr);
+    CHECK(Scene::itemOf(*input).property("decimals").toInt() == 2);
+    // Inside the field, at its trailing edge, and the text's padding makes room for it.
+    QPointF const at = unit->mapToItem(&control, QPointF{0, 0});
+    CHECK(at.x() > control.width() / 2);
+    CHECK(at.x() + unit->width() <= control.width());
+    CHECK(control.property("rightPadding").toReal() >
+          Scene::controlOf(*plain).property("rightPadding").toReal() + unit->width() - 1);
+    input->setUnit("");
+    scene.settle();
+    CHECK_FALSE(unit->isVisible());
+}
+
 TEST_CASE("qt_quick widgets: a setter writes the text without echoing it, and keeps the cursor on the shown text",
           "[qt_quick]") {
     Scene scene;
@@ -400,6 +430,28 @@ TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_q
     REQUIRE(action != nullptr);
     scene.click(*action);
     CHECK(actions == 1);
+}
+
+// Mutation: leave the label visible while inactive (the label stays visible and the size is the label's).
+TEST_CASE("qt_quick widgets: an inactive busy shows neither its indicator nor its label, and takes no room",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto busy = scene.backend().createBusy(column.get());
+    busy->setLabel("Loading\u2026");
+    busy->setActive(false);
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*busy);
+    auto const* const label = item.findChild<QQuickItem*>(QStringLiteral("label"));
+    REQUIRE(label != nullptr);
+    CHECK_FALSE(label->isVisible());
+    CHECK(item.implicitWidth() == 0.0);
+    CHECK(item.implicitHeight() == 0.0);
+    busy->setActive(true);
+    scene.settle();
+    CHECK(label->isVisible());
+    CHECK(item.implicitWidth() > 0.0);
+    CHECK(item.implicitHeight() > 0.0);
 }
 
 TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handlers", "[qt_quick]") {

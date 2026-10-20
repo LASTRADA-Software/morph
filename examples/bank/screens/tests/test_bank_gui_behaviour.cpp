@@ -20,8 +20,6 @@
 #include <QString>
 #include <QTest>
 #include <algorithm>
-#include <app/app_source.hpp>
-#include <app/client_shell.hpp>
 #include <atomic>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_session.hpp>
@@ -31,6 +29,8 @@
 #include <cstddef>
 #include <expected>
 #include <memory>
+#include <morph/client/shell.hpp>
+#include <morph/client/source.hpp>
 #include <morph/qt_quick/backend.hpp>
 #include <optional>
 #include <stdexcept>
@@ -47,9 +47,9 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalAppSource;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
+using morph::client::LocalSource;
 using morph::examples::testing::FakeAppContext;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
@@ -164,9 +164,9 @@ public:
         if (!waitFor([&opened] { return opened.has_value(); }) || !opened->has_value()) {
             throw std::runtime_error{"AutomatedScreen: the application did not open"};
         }
-        _shell = morph::examples::mountClientShell(
+        _shell = morph::client::mountShell(
             _context, _backend, std::move(*opened), _source,
-            morph::examples::ClientShellOptions{
+            morph::client::ShellOptions{
                 .startScreen = std::move(screenId),
                 .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
                 .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); }});
@@ -283,7 +283,7 @@ private:
     QQuickWindow _window;
     QQmlEngine _engine;
     morph::qt_quick::Backend _backend{_engine, *_window.contentItem()};
-    LocalAppSource _source;
+    LocalSource _source;
     std::unique_ptr<morph::ui::MountedShell> _shell;
     std::vector<std::string> _problems;
     std::vector<std::string> _mounted;

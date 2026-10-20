@@ -96,6 +96,46 @@ TEST_CASE("collection<View> and wizard<Wizard> name their action and carry their
     CHECK(wizard.facts().wizards.at("Af_AddRow") == morph::flows::wizardSchemaJson<af::AddWizard>());
 }
 
+// Mutation: write no presentation keys in detail::present (the nodes carry only their model and action).
+TEST_CASE("collection<View> and wizard<Wizard> write the presentation keys they are given", "[ui][author]") {
+    auto const model = ui::ModelHandle<af::Model>{"rows"};
+    ui::Node const collection = ui::collection<af::RowsView>(
+        model, {.title = "Rows", .submitLabel = "Save", .showStatus = false, .columns = 3});
+    CHECK(glz::write_json(collection.json()).value_or("") ==
+          R"({"kind":"collection","model":"rows","action":"Af_ListRows","title":"Rows","submitLabel":"Save",)"
+          R"("showStatus":false,"columns":3})");
+    ui::Node const wizard = ui::wizard<af::AddWizard>(model, {.showStatus = true});
+    CHECK(glz::write_json(wizard.json()).value_or("") ==
+          R"({"kind":"wizard","model":"rows","action":"Af_AddRow","showStatus":true})");
+}
+
+// Mutation: leave fieldLayout out of detail::present (the key is not written).
+TEST_CASE("a presentation's fieldLayout is written by name", "[ui][author]") {
+    auto const model = ui::ModelHandle<af::Model>{"rows"};
+    ui::Node const inlined = ui::wizard<af::AddWizard>(model, {.fieldLayout = morph::forms::FieldLayout::Inline});
+    CHECK(glz::write_json(inlined.json()).value_or("") ==
+          R"({"kind":"wizard","model":"rows","action":"Af_AddRow","fieldLayout":"inline"})");
+    ui::Node const stacked = ui::collection<af::RowsView>(model, {.fieldLayout = morph::forms::FieldLayout::Stacked});
+    CHECK(glz::write_json(stacked.json()).value_or("") ==
+          R"({"kind":"collection","model":"rows","action":"Af_ListRows","fieldLayout":"stacked"})");
+}
+
+// Mutation: write the two-dimension sizing as an `obj` whatever its handles (the loader cannot check it).
+TEST_CASE("Node::sizing of both dimensions is a literal record of literal sizings, and the bounds are integers",
+          "[ui][author]") {
+    ui::Node const node =
+        ui::text({.text = "x"}).sizing(ui::stretch(), ui::fixed(3)).minWidth(2).maxWidth(44).minHeight(1).maxHeight(3);
+    CHECK(glz::write_json(node.json()).value_or("") ==
+          R"({"kind":"text","text":"x","sizing":{"lit":{"width":{"stretch":1},"height":{"fixed":3}}},"minWidth":2,)"
+          R"("maxWidth":44,"minHeight":1,"maxHeight":3})");
+    ui::Node const widthOnly = ui::text({.text = "x"}).sizing(ui::content(), {});
+    CHECK(glz::write_json(widthOnly.json()).value_or("") ==
+          R"({"kind":"text","text":"x","sizing":{"lit":{"width":"content"}}})");
+    ui::Node const computed = ui::text({.text = "x"}).sizing(ui::obj({{"stretch", ui::ref("w")}}), {});
+    CHECK(glz::write_json(computed.json()).value_or("") ==
+          R"({"kind":"text","text":"x","sizing":{"obj":{"width":{"obj":{"stretch":{"ref":"w"}}}}}})");
+}
+
 // Mutation: leave the bundle's views out of the catalog reply (the client's view lookup is empty).
 TEST_CASE("a collection's and a wizard's documents reach the client's catalog through the ui-catalog reply",
           "[ui][author][ui-service]") {

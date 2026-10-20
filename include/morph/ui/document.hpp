@@ -261,8 +261,10 @@ enum class CommandKind : std::uint8_t {
     Retry,          ///< `{"retry": true}`
     SignIn,         ///< `{"signIn": {"from": "m"}}`
     SignOut,        ///< `{"signOut": true}`
-    Upload,         ///< `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}`
-    Download,  ///< `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}`
+    Upload,         ///< `{"upload": e, "to": "m", "as": "x"?, "id": "t"?, "into": "bytes"?, "nameAs"?, "typeAs"?}`
+    /// `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}`, either
+    /// with `"from": "bytes"`, a `name` and a `type`
+    Download,
 };
 
 /// @brief One command. Which members a kind uses is listed with each member.
@@ -287,6 +289,14 @@ struct Command {
     std::string option;
     /// @brief The transfer id of `upload`, whose progress is an element value.
     std::string transfer;
+    /// @brief Whether the file moves inline: `download`'s `"from": "bytes"`, `upload`'s `"into": "bytes"`.
+    bool bytes = false;
+    /// @brief `download`'s media type of inline bytes.
+    ExprPtr mediaType;
+    /// @brief `upload`'s body members for an inline file's name and media type; empty for none.
+    std::string nameAs;
+    /// @brief See `nameAs`.
+    std::string typeAs;
     /// @brief Nested commands: `seq` and `all`; `if`'s then branch; `navigate`'s `onResult`.
     Commands commands;
     /// @brief The alternative: `if`'s else branch; `navigate`'s `onCancel`.
@@ -401,6 +411,8 @@ struct DocNode {
     std::map<std::string, std::string, std::less<>> names;
     /// @brief Key bindings: chord to commands.
     std::map<std::string, Commands, std::less<>> keys;
+    /// @brief Literal flags, by key (`showLabel` of an input).
+    std::map<std::string, bool, std::less<>> flags;
     /// @brief The declarations of the scope the node creates (dialog, drawer, switch case, `forEach` or `table`
     ///        row); empty for a node that creates none.
     std::optional<ScopeDecl> scope;
@@ -443,6 +455,14 @@ struct DocNode {
     [[nodiscard]] std::string_view name(std::string_view key) const {
         auto const found = names.find(key);
         return found == names.end() ? std::string_view{} : std::string_view{found->second};
+    }
+
+    /// @brief A literal flag.
+    /// @param key The key.
+    /// @return Its value; `false` when absent.
+    [[nodiscard]] bool flag(std::string_view key) const {
+        auto const found = flags.find(key);
+        return found != flags.end() && found->second;
     }
 };
 
@@ -524,6 +544,12 @@ struct Document {
     ExprPtr identity;
     /// @brief The unsaved-changes expression.
     ExprPtr dirty;
+    /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
+    ExprPtr subtitle;
+    /// @brief The head's status badges: `headBadge` parts, in order.
+    std::vector<DocNodePtr> status;
+    /// @brief The head's actions: `actionButton` parts, in order.
+    std::vector<DocNodePtr> actions;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -585,6 +611,7 @@ enum class Shape : std::uint8_t {
     ExprRecord,     ///< A record of expressions.
     CommandRecord,  ///< A record of command lists.
     Keys,           ///< Key bindings: chord to command list.
+    Flag,           ///< A literal `true` or `false`, set once.
 };
 
 /// @brief The key is evaluated in the node's own scope (a dialog's, a row's), not the scope around it.
@@ -633,12 +660,17 @@ struct KindSpec {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
-inline constexpr std::array<KeySpec, 13> kCommonKeys = {{
+inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
     {"id", Shape::Name},
     {"visible", Shape::Condition},
     {"enabled", Shape::Condition},
     {"tooltip", Shape::Expr},
     {"sizing", Shape::Expr},
+    {"minWidth", Shape::Expr},
+    {"maxWidth", Shape::Expr},
+    {"minHeight", Shape::Expr},
+    {"maxHeight", Shape::Expr},
+    {"alignSelf", Shape::Text},
     {"span", Shape::Expr},
     {"testId", Shape::Text},
     {"surface", Shape::Text},
@@ -679,17 +711,20 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 /// @brief The keys of `text`.
 inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 5> kButtonKeys = {{{"label", Shape::Expr},
+inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"icon", Shape::Expr},
                                                         {"emphasis", Shape::Text},
+                                                        {"style", Shape::Text},
+                                                        {"selected", Shape::Condition},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 9> kTextInputKeys = {{{"value", Shape::Expr},
                                                            {"placeholder", Shape::Expr},
                                                            {"mode", Shape::Expr},
                                                            {"commitOn", Shape::Text},
                                                            {"label", Shape::Expr},
+                                                           {"showLabel", Shape::Flag},
                                                            {"onChange", Shape::Commands},
                                                            {"onCommit", Shape::Commands},
                                                            {"onSubmit", Shape::Commands}}};
@@ -697,10 +732,11 @@ inline constexpr std::array<KeySpec, 8> kTextInputKeys = {{{"value", Shape::Expr
 inline constexpr std::array<KeySpec, 4> kCheckboxKeys = {
     {{"label", Shape::Expr}, {"checked", Shape::Expr}, {"onToggle", Shape::Commands}, {"onChange", Shape::Commands}}};
 /// @brief The keys of `select`.
-inline constexpr std::array<KeySpec, 7> kSelectKeys = {{{"options", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kSelectKeys = {{{"options", Shape::Expr},
                                                         {"selected", Shape::Expr},
                                                         {"style", Shape::Expr},
                                                         {"label", Shape::Expr},
+                                                        {"showLabel", Shape::Flag},
                                                         {"onStale", Shape::Text},
                                                         {"onChoose", Shape::Commands},
                                                         {"onChange", Shape::Commands}}};
@@ -715,10 +751,14 @@ inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr}
                                                           {"onClick", Shape::Commands},
                                                           {"items", Shape::Parts, "menuItem"}}};
 /// @brief The keys of `column` and `row`.
-inline constexpr std::array<KeySpec, 2> kContainerKeys = {{{"children", Shape::Nodes}, {"gap", Shape::Expr}}};
-/// @brief The keys of `grid`.
-inline constexpr std::array<KeySpec, 3> kGridKeys = {
-    {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"columns", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 4> kContainerKeys = {
+    {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
+/// @brief The keys of `grid`; `justify` is read only to refuse it.
+inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes},
+                                                      {"gap", Shape::Expr},
+                                                      {"columns", Shape::Expr},
+                                                      {"align", Shape::Text},
+                                                      {"justify", Shape::Text}}};
 /// @brief The keys of `panel`.
 inline constexpr std::array<KeySpec, 5> kPanelKeys = {{{"title", Shape::Expr},
                                                        {"padding", Shape::Expr},
@@ -738,13 +778,14 @@ inline constexpr std::array<KeySpec, 1> kTabsKeys = {{{"tabs", Shape::Parts, "ta
 /// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 2> kTabKeys = {{{"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 8> kDialogKeys = {{{"open", Shape::Condition},
+inline constexpr std::array<KeySpec, 9> kDialogKeys = {{{"open", Shape::Condition},
                                                         {"title", Shape::Expr},
                                                         {"showErrors", Shape::Text},
                                                         {"children", Shape::Nodes, {}, kInner},
                                                         {"onDismiss", Shape::Commands},
                                                         {"default", Shape::Commands, {}, kInner},
                                                         {"cancel", Shape::Commands, {}, kInner},
+                                                        {"actions", Shape::Parts, "actionButton", kInner},
                                                         {"side", Shape::Expr}}};
 /// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
@@ -755,7 +796,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 15> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -768,14 +809,16 @@ inline constexpr std::array<KeySpec, 14> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
-                                                        {"onActivate", Shape::Commands, {}, kInner}}};
+                                                        {"onActivate", Shape::Commands, {}, kInner},
+                                                        {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
 inline constexpr std::array<KeySpec, 4> kColumnKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
-inline constexpr std::array<KeySpec, 5> kDateTimeKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},
                                                           {"label", Shape::Expr},
+                                                          {"showLabel", Shape::Flag},
                                                           {"onChange", Shape::Commands},
                                                           {"onCommit", Shape::Commands}}};
 /// @brief The keys of `slider`.
@@ -800,6 +843,17 @@ inline constexpr std::array<KeySpec, 5> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"onDismiss", Shape::Commands}}};
 /// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
+/// @brief The keys of an `actionButton` part: a button a screen's head or an overlay's footer shows.
+inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
+                                                              {"label", Shape::Expr, {}, kRequired},
+                                                              {"icon", Shape::Expr},
+                                                              {"emphasis", Shape::Text},
+                                                              {"enabled", Shape::Condition},
+                                                              {"visible", Shape::Condition},
+                                                              {"onClick", Shape::Commands}}};
+/// @brief The keys of a `headBadge` part: a status badge of a screen's head.
+inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
+    {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
 inline constexpr std::array<KeySpec, 3> kBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}}};
@@ -830,7 +884,7 @@ inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-inline constexpr std::array<KeySpec, 10> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 15> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                        {"action", Shape::Text, {}, kRequired},
                                                        {"prefill", Shape::Expr},
                                                        {"key", Shape::Expr},
@@ -839,10 +893,21 @@ inline constexpr std::array<KeySpec, 10> kFormKeys = {{{"model", Shape::Name, {}
                                                        {"fields", Shape::ExprRecord, "fields"},
                                                        {"onSubmit", Shape::Commands},
                                                        {"onSuccess", Shape::Commands},
-                                                       {"onError", Shape::Commands}}};
-/// @brief The keys of `collection` and `wizard`.
-inline constexpr std::array<KeySpec, 2> kCollectionKeys = {
-    {{"model", Shape::Name, {}, kRequired}, {"action", Shape::Text, {}, kRequired}}};
+                                                       {"onError", Shape::Commands},
+                                                       {"title", Shape::Expr},
+                                                       {"submitLabel", Shape::Expr},
+                                                       {"showStatus", Shape::Flag},
+                                                       {"columns", Shape::Expr},
+                                                       {"fieldLayout", Shape::Text}}};
+/// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
+///        form the view draws.
+inline constexpr std::array<KeySpec, 7> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
+                                                            {"action", Shape::Text, {}, kRequired},
+                                                            {"title", Shape::Expr},
+                                                            {"submitLabel", Shape::Expr},
+                                                            {"showStatus", Shape::Flag},
+                                                            {"columns", Shape::Expr},
+                                                            {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `custom`.
 inline constexpr std::array<KeySpec, 3> kCustomKeys = {
     {{"name", Shape::Text, {}, kRequired}, {"props", Shape::ExprRecord}, {"on", Shape::CommandRecord}}};
@@ -854,7 +919,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 46> kKinds = {{
+inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -900,6 +965,8 @@ inline constexpr std::array<KindSpec, 46> kKinds = {{
     {"a11y", kA11yKeys, kPart},
     {"drag", kDragKeys, kPart},
     {"drop", kDropKeys, kPart},
+    {"actionButton", kActionButtonKeys, kPart},
+    {"headBadge", kHeadBadgeKeys, kPart},
     {"fields", {}, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
@@ -1005,6 +1072,18 @@ public:
         doc.title = optionalExpr(*object, "title", "");
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
+        doc.subtitle = optionalExpr(*object, "subtitle", "");
+        doc.status = topParts(*object, "status", "headBadge");
+        doc.actions = topParts(*object, "actions", "actionButton");
+        if (doc.id == "app") {
+            // The head belongs to a screen's tab; the app document has no view and so no head.
+            for (std::string_view const key : {"subtitle", "status", "actions"}) {
+                if (member(*object, key) != nullptr) {
+                    refuse(pointerAppend("", key),
+                           "`" + std::string{key} + "` is a screen's; the app document has none");
+                }
+            }
+        }
         doc.showErrors = showErrors(*object, "");
         if (Json const* const params = member(*object, "params")) {
             for (auto const& [name, type] : objectOf(*params, "/params", "`params` maps names to types")) {
@@ -1159,6 +1238,26 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // A top-level list of parts: the screen head's `status` and `actions`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document key, then its part kind, at every call.
+    [[nodiscard]] std::vector<DocNodePtr> topParts(Json::object_t const& object, std::string_view key,
+                                                   std::string_view kind) {
+        std::vector<DocNodePtr> parts;
+        Json const* const value = member(object, key);
+        if (value == nullptr) {
+            return parts;
+        }
+        std::string const path = pointerAppend("", key);
+        auto const* const array = std::get_if<Json::array_t>(&value->data);
+        if (array == nullptr) {
+            refuse(path, "`" + std::string{key} + "` is an array");
+        }
+        for (std::size_t index = 0; index < array->size(); ++index) {
+            parts.push_back(part(array->at(index), kind, pointerAppend(path, index)));
+        }
+        return parts;
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per kind of declaration.
@@ -1402,7 +1501,7 @@ private:
     struct CommandSpec {
         std::string_view key;
         CommandKind kind;
-        std::array<std::string_view, 4> companions;
+        std::array<std::string_view, 6> companions;
     };
 
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per command reads as a table.
@@ -1428,8 +1527,8 @@ private:
         {"retry", CommandKind::Retry, {}},
         {"signIn", CommandKind::SignIn, {}},
         {"signOut", CommandKind::SignOut, {}},
-        {"upload", CommandKind::Upload, {"to", "as", "id"}},
-        {"download", CommandKind::Download, {"save", "name", "to", "as"}},
+        {"upload", CommandKind::Upload, {"to", "as", "id", "into", "nameAs", "typeAs"}},
+        {"download", CommandKind::Download, {"save", "name", "to", "as", "from", "type"}},
     }};
     // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1598,6 +1697,18 @@ private:
                 if (Json const* const transfer = member(fields, "id")) {
                     cmd.transfer = nameOf(*transfer, pointerAppend(path, "id"), "`id` is a name");
                 }
+                static constexpr std::array<std::string_view, 2> kInto = {"ref", "bytes"};
+                cmd.bytes = choiceOf(fields, "into", path, kInto) == "bytes";
+                for (auto const& [key, slot] : {std::pair{"nameAs", &cmd.nameAs}, std::pair{"typeAs", &cmd.typeAs}}) {
+                    if (Json const* const name = member(fields, key)) {
+                        if (!cmd.bytes) {
+                            refuse(pointerAppend(path, key),
+                                   "`" + std::string{key} +
+                                       R"(` names a body member for inline bytes; give `"into": "bytes"`)");
+                        }
+                        *slot = nameOf(*name, pointerAppend(path, key), "a body member is a name");
+                    }
+                }
                 break;
             }
             case CommandKind::Download:
@@ -1632,6 +1743,18 @@ private:
 
     static void download(Command& cmd, Json::object_t const& fields, Json const& primary, std::string const& path) {
         cmd.value = expr(primary, pointerAppend(path, "download"));
+        static constexpr std::array<std::string_view, 2> kFrom = {"ref", "bytes"};
+        cmd.bytes = choiceOf(fields, "from", path, kFrom) == "bytes";
+        if (cmd.bytes) {
+            // Inline bytes carry no name or type of their own, so the document gives the name.
+            if (member(fields, "name") == nullptr) {
+                refuse(path, "a download from bytes names its file with `name`");
+            }
+            cmd.extra = optionalExpr(fields, "name", path);
+            cmd.mediaType = optionalExpr(fields, "type", path);
+        } else if (member(fields, "type") != nullptr) {
+            refuse(pointerAppend(path, "type"), R"(`type` is the media type of inline bytes; give `"from": "bytes"`)");
+        }
         std::string const save = text(fields, "save", path, false);
         std::string const destination = text(fields, "to", path, false);
         if (save == "dialog" && destination.empty()) {
@@ -1826,18 +1949,42 @@ private:
         }
         if (made.kind == "fields") {
             for (auto const& [field, overlay] : object) {
-                std::string const where = pointerAppend(path, field);
-                auto const& settings = objectOf(overlay, where, "a field overlay is an object");
-                auto part = std::make_shared<DocNode>();
-                part->kind = "field";
-                part->id = field;
-                part->path = where;
-                for (auto const& [key, value] : settings) {
-                    part->props.emplace(key, expr(value, pointerAppend(where, key)));
-                }
-                made.parts["fields"].push_back(std::move(part));
+                made.parts["fields"].push_back(fieldOverlay(field, overlay, pointerAppend(path, field)));
             }
         }
+    }
+
+    // One field overlay of a form's `fields`: expressions by key, and the host `component` that draws the field with
+    // its `props`.
+    [[nodiscard]] static DocNodePtr fieldOverlay(std::string const& field, Json const& overlay,
+                                                 std::string const& where) {
+        auto const& settings = objectOf(overlay, where, "a field overlay is an object");
+        auto part = std::make_shared<DocNode>();
+        part->kind = "field";
+        part->id = field;
+        part->path = where;
+        for (auto const& [key, value] : settings) {
+            std::string const keyPath = pointerAppend(where, key);
+            if (key == "component") {
+                // The host component that draws the field, and the props it is given beside the field's.
+                auto const* const name = std::get_if<std::string>(&value.data);
+                if (name == nullptr || !isName(*name)) {
+                    refuse(keyPath, "`component` is a name");
+                }
+                part->names.emplace(key, *name);
+            } else if (key == "props") {
+                auto record = std::make_shared<DocNode>();
+                record->kind = "props";
+                record->path = keyPath;
+                for (auto const& [prop, propValue] : objectOf(value, keyPath, "`props` is a record of expressions")) {
+                    record->props.emplace(prop, expr(propValue, pointerAppend(keyPath, prop)));
+                }
+                part->parts["props"].push_back(std::move(record));
+            } else {
+                part->props.emplace(key, expr(value, keyPath));
+            }
+        }
+        return part;
     }
 
     [[nodiscard]] DocNodePtr part(Json const& json, std::string_view kind, std::string const& path) {
@@ -1926,6 +2073,14 @@ private:
                                         commandList(commands, pointerAppend(path, event)));
                 }
                 break;
+            case Shape::Flag: {
+                auto const* const flag = std::get_if<bool>(&value.data);
+                if (flag == nullptr) {
+                    refuse(path, "`" + name + "` is a literal `true` or `false`");
+                }
+                made.flags.emplace(name, *flag);
+                break;
+            }
             case Shape::Keys:
             default:
                 made.keys = keyBindings(value, path);
@@ -2109,6 +2264,9 @@ public:
         if (_doc->view) {
             collect(*_doc->view, screen);
         }
+        for (DocNodePtr const& part : headParts()) {
+            collectPart(*part, screen, screen);
+        }
         std::vector<ScopeInfo*> componentScopes;
         for (auto const& [name, component] : _doc->components) {
             static_cast<void>(name);
@@ -2129,6 +2287,13 @@ public:
         if (_doc->dirty) {
             checkCondition(*_doc->dirty, root, "`dirty`");
         }
+        if (_doc->subtitle) {
+            checkExpr(*_doc->subtitle, root);
+        }
+        for (DocNodePtr const& part : headParts()) {
+            checkElement(*part, root, true);
+        }
+        checkActionButtons(_doc->actions, "/actions");
         for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
@@ -2352,9 +2517,8 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            static_cast<void>(key);
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, scope, *inner);
+                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner);
             }
         }
     }
@@ -2657,6 +2821,14 @@ private:
                            "` has none");
             }
         }
+        // An arranged container is drawn as a keyed list, which places its children as a list does.
+        std::string const asList =
+            "an arranged `" + found->second->kind + "` is drawn as a list, which takes no `align` or `justify`";
+        for (std::string_view const key : {"align", "justify"}) {
+            if (!found->second->name(key).empty()) {
+                refuse(pointerAppend(found->second->path, key), asList);
+            }
+        }
         if (!arranged.insert(point.of).second) {
             refuse(pointerAppend(point.path, "of"), "`" + point.of + "` is arranged by another point");
         }
@@ -2668,7 +2840,29 @@ private:
         return inner;
     }
 
-    void checkNode(DocNode const& node, CheckContext const& context) { checkElement(node, context, false); }
+    void checkNode(DocNode const& node, CheckContext const& context) {
+        if (!node.name("alignSelf").empty()) {
+            refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
+        }
+        checkElement(node, context, false);
+    }
+
+    // What `alignSelf` places a node in.
+    static constexpr std::string_view kAlignSelfPlaces = "`alignSelf` places a node in its row, column or grid";
+
+    // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
+    // a tab page) has no cross axis to place it on.
+    static void checkPlacements(DocNode const& parent) {
+        bool const places =
+            parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" || parent.kind == "forEach";
+        for (auto const& [key, nodes] : parent.children) {
+            for (DocNodePtr const& child : nodes) {
+                if (!child->name("alignSelf").empty() && (!places || key != "children")) {
+                    refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
+                }
+            }
+        }
+    }
 
     void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
         KindSpec const* const spec = findKind(node.kind, part);
@@ -2703,13 +2897,19 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            static_cast<void>(key);
+            CheckContext const& context = isInner(spec, key) ? inner : outer;
             for (DocNodePtr const& child : parts) {
-                checkElement(*child, outer, true);
+                checkElement(*child, context, true);
             }
         }
+        checkPlacements(node);
         if (!part) {
+            checkFlags(node);
+            checkLayoutKeys(node);
             checkKindRules(node, outer);
+            // An overlay's footer actions; a form's field components.
+            checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
+            checkFieldComponents(node);
         }
     }
 
@@ -2721,26 +2921,62 @@ private:
         }
     }
 
+    // A flag that needs a key beside it.
+    static void checkFlags(DocNode const& node) {
+        if (node.flag("showLabel") && node.prop("label") == nullptr) {
+            refuse(pointerAppend(node.path, "showLabel"), "`showLabel` shows the `label`, and the node gives none");
+        }
+    }
+
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
-            auto const found = _doc->components.find(node.name("name"));
-            if (found == _doc->components.end()) {
-                refuse(pointerAppend(node.path, "name"),
-                       "`" + std::string{node.name("name")} + "` is not a component of this document");
-            }
-            for (DocNodePtr const& props : node.partList("props")) {
-                for (auto const& [prop, value] : props->props) {
-                    if (!found->second.props.contains(prop)) {
-                        refuse(value->path, "the component `" + found->first + "` declares no prop `" + prop + "`");
-                    }
-                }
-            }
+            checkCustomProps(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
-        } else if (node.kind == "button") {
+        }
+        checkKindValues(node);
+        std::string_view const model = node.name("model");
+        if (!model.empty()) {
+            if (node.name("action").empty()) {
+                refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
+            }
+            checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
+        } else if (node.kind == "table" && !node.prop("rows")) {
+            refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+    }
+
+    // A custom node names a component of the document and gives only the props it declares.
+    void checkCustomProps(DocNode const& node) const {
+        auto const found = _doc->components.find(node.name("name"));
+        if (found == _doc->components.end()) {
+            refuse(pointerAppend(node.path, "name"),
+                   "`" + std::string{node.name("name")} + "` is not a component of this document");
+        }
+        for (DocNodePtr const& props : node.partList("props")) {
+            for (auto const& [prop, value] : props->props) {
+                if (!found->second.props.contains(prop)) {
+                    refuse(value->path, "the component `" + found->first + "` declares no prop `" + prop + "`");
+                }
+            }
+        }
+    }
+
+    // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
+    static void checkKindValues(DocNode const& node) {
+        if (node.kind == "button") {
             static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
             checkChoice(node, "emphasis", kEmphasis);
+            static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
+            checkChoice(node, "style", kStyles);
+            if (node.prop("selected") != nullptr && node.name("style") != "item") {
+                refuse(pointerAppend(node.path, "selected"),
+                       "`selected` marks a list item; give the button `style: item`");
+            }
+        } else if (node.kind == "grid" && !node.name("justify").empty()) {
+            refuse(pointerAppend(node.path, "justify"),
+                   "a grid's columns share its width; there is no spare length to justify");
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
@@ -2753,15 +2989,209 @@ private:
             // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
+        } else if (node.kind == "text") {
+            checkTextRole(node);
         }
-        std::string_view const model = node.name("model");
-        if (!model.empty()) {
-            if (node.name("action").empty()) {
-                refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
+        if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
+            checkFormColumns(node);
+            static constexpr std::array<std::string_view, 2> kFieldLayouts = {"stacked", "inline"};
+            checkChoice(node, "fieldLayout", kFieldLayouts);
+        }
+        static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
+        static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};
+        checkChoice(node, "align", kAlign);
+        checkChoice(node, "justify", kJustify);
+        checkChoice(node, "alignSelf", kAlign);
+    }
+
+    // Each form field drawn by a host component.
+    void checkFieldComponents(DocNode const& form) const {
+        if (form.kind != "form") {
+            return;
+        }
+        for (DocNodePtr const& record : form.partList("fields")) {
+            for (DocNodePtr const& field : record->partList("fields")) {
+                if (!field->name("component").empty()) {
+                    checkFieldComponent(*field);
+                }
             }
-            checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
-        } else if (node.kind == "table" && !node.prop("rows")) {
-            refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+    }
+
+    // A form field drawn by a host component: a declared one with a `value` prop and a `change` event, given only
+    // props it declares, and not beside a `widget`, which would choose the control too.
+    void checkFieldComponent(DocNode const& field) const {
+        std::string_view const name = field.name("component");
+        std::string const where = pointerAppend(field.path, "component");
+        auto const found = _doc->components.find(name);
+        if (found == _doc->components.end()) {
+            refuse(where, "`" + std::string{name} + "` is not a component of this document");
+        }
+        Component const& component = found->second;
+        if (!component.props.contains("value") || !component.events.contains("change")) {
+            refuse(where, "the component `" + component.name +
+                              "` draws a form field, so it declares a prop `value` and an event `change`");
+        }
+        if (field.prop("widget") != nullptr) {
+            refuse(where, "`component` and `widget` both choose the field's control; give one");
+        }
+        for (DocNodePtr const& props : field.partList("props")) {
+            for (auto const& [prop, value] : props->props) {
+                if (!component.props.contains(prop)) {
+                    refuse(value->path, "the component `" + component.name + "` declares no prop `" + prop + "`");
+                }
+            }
+        }
+    }
+
+    // The screen head's parts: its status badges, then its actions.
+    [[nodiscard]] std::vector<DocNodePtr> headParts() const {
+        std::vector<DocNodePtr> parts = _doc->status;
+        parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
+        return parts;
+    }
+
+    // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
+    static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
+        static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
+        std::set<std::string_view> ids;
+        for (DocNodePtr const& button : buttons) {
+            if (!ids.insert(button->id).second) {
+                refuse(pointerAppend(button->path, "id"),
+                       "the action id `" + button->id + "` is used twice in " + path + "; each action has its own");
+            }
+            checkChoice(*button, "emphasis", kEmphasis);
+        }
+    }
+
+    // A literal sizing of one dimension: `"content"`, `{"fixed": n}` (n of 0 or more) or `{"stretch": w}` (w of 1 or
+    // more). Answers the fixed amount, if it is one.
+    static std::optional<std::int64_t> sizingDimension(Value const& value, std::string const& path) {
+        static constexpr std::string_view kForms =
+            "`sizing` is `\"content\"`, `{\"fixed\": n}`, `{\"stretch\": w}`, or a record of `width` and `height` "
+            "of them";
+        if (std::string const* const text = value.asString(); text != nullptr && *text == "content") {
+            return std::nullopt;
+        }
+        ValueRecord const* const record = value.asRecord();
+        if (record != nullptr && record->size() == 1) {
+            auto const& [form, amount] = *record->begin();
+            std::int64_t const* const units = amount.asInt();
+            if (form == "fixed" && units != nullptr && *units >= 0) {
+                return *units;
+            }
+            if (form == "stretch" && units != nullptr && *units >= 1) {
+                return std::nullopt;
+            }
+        }
+        refuse(path, std::string{kForms});
+    }
+
+    // A node's size keys: each bound a literal integer of 0 or more, a minimum no more than its maximum, no bound on
+    // an overlay or a custom node; and a literal `sizing` one of the forms the interpreter reads, with a fixed amount
+    // inside its dimension's bounds. A sizing that is not literal is read at mount.
+    static void checkLayoutKeys(DocNode const& node) { checkSizing(node, literalBounds(node)); }
+
+    // The size bounds a node gives, `minWidth`, `maxWidth`, `minHeight` and `maxHeight` in that order: literal
+    // integers of 0 or more, no minimum above its maximum, none on an overlay or a custom node.
+    static std::array<std::optional<std::int64_t>, 4> literalBounds(DocNode const& node) {
+        static constexpr std::array<std::string_view, 4> kBounds = {"minWidth", "maxWidth", "minHeight", "maxHeight"};
+        std::array<std::optional<std::int64_t>, 4> bounds{};
+        for (std::size_t index = 0; index < kBounds.size(); ++index) {
+            std::string_view const key = kBounds.at(index);
+            ExprPtr const bound = node.prop(key);
+            if (bound == nullptr) {
+                continue;
+            }
+            if (node.kind == "dialog" || node.kind == "drawer") {
+                refuse(bound->path, "an overlay is sized by the frontend, not by its container");
+            }
+            if (node.kind == "custom") {
+                refuse(bound->path,
+                       "a custom node carries no common properties, so it takes no `" + std::string{key} + "`");
+            }
+            std::int64_t const* const units =
+                bound->kind == ExprKind::Literal ? bound->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+            if (units == nullptr || *units < 0) {
+                refuse(bound->path, "`" + std::string{key} + "` is a literal integer of 0 or more, in backend units");
+            }
+            bounds.at(index) = *units;
+        }
+        for (std::size_t axis = 0; axis < 2; ++axis) {
+            auto const& minimum = bounds.at(2 * axis);
+            auto const& maximum = bounds.at((2 * axis) + 1);
+            if (minimum && maximum && *minimum > *maximum) {
+                refuse(pointerAppend(node.path, kBounds.at(2 * axis)),
+                       "`" + std::string{kBounds.at(2 * axis)} + "` is more than `" +
+                           std::string{kBounds.at((2 * axis) + 1)} + "`");
+            }
+        }
+        return bounds;
+    }
+
+    // A literal `sizing` is one of its forms, and a fixed amount lies inside its dimension's @p bounds.
+    static void checkSizing(DocNode const& node, std::array<std::optional<std::int64_t>, 4> const& bounds) {
+        ExprPtr const sizing = node.prop("sizing");
+        if (sizing == nullptr || sizing->kind != ExprKind::Literal) {
+            return;
+        }
+        std::optional<std::int64_t> width;
+        std::optional<std::int64_t> height;
+        ValueRecord const* const record = sizing->literal.asRecord();
+        if (record != nullptr && (record->contains("width") || record->contains("height"))) {
+            for (auto const& [dimension, value] : *record) {
+                if (dimension == "width") {
+                    width = sizingDimension(value, sizing->path);
+                } else if (dimension == "height") {
+                    height = sizingDimension(value, sizing->path);
+                } else {
+                    refuse(sizing->path, "a `sizing` record has `width` and `height`; `" + dimension + "` is neither");
+                }
+            }
+        } else {
+            width = sizingDimension(sizing->literal, sizing->path);
+        }
+        for (auto const& [fixed, axis] : {std::pair{width, std::size_t{0}}, std::pair{height, std::size_t{1}}}) {
+            auto const& minimum = bounds.at(2 * axis);
+            auto const& maximum = bounds.at((2 * axis) + 1);
+            if (fixed && (*fixed < minimum.value_or(*fixed) || *fixed > maximum.value_or(*fixed))) {
+                refuse(sizing->path, std::string{"a fixed size has no room to bound: the "} +
+                                         (axis == 0 ? "width" : "height") + " is fixed outside its bounds");
+            }
+        }
+    }
+
+    // A text's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one is read at mount, and
+    // one of no known name is reported there.
+    static void checkTextRole(DocNode const& node) {
+        ExprPtr const role = node.prop("role");
+        if (role == nullptr || role->kind != ExprKind::Literal) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 7> kRoles = {"normal",  "muted", "heading", "title",
+                                                                   "section", "error", "success"};
+        std::string const* const name = role->literal.asString();
+        if (name == nullptr) {
+            refuse(pointerAppend(node.path, "role"), "`role` is a name");
+        }
+        if (!listed(kRoles, *name)) {
+            refuse(pointerAppend(node.path, "role"), "`" + *name + "` is not one of the values of `role`");
+        }
+    }
+
+    // A form's `columns`: a literal integer, 1 to 12, the `x-colspan` convention's full row.
+    static void checkFormColumns(DocNode const& node) {
+        ExprPtr const columns = node.prop("columns");
+        if (columns == nullptr) {
+            return;
+        }
+        std::int64_t const* const count =
+            columns->kind == ExprKind::Literal ? columns->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+        if (count == nullptr) {
+            refuse(columns->path, "`columns` is a literal integer");
+        }
+        if (*count < 1 || *count > 12) {
+            refuse(columns->path, "`columns` is 1 to 12; a form lays its fields in at least one column");
         }
     }
 
@@ -2873,6 +3303,9 @@ private:
                 checkExpr(*cmd.value, context);
                 if (cmd.extra) {
                     checkExpr(*cmd.extra, context);
+                }
+                if (cmd.mediaType) {
+                    checkExpr(*cmd.mediaType, context);
                 }
                 if (cmd.option == "preview") {
                     static_cast<void>(require(context, cmd.target, where, {NameCategory::State}, "state"));

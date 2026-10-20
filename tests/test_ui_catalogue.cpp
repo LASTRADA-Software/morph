@@ -11,6 +11,7 @@
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/service.hpp>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -195,4 +196,40 @@ TEST_CASE("catalogues: loading reads only message files; search shows a fallback
     MessageCatalogues const none;
     CHECK(morph::ui::textInEveryLocale(none, "hello", "Hello") == std::vector<std::string>{"Hello"});
     CHECK(morph::ui::matchesInAnyLocale(none, "hello", "Hello", "ELL"));
+}
+
+// Mutation: never find the key in the catalogues (every reference shows its fallback).
+TEST_CASE("catalogTitle formats a title in a locale, and catalogTitles in every locale", "[ui][catalogue]") {
+    MessageCatalogues catalogues;
+    auto de = morph::ui::parseCatalogue(R"({"lims.sample.title": "Probenerfassung"})");
+    REQUIRE(de.has_value());
+    catalogues.add("de", std::move(*de));
+    auto at = morph::ui::parseCatalogue(R"({"greeting": "Servus"})");
+    REQUIRE(at.has_value());
+    catalogues.add("de-AT", std::move(*at));
+    auto const entry = [](std::string_view title) {
+        morph::ui::CatalogEntry made;
+        made.id = "lims.sample";
+        if (!title.empty()) {
+            auto parsed = glz::read_json<morph::ui::Json>(title);
+            REQUIRE(parsed.has_value());
+            made.title = std::move(*parsed);
+        }
+        return made;
+    };
+    auto const reference = entry(R"({"t": "lims.sample.title", "fallback": "Sample entry"})");
+    CHECK(morph::ui::catalogTitle(reference, &catalogues, "de-AT") == "Probenerfassung");  // the language's
+    CHECK(morph::ui::catalogTitle(entry(R"({"t": "greeting", "fallback": "Hello"})"), &catalogues, "de-AT") ==
+          "Servus");  // the exact locale's
+    CHECK(morph::ui::catalogTitle(reference, &catalogues, "fr") == "Sample entry");
+    CHECK(morph::ui::catalogTitle(reference, nullptr, "de") == "Sample entry");
+    CHECK(morph::ui::catalogTitle(entry(R"({"t": "missing"})"), &catalogues, "de") == "lims.sample");
+    CHECK(morph::ui::catalogTitle(entry(R"("Samples")"), &catalogues, "de") == "Samples");
+    CHECK(morph::ui::catalogTitle(entry(""), &catalogues, "de") == "lims.sample");
+
+    CHECK(morph::ui::catalogTitles(reference, &catalogues) ==
+          std::vector<std::string>{"Probenerfassung", "Probenerfassung"});
+    CHECK(morph::ui::catalogTitles(reference, nullptr) == std::vector<std::string>{"Sample entry"});
+    CHECK(morph::ui::catalogTitles(entry(R"("Samples")"), &catalogues) == std::vector<std::string>{"Samples"});
+    CHECK(morph::ui::catalogTitles(entry(""), nullptr) == std::vector<std::string>{"lims.sample"});
 }

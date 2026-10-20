@@ -21,12 +21,24 @@ StackImpl::StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axi
 
 void StackImpl::setGap(int gap) { write("gap", gap); }
 
+void StackImpl::setAlign(ui::Align align) {
+    write("align", static_cast<int>(align));
+    alignChildren(align);
+}
+
+void StackImpl::setJustify(ui::Justify justify) { write("justify", static_cast<int>(justify)); }
+
 GridImpl::GridImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphGrid"), parent} {}
 
 void GridImpl::setColumns(int columns) { write("columns", std::max(1, columns)); }
 
 void GridImpl::setGap(int gap) { write("gap", gap); }
+
+void GridImpl::setAlign(ui::Align align) {
+    write("align", static_cast<int>(align));
+    alignChildren(align);
+}
 
 void GridImpl::setSpan(ui::Widget& child, int span) {
     if (ItemBase const* const base = baseOf(child)) {
@@ -57,7 +69,9 @@ void PanelImpl::setOnToggle(std::function<void(bool)> onToggle) {
 
 ScrollImpl::ScrollImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis)
     : ContainerItemWidget{context, QStringLiteral("MorphScroll"), parent,
-                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}} {}
+                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0},
+                                      {QStringLiteral("bar"),
+                                       QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 SlotImpl::SlotImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent} {}
@@ -86,13 +100,18 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
     });
 }
 
+void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
+
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
 
 // ── Splitter ──────────────────────────────────────────────────────────────
 
 SplitterImpl::SplitterImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis)
-    : ContainerItemWidget{context, QStringLiteral("MorphSplitter"), parent,
-                          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0}}} {}
+    : ContainerItemWidget{
+          context, QStringLiteral("MorphSplitter"), parent,
+          QVariantMap{{QStringLiteral("axis"), axis == ui::Axis::Horizontal ? 1 : 0},
+                      {QStringLiteral("handle"),
+                       QVariant::fromValue(&context.component(QStringLiteral("MorphSplitterHandle")))}}} {}
 
 void SplitterImpl::setSizes(std::vector<int> const& sizes) {
     QVariantList list;

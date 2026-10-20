@@ -9,6 +9,7 @@
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -655,4 +656,21 @@ TEST_CASE("tui table: PageUp and PageDown move the cursor by a view of lines, no
     CHECK(activated == std::vector<ui::Key>{key(4), key(2)});
     cells.clear();
     rows.clear();
+}
+
+// Mutation: draw a toned row as any other (its cells keep the normal colour).
+TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][table]") {
+    Harness harness{30, 4};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.table->setRowTone(*fruit.rows.at(0), ui::Tone::Err);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    auto const& theme = harness.screen().theme();
+    // Row 1 is the first data row; its first cell starts after the two-cell gutter.
+    CHECK(buffer.at(1, 2).style.fg == theme.error.fg);
+    CHECK_FALSE(buffer.at(2, 2).style.fg == theme.error.fg);
+    fruit.table->setRowTone(*fruit.rows.at(0), std::nullopt);
+    static_cast<void>(harness.draw());
+    CHECK_FALSE(harness.screen().renderedBuffer().at(1, 2).style.fg == theme.error.fg);
+    CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
 }

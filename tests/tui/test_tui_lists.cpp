@@ -200,6 +200,21 @@ TEST_CASE("tui lists: tabs draw a bar over the pages the mount leaves visible; R
     CHECK(selected.size() == 1);
 }
 
+// Mutation: keep the bar's row whatever setBarShown says (the page stays on row 1).
+TEST_CASE("tui lists: a hidden tab bar gives its row to the page, and a shown one keeps one row", "[tui][lists]") {
+    Harness harness{20, 3};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"One"});
+    tabs->setSelected(0);
+    auto const page = harness.make<TextImpl>(tabs.get());
+    page->setText("page");
+    tabs->setBarShown(false);
+    CHECK(harness.draw() == Rows{"page"});
+    tabs->setTabs({"One", "Two"});
+    tabs->setBarShown(true);
+    CHECK(harness.draw() == Rows{"[One] Two", "page"});
+}
+
 TEST_CASE("tui lists: a radio select and a menu leave Tab and Esc to the frontend and dialogs", "[tui][lists]") {
     Harness harness{20, 4};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

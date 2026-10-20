@@ -11,6 +11,10 @@ MorphWidget {
     // 0 vertical, 1 horizontal; fixed at creation.
     property int axis: 0
     readonly property Item content: column
+    // The bar's part, `MorphScrollBar` or its restyle, which C++ passes at creation; instantiated once, on the axis.
+    property Component bar: null
+    // The bar made from `bar`, or null without one.
+    property ScrollBar barItem: null
 
     // Scrolls so that `item`, somewhere inside the content, is in view.
     function reveal(item: Item) {
@@ -46,17 +50,23 @@ MorphWidget {
         contentHeight: root.axis === 0 ? column.implicitHeight : height
         flickableDirection: root.axis === 0 ? Flickable.VerticalFlick : Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {
-            visible: root.axis === 0
-        }
-        ScrollBar.horizontal: ScrollBar {
-            visible: root.axis === 1
-        }
+        ScrollBar.vertical: root.axis === 0 ? root.barItem : null
+        ScrollBar.horizontal: root.axis === 1 ? root.barItem : null
 
         ColumnLayout {
             id: column
             width: root.axis === 0 ? flick.width : implicitWidth
         }
+    }
+
+    // The bar is a child of the flickable itself, not of its content: the attached ScrollBar lays out only a bar
+    // whose parent is the flickable.
+    Component.onCompleted: {
+        if (root.bar)
+            root.barItem = root.bar.createObject(flick, {
+                orientation: root.axis === 0 ? Qt.Vertical : Qt.Horizontal,
+                scheme: Qt.binding(() => root.scheme)
+            }) as ScrollBar
     }
 
     Connections {

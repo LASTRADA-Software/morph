@@ -30,6 +30,19 @@
 
 namespace morph::ui::testing {
 
+/// @brief Where a widget is drawn, in its backend's own units (a cell on the terminal; `Theme.unitWidth` and
+///        `Theme.unitHeight` on Qt Quick), from the top left of the window or screen.
+struct WidgetBounds {
+    /// @brief The left edge.
+    double x = 0;
+    /// @brief The top edge.
+    double y = 0;
+    /// @brief The width.
+    double width = 0;
+    /// @brief The height.
+    double height = 0;
+};
+
 /// @brief How the conformance cases read and drive one backend under test.
 ///
 /// The driving operations act as a user would, through the backend's own input path where it has one; each may run
@@ -154,6 +167,16 @@ public:
     /// @param zone The drop zone.
     /// @param paths The files' paths, in the order dropped; not empty.
     virtual void dropFiles(Widget& zone, std::vector<std::string> const& paths) = 0;
+
+    /// @brief Where a widget is drawn, for the layout cases (`layoutConformanceCases`). A backend that lays nothing
+    ///        out, such as `RecordingBackend`, answers none and runs only `conformanceCases`; a layout case run on
+    ///        it fails.
+    /// @param widget The widget.
+    /// @return Its bounds, in the backend's own units; `nullopt` when the probe reads no geometry.
+    [[nodiscard]] virtual std::optional<WidgetBounds> boundsOf(Widget const& widget) {
+        static_cast<void>(widget);
+        return std::nullopt;
+    }
 };
 
 /// @brief One scripted case.
@@ -1381,7 +1404,268 @@ private:
     return checks.result();
 }
 
+/// @brief Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry.
+class Geometry {
+public:
+    /// @brief Over @p probe.
+    /// @param probe  The backend under test.
+    /// @param checks The case's checks.
+    Geometry(ConformanceProbe& probe, Checks& checks) : _probe{&probe}, _checks{&checks} {}
+
+    /// @brief Where @p widget is drawn; zero, with the case failed, when the probe reads no geometry.
+    /// @param widget The widget.
+    /// @return Its bounds.
+    [[nodiscard]] WidgetBounds of(Widget const& widget) {
+        std::optional<WidgetBounds> const bounds = _probe->boundsOf(widget);
+        _checks->that(bounds.has_value(), "the probe reads no bounds, so a layout case measures nothing");
+        return bounds.value_or(WidgetBounds{});
+    }
+
+    /// @brief Checks that a length is what it should be, within one unit.
+    /// @param what     What is measured, for the message.
+    /// @param expected The length it should be.
+    /// @param actual   The length it is.
+    void near(std::string_view what, double expected, double actual) {
+        _checks->that(
+            actual >= expected - 1.0 && actual <= expected + 1.0,
+            std::string{what} + ": expected " + std::to_string(expected) + ", got " + std::to_string(actual));
+    }
+
+private:
+    ConformanceProbe* _probe;
+    Checks* _checks;
+};
+
+/// @brief A text that sizes as @p layout says.
+/// @param text   The text.
+/// @param layout Its size request.
+/// @return The node.
+[[nodiscard]] inline Node sizedText(std::string text, LayoutHints layout) {
+    Text made{.text = std::move(text)};
+    made.common.layout = layout;
+    return ui::text(std::move(made));
+}
+
+/// @brief @p inner inside a column, so it is sized as a child is: a root fills the window or screen whatever its
+///        own sizing.
+/// @param inner The container a case measures.
+/// @return The column.
+[[nodiscard]] inline Node insideColumn(Node inner) { return ui::column(Column{.children = {std::move(inner)}}); }
+
+/// @brief @p inner inside a row, so its height is sized as a child's is.
+/// @param inner The container a case measures.
+/// @return The row.
+[[nodiscard]] inline Node insideRow(Node inner) { return ui::row(Row{.children = {std::move(inner)}}); }
+
+/// @brief The container a case measures, the one child of the mounted root, and its children in order.
+struct Measured {
+    /// @brief The measured container; null when the root holds none.
+    Widget* container = nullptr;
+    /// @brief Its children.
+    std::vector<Widget*> children;
+};
+
+/// @brief The container a case measures, inside the root `insideColumn` or `insideRow` made.
+/// @param probe The backend under test.
+/// @param view  The mount.
+/// @return It and its children.
+[[nodiscard]] inline Measured measured(ConformanceProbe& probe, Mounted const& view) {
+    Measured found;
+    found.container = probe.childAt(rootContainer(view), 0);
+    ContainerWidget const* const inner = found.container == nullptr ? nullptr : asContainer(*found.container);
+    for (std::size_t index = 0; inner != nullptr && index < probe.childCount(*inner); ++index) {
+        found.children.push_back(probe.childAt(*inner, index));
+    }
+    return found;
+}
+
+/// @brief Case: along a row, a stretch child's share stops at its maximum and its stretch sibling takes the rest.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> maximumCapsStretchShare(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("a", {.width = Sizing::stretch(), .maxWidth = 20}),
+                         sizedText("b", {.width = Sizing::stretch()})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two children");
+    if (children.size() == 2) {
+        geometry.near("the capped stretch child's width", 20, geometry.of(*children.at(0)).width);
+        geometry.near("its stretch sibling's width", 40, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: along a row, a content child is at least its minimum wide.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> minimumWidensContent(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("ab", {.minWidth = 30}), sizedText("c", {})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two children");
+    if (children.size() == 2) {
+        geometry.near("a content text with minWidth 30", 30, geometry.of(*children.at(0)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: across a column, a stretch child stops at its maximum, at the start.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> maximumCapsAcross(ConformanceProbe& probe) {
+    Column column{.children = {sizedText("card", {.width = Sizing::stretch(), .maxWidth = 44})}};
+    column.common.layout = {.width = Sizing::fixed(70)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    std::vector<Widget*> const& children = inside.children;
+    checks.that(children.size() == 1, "the column holds one child");
+    if (children.size() == 1) {
+        WidgetBounds const outer = geometry.of(*inside.container);
+        geometry.near("the column's width", 70, outer.width);
+        WidgetBounds const card = geometry.of(*children.at(0));
+        geometry.near("a stretch child with maxWidth 44 across a 70-unit column", 44, card.width);
+        geometry.near("its left edge, at the column's start", outer.x, card.x);
+    }
+    return checks.result();
+}
+
+/// @brief Case: down a column, a stretch child's height stops at its maximum and its stretch sibling takes the
+///        rest.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> maximumCapsStretchHeight(ConformanceProbe& probe) {
+    Column column{.children = {sizedText("top", {.height = Sizing::stretch(), .maxHeight = 5}),
+                               sizedText("rest", {.height = Sizing::stretch()})}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the column holds two children");
+    if (children.size() == 2) {
+        geometry.near("the capped stretch child's height", 5, geometry.of(*children.at(0)).height);
+        geometry.near("its stretch sibling's height", 15, geometry.of(*children.at(1)).height);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a row 3 units tall with `align: center` places a 1-unit text a unit down.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> rowCentresAcross(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("x", {})}, .align = Align::Center};
+    row.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(3)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the row holds one child");
+    if (inside.children.size() == 1) {
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const text = geometry.of(*inside.children.at(0));
+        geometry.near("the text's height", 1, text.height);
+        geometry.near("the text's offset down the row", 1, text.y - outer.y);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a column with `justify: end` places its last child's end at its own end, and `between` its first
+///        child at the start and its last at the end.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> columnJustifies(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    for (Justify const justify : {Justify::End, Justify::Between}) {
+        Column column{.children = {sizedText("a", {}), sizedText("b", {}), sizedText("c", {})}, .justify = justify};
+        column.common.layout = {.width = Sizing::fixed(20), .height = Sizing::fixed(12)};
+        Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+        probe.settle();
+        Measured const inside = measured(probe, view);
+        checks.that(inside.children.size() == 3, "the column holds three children");
+        if (inside.children.size() != 3) {
+            continue;
+        }
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const first = geometry.of(*inside.children.at(0));
+        WidgetBounds const last = geometry.of(*inside.children.at(2));
+        geometry.near(justify == Justify::End ? "end: the last child's end" : "between: the last child's end",
+                      outer.y + outer.height, last.y + last.height);
+        if (justify == Justify::Between) {
+            geometry.near("between: the first child's start", outer.y, first.y);
+        } else {
+            checks.that(first.y > outer.y + 1, "end: the first child is not at the column's start");
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a child capped below its column's width with `alignSelf: center` has equal space either side; a
+///        stretch child with `maxWidth: 44` in a 70-unit column with `align: center` is 44 wide and centred.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> cappedChildCentres(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    for (bool const own : {true, false}) {
+        LayoutHints card{.width = Sizing::stretch(), .maxWidth = own ? 20 : 44};
+        if (own) {
+            card.alignSelf = Align::Center;
+        }
+        Column column{.children = {sizedText("card", card)}, .align = own ? Align::Stretch : Align::Center};
+        column.common.layout = {.width = Sizing::fixed(70)};
+        Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+        probe.settle();
+        Measured const inside = measured(probe, view);
+        checks.that(inside.children.size() == 1, "the column holds one child");
+        if (inside.children.size() != 1) {
+            continue;
+        }
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const placed = geometry.of(*inside.children.at(0));
+        double const before = placed.x - outer.x;
+        double const after = (outer.x + outer.width) - (placed.x + placed.width);
+        geometry.near(own ? "alignSelf center: the capped child's width" : "align center: the card's width",
+                      own ? 20 : 44, placed.width);
+        geometry.near(own ? "alignSelf center: the space after it, against the space before"
+                          : "align center: the space after the card, against the space before",
+                      before, after);
+    }
+    return checks.result();
+}
+
 }  // namespace detail
+
+/// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
+///        `boundsOf` reads geometry; a probe that reads none fails every one.
+/// @return The cases.
+[[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
+    static std::array<ConformanceCase, 7> const cases{{
+        {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
+         .run = detail::maximumCapsStretchShare},
+        {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
+        {.name = "a stretch child's maximum caps it across a column", .run = detail::maximumCapsAcross},
+        {.name = "a stretch child's maximum height caps its share down a column",
+         .run = detail::maximumCapsStretchHeight},
+        {.name = "a row centres a child across it", .run = detail::rowCentresAcross},
+        {.name = "a column's justify places its spare height", .run = detail::columnJustifies},
+        {.name = "a capped child is centred by its own alignment or its column's", .run = detail::cappedChildCentres},
+    }};
+    return cases;
+}
 
 /// @brief Every conformance case, in a fixed order.
 ///

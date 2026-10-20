@@ -45,7 +45,7 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 |---|---|---|---|
 | `visible` | `Prop<bool>` | `true` | Shown |
 | `enabled` | `Prop<bool>` | `true` | Accepts input |
-| `layout` | `LayoutHints{width, height}` | content × content | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI) |
+| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight, alignSelf}` | content × content, unbounded, the container's alignment | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing; `alignSelf`, an optional `Align` that places the widget across its stack's or grid row's axis in place of the container's. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum, a fixed amount outside its bounds, and an `alignSelf` on a node whose parent is not a stack or a grid |
 | `dragKey` | `Prop<std::optional<Key>>` | `nullopt` | Engaged: the widget can be dragged, and a drop delivers this key |
 | `accepts` | `std::function<bool(Key const&)>` | empty | Which keys a drop target takes; empty takes every key. Used only when `onDrop` is set |
 | `onDrop` | `std::function<void(Key)>` | empty | Set: the widget is a drop target, called with the dropped key |
@@ -101,14 +101,14 @@ lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
 |---|---|---|
-| `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success}`) |
-| `Button` | `button` | `label`, `onClick` |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
+| `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section}`; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`) |
+| `Button` | `button` | `label`, `onClick`, `emphasis` and `icon` (set once; the mount tells the widget only a non-`Normal` emphasis and a non-empty icon), `style` (a `ButtonStyle`, `Push` or `Item`, set once; the mount tells the widget only `Item`) and `selected` (a `Prop<bool>`, default `false`: whether an item is the current entry, told to the widget only for an item, when bound or `true`). The mount refuses (`std::logic_error`) a bound or `true` `selected` on a push button |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `label` and `showLabel` (below) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
-| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once) |
+| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
-| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once) |
-| `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
+| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
+| `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
 | `Spacer` | `spacer` | none |
 | `Panel` | `panel` | `title`, `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
 | `Scroll` | `scroll` | `child`, `axis` (`Axis{Vertical, Horizontal}`, set once) |
@@ -117,8 +117,8 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells, and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
-| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width}`, set once), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
+| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
 | `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
@@ -128,6 +128,7 @@ lowers them to the kinds below.
 | `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |
 | `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
 | `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
+| `ActionBar` | `actionBar` | `children` (a null child is skipped). It mounts as a horizontal stack, spacing step 2, in the footer of the Dialog or Drawer whose content holds it, at any depth, including content a Switch, Tabs or row mounts later; anywhere else the mount throws `std::logic_error`. The footer is asked for only when an `ActionBar` mounts |
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
@@ -138,7 +139,7 @@ Every node but `Custom` also carries `Common`:
 | Field | Meaning |
 |---|---|
 | `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
-| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch), set once |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, and `alignSelf`), set once |
 | `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
 | `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
 | `testId` | The stable identifier an automated test finds the widget by, set once |
@@ -158,9 +159,15 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
 
+**Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;
+default `false`). With `showLabel` the input draws the label as a visible caption above its control; without
+it the caption is drawn elsewhere or not at all. Inside a form the field's cell (the column `formView` draws per
+field, or a row with the caption beside the control under `FieldLayout::Inline`) owns the caption, and the input owns the required mark and the unit: `formView` sets `label` to the field's
+label and leaves `showLabel` false, so a kit never draws the caption twice.
+
 The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
-`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
-`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
+`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value`, `placeholder`, `unit` and `label`; Checkbox
+`label` and `checked`; Select `options`, `selected` and `label`; DateTimeInput `label`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
 `text` and the action's `label`; Badge `tone` and `text`; Progress `value` and `label`; Steps `items` and
@@ -232,7 +239,7 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    TextInput's mode, a Select's style, a stack's, scroll area's or splitter's axis, a DateTimeInput's
    mode and zone, a FilePicker's mode, a Drawer's side), and adopted into the scope **first**.
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
-   it is not content × content; `dragKey` only when bound or engaged; the drop handler only when
+   it is not content × content and unbounded; `dragKey` only when bound or engaged; the drop handler only when
    `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
    `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
    the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
@@ -247,7 +254,10 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    Dialog's `open`, whose `Effect` reads the binding itself ([below](#switch-tabs-dialog)). Fields
    set once (a stack's gap, a grid's columns and gap, a panel's padding and collapsibility, a
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
-   setters once. Each callback is handed over once, as an empty function when the node has none —
+   setters once. A TextInput's `unit` is applied only when bound or not empty, and its `decimals`
+   only when 0 or more, so an input that holds no number is told neither; a multiline input with
+   either is refused (`std::logic_error`). A TextInput's, Select's and DateTimeInput's `label` is
+   applied, as `setCaption(label, showLabel)`, only when bound, not empty, or `showLabel` is set. Each callback is handed over once, as an empty function when the node has none —
    except a Menu's `setOnActivate`, which always gets the mount's dispatcher over its items. Then
    the exceptions:
    - a Grid child's span is set only when it is not 1;

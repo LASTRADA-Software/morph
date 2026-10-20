@@ -642,6 +642,56 @@ TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error
     CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
 }
 
+// Mutation: map Section to Normal in roleStyle (the section is neither bold nor muted).
+TEST_CASE("tui widgets: a section text is bold and muted, a step below a heading", "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const section = harness.make<TextImpl>(column.get());
+    section->setText("Lab");
+    section->setRole(ui::TextRole::Section);
+    auto const heading = harness.make<TextImpl>(column.get());
+    heading->setText("App");
+    heading->setRole(ui::TextRole::Heading);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    auto const& theme = harness.screen().theme();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK(buffer.at(0, 0).style.fg == theme.textMuted.fg);
+    CHECK(buffer.at(1, 0).style.bold);
+    CHECK_FALSE(theme.textMuted.fg == theme.textBold.fg);
+}
+
+// Mutation: draw an item as a push button (its line shows `[ ... ]`).
+TEST_CASE("tui widgets: an item button paints its label unbracketed across its line, selected in the list's style",
+          "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const push = harness.make<ButtonImpl>(column.get());
+    push->setLabel("Push");
+    auto const item = harness.make<ButtonImpl>(column.get());
+    item->setLabel("Samples");
+    item->setStyle(ui::ButtonStyle::Item);
+    auto const other = harness.make<ButtonImpl>(column.get());
+    other->setLabel("Results");
+    other->setStyle(ui::ButtonStyle::Item);
+    other->setSelected(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 3);
+    CHECK(rows.at(0).starts_with("[ Push ]"));
+    CHECK(rows.at(1).starts_with(" Samples"));
+    CHECK_FALSE(rows.at(1).contains('['));
+    CHECK_FALSE(rows.at(2).contains('['));
+    auto const& buffer = harness.screen().renderedBuffer();
+    auto const& theme = harness.screen().theme();
+    auto const same = [](::core::tui::Style const& lhs, ::core::tui::Style const& rhs) {
+        return lhs.fg == rhs.fg && lhs.bg == rhs.bg && lhs.bold == rhs.bold && lhs.inverse == rhs.inverse;
+    };
+    // The selected item's style runs to the end of its line, past its label.
+    CHECK(same(buffer.at(2, 19).style, theme.listItemSelected));
+    CHECK(same(buffer.at(1, 19).style, theme.textNormal));
+    CHECK_FALSE(same(theme.listItemSelected, theme.textNormal));
+}
+
 TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
     Harness harness{20, 3};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

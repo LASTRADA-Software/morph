@@ -56,6 +56,11 @@ ButtonImpl::ButtonImpl(Context& context, ui::ContainerWidget* parent)
 
 void ButtonImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 
+void ButtonImpl::setIcon(std::string_view icon) {
+    context().checkIcon(icon);
+    write("icon", toQString(icon));
+}
+
 void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
     // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger.
     int shown = 0;
@@ -66,6 +71,11 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
     }
     write("emphasis", shown);
 }
+
+// MorphButton's `style`: 0 push, 1 item.
+void ButtonImpl::setStyle(ui::ButtonStyle style) { write("style", style == ui::ButtonStyle::Item ? 1 : 0); }
+
+void ButtonImpl::setSelected(bool selected) { write("selected", selected); }
 
 void ButtonImpl::setOnClick(ui::Action onClick) {
     relay().on(QStringLiteral("click"), actionHandler(std::move(onClick)));
@@ -99,7 +109,16 @@ void MenuImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
         return;
     }
     _entries = entries;
+    checkIcons(entries);
     write("entries", menuEntries(entries));
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a submenu's entries are checked as its parent's are.
+void MenuImpl::checkIcons(std::vector<ui::MenuEntry> const& entries) const {
+    for (ui::MenuEntry const& entry : entries) {
+        context().checkIcon(entry.icon);
+        checkIcons(entry.items);
+    }
 }
 
 void MenuImpl::setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) {
@@ -172,7 +191,10 @@ void BadgeImpl::setTone(ui::Tone tone) { write("tone", static_cast<int>(tone)); 
 
 void BadgeImpl::setText(std::string_view text) { write("text", toQString(text)); }
 
-void BadgeImpl::setIcon(std::string_view icon) { write("icon", toQString(icon)); }
+void BadgeImpl::setIcon(std::string_view icon) {
+    context().checkIcon(icon);
+    write("icon", toQString(icon));
+}
 
 std::string BadgeImpl::shownText() const { return toUtf8(read("text").toString()); }
 
@@ -220,7 +242,10 @@ void EmptyStateImpl::setTitle(std::string_view title) { write("title", toQString
 
 void EmptyStateImpl::setText(std::string_view text) { write("text", toQString(text)); }
 
-void EmptyStateImpl::setIcon(std::string_view icon) { write("icon", toQString(icon)); }
+void EmptyStateImpl::setIcon(std::string_view icon) {
+    context().checkIcon(icon);
+    write("icon", toQString(icon));
+}
 
 void EmptyStateImpl::setActionLabel(std::string_view label) { write("actionLabel", toQString(label)); }
 

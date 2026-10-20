@@ -24,9 +24,13 @@ MorphWidget {
 
         RowLayout {
             ToolButton {
+                font: Theme.bodyFont
                 id: toggle
                 objectName: "toggle"
-                text: (root.open ? "▾ " : "▸ ") + root.title
+                readonly property string chevron: root.open ? "nav.collapse" : "nav.expand"
+                icon.source: Theme.iconSource(chevron)
+                icon.color: "transparent"
+                text: (icon.source.toString() !== "" ? "" : root.open ? "▾ " : "▸ ") + root.title
                 onClicked: {
                     root.open = !root.open
                     root.fire("toggle", root.open)

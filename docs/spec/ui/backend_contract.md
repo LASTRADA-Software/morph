@@ -121,14 +121,14 @@ reorders children, and only through this.
 
 | Container | Children |
 |---|---|
-| `StackWidget` | In order along the axis fixed at creation, `setGap` apart |
-| `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told |
+| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
+| `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
-| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included |
-| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built. A hidden cell keeps its column: the cells after it stay under their own headers |
+| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer |
+| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
@@ -139,6 +139,13 @@ calls it only for another value than `Normal`, so a document without the `emphas
 `danger`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error colour;
 the terminal draws both bold, a danger one in the error colour.
 
+**Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
+behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its
+label at the start and unframed. The mount calls it once, only for `Item`. `setSelected(bool)` marks an item as the
+current entry, or clears the mark; the mount calls it only for an item whose `selected` is bound or `true`, and a new
+button is a push button and not selected. Qt Quick tints the current item in the accent with a bar at its leading
+edge; the terminal draws it in the list's selected-item style.
+
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
@@ -146,6 +153,24 @@ fills its width. A kind whose width is its label (a button, a badge, a checkbox)
 natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
 start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
 size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
+
+**Alignment.** All of the above is the default, `Align::Stretch` and `Justify::Start`; the mount calls `setAlign` and
+`setJustify` only for another value, as it does `setEmphasis`, so a screen that says nothing of alignment records
+nothing new. `StackWidget::setAlign(Align)` places every child across the axis, and a child's `alignSelf` (in its
+`LayoutHints`) places that child instead: under `Start`, `Center` or `End` a content child keeps its own extent across
+(a text is one line tall in a row, its natural width in a column) and sits at the start, centred (rounded down on the
+terminal) or at the end; a `fixed` or `stretch` child keeps its extent, clamped into its bounds, and is placed the
+same way, so a `stretch` card with `maxWidth: 44` in a 70-unit column under `Center` is 44 units wide with 13 either
+side. `StackWidget::setJustify(Justify)` places the spare length along the axis while no shown child stretches (one
+that stretches takes it all): packed at the start, centred, at the end, or for `Between` in equal gaps, each at least
+`setGap`'s, the first child at the start and the last at the end. `GridWidget::setAlign` places each cell's content
+vertically in its row as a row places its children; a grid's columns share its width, so it has no `setJustify`.
+
+**Bounds.** A bound clamps the extent the sizing rule gives, in backend units. Along a stack's axis a `stretch`
+child's share stops at its maximum and the rest goes to the other `stretch` children; a content or fixed child takes
+at least its minimum and at most its maximum; a stack whose minimums do not fit overflows and clips, as a fixed
+child does. Across, a child its maximum stops from filling is placed by its alignment, at the start by default: a card sized `stretch` with
+`maxWidth: 44` in a 70-unit column is 44 units wide, on both backends.
 
 ## Interfaces
 
@@ -155,21 +180,21 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
-| `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
-| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder` | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
+| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
+| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
-| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
+| `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
-| `StackWidget` | `setGap` | — |
-| `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)` | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
+| `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
-| `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none) | `setOnSelect(index)` |
-| `DialogWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
+| `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
+| `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
-| `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field) | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
+| `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)` |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
@@ -178,7 +203,7 @@ size until the user drags. A splitter's panes and a table's cells are sized by t
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
-| `DrawerWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open drawer |
+| `DrawerWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
@@ -229,13 +254,14 @@ The headless reference backend and the test double for everything above the cont
 - **Golden dump** (`dump()`): one line per live widget, `Kind#id name=value …`, properties in name
   order, children indented two spaces per depth, every line ending in a newline. A child whose
   parent was destroyed first becomes a root.
-- **Properties.** Every kind records `visible`, `enabled`, `layout`, `dragKey`, `drop`, `a11yName`,
+- **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
+  and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
-  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
+  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
-  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap` (Column, Row); `columns`,
-  `gap`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
-  `axis` (Scroll); `tabs`, `selected` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
+  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
+  `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
+  `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);
@@ -315,6 +341,23 @@ The headless reference backend and the test double for everything above the cont
 backend's test suite runs every case on a fresh probe. `RecordingBackend` passes them in
 `tests/test_ui_conformance.cpp`.
 
+`layoutConformanceCases()` are the cases of where a backend that lays widgets out draws them, read through the
+probe's `boundsOf(widget)`: the widget's bounds in the backend's own units (a cell on the terminal, the theme's unit
+width and height on Qt Quick), a `WidgetBounds{x, y, width, height}` from the top left of the window or screen,
+compared within one unit. A probe that reads no geometry answers none, and every layout case run on it fails rather
+than passing unmeasured; `RecordingBackend` lays nothing out and runs only `conformanceCases()`. Each case mounts
+the container it measures inside another, since a root fills the window or screen whatever its own sizing:
+
+1. Along a row, a `stretch` child's share stops at its maximum and its `stretch` sibling takes the rest.
+2. Along a row, a content child is at least its minimum wide.
+3. Across a column, a `stretch` child stops at its maximum, at the start.
+4. Down a column, a `stretch` child's height stops at its maximum and its sibling takes the rest.
+5. A row 3 units tall with `align: center` places a one-unit text one unit down.
+6. A column with `justify: end` places its last child's end at its own end; with `between`, its first child at the
+   start and its last at the end.
+7. A `stretch` child capped at 20 in a 70-unit column with `alignSelf: center`, and one capped at 44 under the
+   column's `align: center`, each have equal space either side.
+
 ### The probe
 
 A backend author implements one `ConformanceProbe`. Its driving operations act as a user would,
@@ -344,6 +387,7 @@ after it; its reading operations report what the widget shows now.
 | `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening each submenu on the way |
 | `expand(section, open)` | Opens or closes a collapsible section with its own control |
 | `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
+| `boundsOf(widget)` | Where the widget is drawn, in the backend's units, for the layout cases; none by default, for a probe that reads no geometry |
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.

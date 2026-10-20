@@ -45,6 +45,36 @@ struct MountError {
     std::string reason;
 };
 
+/// @brief A screen's head beside its title: the subtitle, the status badges and the actions a shell shows above the
+///        screen (the document's `subtitle`, `status` and `actions`).
+class ScreenHead {
+public:
+    ScreenHead() = default;
+    ScreenHead(ScreenHead const&) = delete;
+    ScreenHead& operator=(ScreenHead const&) = delete;
+    ScreenHead(ScreenHead&&) = delete;
+    ScreenHead& operator=(ScreenHead&&) = delete;
+    virtual ~ScreenHead() = default;
+
+    /// @brief The subtitle, as text; empty when the screen declares none.
+    /// @return It; it keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::string> const& subtitle() const = 0;
+
+    /// @brief The status badges that are visible, in order.
+    /// @return They; empty once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadBadge>> const& status() const = 0;
+
+    /// @brief The actions that are visible, in order, each with whether it is enabled.
+    /// @return They; empty once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadAction>> const& actions() const = 0;
+
+    /// @brief Runs an action's `onClick` as a user event in the screen scope, in one batch.
+    /// @param actionId The action's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
+    ///         `false` for a closed screen.
+    virtual bool run(std::string_view actionId) = 0;
+};
+
 /// @brief One mounted screen, as its host sees it.
 ///
 /// The host reads `title`, `dirty` and `identity` to show the tab and the unsaved indicator, and closes the screen
@@ -70,6 +100,11 @@ public:
     ///        when it changes.
     /// @return It; it keeps its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<Value> const& identity() const = 0;
+
+    /// @brief The screen's head beside its title, for a shell to show above it.
+    /// @return It, valid as long as the handle: a document screen's (empty values when the document declares no
+    ///         head); null for a host screen unless its handle overrides this.
+    [[nodiscard]] virtual ScreenHead* head() noexcept { return nullptr; }
 
     /// @brief Asks the screen to close (spec 6 §3).
     ///
@@ -279,6 +314,27 @@ private:
 
 }  // namespace detail::host
 
+/// @brief The canonical text of a screen's identity: what `DocumentScreenHost::identityOf` answers, so
+///        `identityOf(id, params) == identityKey(handle.identity().peek())` says whether a mounted screen is the one
+///        those params would open.
+/// @param identity The identity value.
+/// @return Its JSON with record fields in name order, or `std::nullopt` for `null` (a screen without an identity).
+[[nodiscard]] inline std::optional<std::string> identityKey(Value const& identity) {
+    if (identity.isNull()) {
+        return std::nullopt;
+    }
+    return detail::canonicalJson(identity);
+}
+
+/// @brief Whether two identities name the same screen instance: their keys are equal, and neither is `null`.
+/// @param lhs One identity.
+/// @param rhs The other.
+/// @return True when both have a key and the keys are equal; `null` equals nothing, itself included.
+[[nodiscard]] inline bool sameIdentity(Value const& lhs, Value const& rhs) {
+    std::optional<std::string> const left = identityKey(lhs);
+    return left.has_value() && left == identityKey(rhs);
+}
+
 /// @brief The framework's `ScreenHost` over UI documents: it mounts them through an `Interpreter`, closes them by the
 ///        protocol of spec 6 §3, and hands a document's `navigate` to `onNavigate`, which the deriving host
 ///        implements.
@@ -337,10 +393,10 @@ public:
         }
         detail::host::ParamsEnv const env{params};
         Value const identity = evaluate(*document->identity, env);
-        if (env.unknown() || identity.isNull()) {
+        if (env.unknown()) {
             return std::nullopt;
         }
-        return detail::canonicalJson(identity);
+        return identityKey(identity);
     }
 
     /// @brief Starts the requests of a screen's `prefetch` queries before it mounts (spec 5 §5), so the screen mounts
@@ -543,7 +599,7 @@ private:
 
     /// The handle of a document screen. Its state is shared with the posts it makes, so a post that runs after the
     /// handle is gone finds the screen already closed.
-    class Handle final : public ScreenHandle {
+    class Handle final : public ScreenHandle, public ScreenHead {
     public:
         Handle(std::unique_ptr<Screen> screen, CloseGuard guard, std::function<void(ScreenHandle&)> saveFailed)
             : _state{std::make_shared<State>(std::move(screen), std::move(guard), std::move(saveFailed))} {
@@ -566,6 +622,18 @@ private:
         [[nodiscard]] reactive::Computed<std::string> const& title() const override { return _state->title; }
         [[nodiscard]] reactive::Computed<bool> const& dirty() const override { return _state->dirty; }
         [[nodiscard]] reactive::Computed<Value> const& identity() const override { return _state->identity; }
+
+        [[nodiscard]] ScreenHead* head() noexcept override { return this; }
+        [[nodiscard]] reactive::Computed<std::string> const& subtitle() const override { return _state->subtitle; }
+        [[nodiscard]] reactive::Computed<std::vector<HeadBadge>> const& status() const override {
+            return _state->status;
+        }
+        [[nodiscard]] reactive::Computed<std::vector<HeadAction>> const& actions() const override {
+            return _state->actions;
+        }
+        bool run(std::string_view actionId) override {
+            return _state->screen != nullptr && _state->screen->runAction(actionId);
+        }
 
         void requestClose(std::function<void(bool closed)> done) override { State::request(_state, std::move(done)); }
 
@@ -652,12 +720,29 @@ private:
                             return lastTitle;
                         }},
                   dirty{*runtime, [this] { return !closed.get() && generation.get() >= 0 && screen->dirty(); }},
-                  identity{*runtime, [this] {
+                  identity{*runtime,
+                           [this] {
                                if (!closed.get() && generation.get() >= 0) {
                                    lastIdentity = screen->identity();
                                }
                                return lastIdentity;
-                           }} {}
+                           }},
+                  subtitle{*runtime,
+                           [this] {
+                               if (!closed.get() && generation.get() >= 0) {
+                                   lastSubtitle = detail::host::titleText(screen->subtitle());
+                               }
+                               return lastSubtitle;
+                           }},
+                  status{*runtime,
+                         [this] {
+                             return !closed.get() && generation.get() >= 0 ? screen->status()
+                                                                           : std::vector<HeadBadge>{};
+                         }},
+                  actions{*runtime, [this] {
+                              return !closed.get() && generation.get() >= 0 ? screen->actions()
+                                                                            : std::vector<HeadAction>{};
+                          }} {}
 
             State(State const&) = delete;
             State& operator=(State const&) = delete;
@@ -812,6 +897,7 @@ private:
                     // The last values a host reads once the screen is gone, whether or not it read them before.
                     lastTitle = detail::host::titleText(screen->title());
                     lastIdentity = screen->identity();
+                    lastSubtitle = detail::host::titleText(screen->subtitle());
                     runtime->batch([this] { closed.set(true); });
                     screen.reset();
                 }
@@ -846,6 +932,7 @@ private:
             std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
+            std::string lastSubtitle;
             // What the screen was mounted with, for a remount.
             ParamMap params;
             ContainerWidget* parent = nullptr;
@@ -855,6 +942,9 @@ private:
             reactive::Computed<std::string> title;
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;
+            reactive::Computed<std::string> subtitle;
+            reactive::Computed<std::vector<HeadBadge>> status;
+            reactive::Computed<std::vector<HeadAction>> actions;
         };
 
         std::shared_ptr<State> _state;
@@ -947,6 +1037,14 @@ private:
     bool download(Value const& file, std::string const& option, Value const& name,
                   std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr && _options.application->download(file, option, name, std::move(done));
+    }
+    bool readFile(Value const& file, std::size_t maxBytes,
+                  std::function<void(std::expected<InlineFile, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->readFile(file, maxBytes, std::move(done));
+    }
+    bool saveFile(InlineFile const& file, std::string const& option,
+                  std::function<void(std::expected<Value, std::string>)> done) override {
+        return _options.application != nullptr && _options.application->saveFile(file, option, std::move(done));
     }
     void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override {
         if (_options.application != nullptr) {

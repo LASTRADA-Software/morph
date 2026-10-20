@@ -12,11 +12,23 @@
 
 BRIDGE_REGISTER_MODEL(probe::ProbeModel, "Probe_Model")
 BRIDGE_REGISTER_ACTION(probe::ProbeModel, probe::Answer, "Probe_Answer")
+BRIDGE_REGISTER_ACTION(probe::ProbeModel, probe::Login, "Probe_Login")
+BRIDGE_REGISTER_EFFECTS(probe::Login, ::morph::effects::none)
+BRIDGE_REGISTER_ACTION(probe::ProbeModel, probe::Attach, "Probe_Attach")
+BRIDGE_REGISTER_EFFECTS(probe::Attach, ::morph::effects::none)
 
 namespace probe {
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
 std::int64_t ProbeModel::execute(Answer const& /*action*/) const { return 42; }
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
+LoginReply ProbeModel::execute(Login const& /*action*/) const { return LoginReply{.user = "ada", .jwt = "t-1"}; }
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): the bridge calls an action on a model instance.
+std::int64_t ProbeModel::execute(Attach const& action) const {
+    return static_cast<std::int64_t>(action.content.size());
+}
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "probe", .version = "1"}};
@@ -30,6 +42,6 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     return served.build();
 }
 
-morph::examples::LocalApp app() { return morph::examples::LocalApp{.name = "probe", .bundle = &bundle, .setUp = {}}; }
+morph::client::LocalApp app() { return morph::client::LocalApp{.name = "probe", .bundle = &bundle, .setUp = {}}; }
 
 }  // namespace probe

@@ -95,8 +95,19 @@ void ItemBase::write(char const* name, QVariant const& value) const {
     if (_item == nullptr) {
         return;
     }
+    // A name the item does not declare would become a dynamic property no binding reads: refused and reported.
+    if (_item->metaObject()->indexOfProperty(name) < 0) {
+        _context->undeclared(*_item, name);
+        return;
+    }
     if (_item->property(name) != value) {
         _item->setProperty(name, value);
+    }
+}
+
+void ItemBase::offer(char const* name, QVariant const& value) const {
+    if (_item != nullptr && _item->metaObject()->indexOfProperty(name) >= 0) {
+        write(name, value);
     }
 }
 
@@ -123,6 +134,22 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
     write("widthAmount", hints.width.amount);
     write("heightKind", static_cast<int>(hints.height.kind));
     write("heightAmount", hints.height.amount);
+    // A bound or an alignment given must reach the item, and one it cannot take is reported; an absent one is
+    // offered, so a component that declares neither is not reported for a node that has none.
+    if (hints.alignSelf) {
+        write("alignSelf", static_cast<int>(*hints.alignSelf));
+    } else {
+        offer("alignSelf", -1);
+    }
+    for (auto const& [name, bound] :
+         {std::pair{"minWidthUnits", hints.minWidth}, std::pair{"maxWidthUnits", hints.maxWidth},
+          std::pair{"minHeightUnits", hints.minHeight}, std::pair{"maxHeightUnits", hints.maxHeight}}) {
+        if (bound) {
+            write(name, *bound);
+        } else {
+            offer(name, -1);
+        }
+    }
 }
 
 void ItemBase::showDragKey(std::optional<ui::Key> const& key) const {
@@ -276,14 +303,24 @@ void ContainerCore::adopt(ItemBase& child) {
     if (QQuickItem* const item = child.item(); item != nullptr && content != nullptr) {
         item->setParentItem(content);
     }
+    // Every MorphUi item declares these; a custom component takes part in the fill and the scheme only if it does.
     CrossFill const fill = crossFill();
-    child.write("fillsWidth", fill.width);
-    child.write("fillsHeight", fill.height);
+    child.offer("fillsWidth", fill.width);
+    child.offer("fillsHeight", fill.height);
+    child.offer("alignAcross", alignsAcross());
+    child.offer("crossAlign", _crossAlign);
     if (QObject* const inherited = scheme()) {
-        child.write("inheritedScheme", QVariant::fromValue(inherited));
+        child.offer("inheritedScheme", QVariant::fromValue(inherited));
     }
     _children.push_back(&child);
     adopted(child);
+}
+
+void ContainerCore::alignChildren(ui::Align align) {
+    _crossAlign = static_cast<int>(align);
+    for (ItemBase const* const child : _children) {
+        child->offer("crossAlign", _crossAlign);
+    }
 }
 
 // NOLINTNEXTLINE(misc-no-recursion): a container's children may be containers, which pass it on in turn.
@@ -293,7 +330,7 @@ void ContainerCore::passSchemeDown() const {
         return;
     }
     for (ItemBase const* const child : _children) {
-        child->write("inheritedScheme", QVariant::fromValue(inherited));
+        child->offer("inheritedScheme", QVariant::fromValue(inherited));
         auto const* const nested = dynamic_cast<ContainerCore const*>(child);
         if (nested != nullptr && child->read("surface").toString().isEmpty()) {
             nested->passSchemeDown();

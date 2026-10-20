@@ -153,11 +153,58 @@ template <typename Special>
     }
 }
 
+/// @brief Formats an alignment.
+/// @param align The alignment.
+/// @return `stretch`, `start`, `center` or `end`.
+[[nodiscard]] inline std::string formatAlign(Align align) {
+    switch (align) {
+        case Align::Start:
+            return "start";
+        case Align::Center:
+            return "center";
+        case Align::End:
+            return "end";
+        case Align::Stretch:
+        default:
+            return "stretch";
+    }
+}
+
+/// @brief Formats a justification.
+/// @param justify The justification.
+/// @return `start`, `center`, `end` or `between`.
+[[nodiscard]] inline std::string formatJustify(Justify justify) {
+    switch (justify) {
+        case Justify::Center:
+            return "center";
+        case Justify::End:
+            return "end";
+        case Justify::Between:
+            return "between";
+        case Justify::Start:
+        default:
+            return "start";
+    }
+}
+
 /// @brief Formats a size request.
 /// @param hints The request.
-/// @return `width/height`, each as `formatSizing` gives it.
+/// @return `width/height`, each as `formatSizing` gives it and followed by ` min=<n>` and ` max=<n>` for the bounds
+///         it has, then ` self=<align>` when the node places itself, such as `stretch(1) max=44/content self=center`.
 [[nodiscard]] inline std::string formatLayout(LayoutHints const& hints) {
-    return formatSizing(hints.width) + "/" + formatSizing(hints.height);
+    auto const bounds = [](std::optional<int> minimum, std::optional<int> maximum) {
+        std::string text;
+        if (minimum) {
+            text += " min=" + std::to_string(*minimum);
+        }
+        if (maximum) {
+            text += " max=" + std::to_string(*maximum);
+        }
+        return text;
+    };
+    return formatSizing(hints.width) + bounds(hints.minWidth, hints.maxWidth) + "/" + formatSizing(hints.height) +
+           bounds(hints.minHeight, hints.maxHeight) +
+           (hints.alignSelf ? " self=" + formatAlign(*hints.alignSelf) : std::string{});
 }
 
 /// @brief Formats a date-time value.
@@ -208,6 +255,11 @@ template <typename T, typename F>
     }
 }
 
+/// @brief A button style's name.
+/// @param style The style.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(ButtonStyle style) { return style == ButtonStyle::Item ? "Item" : "Push"; }
+
 /// @brief A text role's name.
 /// @param role The role.
 /// @return The enumerator's name.
@@ -223,6 +275,8 @@ template <typename T, typename F>
             return "Error";
         case TextRole::Success:
             return "Success";
+        case TextRole::Section:
+            return "Section";
         default:
             return "unknown";
     }
@@ -760,6 +814,10 @@ protected:
     /// @return The store.
     [[nodiscard]] RecordStore& store() const noexcept { return *_store; }
 
+    /// @brief The store, shared: what a part this widget makes (an overlay's footer) records into.
+    /// @return The store.
+    [[nodiscard]] std::shared_ptr<RecordStore> const& sharedStore() const noexcept { return _store; }
+
     /// @brief This widget's id.
     /// @return The id.
     [[nodiscard]] int id() const noexcept { return _id; }
@@ -824,16 +882,20 @@ public:
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
-/// @brief A fake `ButtonWidget`: properties `label` and `emphasis`.
+/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style` and `selected`.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
     void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+    void setStyle(ButtonStyle style) override { set("style", enumName(style)); }
+    void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, the field state, and a text cursor.
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,
+///        `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
 /// the field shows leaves it alone, as the contract requires, and `setText` with another text puts it at the end.
@@ -873,6 +935,12 @@ public:
     [[nodiscard]] std::string const& text() const noexcept { return _shown; }
 
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
+    void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
+    void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
+    }
     void setOnChange(std::function<void(std::string)> onChange) override { callbacks().change = std::move(onChange); }
     void setOnSubmit(std::function<void(std::string)> onSubmit) override { callbacks().submit = std::move(onSubmit); }
     void setOnCommit(std::function<void(std::string)> onCommit) override { callbacks().commit = std::move(onCommit); }
@@ -891,7 +959,7 @@ public:
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };
 
-/// @brief A fake `SelectWidget`: properties `style`, `options`, `selected`.
+/// @brief A fake `SelectWidget`: properties `style`, `options`, `selected`, `caption`, `captionShown`.
 ///
 /// `selected` shows the option the widget marks: the requested key while the options contain it, else `none`. The
 /// requested key is kept, so options that bring it back mark it again; that re-marking is the widget's own doing and
@@ -926,6 +994,10 @@ public:
     /// @brief Stores the handler `RecordingBackend::open` calls.
     /// @param onOpen The handler.
     void setOnOpen(Action onOpen) override { callbacks().open = std::move(onOpen); }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
+    }
 
     /// @brief Whether one of the current options has @p key.
     /// @param key The key.
@@ -967,19 +1039,22 @@ public:
     }
 };
 
-/// @brief A fake `StackWidget`, of kind `Column` or `Row`: property `gap`.
+/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`.
 class FakeStack final : public FakeContainer<StackWidget> {
 public:
     using FakeContainer<StackWidget>::FakeContainer;
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
+    void setAlign(Align align) override { set("align", formatAlign(align)); }
+    void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
 };
 
-/// @brief A fake `GridWidget`: properties `columns`, `gap`, and `span` on a child.
+/// @brief A fake `GridWidget`: properties `columns`, `gap`, `align`, and `span` on a child.
 class FakeGrid final : public FakeContainer<GridWidget> {
 public:
     using FakeContainer<GridWidget>::FakeContainer;
     void setColumns(int columns) override { set("columns", std::to_string(columns)); }
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
+    void setAlign(Align align) override { set("align", formatAlign(align)); }
 
     /// @brief Records property `span` on @p child.
     /// @param child One of this grid's children.
@@ -1013,7 +1088,7 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`.
+/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`, `caption`, `captionShown`.
 class FakeDateTimeInput final : public FakeField<DateTimeInputWidget> {
 public:
     using FakeField<DateTimeInputWidget>::FakeField;
@@ -1022,6 +1097,10 @@ public:
     }
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override {
         callbacks().dateTime = std::move(onChange);
+    }
+    void setCaption(std::string_view label, bool shown) override {
+        set("caption", formatText(label));
+        set("captionShown", formatBool(shown));
     }
 };
 
@@ -1044,7 +1123,7 @@ public:
     void setOnPicked(std::function<void(std::string)> onPicked) override { callbacks().picked = std::move(onPicked); }
 };
 
-/// @brief A fake `TabsWidget`: properties `tabs`, `selected`.
+/// @brief A fake `TabsWidget`: properties `tabs`, `selected`, `barShown`.
 class FakeTabs final : public FakeContainer<TabsWidget> {
 public:
     using FakeContainer<TabsWidget>::FakeContainer;
@@ -1053,12 +1132,34 @@ public:
     }
     void setSelected(std::size_t index) override { set("selected", std::to_string(index)); }
     void setOnSelect(std::function<void(std::size_t)> onSelect) override { callbacks().index = std::move(onSelect); }
+    void setBarShown(bool shown) override { set("barShown", shown ? "true" : "false"); }
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`.
-class FakeDialog final : public FakeContainer<DialogWidget> {
+/// @brief A fake overlay's footer: a `Footer` child, made when it is first asked for, so an overlay that never shows
+///        actions logs none.
+/// @tparam Interface `DialogWidget` or `DrawerWidget`.
+template <typename Interface>
+class FakeOverlay : public FakeContainer<Interface> {
 public:
-    using FakeContainer<DialogWidget>::FakeContainer;
+    using FakeContainer<Interface>::FakeContainer;
+
+    /// @brief The footer, a `Footer` container child of the overlay.
+    /// @return It.
+    ContainerWidget& footer() override {
+        if (_footer == nullptr) {
+            _footer = std::make_unique<FakeContainer<SlotWidget>>(this->sharedStore(), "Footer", this);
+        }
+        return *_footer;
+    }
+
+private:
+    std::unique_ptr<FakeContainer<SlotWidget>> _footer;
+};
+
+/// @brief A fake `DialogWidget`: properties `open`, `title`; a `Footer` child once its footer is asked for.
+class FakeDialog final : public FakeOverlay<DialogWidget> {
+public:
+    using FakeOverlay<DialogWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
@@ -1128,10 +1229,10 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
 };
 
-/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`.
-class FakeDrawer final : public FakeContainer<DrawerWidget> {
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`; a `Footer` child once its footer is asked for.
+class FakeDrawer final : public FakeOverlay<DrawerWidget> {
 public:
-    using FakeContainer<DrawerWidget>::FakeContainer;
+    using FakeOverlay<DrawerWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
@@ -1294,6 +1395,18 @@ public:
         store().set(rowId, "rowKey", formatKey(key));
         _rowKeys.insert_or_assign(rowId, key);
         remark();
+    }
+
+    /// @brief Records the row's property `tone` (`none` for no tone).
+    /// @param row One of this table's rows.
+    /// @param tone The tone, or none.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowTone(Widget& row, std::optional<Tone> tone) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowTone of a widget that is not this table's row"};
+        }
+        store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
     }
 
     /// @brief Requests the rows with @p keys, and records property `selection` as the rows it marks.

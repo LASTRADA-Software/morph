@@ -11,6 +11,7 @@
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -109,6 +110,42 @@ TEST_CASE("tui fields: the placeholder shows while the field is empty", "[tui][f
     harness.focus(*input);
     static_cast<void>(harness.type("x"));
     CHECK(harness.draw() == Rows{"x"});
+}
+
+// Mutation: paint the field over the whole width and no unit (`kg` is not drawn).
+TEST_CASE("tui fields: a unit is drawn muted at the right edge before the marks, and the text stops before it",
+          "[tui][fields]") {
+    Harness harness{20, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setUnit("kg");
+    input->setDecimals(2);
+    input->setRequired(true);
+    harness.focus(*input);
+    static_cast<void>(harness.type("12.5"));
+    CHECK(harness.draw() == Rows{"12.5             kg*"});
+    // A text longer than the room before the unit scrolls in it; the unit stays.
+    static_cast<void>(harness.type("678901234567"));
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 1);
+    INFO("[" << rows.front() << "]");
+    CHECK(rows.front().ends_with("1234567  kg*"));  // the cursor's cell, then the gap before the unit
+    auto const multiline = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Multiline);
+    CHECK_THROWS_AS(multiline->setUnit("kg"), std::logic_error);
+}
+
+// Mutation: ignore `shown` in setCaption (no caption row is drawn).
+TEST_CASE("tui fields: a shown caption is drawn on its own row above the control", "[tui][fields]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const input = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    input->setText("Ada");
+    input->setCaption("Name", true);
+    auto const other = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    other->setText("x");
+    other->setCaption("Hidden", false);
+    CHECK(harness.draw() == Rows{"Name", "Ada", "x"});
+    input->setCaption("Name", false);
+    CHECK(harness.draw() == Rows{"Ada", "x"});
 }
 
 TEST_CASE("tui fields: a password field never shows what was typed", "[tui][fields]") {

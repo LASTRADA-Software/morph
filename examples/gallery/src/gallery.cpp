@@ -159,8 +159,8 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     return served.build();
 }
 
-morph::examples::LocalApp localApp() {
-    return morph::examples::LocalApp{.name = std::string{kApplicationId}, .bundle = &bundle, .setUp = {}};
+morph::client::LocalApp localApp() {
+    return morph::client::LocalApp{.name = std::string{kApplicationId}, .bundle = &bundle, .setUp = {}};
 }
 
 }  // namespace gallery

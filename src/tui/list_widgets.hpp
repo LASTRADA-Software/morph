@@ -50,6 +50,7 @@ public:
     void setOptions(std::vector<ui::SelectOption> const& options) override;
     void setSelected(std::optional<ui::Key> const& selected) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The label of the marked option; empty when none is marked.
@@ -97,6 +98,7 @@ public:
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
     /// Calls @p onOpen when the user opens the list, also when there are no options and so no list to show.
     void setOnOpen(ui::Action onOpen) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The label of the marked option; empty when none is marked.
@@ -191,14 +193,17 @@ private:
 /// The children are the page slots the mount makes, in the order their tabs were first shown, stacked; the mount
 /// hides every page but the selected one through its own visible flag, so `setSelected` moves the bar's highlight
 /// only. A selection past the last tab highlights none, and Right then selects the first, Left the last.
+///
+/// A hidden bar gives its row to the body and takes no focus: there is no strip to choose a tab on.
 class TabsImpl final : public TuiContainer<ui::TabsWidget> {
 public:
     explicit TabsImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setTabs(std::vector<std::string> const& tabs) override;
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
+    void setBarShown(bool shown) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
-    [[nodiscard]] bool wantsFocus() const override { return true; }
+    [[nodiscard]] bool wantsFocus() const override { return _barShown; }
     [[nodiscard]] bool focusesOnPress() const override { return false; }
     /// The label of the highlighted tab; empty when none is.
     [[nodiscard]] std::string probeText() const override;
@@ -214,6 +219,7 @@ private:
     std::vector<std::string> _labels;
     std::size_t _selected = 0;
     std::function<void(std::size_t)> _onSelect;
+    bool _barShown = true;
 };
 
 }  // namespace morph::tui::detail

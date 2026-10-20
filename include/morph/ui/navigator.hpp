@@ -13,6 +13,7 @@
 
 #include "backend.hpp"
 #include "bundle.hpp"
+#include "catalogue.hpp"
 #include "view.hpp"
 
 /// @file
@@ -45,7 +46,8 @@ struct NavigatorOptions {
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
 ///
-/// Entries are grouped by module, then group, in the order each first appears; each group has a heading. An
+/// Entries are grouped by module, then group, in the order each first appears; each group has a heading. Each entry
+/// is a list item (`ButtonStyle::Item`) as wide as the navigator, and `setCurrent` marks the open screen's. An
 /// unavailable entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose
 /// titles contains the text, ignoring ASCII case, and the headings of the groups that still show one. Neither
 /// copyable nor movable; owned by the owner thread of its backend.
@@ -119,6 +121,28 @@ public:
     /// @return Their screen ids.
     [[nodiscard]] std::vector<std::string> const& pins() const noexcept { return _pins; }
 
+    /// @brief Marks the entry of the screen that is open, and clears the mark of the one marked before. A pin is not
+    ///        marked.
+    /// @param screenId The open screen's id; one the navigator does not list, or empty, leaves no entry marked.
+    void setCurrent(std::string_view screenId) {
+        if (screenId == _current) {
+            return;
+        }
+        if (Item const* const previous = itemOf(_current)) {
+            previous->button->setSelected(false);
+        }
+        _current = std::string{screenId};
+        if (Item const* const next = itemOf(_current)) {
+            next->button->setSelected(true);
+        } else {
+            _current.clear();
+        }
+    }
+
+    /// @brief The screen whose entry is marked.
+    /// @return Its id; empty when none is.
+    [[nodiscard]] std::string const& current() const noexcept { return _current; }
+
 private:
     struct Item {
         CatalogEntry const* entry = nullptr;
@@ -148,18 +172,7 @@ private:
                 return titles;
             }
         }
-        if (std::string const* const text = std::get_if<std::string>(&entry.title.data)) {
-            return {*text};
-        }
-        if (auto const* const object = std::get_if<Json::object_t>(&entry.title.data)) {
-            for (auto const& [key, value] : *object) {
-                std::string const* const text = std::get_if<std::string>(&value.data);
-                if (key == "fallback" && text != nullptr) {
-                    return {*text};
-                }
-            }
-        }
-        return {entry.id};
+        return catalogTitles(entry, nullptr);
     }
 
     [[nodiscard]] CatalogEntry const* entryOf(std::string_view screenId) const {
@@ -168,6 +181,17 @@ private:
     }
 
     [[nodiscard]] bool known(std::string_view screenId) const { return entryOf(screenId) != nullptr; }
+
+    [[nodiscard]] Item const* itemOf(std::string_view screenId) const {
+        for (Group const& group : _groups) {
+            auto const found = std::ranges::find_if(
+                group.items, [screenId](Item const& item) { return !screenId.empty() && item.entry->id == screenId; });
+            if (found != group.items.end()) {
+                return &*found;
+            }
+        }
+        return nullptr;
+    }
 
     [[nodiscard]] bool pinned(std::string_view screenId) const {
         return std::ranges::find(_pins, screenId) != _pins.end();
@@ -205,7 +229,7 @@ private:
         }
         for (Group& group : _groups) {
             group.heading = _backend->createText(_root.get());
-            group.heading->setRole(TextRole::Heading);
+            group.heading->setRole(TextRole::Section);
             group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
             std::string heading = group.module;
             if (!group.group.empty()) {
@@ -218,6 +242,8 @@ private:
                 }
                 Item item{.entry = &entry, .titles = titlesOf(entry), .button = _backend->createButton(_root.get())};
                 item.button->setTestId("nav_" + entry.id);
+                item.button->setStyle(ButtonStyle::Item);
+                item.button->setLayout({.width = Sizing::stretch(), .height = {}});
                 wire(*item.button, entry, item.titles.front());
                 group.items.push_back(std::move(item));
             }
@@ -266,6 +292,7 @@ private:
     std::vector<std::unique_ptr<ButtonWidget>> _pinButtons;
     std::vector<Group> _groups;
     std::vector<std::string> _pins;
+    std::string _current;
 };
 
 }  // namespace morph::ui

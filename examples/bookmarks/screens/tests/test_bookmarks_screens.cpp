@@ -5,11 +5,12 @@
 // empties the active list, and showing archived ones brings them back. The models run in process over the rung's test
 // database.
 
-#include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/client/source.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <string>
 #include <testkit/bundle_warnings.hpp>
 #include <testkit/db_fixture.hpp>
@@ -20,8 +21,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 using morph::ladder::testkit::DbFixture;
@@ -135,5 +136,25 @@ TEST_CASE("bookmarks screens: show archived lists the archived bookmarks again",
     bool const shown = harness.waitForText("count", "1 bookmarks");
     reportProblems(harness);
     CHECK(shown);
+    CHECK(harness.problems().empty());
+}
+
+// Mutation: drop the table's `empty` (no empty state is mounted, and the table shows its bare header).
+TEST_CASE("bookmarks screens: with no bookmarks the empty state shows in the table's place", "[bookmarks-screens]") {
+    DbFixture fixture;
+    ScreenHarness harness = open();
+    signIn(harness);
+    // Shown with nothing hidden between it and the page: the empty content sits in a column the table's rows toggle.
+    auto const shown = [&harness](char const* kind, char const* testId) {
+        std::optional<int> const page = harness.find("Column", "bookmarksPage");
+        std::optional<int> const widget = harness.find(kind, testId);
+        return page.has_value() && widget.has_value() && harness.shownUnder(*page, *widget);
+    };
+    CHECK(shown("EmptyState", "noBookmarks"));
+    CHECK_FALSE(shown("Table", "bookmarks"));
+    createBookmark(harness, "https://example.org/a", 1);
+    CHECK(shown("Table", "bookmarks"));
+    CHECK_FALSE(shown("EmptyState", "noBookmarks"));
+    reportProblems(harness);
     CHECK(harness.problems().empty());
 }

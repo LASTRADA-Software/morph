@@ -30,6 +30,16 @@ void StackImpl::setGap(int gap) {
     refresh();
 }
 
+void StackImpl::setAlign(ui::Align align) {
+    _align = align;
+    refresh();
+}
+
+void StackImpl::setJustify(ui::Justify justify) {
+    _justify = justify;
+    refresh();
+}
+
 void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
     _extents = std::move(extents);
     _extentGap = gap;
@@ -48,7 +58,11 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
-                      StackSpec{.axis = _axis, .gap = _extents.empty() ? _gap : _extentGap, .extents = _extents});
+                      StackSpec{.axis = _axis,
+                                .gap = _extents.empty() ? _gap : _extentGap,
+                                .extents = _extents,
+                                .align = _align,
+                                .justify = _justify});
 }
 
 void StackImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
@@ -73,6 +87,11 @@ void GridImpl::setGap(int gap) {
     refresh();
 }
 
+void GridImpl::setAlign(ui::Align align) {
+    _align = align;
+    refresh();
+}
+
 void GridImpl::setSpan(ui::Widget& child, int span) {
     auto& cell = WidgetBase::of(child);
     if (cell.container() != this) {
@@ -93,8 +112,11 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
     std::vector<layout::GridCell> cells;
     cells.reserve(shown.size());
     for (auto const* child : shown) {
-        cells.push_back(layout::GridCell{
-            .span = spanOf(child), .naturalHeight = child->naturalSize().height, .height = child->layout().height});
+        cells.push_back(
+            layout::GridCell{.span = spanOf(child),
+                             .naturalHeight = child->naturalSize().height,
+                             .height = child->layout().height,
+                             .bounds = layout::boundsOf(child->layout().minHeight, child->layout().maxHeight)});
     }
     return cells;
 }
@@ -132,8 +154,15 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
             continue;
         }
         auto area = layout::slotArea(plan, *slot);
-        area.width = layout::crossExtent(child->layout().width, area.width);
-        area.height = layout::crossExtent(child->layout().height, area.height);
+        // Across a column of the grid the cell fills its width; in its row, the grid's or the cell's own
+        // alignment places it.
+        ui::LayoutHints const& hints = child->layout();
+        area.width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+        ui::Align const placed = hints.alignSelf.value_or(_align);
+        int const height = alignedExtent(placed, hints.height, requestedSize(*child).height, area.height,
+                                         layout::boundsOf(hints.minHeight, hints.maxHeight));
+        area.y += alignedOffset(placed, height, area.height);
+        area.height = height;
         areas.push_back(area);
         ++slot;
     }
@@ -520,6 +549,26 @@ void OverlayCore::setOpen(bool open) {
 void OverlayCore::setTitle(std::string_view title) {
     _title = std::string{title};
     _self->refresh();
+}
+
+::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
+
+std::vector<::core::tui::Rect> FooterImpl::childAreas(::core::tui::Size size) const {
+    ::core::tui::Size const natural = naturalSize();
+    int const width = std::min(size.width, natural.width);
+    return stackAreas(children(), {.x = size.width - width, .y = 0, .width = width, .height = size.height},
+                      StackSpec{.axis = ui::Axis::Horizontal, .gap = 1});
+}
+
+void FooterImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+
+ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
+    if (_footer == nullptr) {
+        _footer = std::make_unique<FooterImpl>(overlay.context());
+        overlay.attach(*_footer);
+    }
+    overlay.move(*_footer, overlay.children().size());
+    return *_footer;
 }
 
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {

@@ -33,7 +33,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `Dispatcher` | Binds a model by type id, privately or to a shared instance (`bind`), and returns a `ModelChannel` whose `execute(actionId, bodyJson, CallOptions)` sends one action and resolves with the reply's JSON text on the runtime's owner. |
 | `BridgeDispatcher` | The application's `Dispatcher`: `bind` makes a `bridge::RawHandler` (`bindByType`, and `attach` for a key), `execute` is `executeRaw`. An `evaluate` query goes through the `Evaluator` it was built with (`ui::evaluatorOver`, the UI service's `ui-evaluate`); without one it is refused with a `std::runtime_error`. It has no offline queue of its own: `queueOffline` is ignored unless a `QueueingDispatcher` wraps it. A shared binding without a key is left unattached, which the bridge refuses at the first call. |
 | `QueueingDispatcher` | The client's offline queue (`include/morph/ui/queueing_dispatcher.hpp`), around any `Dispatcher`. A call made with `queueOffline` that fails with `backend::DisconnectedError` is held, and the caller's completion stays pending, so the mutation stays `pending` and its elements `stale`. While anything is held, a later queued call joins the queue unsent, so the server sees calls in the order they were made. `replay()` re-sends the held calls oldest first, one at a time, and settles each caller with its replay: a refusal runs the mutation's `onError`, and a call still unreachable stops the replay and stays held with every call behind it. A call without `queueOffline`, and an evaluation, are never held. `held()` and `setOnHeld` report the count. When to replay is the host's: it calls `replay()` once its transport reconnects. |
-| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
+| `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `readFile(file, maxBytes, done)` and `saveFile(InlineFile{name, mediaType, bytes}, option, done)` (a file's bytes moved inline; a host reads a file's size before its bytes and refuses one over `maxBytes`), `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
 | `Session` | What screens of one client session share: the query cache, the mounted queries, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
 | `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, a mutation run, or an upload or download in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
@@ -43,7 +43,10 @@ Read this before changing what a mounted document does. What a document may say 
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
 `backendChanged`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
-(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source).
+(`ui::watcherOver` builds one over a remote source's exchange; empty for a local source), and `maxInlineFileBytes`,
+the most bytes a document moves inline in one file (default `kDefaultInlineFileBytes`, 1 MiB). `Session` construction
+throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, ⌊(`wire::kMaxEnvelopeBytes` −
+64 KiB) · 3 / 4⌋ = 6 242 304 bytes: base64 grows bytes by 4/3, and 64 KiB are left for the rest of the envelope.
 
 
 ## The app root scope
@@ -254,6 +257,16 @@ its target does not resolve, and when the host does not support it.
   with the file reference added to the mutation's body under `as` (`file` by default). A body cannot
   name the reference itself, since a mutation's body is checked where the mutation is declared.
 - `download` to `preview` writes the local reference to the state it names.
+- **Inline bytes.** `upload` with `"into": "bytes"` asks the host's `readFile` with the session's cap, refuses a
+  reply over the cap even when the host did not, and runs the mutation with `as` (default `file`) set to the bytes
+  in base64, and `nameAs` and `typeAs`, when given, to the file's name and media type; its transfer's `pending`,
+  `progress` (1 once the bytes are read) and `error` behave as for a reference. `download` with `"from": "bytes"`
+  evaluates its file to base64 text (with or without padding) or a list of integers 0 to 255, decodes it, and calls
+  `saveFile` with its `name` and `type`; content over the cap, or that does not decode, fails the command with a
+  diagnostic (`download: 2.4 MiB is over the 1 MiB inline cap; serve it through the file store`) and the host is
+  not called. A field component writing a member whose schema says `contentEncoding: base64`
+  (`FieldSpec::bytes`) is held to the cap too (`field <name>: <n> bytes is over the <cap> inline cap`); any other
+  field is not.
 - `retry` refetches the failed queries of the innermost boundary.
 
 ## Lowering
@@ -261,20 +274,45 @@ its target does not resolve, and when the host does not support it.
 Each node kind lowers to its `view.hpp` kind; every bound property is a numbered slot
 (`ui::slot`), a literal a constant. Properties the view tree sets once (`gap`, a grid's `columns`, a
 slider's range, a table's columns, `sizing`, `autofocus`) are evaluated once, untracked. `sizing`
-applies to the width.
+sizes the width, or both dimensions from a `{width, height}` record (one left out is content); a computed
+sizing that evaluates to none of its forms is reported once for its path and lowers to content. The size bounds,
+literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`, `minHeight` and `maxHeight`. `align`,
+`justify` and `alignSelf`, names the loader checked, become the stack's or grid's `align` and `justify` and
+`LayoutHints::alignSelf`.
 
 - **Scoped content.** A dialog's, drawer's or switch case's content is lowered behind a one-row
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
 - **`switch`** selects the first case whose `when` equals `on` (structurally), else `default`.
+- **Action parts.** `ScreenCore::lowerActionParts(parts, ctx)` lowers a list of `actionButton` parts into
+  `ActionModels`: the label, icon, `enabled` and `visible` bound in `ctx`'s scope, the emphasis, and a run function
+  that runs the part's `onClick` there as a user event, in one batch.
+- **Overlay actions.** A dialog's or drawer's `actions` are lowered with its content, in its scope, and end the
+  content as a `ui::ActionBar` of buttons (test id `action_<id>`, shown and enabled as the action is), so their
+  bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. `default`
+  and `cancel` keep their Enter and Escape bindings.
+- **The head.** A screen's `status` and `actions` are lowered once, at mount, in the screen scope; `Screen::status()`
+  and `Screen::actions()` read the visible ones (a tracked read), `Screen::subtitle()` evaluates `subtitle`, and
+  `Screen::runAction(id)` runs an enabled, visible action, reporting an unknown, hidden or disabled id.
 - **A field's `label`.** A text input, select, slider, date-time input or file picker shows no caption of
-  its own, so its `label` is bound as its accessible name (`Common::a11y.name`). An `a11y` part that
-  gives a `name` wins over it; one that gives only a `role` leaves the label as the name. A checkbox's
-  and a button's label is their text, which already names them.
+  its own unless the document asks, so its `label` is bound as its accessible name (`Common::a11y.name`). An
+  `a11y` part that gives a `name` wins over it; one that gives only a `role` leaves the label as the name. A
+  text input, select and date-time input also take the label as their view tree `label`, and `showLabel`
+  (`true`) makes them draw it as a visible caption above the control; the label stays the accessible name
+  either way. A checkbox's and a button's label is their text, which already names them.
 - **`table`** from `rows`: the columns' labels and widths are set once; a column without a `cell`
   shows the row's field of the column's `id`; `columns` given as an expression is a list of
-  `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone`, `sort`, `filters` and
-  `hoveredKey` are not lowered.
+  `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
+  scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
+  none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
+  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered. With `empty`,
+  the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
+  while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
+  list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
+  so it is placed as the table would be, and has no test id; every other common property stays on the table
+  (`testId`, the element id `focus` finds, `enabled`, `tooltip`, `a11y`, `keys`, drag and drop). A hidden table
+  keeps its element values. No view-tree kind is added, so both backends draw it with what they have. A
+  model-backed table's `empty` waits for the table engine, as the table does.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,
@@ -297,6 +335,15 @@ applies to the width.
   `bool` as a bool and `number` as a double. An event runs the node's `on.<event>` commands with its payload read as
   the declared type: `i:<int>`, `s:<text>`, or JSON text. The fallback is lowered too, with `props` bound, for a
   backend that loads nothing.
+- **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
+  form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
+  `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:
+  `value` (the field's wire value, its JSON text for a `json` prop, `null` while blank or invalid), `errors`
+  (the messages, as a JSON list), `readonly`, `required` and `label`; the overlay's `props` give the rest,
+  evaluated in the form's scope. A `change` payload is read as the `value` prop's type and written with
+  `FieldState::edit`, a user's edit; one that does not decode, or does not fit the field (an object field takes
+  an object, a list field an array), changes nothing and is reported (`field <name>: the component's change does
+  not decode: <reason>`).
 - **`form`** is the forms engine's (`docs/spec/forms/engine.md`). Its element is declared like an
   input's, with or without an `id`, and builds a `forms::FormSession` when the scope is declared, so
   its values can be read before it is drawn: the schema comes from `Catalog::schema(action)`; the
@@ -307,7 +354,10 @@ applies to the width.
   value loading the form as a programmatic change: the first value, and a value whose `key` equals the
   previous one's, `refill` the form, so a field the user changed keeps what they entered; a new `key`,
   or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
-  carries the node's common properties. `onSubmit`, `onSuccess` and `onError` run once per attempt,
+  carries the node's common properties. `title` (a heading over the fields) and `submitLabel` (the explicit-mode
+  button, and the status line's `ready: press <label>`) are bound in the node's scope, so a `t` re-resolves on
+  `setLocale`; `showStatus`, `columns` and `fieldLayout` are read at load, `columns` setting every group's grid and
+  the implicit group's, `fieldLayout` the engine's `FormViewOptions::fieldLayout`. `onSubmit`, `onSuccess` and `onError` run once per attempt,
   success and failure, with the body, the reply and the error text as `event`. Its element values
   are `ready`, `body` (the record it would submit, `null` while not ready), `submitted`, `pending`
   and each field by wire name, a record of `value`, `draft`, `valid`, `required`, `visible`,
@@ -321,7 +371,9 @@ applies to the width.
   schemas come from `Catalog::schema`. Every call (the list query, the row and collection actions,
   the editor's and every step's submissions) goes through the `model` alias's channel, as a form's
   does. They lower to `forms::collectionView` and `forms::wizardView`, with the forms' own titles
-  left out, inside a column that carries the node's common properties. They have no element values
+  left out, inside a column that carries the node's common properties. `submitLabel`, `showStatus`, `columns` and
+  `fieldLayout` reach every form the view draws (`options.form`), as on a `form`; `title`, bound in the node's scope, replaces the
+  view's heading (`collection_title`, `wizard_title`). They have no element values
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
 
@@ -365,8 +417,9 @@ Reported when met, and shown as a muted text naming the kind:
 - The chrome of a `collection` or `wizard` (its header, rows, confirm, editor and navigation drawn
   by the host's own kit): C++ code replaces them through `forms::CollectionChrome` and
   `forms::WizardChrome`.
-- A `form` node's `overrides` (spec 2 §7): document subtrees or components replacing a field's
-  control. C++ code replaces controls through `forms::Overrides`.
+- A `form` node's subtree overrides (spec 2 §7): document subtrees replacing a field's control. A host
+  component replaces one through the field overlay's `component`; C++ code replaces controls through
+  `forms::Overrides`.
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
   encode.
 - A `table` declared from a model's list action: the table engine (spec 7).

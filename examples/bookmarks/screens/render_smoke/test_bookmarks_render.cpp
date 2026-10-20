@@ -4,10 +4,10 @@
 // local mode over the rung's test database. A refused document, a mount error, an interpreter diagnostic or a Qt
 // warning fails it.
 
-#include <app/app_source.hpp>
 #include <array>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/client/source.hpp>
 #include <string>
 #include <testkit/db_fixture.hpp>
 #include <testkit/render_smoke.hpp>
@@ -17,9 +17,9 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalAppSource;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
+using morph::client::LocalSource;
 using morph::examples::testing::runRenderSmoke;
 using morph::examples::testing::SmokeReport;
 using morph::ladder::testkit::DbFixture;
@@ -40,10 +40,10 @@ char** argValues() {
 // Mutation: drop the screen from the bundle (the mounted list is empty).
 TEST_CASE("bookmarks render smoke: local mode, every screen, offscreen", "[bookmarks][render-smoke]") {
     DbFixture fixture;
-    LocalAppSource source{LocalApp{.name = "bookmarks",
-                                   .bundle = &bookmarks::screens::bundle,
-                                   .setUp = [](LocalSetup const&) { bookmarks::screens::prepareLocal(); }},
-                          LocalSetup{.db = {}, .user = "alice"}};
+    LocalSource source{LocalApp{.name = "bookmarks",
+                                .bundle = &bookmarks::screens::bundle,
+                                .setUp = [](LocalSetup const&) { bookmarks::screens::prepareLocal(); }},
+                       LocalSetup{.db = {}, .user = "alice"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted == std::vector<std::string>{
                                 std::string{bookmarks::screens::kLogin}, std::string{bookmarks::screens::kBookmarks},

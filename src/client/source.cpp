@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include "app/app_source.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -10,6 +8,8 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/client/source.hpp>
+#include <morph/client/transport.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
@@ -28,99 +28,14 @@
 #include <variant>
 #include <vector>
 
-#include "app/transport.hpp"
-
-namespace morph::examples {
+namespace morph::client {
 
 namespace {
-
-/// The value options, by name, and where each is read into.
-struct ValueOption {
-    std::string_view name;
-    std::function<void(ClientArgs&, std::string)> store;
-};
-
-std::array<ValueOption, 5> const& valueOptions() {
-    static std::array<ValueOption, 5> const options{{
-        {.name = "--server", .store = [](ClientArgs& out, std::string value) { out.server = std::move(value); }},
-        {.name = "--app", .store = [](ClientArgs& out, std::string value) { out.app = std::move(value); }},
-        {.name = "--db", .store = [](ClientArgs& out, std::string value) { out.db = std::move(value); }},
-        {.name = "--user", .store = [](ClientArgs& out, std::string value) { out.user = std::move(value); }},
-        {.name = "--screen", .store = [](ClientArgs& out, std::string value) { out.screen = std::move(value); }},
-    }};
-    return options;
-}
-
-constexpr std::string_view kExitAfterMount = "--exit-after-mount";
-constexpr std::string_view kDev = "--dev";
 
 // How often the offline queue is retried while it holds a call.
 constexpr std::chrono::seconds kReplayEvery{2};
 
-/// What reading one argument as a value option did: how many arguments it used, or why it is refused.
-struct OptionRead {
-    std::size_t used = 0;
-    std::string error;
-};
-
-// Reads `args[index]` as a value option, `--name value` or `--name=value`, into @p read. It uses no argument when
-// `args[index]` is no value option.
-OptionRead readValueOption(std::vector<std::string> const& args, std::size_t index, ClientArgs& read) {
-    std::string_view const arg = args.at(index);
-    for (ValueOption const& option : valueOptions()) {
-        if (arg == option.name) {
-            if (index + 1 >= args.size() || std::string_view{args.at(index + 1)}.starts_with("--")) {
-                return OptionRead{.used = 0, .error = std::string{option.name} + " needs a value"};
-            }
-            option.store(read, args.at(index + 1));
-            return OptionRead{.used = 2, .error = {}};
-        }
-        if (arg.starts_with(option.name) && arg.size() > option.name.size() && arg.at(option.name.size()) == '=') {
-            std::string value{arg.substr(option.name.size() + 1)};
-            if (value.empty()) {
-                return OptionRead{.used = 0, .error = std::string{option.name} + " needs a value"};
-            }
-            option.store(read, std::move(value));
-            return OptionRead{.used = 1, .error = {}};
-        }
-    }
-    return OptionRead{};
-}
-
 }  // namespace
-
-std::expected<ClientArgs, std::string> readClientArgs(std::vector<std::string>& args) {
-    ClientArgs read;
-    std::vector<std::size_t> used;
-    for (std::size_t index = 1; index < args.size(); ++index) {
-        std::string_view const arg = args.at(index);
-        if (arg == "--") {
-            break;
-        }
-        if (arg == kExitAfterMount || arg == kDev) {
-            (arg == kDev ? read.dev : read.exitAfterMount) = true;
-            used.push_back(index);
-            continue;
-        }
-        OptionRead const option = readValueOption(args, index, read);
-        if (!option.error.empty()) {
-            return std::unexpected(option.error);
-        }
-        for (std::size_t offset = 0; offset < option.used; ++offset) {
-            used.push_back(index + offset);
-        }
-        if (option.used > 1) {
-            index += option.used - 1;
-        }
-    }
-    if (read.server.has_value() == read.app.has_value()) {
-        return std::unexpected(std::string{"give exactly one of --server URL and --app NAME"});
-    }
-    for (std::size_t const index : used | std::views::reverse) {
-        args.erase(args.begin() + static_cast<std::ptrdiff_t>(index));
-    }
-    return read;
-}
 
 std::vector<std::string> clientVocabularies() {
     return {std::string{ui::kVocabulary}, std::string{ui::kExprVocabulary}};
@@ -133,16 +48,16 @@ ui::HelloRequest clientHello() {
     return hello;
 }
 
-// ── ClientSource ────────────────────────────────────────────────────────────
+// ── Source ────────────────────────────────────────────────────────────
 
-ui::Dispatcher& ClientSource::dispatcher() {
+ui::Dispatcher& Source::dispatcher() {
     if (!_queue || !_loaded) {
-        throw std::logic_error{"ClientSource::dispatcher: the source has delivered no bundle"};
+        throw std::logic_error{"Source::dispatcher: the source has delivered no bundle"};
     }
     return *_queue;
 }
 
-ui::Catalog ClientSource::catalog() const {
+ui::Catalog Source::catalog() const {
     if (!_loaded) {
         return ui::Catalog{};
     }
@@ -180,8 +95,8 @@ ui::Catalog ClientSource::catalog() const {
     return catalog;
 }
 
-void ClientSource::fetchSchemas(std::string const& modelType,
-                                std::function<void(std::expected<std::string, std::string>)> done) {
+void Source::fetchSchemas(std::string const& modelType,
+                          std::function<void(std::expected<std::string, std::string>)> done) {
     if (!_exchange) {
         done(std::unexpected(std::string{"the source is not open"}));
         return;
@@ -199,7 +114,39 @@ void ClientSource::fetchSchemas(std::string const& modelType,
     });
 }
 
-std::vector<std::string> ClientSource::screens() const {
+std::function<std::shared_ptr<ui::Document const>(std::string_view)> Source::documents(
+    std::function<void(ui::Refusal const&)> onRefused) {
+    return [this, onRefused = std::move(onRefused)](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
+        ui::Bundle const* const loaded = bundle();
+        std::vector<std::string> const listed = screens();
+        if (loaded == nullptr || std::ranges::find(listed, screenId) == listed.end()) {
+            return nullptr;
+        }
+        auto const text = loaded->documents.find(screenId);
+        if (text == loaded->documents.end()) {
+            return nullptr;
+        }
+        auto const cached = _documents.find(screenId);
+        if (cached != _documents.end() && cached->second.catalogLoad == _catalogLoads &&
+            cached->second.text == text->second) {
+            return cached->second.document;
+        }
+        auto document = ui::loadDocumentText(text->second, ui::LoadOptions{.catalog = catalog()});
+        if (!document) {
+            if (onRefused) {
+                onRefused(document.error());
+            }
+            return nullptr;
+        }
+        auto shared = std::make_shared<ui::Document const>(std::move(*document));
+        _documents.insert_or_assign(
+            std::string{screenId},
+            LoadedDocument{.text = text->second, .catalogLoad = _catalogLoads, .document = shared});
+        return shared;
+    };
+}
+
+std::vector<std::string> Source::screens() const {
     std::vector<std::string> ids;
     if (!_loaded) {
         return ids;
@@ -212,13 +159,13 @@ std::vector<std::string> ClientSource::screens() const {
     return ids;
 }
 
-bool ClientSource::isPublic(std::string_view screenId) const {
+bool Source::isPublic(std::string_view screenId) const {
     return _loaded && std::ranges::any_of(_loaded->catalog.entries, [screenId](ui::CatalogEntry const& entry) {
                return entry.id == screenId && entry.isPublic;
            });
 }
 
-std::vector<std::string> ClientSource::modelTypes() const {
+std::vector<std::string> Source::modelTypes() const {
     std::vector<std::string> types;
     if (!_loaded) {
         return types;
@@ -240,7 +187,7 @@ std::vector<std::string> ClientSource::modelTypes() const {
     return types;
 }
 
-void ClientSource::recordSchemas(std::string const& document) {
+void Source::recordSchemas(std::string const& document) {
     auto parsed = ui::parseJson(document);
     if (!parsed) {
         return;
@@ -252,7 +199,7 @@ void ClientSource::recordSchemas(std::string const& document) {
     }
 }
 
-void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
+void Source::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done) {
     _schemas.clear();
     _byModel.clear();
     std::vector<std::string> const types = modelTypes();
@@ -280,8 +227,7 @@ void ClientSource::loadSchemas(std::shared_ptr<bool> const& alive, std::function
     }
 }
 
-void ClientSource::open(ui::AppContext& context,
-                        std::function<void(std::expected<ui::Bundle, ui::ConnectError>)> ready) {
+void Source::open(ui::AppContext& context, std::function<void(std::expected<ui::Bundle, ui::ConnectError>)> ready) {
     close();
     auto const alive = std::make_shared<bool>(true);
     _alive = alive;
@@ -365,8 +311,8 @@ void ClientSource::open(ui::AppContext& context,
     reload(alive, [deliver](std::expected<void, ui::ConnectError> loaded) { (*deliver)(std::move(loaded)); });
 }
 
-void ClientSource::reload(std::shared_ptr<bool> const& alive,
-                          std::function<void(std::expected<void, ui::ConnectError>)> done) {
+void Source::reload(std::shared_ptr<bool> const& alive,
+                    std::function<void(std::expected<void, ui::ConnectError>)> done) {
     ui::UiClient const client{_exchange, clientHello(), _store};
     client.open(_session, [this, alive,
                            done = std::move(done)](std::expected<ui::LoadedBundle, ui::ConnectError> opened) mutable {
@@ -381,13 +327,14 @@ void ClientSource::reload(std::shared_ptr<bool> const& alive,
         loadSchemas(alive, [this, alive, done = std::move(done)] {
             if (*alive) {
                 *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                ++_catalogLoads;
                 done({});
             }
         });
     });
 }
 
-void ClientSource::poll(std::function<void(std::vector<std::string> changed)> changed) {
+void Source::poll(std::function<void(std::vector<std::string> changed)> changed) {
     if (!_exchange || !_loaded || !_alive || _polling) {
         return;
     }
@@ -409,13 +356,14 @@ void ClientSource::poll(std::function<void(std::vector<std::string> changed)> ch
                     loadSchemas(alive, [this, alive, ids = std::move(ids), changed = std::move(changed)] {
                         if (*alive) {
                             *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                            ++_catalogLoads;
                             changed(ids);
                         }
                     });
                 });
 }
 
-void ClientSource::signIn(std::string principal, std::string token, std::function<void(bool)> done) {
+void Source::signIn(std::string principal, std::string token, std::function<void(bool)> done) {
     _session.principal = std::move(principal);
     _session.token = std::move(token);
     if (_bridge) {
@@ -430,9 +378,9 @@ void ClientSource::signIn(std::string principal, std::string token, std::functio
     });
 }
 
-void ClientSource::signOut(std::function<void(bool)> done) { signIn(signedOutPrincipal(), {}, std::move(done)); }
+void Source::signOut(std::function<void(bool)> done) { signIn(signedOutPrincipal(), {}, std::move(done)); }
 
-void ClientSource::connected() {
+void Source::connected() {
     // The first connect's `ui-hello` is the one `open` filed, and its answer loads the first bundle; every later
     // connect is a new connection, which negotiates events again. Only the handshake: the documents did not change
     // because the connection dropped.
@@ -460,13 +408,13 @@ void ClientSource::connected() {
     });
 }
 
-void ClientSource::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }
+void Source::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }
 
-void ClientSource::onEvent(std::function<void(wire::EventBody const&)> listener) {
+void Source::onEvent(std::function<void(wire::EventBody const&)> listener) {
     _eventListeners.push_back(std::move(listener));
 }
 
-ui::Watcher ClientSource::watcher() {
+ui::Watcher Source::watcher() {
     if (!_serverEvents || !_exchange || _bridge == nullptr) {
         return {};
     }
@@ -474,12 +422,12 @@ ui::Watcher ClientSource::watcher() {
     return ui::watcherOver(_exchange, [this] { return _session; }, &_bridge->owner());
 }
 
-void ClientSource::switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) {
+void Source::switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) {
     done(std::unexpected("this client does not switch backends; the switch to `" + backend.name +
                          "` is the hosting layer's"));
 }
 
-void ClientSource::close() {
+void Source::close() {
     if (_alive) {
         *_alive = false;
     }
@@ -493,19 +441,19 @@ void ClientSource::close() {
     disconnect();
 }
 
-std::optional<ui::FileTransfer> ClientSource::files() const {
+std::optional<ui::FileTransfer> Source::files() const {
     if (!_exchange) {
         return std::nullopt;
     }
     return ui::FileTransfer{_exchange, _session};
 }
 
-// ── RemoteAppSource ─────────────────────────────────────────────────────────
+// ── RemoteSource ─────────────────────────────────────────────────────────
 
-RemoteAppSource::RemoteAppSource(std::string url, std::chrono::milliseconds timeout)
+RemoteSource::RemoteSource(std::string url, std::chrono::milliseconds timeout)
     : _url{std::move(url)}, _timeout{timeout} {}
 
-std::expected<ClientSource::Transport, ui::ConnectError> RemoteAppSource::connect(ui::AppContext& context) {
+std::expected<Source::Transport, ui::ConnectError> RemoteSource::connect(ui::AppContext& context) {
     auto made = makeTransport(context, _url);
     if (!made) {
         return std::unexpected(ui::ConnectError{.kind = ui::ConnectError::Kind::Unreachable,
@@ -515,19 +463,19 @@ std::expected<ClientSource::Transport, ui::ConnectError> RemoteAppSource::connec
     return Transport{.backend = std::move(made->backend), .exchange = std::move(exchange), .serverEvents = true};
 }
 
-// ── LocalAppSource ──────────────────────────────────────────────────────────
+// ── LocalSource ──────────────────────────────────────────────────────────
 
-LocalAppSource::LocalAppSource(LocalApp app, LocalSetup setup) : _app{std::move(app)}, _setup{std::move(setup)} {
+LocalSource::LocalSource(LocalApp app, LocalSetup setup) : _app{std::move(app)}, _setup{std::move(setup)} {
     requestSession().principal = _setup.user;
 }
 
-LocalAppSource::~LocalAppSource() {
+LocalSource::~LocalSource() {
     // Here, not in the base: the bridge's LocalBackend runs on this class's workers, which go first otherwise.
     close();
 }
 
-void LocalAppSource::fetchSchemas(std::string const& modelType,
-                                  std::function<void(std::expected<std::string, std::string>)> done) {
+void LocalSource::fetchSchemas(std::string const& modelType,
+                               std::function<void(std::expected<std::string, std::string>)> done) {
     // In process, the registry the local backend dispatches through answers directly, as a server's does; a model
     // whose schemas cannot be emitted (an unsatisfiable form) is reported as not described, as a refusal would be.
     std::expected<std::string, std::string> document;
@@ -539,7 +487,7 @@ void LocalAppSource::fetchSchemas(std::string const& modelType,
     done(std::move(document));
 }
 
-std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect(ui::AppContext& context) {
+std::expected<Source::Transport, ui::ConnectError> LocalSource::connect(ui::AppContext& context) {
     try {
         if (!_setUp && _app.setUp) {
             _app.setUp(_setup);
@@ -581,17 +529,16 @@ std::expected<ClientSource::Transport, ui::ConnectError> LocalAppSource::connect
 #endif
 }
 
-void LocalAppSource::disconnect() {
+void LocalSource::disconnect() {
     _workers.reset();
     _service.reset();
 }
 
 // ── makeSource ──────────────────────────────────────────────────────────────
 
-std::expected<std::unique_ptr<ClientSource>, std::string> makeSource(ClientArgs const& args,
-                                                                     std::vector<LocalApp> const& apps) {
+std::expected<std::unique_ptr<Source>, std::string> makeSource(Args const& args, std::vector<LocalApp> const& apps) {
     if (args.server) {
-        return std::make_unique<RemoteAppSource>(*args.server);
+        return std::make_unique<RemoteSource>(*args.server);
     }
     std::string const name = args.app.value_or(std::string{});
     auto const found = std::ranges::find(apps, name, &LocalApp::name);
@@ -603,7 +550,7 @@ std::expected<std::unique_ptr<ClientSource>, std::string> makeSource(ClientArgs 
         return std::unexpected("no application named '" + name + "' is linked into this client (linked: " +
                                (linked.empty() ? std::string{"none"} : linked) + ")");
     }
-    return std::make_unique<LocalAppSource>(*found, LocalSetup{.db = args.db, .user = args.user});
+    return std::make_unique<LocalSource>(*found, LocalSetup{.db = args.db, .user = args.user});
 }
 
-}  // namespace morph::examples
+}  // namespace morph::client

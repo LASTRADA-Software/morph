@@ -11,7 +11,10 @@
 #include <map>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
+#include <set>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace morph::qt_quick::detail {
 
@@ -52,9 +55,24 @@ public:
     /// The item every widget's item is owned by, as a QObject, until the widget deletes it.
     [[nodiscard]] QObject* owner() const noexcept { return _holder; }
 
-private:
+    /// The component of the `MorphUi` type @p type, or of the restyle the map names for it, compiled once per
+    /// context: what `make` instantiates, and what a container is given for a part it instantiates itself (a table
+    /// row's background). Throws `std::runtime_error` when it does not compile.
     [[nodiscard]] QQmlComponent& component(QString const& type);
+
+    /// Reports, once per QML type and property, that C++ wrote @p name to @p item, which does not declare it: through
+    /// the components' failure callback, or on `std::cerr` without components. Not thrown: a write runs from Qt
+    /// signal handlers and from a table's restriping while a row is destroyed, where an exception cannot pass.
+    void undeclared(QObject const& item, char const* name);
+
+    /// Reports, once per name, a node's icon that the bundle's declared icon set does not name; it is drawn as text.
+    /// Without a declared set nothing is reported: every icon is drawn as text or as MorphUi's own.
+    void checkIcon(std::string_view icon);
+
+private:
     void widthChanged();
+    // A problem of a widget: through the components' failure callback, or on `std::cerr` without components.
+    void report(std::string name, std::string reason) const;
 
     QQmlEngine* _engine;
     BackendOptions _options;
@@ -62,6 +80,8 @@ private:
     std::unique_ptr<ContainerCore> _roots;
     std::map<QString, std::unique_ptr<QQmlComponent>> _components;
     std::string _widthClass;
+    std::set<std::pair<std::string, std::string>> _undeclared;
+    std::set<std::string, std::less<>> _missingIcons;
 };
 
 }  // namespace morph::qt_quick::detail

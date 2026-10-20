@@ -3,9 +3,12 @@
 // qt_quick::Frontend: run, quit and the teardown order (docs/spec/qt_quick/frontend.md). This executable owns no
 // QGuiApplication: each run makes its own, as a client's main does.
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QKeyEvent>
+#include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QWindow>
 #include <array>
@@ -14,6 +17,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <expected>
 #include <functional>
+#include <iostream>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/frontend.hpp>
 #include <morph/reactive/runtime.hpp>
@@ -21,6 +26,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <testkit/log_level.hpp>
@@ -173,6 +179,160 @@ TEST_CASE("qt_quick frontend: the option is named qt and is usable where a windo
     CHECK(qt_quick::usableHere(env(std::string{":0"})));
     CHECK_FALSE(qt_quick::usableHere(ui::EnvironmentReader{}));
 #endif
+}
+
+namespace {
+
+/// A source whose bundle carries the given theme files.
+class ThemedSource final : public ui::AppSource {
+public:
+    explicit ThemedSource(std::map<std::string, std::string, std::less<>> themes) : _themes{std::move(themes)} {}
+
+    void open(ui::AppContext& context,
+              std::function<void(std::expected<ui::Bundle, ui::ConnectError>)> ready) override {
+        static_cast<void>(context);
+        ui::Bundle bundle{.applicationId = "app", .manifestDigest = {}, .documents = {}};
+        bundle.themes = _themes;
+        ready(std::move(bundle));
+    }
+    void switchBackend(ui::Backend backend, std::function<void(std::expected<void, std::string>)> done) override {
+        static_cast<void>(backend);
+        done({});
+    }
+    void close() override {}
+
+private:
+    std::map<std::string, std::string, std::less<>> _themes;
+};
+
+/// A bundle theme whose accent is green.
+std::map<std::string, std::string, std::less<>> greenTheme() {
+    return {{"theme/index.json", R"({"vocab": "ui-theme/1", "base": "theme/base.json"})"},
+            {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#00ff00"}}})"}};
+}
+
+/// What `std::cerr` receives while it lives.
+class CapturedErr {
+public:
+    CapturedErr() : _previous{std::cerr.rdbuf(_text.rdbuf())} {}
+    ~CapturedErr() { std::cerr.rdbuf(_previous); }
+    CapturedErr(CapturedErr const&) = delete;
+    CapturedErr& operator=(CapturedErr const&) = delete;
+    CapturedErr(CapturedErr&&) = delete;
+    CapturedErr& operator=(CapturedErr&&) = delete;
+
+    /// How many times @p text was written.
+    [[nodiscard]] std::size_t count(std::string const& text) const {
+        std::string const all = _text.str();
+        std::size_t found = 0;
+        for (std::size_t at = all.find(text); at != std::string::npos; at = all.find(text, at + text.size())) {
+            ++found;
+        }
+        return found;
+    }
+
+private:
+    std::ostringstream _text;
+    std::streambuf* _previous;
+};
+
+QObject* themeOf(QQmlEngine& engine) {
+    return engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+}
+
+constexpr char const* kReplaced = "the theme onEngine applied is replaced by the bundle's";
+constexpr char const* kIgnored = "the bundle's theme is not applied: FrontendConfig::bundleTheme is Ignore";
+
+}  // namespace
+
+// Mutation: call the hook after the backend is built (the backend's column is already in the content item).
+TEST_CASE("qt_quick frontend: onEngine runs with the engine and the window before the backend exists",
+          "[qt_quick][frontend]") {
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config =
+        configWith(log, [](ui::AppContext& context) { context.executor().post([&context] { context.quit(0); }); });
+    std::optional<bool> emptyContent;
+    QQmlEngine* seen = nullptr;
+    config.onEngine = [&emptyContent, &seen, &log](QQmlEngine& engine, QQuickWindow& window) {
+        log.emplace_back("onEngine");
+        emptyContent = window.contentItem()->childItems().isEmpty();
+        CHECK(window.title() == QStringLiteral("test"));
+        seen = &engine;
+    };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    REQUIRE(emptyContent.has_value());
+    CHECK(*emptyContent);
+    CHECK(seen != nullptr);
+    REQUIRE_FALSE(log.empty());
+    CHECK(log.front() == "onEngine");  // before the source opens
+}
+
+TEST_CASE("qt_quick frontend: an onEngine that throws ends the run after the teardown, with nothing mounted",
+          "[qt_quick][frontend]") {
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config = configWith(log, [](ui::AppContext&) {});
+    config.onEngine = [](QQmlEngine&, QQuickWindow&) { throw std::runtime_error{"no engine setup"}; };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK_THROWS_WITH(frontend.run(source), "no engine setup");
+    CHECK(log.empty());  // the source was never opened, and no shell was mounted
+    CHECK(QGuiApplication::instance() == nullptr);
+}
+
+// Mutation: apply the bundle's theme whatever bundleTheme says (the accent is the bundle's green).
+TEST_CASE("qt_quick frontend: with bundleTheme Ignore the theme onEngine set stays, and the bundle's is reported",
+          "[qt_quick][frontend]") {
+    CapturedErr const err;
+    ThemedSource source{greenTheme()};
+    std::vector<std::string> log;
+    std::optional<QColor> accent;
+    QQmlEngine* engineSeen = nullptr;
+    qt_quick::FrontendConfig config = configWith(log, [&accent, &engineSeen](ui::AppContext& context) {
+        accent = themeOf(*engineSeen)->property("accent").value<QColor>();
+        context.quit(0);
+    });
+    config.bundleTheme = qt_quick::BundleTheme::Ignore;
+    config.onEngine = [&engineSeen](QQmlEngine& engine, QQuickWindow&) {
+        engineSeen = &engine;
+        themeOf(engine)->setProperty("accent", QColor{"#aa0055"});
+    };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    REQUIRE(accent.has_value());
+    CHECK(*accent == QColor{"#aa0055"});
+    CHECK(err.count(kIgnored) == 1);
+    CHECK(err.count(kReplaced) == 0);
+}
+
+// Mutation: never compare the snapshots (the replacement is not reported).
+TEST_CASE("qt_quick frontend: with bundleTheme Apply a theme onEngine set is replaced by the bundle's, and reported",
+          "[qt_quick][frontend]") {
+    for (bool const changes : {true, false}) {
+        INFO((changes ? "the hook sets the accent" : "the hook changes nothing"));
+        CapturedErr const err;
+        ThemedSource source{greenTheme()};
+        std::vector<std::string> log;
+        std::optional<QColor> accent;
+        QQmlEngine* engineSeen = nullptr;
+        qt_quick::FrontendConfig config = configWith(log, [&accent, &engineSeen](ui::AppContext& context) {
+            accent = themeOf(*engineSeen)->property("accent").value<QColor>();
+            context.quit(0);
+        });
+        config.onEngine = [&engineSeen, changes](QQmlEngine& engine, QQuickWindow&) {
+            engineSeen = &engine;
+            if (changes) {
+                themeOf(engine)->setProperty("accent", QColor{"#aa0055"});
+            }
+        };
+        qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+        CHECK(frontend.run(source) == 0);
+        REQUIRE(accent.has_value());
+        CHECK(*accent == QColor{"#00ff00"});
+        CHECK(err.count(kReplaced) == (changes ? 1U : 0U));
+        CHECK(err.count(kIgnored) == 0);
+    }
 }
 
 int main(int argcIn, char* argvIn[]) {

@@ -60,7 +60,7 @@ by name.
 | `ref<T>("name.path")`, `row(&T::member)`, `row("path")`, `row<T>()` | `{"ref": ...}`, `{"row": ...}` |
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
-| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
+| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |
 | `element("id")` and its `value()`, `draft()`, `checked()`, `selected()`, `selection()`, `open()`, `valid()`, `ready()`, `get(path)` | An element's values (spec 5 §6) |
 | A query handle's `value()`, `at(&Result::m)`, `pending()`, `error()`, `errorKind()`, `can()`; a mutation handle's `result()`, `pending()`, `error()`, `errorKind()`, `can()` | `{"ref": q}`, `{"pending": q}`, `{"result": m}`, … |
@@ -70,12 +70,18 @@ by name.
   converts to another when its value can: the same type, `Any` on either side, a `std::optional`
   of a type for the type (an expression propagates `null`), a C++ conversion, or a list of such
   elements. A wrong body type is therefore a compile error, as spec 5 §11 asks.
-- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path
-  and throws `AuthoringError` on any other expression (a call, a `result`). A member's JSON name is
+- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path.
+  A mutation's `result()` is a `ResultHandle`, a handle whose `at` overloads are deleted: reading a
+  field of it in place is a compile error, and the screen binds it first,
+  `auto r = screen.let("r", m.result());`, then reads `r.at(...)`. It converts to `Handle<T>`
+  wherever a handle is taken. `at` on any other expression that is not a named read (a call, or a
+  `result` built through `raw`) throws `AuthoringError`. A member's JSON name is
   glaze's, found by its address in a value-initialised object of its class: a member a `glz::meta`
   leaves out has no name and throws as well. A renamed member is a compile error.
 - **Absent handles.** A default-constructed handle is absent: an option left unset writes no key.
   Using an absent handle as an operand throws `AuthoringError`.
+- **`concatLists`** takes a list of `AnyHandle`s, or of `Handle<std::vector<T>>` for one element
+  type, which answers a `Handle<std::vector<T>>`.
 - **No `==`.** Equality is `eq` and `ne`. A `==` returning an expression rather than a `bool` breaks
   the comparisons C++20 rewrites from it.
 
@@ -98,6 +104,7 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
+| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)` | The screen's head: its subtitle, and a status badge or an action appended in order |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
 | `columnsPoint`, `arrangePoint`, `choicePoint`, `valuePoint<T>`, `point(name, "layout" \| "saved")` | `customize.name`, returning the `Point` `customize`, `resetPrefs` and `pref` name |
 
@@ -136,22 +143,35 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `dataTable`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
 `keyValue`, `emptyState`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
-options second.
+options second. `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
+`ActionButtonOptions`, run in its scope.
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
 `id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface`,
-`a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, and the
-input decorations `readonly`, `required`, `errors`, `stale`. `with(key, handle)` and
+`a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
+`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
+`sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
+`content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
+`{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
+- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
+  writes no key, and `selected`, a condition, is written as given and refused at load without `ButtonStyle::Item`.
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, align, justify}`; an absent
+  `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
+  a grid's `justify` is written so the loader refuses it rather than dropped.
 - **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,
-  `rowTone`, `highlightKey`, `onActivate`), and optionally a row-scope builder that returns the
+  `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
+  its place while its rows are an empty list)), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).
-- **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError})`**:
-  the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit, ...}}`.
-- **`collection<View>(model)` and `wizard<Wizard>(model)`** (`ui/author_forms.hpp`) take a view
+- **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError,
+  .presentation})`**: the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit,
+  ...}}`. `FormPresentation{title, submitLabel, showStatus, columns, fieldLayout}` writes the presentation keys a form, a
+  collection and a wizard share; an absent one is left out.
+- **`collection<View>(model, presentation)` and `wizard<Wizard>(model, presentation)`** (`ui/author_forms.hpp`),
+  like `collection<A>` and `wizard<A>`, take a `FormPresentation` (default none) and a view
   descriptor or a `flows::Wizard` instead of an action. The node names the view's `v-query` or the
   wizard's first step, and the node's facts carry `views::viewSchemaJson<View>()` or
   `flows::wizardSchemaJson<Wizard>()` under that action. The bundle serves the document with the

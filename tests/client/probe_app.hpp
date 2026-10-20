@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <app/app_source.hpp>
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <morph/client/source.hpp>
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
@@ -18,12 +18,37 @@ namespace probe {
 /// @brief The query's action.
 struct Answer {};
 
-/// @brief The model: one answer.
+/// @brief A sign-in that answers in a shape of its own, `{user, jwt}`, as an application's own server may.
+struct Login {};
+
+/// @brief What `Login` answers.
+struct LoginReply {
+    /// @brief The principal.
+    std::string user;
+    /// @brief The session token.
+    std::string jwt;
+};
+
+/// @brief An attachment moved inline: the file's bytes in base64.
+struct Attach {
+    /// @brief The bytes, in base64.
+    std::string content;
+};
+
+/// @brief The model: one answer, a sign-in and an attachment.
 struct ProbeModel {
     /// @brief The answer.
     /// @param action The request.
     /// @return 42.
     [[nodiscard]] std::int64_t execute(Answer const& action) const;
+    /// @brief Signs in as `ada`.
+    /// @param action The request.
+    /// @return `{user: "ada", jwt: "t-1"}`.
+    [[nodiscard]] LoginReply execute(Login const& action) const;
+    /// @brief Takes an attachment.
+    /// @param action The attachment.
+    /// @return How many base64 characters it carried.
+    [[nodiscard]] std::int64_t execute(Attach const& action) const;
 };
 
 /// @brief The start screen.
@@ -44,6 +69,6 @@ inline constexpr std::string_view kOther =
 
 /// @brief The application, linked.
 /// @return It.
-[[nodiscard]] morph::examples::LocalApp app();
+[[nodiscard]] morph::client::LocalApp app();
 
 }  // namespace probe

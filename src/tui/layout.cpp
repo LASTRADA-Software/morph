@@ -6,13 +6,25 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <ranges>
+#include <stdexcept>
+#include <string>
 
 namespace morph::tui::layout {
 
 namespace {
+
+/// The item at `index`, checked: a span has no `at()` before C++26.
+Item const& itemAt(std::span<Item const> items, std::size_t index) {
+    if (index >= items.size()) {
+        throw std::out_of_range{"morph::tui::layout: item " + std::to_string(index) + " past " +
+                                std::to_string(items.size())};
+    }
+    return *std::next(items.begin(), static_cast<std::ptrdiff_t>(index));
+}
 
 // Sums and products of cell counts run in 64 bits: a weight, a gap or a Fixed amount may be anything an int holds,
 // and the products and sums of several of them do not fit one.
@@ -27,49 +39,92 @@ bool isStretch(ui::Sizing const& sizing) noexcept { return sizing.kind == ui::Si
 
 Wide weightOf(ui::Sizing const& sizing) noexcept { return std::max(1, sizing.amount); }
 
+int maximumOf(Bounds bounds) noexcept { return std::max(bounds.minimum, bounds.maximum); }
+
+/// `extent` clamped into `bounds`.
+int clampInto(int extent, Bounds bounds) noexcept {
+    return std::clamp(extent, std::max(0, bounds.minimum), std::max(0, maximumOf(bounds)));
+}
+
+Bounds boundsOfItem(Item const& item) noexcept { return Bounds{.minimum = item.minimum, .maximum = item.maximum}; }
+
 /// What an item that does not stretch asks for.
 int requestOf(Item const& item) noexcept {
-    return std::max(0, item.sizing.kind == ui::Sizing::Kind::Fixed ? item.sizing.amount : item.natural);
+    return clampInto(std::max(0, item.sizing.kind == ui::Sizing::Kind::Fixed ? item.sizing.amount : item.natural),
+                     boundsOfItem(item));
 }
 
 Wide gapsBetween(std::size_t count, int gap) noexcept {
     return count == 0 ? 0 : Wide{gap} * (static_cast<Wide>(count) - 1);
 }
 
-/// Shares `spare` among the Stretch items of `items` by weight.
-void shareSpare(std::span<Item const> items, std::vector<int>& sizes, Wide spare, Wide weights) {
+/// Shares `spare` by weight among the items `sharing` marks.
+void shareSpare(std::span<Item const> items, std::vector<bool> const& sharing, std::vector<int>& sizes, Wide spare,
+                Wide weights) {
     Wide given = 0;
-    auto size = sizes.begin();
-    for (auto const& item : items) {
-        if (isStretch(item.sizing)) {
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        if (sharing.at(index)) {
             // At most `spare`, which is at most the track's length: it fits an int.
-            *size = static_cast<int>(spare * weightOf(item.sizing) / weights);
-            given += *size;
+            sizes.at(index) = static_cast<int>(spare * weightOf(itemAt(items, index).sizing) / weights);
+            given += sizes.at(index);
         }
-        ++size;
     }
-    // Each share is rounded down by less than one cell, so fewer cells are left over than there are Stretch items:
+    // Each share is rounded down by less than one cell, so fewer cells are left over than there are sharing items:
     // one pass hands them out.
     Wide remainder = spare - given;
-    size = sizes.begin();
-    for (auto const& item : items) {
-        if (remainder == 0) {
-            break;
-        }
-        if (isStretch(item.sizing)) {
-            ++*size;
+    for (std::size_t index = 0; index < items.size() && remainder > 0; ++index) {
+        if (sharing.at(index)) {
+            ++sizes.at(index);
             --remainder;
         }
-        ++size;
     }
 }
 
-/// Takes `deficit` cells off `sizes`, from the last one towards the first.
-void shrinkFromLast(std::vector<int>& sizes, Wide deficit) {
-    for (auto& size : sizes | std::views::reverse) {
-        auto const take = std::min(Wide{size}, deficit);
-        size -= static_cast<int>(take);
-        deficit -= take;
+/// Shares `spare` among the Stretch items, each stopped at its maximum; what a capped item leaves goes to the
+/// others. Each pass caps at least one item or settles, so there are at most as many passes as Stretch items.
+void shareCapped(std::span<Item const> items, std::vector<int>& sizes, Wide spare) {
+    std::vector<bool> sharing(items.size());
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        sharing.at(index) = isStretch(itemAt(items, index).sizing);
+    }
+    for (;;) {
+        Wide weights = 0;
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            weights += sharing.at(index) ? weightOf(itemAt(items, index).sizing) : 0;
+        }
+        if (weights == 0 || spare <= 0) {
+            return;
+        }
+        shareSpare(items, sharing, sizes, spare, weights);
+        bool capped = false;
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            int const maximum = maximumOf(boundsOfItem(itemAt(items, index)));
+            if (sharing.at(index) && sizes.at(index) > maximum) {
+                sizes.at(index) = maximum;
+                sharing.at(index) = false;
+                spare -= maximum;
+                capped = true;
+            }
+        }
+        if (!capped) {
+            return;
+        }
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            if (sharing.at(index)) {
+                sizes.at(index) = 0;
+            }
+        }
+    }
+}
+
+/// Takes `deficit` cells off `sizes`, from the last one towards the first, none below its item's minimum.
+void shrinkFromLast(std::span<Item const> items, std::vector<int>& sizes, Wide deficit) {
+    for (std::size_t index = sizes.size(); index-- > 0 && deficit > 0;) {
+        auto const take = std::min(Wide{sizes.at(index)} - std::max(0, itemAt(items, index).minimum), deficit);
+        if (take > 0) {
+            sizes.at(index) -= static_cast<int>(take);
+            deficit -= take;
+        }
     }
 }
 
@@ -86,39 +141,43 @@ std::vector<int> edgesOf(std::span<int const> extents, int gap) {
 }
 
 int heightOf(GridCell const& cell) noexcept {
-    return std::max(0, cell.height.kind == ui::Sizing::Kind::Fixed ? cell.height.amount : cell.naturalHeight);
+    return clampInto(
+        std::max(0, cell.height.kind == ui::Sizing::Kind::Fixed ? cell.height.amount : cell.naturalHeight),
+        cell.bounds);
 }
 
 }  // namespace
+
+Bounds boundsOf(std::optional<int> minimum, std::optional<int> maximum) noexcept {
+    return Bounds{.minimum = std::max(0, minimum.value_or(0)),
+                  .maximum = maximum.value_or(std::numeric_limits<int>::max())};
+}
 
 std::vector<int> distribute(std::span<Item const> items, Track track) {
     std::vector<int> sizes;
     sizes.reserve(items.size());
     Wide used = 0;
-    Wide weights = 0;
     for (auto const& item : items) {
-        if (isStretch(item.sizing)) {
-            weights += weightOf(item.sizing);
-            sizes.push_back(0);
-            continue;
-        }
-        sizes.push_back(requestOf(item));
+        sizes.push_back(isStretch(item.sizing) ? 0 : requestOf(item));
         used += sizes.back();
     }
-    Wide const spare = Wide{track.length} - gapsBetween(items.size(), std::max(0, track.gap)) - used;
-    if (spare > 0 && weights > 0) {
-        shareSpare(items, sizes, spare, weights);
-    } else if (spare < 0) {
-        shrinkFromLast(sizes, -spare);
+    Wide const gaps = gapsBetween(items.size(), std::max(0, track.gap));
+    shareCapped(items, sizes, Wide{track.length} - gaps - used);
+    // A share below its minimum is raised to it; the overflow that makes is taken back from the last items first.
+    Wide total = 0;
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        sizes.at(index) = std::max({sizes.at(index), itemAt(items, index).minimum, 0});
+        total += sizes.at(index);
+    }
+    if (Wide const deficit = total + gaps - Wide{track.length}; deficit > 0) {
+        shrinkFromLast(items, sizes, deficit);
     }
     return sizes;
 }
 
-int crossExtent(ui::Sizing sizing, int space) {
-    if (sizing.kind == ui::Sizing::Kind::Fixed) {
-        return std::clamp(sizing.amount, 0, std::max(0, space));
-    }
-    return std::max(0, space);
+int crossExtent(ui::Sizing sizing, int space, Bounds bounds) {
+    int const wanted = sizing.kind == ui::Sizing::Kind::Fixed ? sizing.amount : space;
+    return std::clamp(clampInto(wanted, bounds), 0, std::max(0, space));
 }
 
 GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap) {

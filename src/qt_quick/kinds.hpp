@@ -39,6 +39,9 @@ public:
     void setOnChange(std::function<void(std::string)> onChange) override;
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
+    void setUnit(std::string_view unit) override;
+    void setDecimals(int decimals) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
     [[nodiscard]] std::size_t cursor() const;
@@ -66,6 +69,7 @@ public:
     void setSelected(std::optional<ui::Key> const& key) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
     void setOnOpen(ui::Action onOpen) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The index of the option the select marks, or -1.
     [[nodiscard]] int marked() const;
@@ -84,6 +88,7 @@ public:
     DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes);
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
 
 private:
@@ -130,6 +135,9 @@ public:
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
+    void setIcon(std::string_view icon) override;
+    void setStyle(ui::ButtonStyle style) override;
+    void setSelected(bool selected) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -142,6 +150,8 @@ public:
     void choose(std::vector<std::size_t> const& path) const;
 
 private:
+    // Reports each entry's icon the bundle's declared icon set does not name.
+    void checkIcons(std::vector<ui::MenuEntry> const& entries) const;
     std::vector<ui::MenuEntry> _entries;
 };
 
@@ -227,12 +237,16 @@ class StackImpl final : public ContainerItemWidget<ui::StackWidget> {
 public:
     StackImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis);
     void setGap(int gap) override;
+    void setAlign(ui::Align align) override;
+    void setJustify(ui::Justify justify) override;
 
 protected:
     /// A column fills its children's width, a row their height.
     [[nodiscard]] CrossFill crossFill() const noexcept override {
         return CrossFill{.width = _axis == ui::Axis::Vertical, .height = _axis == ui::Axis::Horizontal};
     }
+    /// A column places its children horizontally, a row vertically.
+    [[nodiscard]] int alignsAcross() const noexcept override { return _axis == ui::Axis::Vertical ? 1 : 2; }
 
 private:
     ui::Axis _axis;
@@ -244,6 +258,11 @@ public:
     void setColumns(int columns) override;
     void setGap(int gap) override;
     void setSpan(ui::Widget& child, int span) override;
+    void setAlign(ui::Align align) override;
+
+protected:
+    /// A cell's content is placed vertically in its row.
+    [[nodiscard]] int alignsAcross() const noexcept override { return 2; }
 };
 
 class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {
@@ -272,6 +291,7 @@ public:
     void setTabs(std::vector<std::string> const& labels) override;
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
+    void setBarShown(bool shown) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;
 };
@@ -282,6 +302,27 @@ class OverlayImpl final : public ContainerItemWidget<Interface> {
 public:
     OverlayImpl(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ContainerItemWidget<Interface>{context, type, parent, std::move(initial)} {}
+    ~OverlayImpl() override = default;
+    OverlayImpl(OverlayImpl const&) = delete;
+    OverlayImpl& operator=(OverlayImpl const&) = delete;
+    OverlayImpl(OverlayImpl&&) = delete;
+    OverlayImpl& operator=(OverlayImpl&&) = delete;
+
+    /// The footer, a `MorphFooter` in the overlay's `footer` item, made the first time it is asked for.
+    ui::ContainerWidget& footer() override {
+        if (_footer == nullptr) {
+            _makingFooter = true;
+            try {
+                _footer = std::make_unique<ContainerItemWidget<ui::SlotWidget>>(this->context(),
+                                                                                QStringLiteral("MorphFooter"), this);
+            } catch (...) {
+                _makingFooter = false;
+                throw;
+            }
+            _makingFooter = false;
+        }
+        return *_footer;
+    }
     void setOpen(bool open) override {
         if (this->read("shown").toBool() != open) {
             this->call("show", open);
@@ -299,6 +340,17 @@ public:
     [[nodiscard]] bool open() const { return this->read("shown").toBool(); }
     /// Dismisses it as Escape would.
     void dismiss() const { this->call("dismiss"); }
+
+protected:
+    // The footer goes in the overlay's `footer` item; every other child in its content.
+    [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override {
+        static_cast<void>(child);
+        return qobject_cast<QQuickItem*>(this->part(_makingFooter ? "footer" : "content"));
+    }
+
+private:
+    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _footer;
+    bool _makingFooter = false;
 };
 
 using DialogImpl = OverlayImpl<ui::DialogWidget>;
@@ -357,6 +409,7 @@ public:
     void setColumns(std::vector<ui::TableColumn> const& columns) override;
     void setSelectionMode(ui::SelectionMode mode) override;
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
+    void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
@@ -370,9 +423,13 @@ public:
 
 protected:
     void adopted(ItemBase& child) override;
+    void moved() override;
+    void releasing(ItemBase& child) noexcept override;
 
 private:
     void mark() const;
+    /// Writes `alternate` on every row but @p leaving: true at each odd position.
+    void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
 
     ui::SelectionMode _mode = ui::SelectionMode::None;
@@ -386,6 +443,10 @@ class TableRowImpl final : public ContainerItemWidget<ui::StackWidget> {
 public:
     TableRowImpl(Context& context, ui::ContainerWidget* parent, TableImpl& table);
     void setGap(int gap) override;
+    /// The table places a row's cells in its columns; the mount never aligns a table row.
+    void setAlign(ui::Align align) override { static_cast<void>(align); }
+    /// As `setAlign`.
+    void setJustify(ui::Justify justify) override { static_cast<void>(justify); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

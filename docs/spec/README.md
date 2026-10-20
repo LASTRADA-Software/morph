@@ -164,6 +164,10 @@ placeholder tabs, closing tab by tab until a veto, and the most-recently-used wa
 the widgets every renderer implements, the seam that picks a renderer at
 runtime, and the terminal renderer
 
+**The generic client**
+[`client/client.md`](client/client.md) — `morph::client`: the sources a client opens an application's screens from,
+the shell it mounts them in, the sign-in mapping and the application host a shell of an application's own uses
+
 **Qt Quick renderer**
 [`qt_quick/backend.md`](qt_quick/backend.md) ·
 [`qt_quick/frontend.md`](qt_quick/frontend.md) — the view tree's widgets as

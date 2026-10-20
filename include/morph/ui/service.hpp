@@ -5,6 +5,7 @@
 #include <compare>
 #include <cstddef>
 #include <expected>
+#include <format>
 #include <functional>
 #include <map>
 #include <memory>
@@ -266,7 +267,7 @@ private:
 
 /// @brief A file of the bundle that is not a screen, as `UiRegistry::addFile` takes it.
 struct BundleFile {
-    /// @brief `app`, `theme`, `messages` or `component`.
+    /// @brief `app`, `theme`, `messages`, `component` or `icon`.
     std::string kind;
     /// @brief The file's id: `app` for the app document, or a theme's, a catalogue's or a component's name.
     std::string id;
@@ -361,19 +362,22 @@ public:
     }
 
     /// @brief Adds a file that is not a screen: the app document (`app`, whose id is `app`), a theme (`theme`), a
-    ///        message catalogue (`messages`) or a delivered component (`component`).
+    ///        message catalogue (`messages`), a delivered component (`component`) or an icon (`icon`).
     ///
     /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
     /// an app document that load-time validation refuses or whose id is not `app`, a message catalogue whose id is
     /// not `i18n/LOCALE.json`, that `parseCatalogue` refuses, or that has a pattern outside the `ui/1` subset, and a
-    /// theme file that is neither a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes.
+    /// theme file that is neither a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes, and an
+    /// icon that is not SVG text or is larger than `kMaxIconBytes`.
     /// @param file The file.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> addFile(BundleFile file) {
         if (file.kind != kAppFile && file.kind != kThemeFile && file.kind != kMessagesFile &&
-            file.kind != kComponentFile) {
-            return refuse(file.id, "a file is an app document, a theme, a message catalogue or a component, not `" +
-                                       file.kind + "`");
+            file.kind != kComponentFile && file.kind != kIconFile) {
+            return refuse(file.id,
+                          "a file is an app document, a theme, a message catalogue, a component or an icon, "
+                          "not `" +
+                              file.kind + "`");
         }
         if (file.id.empty()) {
             return refuse(file.id, "a file has an id");
@@ -433,6 +437,17 @@ private:
             if (auto reason = checkTheme(index, lookup)) {
                 return Refusal{.document = indexId, .path = {}, .reason = "the theme: " + std::move(*reason)};
             }
+            for (auto const& [name, fileId] : index.icons) {
+                bool const held = std::ranges::any_of(
+                    _files, [&fileId](BundleFile const& file) { return file.kind == kIconFile && file.id == fileId; });
+                if (!held) {
+                    return Refusal{.document = indexId,
+                                   .path = {},
+                                   .reason = std::format("the theme index names the icon `{}` as `{}`, which is not "
+                                                         "an icon file of the bundle",
+                                                         name, fileId)};
+                }
+            }
         }
         return std::nullopt;
     }
@@ -457,6 +472,21 @@ private:
         }
         if (file.kind == kAppFile) {
             return addApp(file);
+        }
+        if (file.kind == kIconFile) {
+            return checkIcon(file);
+        }
+        return {};
+    }
+
+    // An icon is SVG text, small enough for a theme to carry a set of them.
+    [[nodiscard]] static std::expected<void, Refusal> checkIcon(BundleFile const& file) {
+        if (file.bytes.size() > kMaxIconBytes) {
+            return refuse(file.id, std::format("an icon is at most {} bytes of SVG; this one is {}", kMaxIconBytes,
+                                               file.bytes.size()));
+        }
+        if (!file.bytes.contains("<svg")) {
+            return refuse(file.id, "an icon is SVG text, and this one has no <svg> element");
         }
         return {};
     }

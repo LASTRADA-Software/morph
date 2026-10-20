@@ -388,3 +388,37 @@ TEST_CASE("navigator: a translatable title shows its fallback, and a title of no
     harness.backend.edit(search, "numbered");
     CHECK(shown(harness, "nav_lims.numbered"));
 }
+
+// Mutation: create the entries without setStyle (they record no style); or let setCurrent keep the previous mark.
+TEST_CASE("navigator: entries are list items, and setCurrent marks the open screen's alone",
+          "[ui][workspace][navigator]") {
+    Harness harness;
+    Navigator navigator{harness.backend, nullptr,
+                        NavigatorOptions{.entries = lab(),
+                                         .titles = {},
+                                         .pins = {"lims.samples"},
+                                         .maxPins = 12,
+                                         .onOpen = {},
+                                         .onPrefetch = {},
+                                         .onPins = {}}};
+    auto const prop = [&harness](char const* testId, char const* name) {
+        return harness.backend.prop(*harness.backend.find("Button", "testId", testId), name);
+    };
+    CHECK(prop("nav_lims.samples", "style") == "Item");
+    // A group's heading is a section, a step below the application's name.
+    CHECK(harness.backend.prop(*harness.backend.find("Text", "testId", "navigator_group_Lab/Work"), "role") ==
+          "Section");
+    CHECK(prop("nav_lims.samples", "layout") == "stretch(1)/content");
+    CHECK(prop("pin_lims.samples", "style").empty());     // a pin stays a push button
+    CHECK(prop("nav_lims.samples", "selected").empty());  // a new item is not selected, and is not told so
+    navigator.setCurrent("lims.samples");
+    CHECK(prop("nav_lims.samples", "selected") == "true");
+    navigator.setCurrent("lims.results");
+    CHECK(prop("nav_lims.samples", "selected") == "false");
+    CHECK(prop("nav_lims.results", "selected") == "true");
+    CHECK(navigator.current() == "lims.results");
+    CHECK(prop("pin_lims.samples", "selected").empty());
+    navigator.setCurrent("nowhere");
+    CHECK(prop("nav_lims.results", "selected") == "false");
+    CHECK(navigator.current().empty());
+}

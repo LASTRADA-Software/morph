@@ -28,11 +28,11 @@ endif()
 
 # The screen harness lives in the ladder's testkit, and the tests open screens through the generic app, so they are
 # built with both.
-if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit AND TARGET morph::examples_common)
+if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit AND TARGET morph::client)
     include(Catch)
     add_executable(bank_screen_tests tests/test_bank_screens.cpp
         "${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp")
-    target_link_libraries(bank_screen_tests PRIVATE bank_screens morph::examples_common morph::ladder_testkit)
+    target_link_libraries(bank_screen_tests PRIVATE bank_screens morph::client morph::ladder_testkit)
     target_include_directories(bank_screen_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../tests")
     target_compile_features(bank_screen_tests PRIVATE cxx_std_23)
     set_target_properties(bank_screen_tests PROPERTIES AUTOMOC ON)
@@ -51,7 +51,7 @@ if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit AND TARGET morph::examples_
     if(TARGET morph_qt_quick)
         add_executable(bank_render_smoke tests/test_bank_render.cpp)
         target_link_libraries(bank_render_smoke PRIVATE
-            bank_screens morph::examples_common morph::qt_quick morph::ladder_testkit morph_test_main)
+            bank_screens morph::client morph::qt_quick morph::ladder_testkit morph_test_main)
         target_include_directories(bank_render_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../tests")
         apply_warnings(bank_render_smoke)
         if(DEFINED AF_SANITIZER)
@@ -76,7 +76,7 @@ if(MORPH_BUILD_TESTS AND TARGET morph_ladder_testkit AND TARGET morph::examples_
         find_package(Qt6 REQUIRED COMPONENTS Test)
         add_executable(bank_gui_behaviour tests/test_bank_gui_behaviour.cpp)
         target_link_libraries(bank_gui_behaviour PRIVATE
-            bank_screens morph::examples_common morph::qt_quick morph::ladder_testkit Qt6::Test Catch2::Catch2)
+            bank_screens morph::client morph::qt_quick morph::ladder_testkit Qt6::Test Catch2::Catch2)
         target_include_directories(bank_gui_behaviour PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../tests")
         apply_warnings(bank_gui_behaviour)
         if(DEFINED AF_SANITIZER)

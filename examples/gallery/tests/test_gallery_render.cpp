@@ -12,10 +12,10 @@
 #include <QSGRendererInterface>
 #include <QString>
 #include <algorithm>
-#include <app/app_source.hpp>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/client/source.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
@@ -54,7 +54,7 @@ void show(SmokeReport const& report) {
 }  // namespace
 
 TEST_CASE("gallery render smoke: local mode, every screen, offscreen", "[gallery][render-smoke]") {
-    morph::examples::LocalAppSource source{gallery::localApp(), morph::examples::LocalSetup{}};
+    morph::client::LocalSource source{gallery::localApp(), morph::client::LocalSetup{}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted == std::vector<std::string>{std::string{gallery::kHomeScreen}});
     // Just before the verdict: unscoped messages attach to the next assertion, so earlier they would ride on one
@@ -81,7 +81,7 @@ TEST_CASE("gallery render smoke: remote mode, against a server, offscreen", "[ga
     auto server = std::make_shared<morph::backend::RemoteServer>(workers, config);
     morph::qt::QtWebSocketServer socket{*server, 0};
     REQUIRE(socket.listen());
-    morph::examples::RemoteAppSource source{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(socket.port()))};
+    morph::client::RemoteSource source{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(socket.port()))};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted == std::vector<std::string>{std::string{gallery::kHomeScreen}});
     // Just before the verdict: unscoped messages attach to the next assertion, so earlier they would ride on one
@@ -92,7 +92,7 @@ TEST_CASE("gallery render smoke: remote mode, against a server, offscreen", "[ga
 
 // Mutation: report clean() without checking that a screen mounted — this case passes a source with no screens.
 TEST_CASE("render smoke: a source that opens nothing is not clean", "[gallery][render-smoke]") {
-    morph::examples::LocalApp const empty{
+    morph::client::LocalApp const empty{
         .name = "empty",
         .bundle =
             [] {
@@ -100,7 +100,7 @@ TEST_CASE("render smoke: a source that opens nothing is not clean", "[gallery][r
                 return served.build();
             },
         .setUp = {}};
-    morph::examples::LocalAppSource source{empty, morph::examples::LocalSetup{}};
+    morph::client::LocalSource source{empty, morph::client::LocalSetup{}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.opened);
     CHECK(report.mounted.empty());
@@ -109,9 +109,9 @@ TEST_CASE("render smoke: a source that opens nothing is not clean", "[gallery][r
 
 // Mutation: drop the message handler's record — the planted warning is not reported.
 TEST_CASE("render smoke: a Qt warning during the run is a failure", "[gallery][render-smoke]") {
-    morph::examples::LocalApp warned = gallery::localApp();
-    warned.setUp = [](morph::examples::LocalSetup const& /*setup*/) { qWarning("planted warning"); };
-    morph::examples::LocalAppSource source{warned, morph::examples::LocalSetup{}};
+    morph::client::LocalApp warned = gallery::localApp();
+    warned.setUp = [](morph::client::LocalSetup const& /*setup*/) { qWarning("planted warning"); };
+    morph::client::LocalSource source{warned, morph::client::LocalSetup{}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted == std::vector<std::string>{std::string{gallery::kHomeScreen}});
     CHECK(std::ranges::find(report.failures, std::string{"Qt: planted warning"}) != report.failures.end());

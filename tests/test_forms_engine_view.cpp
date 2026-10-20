@@ -15,6 +15,7 @@
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -104,6 +105,42 @@ TEST_CASE("formView: each kind draws its control", "[forms-engine][view]") {
     CHECK(mounted.has("Select", "unit_mass"));
 }
 
+// Mutation: drop the unit from the number input (the unit is drawn nowhere, and the input reports none).
+TEST_CASE("formView: a number's input shows its unit and knows its places; a unit choice keeps its select",
+          "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "density":{"type":"number","ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},"x-displayDecimals":2,"x-order":0},
+      "count":{"type":"integer","ExtUnits":{"unitAscii":"pcs","unitUnicode":"pcs"},"x-order":1},
+      "note":{"type":"string","x-order":2}}})";
+    Mounted const mounted{kSchema};
+    int const density = mounted.widget("TextInput", "field_density");
+    CHECK(mounted.backend.prop(density, "unit") == "kg");
+    CHECK(mounted.backend.prop(density, "decimals") == "2");
+    CHECK_FALSE(mounted.backend.find("Text", "text", "kg").has_value());  // no muted text beside the input
+    int const count = mounted.widget("TextInput", "field_count");
+    CHECK(mounted.backend.prop(count, "unit") == "pcs");
+    CHECK(mounted.backend.prop(count, "decimals") == "0");
+    int const note = mounted.widget("TextInput", "field_note");
+    CHECK_FALSE(mounted.backend.hasProp(note, "unit"));
+    CHECK_FALSE(mounted.backend.hasProp(note, "decimals"));
+
+    // A Quantity with alternatives keeps its unit select, and its input names no unit of its own.
+    Mounted const kinds{kKinds};
+    CHECK(kinds.has("Select", "unit_mass"));
+    CHECK_FALSE(kinds.backend.hasProp(kinds.widget("TextInput", "field_mass"), "unit"));
+}
+
+TEST_CASE("formView: a multiline input with a unit or places is refused when it mounts", "[forms-engine][view]") {
+    morph::test::formsengine::Harness harness;
+    RecordingBackend backend;
+    CHECK_THROWS_AS((ui::Mounted{harness.rt, backend,
+                                 ui::textInput({.mode = ui::TextInputMode::Multiline, .unit = std::string{"kg"}})}),
+                    std::logic_error);
+    CHECK_THROWS_AS(
+        (ui::Mounted{harness.rt, backend, ui::textInput({.mode = ui::TextInputMode::Multiline, .decimals = 2})}),
+        std::logic_error);
+}
+
 TEST_CASE("formView: labels fall back to the wire key, follow x-order and come from translations",
           "[forms-engine][view]") {
     constexpr std::string_view kSchema = R"({"properties":{
@@ -120,9 +157,9 @@ TEST_CASE("formView: labels fall back to the wire key, follow x-order and come f
     Mounted const mounted{kSchema, {}, std::move(options)};
     int const zeta = mounted.widget("Text", "label_zeta");
     int const alpha = mounted.widget("Text", "label_alpha");
-    CHECK(mounted.backend.prop(zeta, "text") == "zeta *");  // the wire key, and required
-    CHECK(mounted.backend.prop(alpha, "text") == "Alfa");   // the translation beats the schema's title
-    CHECK(zeta < alpha);                                    // drawn in x-order
+    CHECK(mounted.backend.prop(zeta, "text") == "zeta");   // the wire key; the control marks it required
+    CHECK(mounted.backend.prop(alpha, "text") == "Alfa");  // the translation beats the schema's title
+    CHECK(zeta < alpha);                                   // drawn in x-order
     CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_alpha"), "a11yName") == "Alfa");
 }
 
@@ -153,8 +190,10 @@ TEST_CASE("formView: mounted controls drive the session", "[forms-engine][view]"
     CHECK(mounted.form->field("grade").text().peek() == R"("Low")");
 }
 
-TEST_CASE("formView: explicit mode adds a Submit button bound to readiness; the cell shows help and a live *",
-          "[forms-engine][view]") {
+TEST_CASE(
+    "formView: explicit mode adds a Submit button bound to readiness; the cell shows help, the control a live "
+    "required mark",
+    "[forms-engine][view]") {
     constexpr std::string_view kSchema = R"({"x-submitMode":"explicit","properties":{
       "label":{"type":"string","description":"What it is called","x-order":0},
       "note":{"type":["string","null"],"x-order":1},
@@ -167,7 +206,8 @@ TEST_CASE("formView: explicit mode adds a Submit button bound to readiness; the 
     CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note");
     mounted.backend.toggle(mounted.widget("Checkbox", "field_flag"));
     mounted.harness.settle();
-    CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note *");  // requiredWhen, live
+    // requiredWhen, live: the control is marked, the label keeps the field's label.
+    CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note");
     CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_note"), "required") == "true");
     mounted.edit("label", "x");
     mounted.edit("note", "n");
@@ -417,4 +457,60 @@ TEST_CASE("formView: a date-time control's draft and instant convert in the disp
     CHECK(engine::instantDraft(instant, false, 60) == "2024-01-01T10:00:00");
     CHECK(engine::instantDraft(std::nullopt, false, 0).empty());
     CHECK(engine::instantDraft(morph::time::Timestamp{}, false, 0).empty());
+}
+
+// Mutation: ignore `fieldLayout` in fieldCell (every cell stays a column, label over control).
+TEST_CASE("formView: an inline layout puts the label beside the control; a stacked one keeps it above",
+          "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "name":{"type":"string","x-order":0},
+      "flag":{"type":"boolean","x-order":1},
+      "note":{"type":"string","description":"Shown to the customer","x-order":2},
+      "address":{"type":["object","null"],"title":"Address","x-order":3,
+                 "properties":{"street":{"type":"string","x-order":0}}}}})";
+    FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    Mounted const inlined{kSchema, std::move(options)};
+    RecordingBackend const& backend = inlined.backend;
+    int const cell = inlined.widget("Row", "cell_name");
+    CHECK(backend.prop(cell, "align") == "center");
+    CHECK(backend.prop(cell, "gap") == "3");
+    std::vector<int> const line = backend.children(cell);
+    REQUIRE(line.size() == 2);
+    CHECK(line.at(0) == inlined.widget("Text", "label_name"));
+    CHECK(backend.prop(line.at(0), "layout") == "fixed(16)/content");
+    CHECK(backend.prop(line.at(1), "layout") == "stretch(1)/content");
+    CHECK(backend.children(line.at(1)) == std::vector<int>{inlined.widget("TextInput", "field_name")});
+    // A Boolean's checkbox carries its label, so a spacer of the label's width lines its box up.
+    std::vector<int> const flag = backend.children(inlined.widget("Row", "cell_flag"));
+    REQUIRE(flag.size() == 2);
+    CHECK(backend.kindOf(flag.at(0)) == "Spacer");
+    CHECK(backend.prop(flag.at(0), "layout") == "fixed(16)/content");
+    // The help is a second row, indented by the label's width.
+    std::vector<int> const note = backend.children(inlined.widget("Column", "cell_note"));
+    REQUIRE(note.size() == 2);
+    CHECK(backend.kindOf(note.at(0)) == "Row");
+    std::vector<int> const help = backend.children(note.at(1));
+    REQUIRE(help.size() == 2);
+    CHECK(backend.kindOf(help.at(0)) == "Spacer");
+    CHECK(backend.prop(help.at(1), "text") == "Shown to the customer");
+    // An object's panel stays stacked; its members follow the form's layout.
+    CHECK(inlined.has("Column", "cell_address"));
+    CHECK(inlined.has("Row", "cell_address.street"));
+
+    Mounted const stacked{kSchema};
+    std::vector<int> const column = stacked.backend.children(stacked.widget("Column", "cell_name"));
+    REQUIRE(column.size() == 2);
+    CHECK(column.at(0) == stacked.widget("Text", "label_name"));
+    CHECK(column.at(1) == stacked.widget("TextInput", "field_name"));
+    CHECK_FALSE(stacked.has("Row", "cell_name"));
+}
+
+TEST_CASE("formView: an inline label narrower than one unit is refused", "[forms-engine][view]") {
+    Harness harness;
+    auto const form = harness.session("Probe", R"({"properties":{"name":{"type":"string"}}})");
+    FormViewOptions options;
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    options.inlineLabelWidth = 0;
+    CHECK_THROWS_AS(morph::forms::formView(*form, std::move(options)), std::invalid_argument);
 }

@@ -3,10 +3,10 @@
 // The forms demo's render smoke (spec 4 §7): every screen of the bundle mounted by the Qt Quick renderer, offscreen,
 // in local mode. A refused document, a mount error, an interpreter diagnostic or a Qt warning fails it.
 
-#include <app/app_source.hpp>
 #include <array>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/client/source.hpp>
 #include <string>
 #include <testkit/render_smoke.hpp>
 #include <vector>
@@ -15,9 +15,9 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalAppSource;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
+using morph::client::LocalSource;
 using morph::examples::testing::runRenderSmoke;
 using morph::examples::testing::SmokeReport;
 
@@ -36,8 +36,8 @@ char** argValues() {
 
 // Mutation: drop a screen from the bundle (the mounted list misses it).
 TEST_CASE("forms render smoke: local mode, every screen, offscreen", "[forms][render-smoke]") {
-    LocalAppSource source{LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}},
-                          LocalSetup{.db = {}, .user = "tech"}};
+    LocalSource source{LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}},
+                       LocalSetup{.db = {}, .user = "tech"}};
     SmokeReport const report = runRenderSmoke(argCount(), argValues(), source);
     CHECK(report.mounted ==
           std::vector<std::string>{std::string{lab::screens::kDensity}, std::string{lab::screens::kMeasure},

@@ -20,8 +20,9 @@ MorphWidget {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.tint(root.scheme.surface, Qt.alpha(root.toneOf(root.tone), 0.15))
-        border.color: root.toneOf(root.tone)
+        // Over the surface, so a translucent fill (neutral's) still hides what is behind.
+        color: Qt.tint(root.scheme.surface, root.toneBgOf(root.tone))
+        border.color: root.toneBorderOf(root.tone)
     }
 
     RowLayout {
@@ -30,13 +31,26 @@ MorphWidget {
         anchors.leftMargin: Theme.unitWidth
         anchors.rightMargin: Theme.unitWidth
 
+        // The tone's icon, when the theme's icon set names it.
+        Image {
+            objectName: "toneIcon"
+            readonly property string name: ["", "tone.info", "tone.ok", "tone.warn", "tone.err"][root.tone] ?? ""
+            visible: source.toString() !== ""
+            source: Theme.iconSource(name)
+            sourceSize.height: Theme.unitHeight
+            Layout.preferredHeight: Theme.unitHeight
+            Layout.preferredWidth: visible ? Theme.unitHeight : 0
+        }
+
         Label {
+            font: Theme.bodyFont
             Layout.fillWidth: true
             text: root.text
             wrapMode: Text.Wrap
         }
 
         Button {
+            font: Theme.bodyFont
             objectName: "action"
             visible: root.actionLabel !== ""
             text: root.actionLabel
@@ -44,9 +58,12 @@ MorphWidget {
         }
 
         ToolButton {
+            font: Theme.bodyFont
             objectName: "dismiss"
             visible: root.dismissible
-            text: "×"
+            icon.source: Theme.iconSource("close")
+            icon.color: "transparent"
+            text: icon.source.toString() !== "" ? "" : "×"
             onClicked: root.fire("dismiss", undefined)
         }
     }

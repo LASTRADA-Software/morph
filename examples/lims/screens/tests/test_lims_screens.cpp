@@ -4,12 +4,12 @@
 // through the transitions its state allows, and the results screen opens on its sample. The models run in process
 // over the rung's test database, as the presenter tests they replace did.
 
-#include <app/app_source.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <morph/client/source.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/util/rational.hpp>
@@ -33,8 +33,8 @@
 
 namespace {
 
-using morph::examples::LocalApp;
-using morph::examples::LocalSetup;
+using morph::client::LocalApp;
+using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
 using morph::ladder::testkit::DbFixture;

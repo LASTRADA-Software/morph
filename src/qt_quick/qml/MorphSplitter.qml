@@ -43,8 +43,31 @@ MorphWidget {
         return out
     }
 
-    // The Basic style's handle thickness, between two panes.
-    readonly property real handleExtent: 6
+    // The handle's part, `MorphSplitterHandle` or its restyle, which C++ passes at creation; the split view makes one
+    // per gap.
+    property Component handle: null
+    // The first handle the split view made, or null while there is none.
+    property Item handleItem: null
+    // The room a handle takes between two panes: its implicit extent along the axis.
+    readonly property real handleExtent: root.handleItem ? (root.axis === 0 ? root.handleItem.implicitHeight
+                                                                             : root.handleItem.implicitWidth) : 0
+
+    // Tells each handle the split view made its axis and scheme. The handles are the split view's own children that
+    // declare `axis`; the panes are in its content item. Neither `contentItem` nor `background` is read to tell them
+    // apart: reading a deferred one makes it, which adds a child and calls this again.
+    function dressHandles() {
+        let first = null
+        for (let i = 0; i < split.children.length; ++i) {
+            const child = split.children[i]
+            if (!("axis" in child))
+                continue
+            child.axis = root.axis
+            child.scheme = Qt.binding(() => root.scheme)
+            if (first === null)
+                first = child
+        }
+        root.handleItem = first
+    }
 
     // What the panes ask for: along the axis, each pane's size in units when `sizes` matches the pane count and its
     // implicit extent otherwise, plus the handles between them; across, the largest pane's implicit extent. A
@@ -70,6 +93,8 @@ MorphWidget {
         id: split
         anchors.fill: parent
         orientation: root.axis === 0 ? Qt.Vertical : Qt.Horizontal
+        handle: root.handle
+        onChildrenChanged: root.dressHandles()
         // The share is re-applied as the split view's length changes, until the user drags: panes are adopted while
         // the splitter is still small, and a share applied then would stay that small.
         onWidthChanged: {

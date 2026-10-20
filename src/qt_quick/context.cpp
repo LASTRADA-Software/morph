@@ -2,10 +2,12 @@
 
 #include "qt_quick/context.hpp"
 
+#include <QMetaObject>
 #include <QObject>
 #include <QQmlContext>
 #include <QQmlError>
 #include <QUrl>
+#include <iostream>
 #include <memory>
 #include <morph/qt_quick/components.hpp>
 #include <stdexcept>
@@ -123,6 +125,40 @@ QQmlComponent& Context::component(QString const& type) {
                                  toUtf8(errorsOf(*made))};
     }
     return *_components.emplace(type, std::move(made)).first->second;
+}
+
+void Context::undeclared(QObject const& item, char const* name) {
+    // A QML type's class name carries the engine's suffix (`MorphButton_QMLTYPE_3`); the type is what precedes it.
+    std::string type = item.metaObject()->className();
+    if (auto const suffix = type.find("_QML"); suffix != std::string::npos) {
+        type.resize(suffix);
+    }
+    if (!_undeclared.emplace(type, name).second) {
+        return;
+    }
+    report(type, type + " does not declare the property `" + name + "`; the write is refused");
+}
+
+void Context::checkIcon(std::string_view icon) {
+    if (icon.empty() || _missingIcons.contains(icon)) {
+        return;
+    }
+    QObject const* const theme =
+        _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    if (theme == nullptr || !theme->property("iconSet").toBool() ||
+        theme->property("icons").toMap().contains(toQString(icon))) {
+        return;
+    }
+    _missingIcons.emplace(icon);
+    report(std::string{icon}, "icon " + std::string{icon} + " is not in the theme's icon set");
+}
+
+void Context::report(std::string name, std::string reason) const {
+    if (_options.components != nullptr) {
+        _options.components->report(ComponentFailure{.name = std::move(name), .reason = std::move(reason)});
+        return;
+    }
+    std::cerr << "morph::qt_quick: " << reason << '\n';
 }
 
 Context::Made Context::make(QString const& type, QVariantMap initial) {

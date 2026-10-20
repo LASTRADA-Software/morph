@@ -25,6 +25,7 @@
 #include "../ui/frontend.hpp"
 #include "bundle.hpp"
 #include "file_store.hpp"
+#include "theme.hpp"
 
 /// @file
 /// @brief The client side of the UI service (spec 5 §12, "Content addressing"): `UiClient` runs `ui-hello`,
@@ -373,7 +374,8 @@ private:
         if (kind == kComponentFile) {
             return client.components;
         }
-        return kind == kScreenFile || kind == kAppFile || kind == kThemeFile || kind == kMessagesFile;
+        return kind == kScreenFile || kind == kAppFile || kind == kThemeFile || kind == kMessagesFile ||
+               kind == kIconFile;
     }
 
     /// @brief Fills the bundle the shell reads from the verified files.
@@ -387,6 +389,29 @@ private:
             if (auto const found = loaded.files.find(file.hash); found != loaded.files.end()) {
                 auto& into = file.kind == kThemeFile ? loaded.bundle.themes : loaded.bundle.documents;
                 into.insert_or_assign(file.id, found->second);
+            }
+        }
+        // The icon set the theme index names, each icon's SVG by its name; a build refuses an index naming a file
+        // the bundle lacks.
+        for (auto const& [fileId, text] : loaded.bundle.themes) {
+            static_cast<void>(fileId);
+            if (!isThemeIndex(text)) {
+                continue;
+            }
+            auto const index = parseThemeIndex(text);
+            if (!index) {
+                continue;
+            }
+            for (auto const& [name, iconId] : index->icons) {
+                auto const file = std::ranges::find_if(loaded.manifest.files, [&iconId](ManifestFile const& listed) {
+                    return listed.kind == kIconFile && listed.id == iconId;
+                });
+                if (file == loaded.manifest.files.end()) {
+                    continue;
+                }
+                if (auto const found = loaded.files.find(file->hash); found != loaded.files.end()) {
+                    loaded.bundle.icons.insert_or_assign(name, found->second);
+                }
             }
         }
     }

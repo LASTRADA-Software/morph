@@ -40,6 +40,7 @@ MorphField {
     defaultRole: root.radio ? Accessible.Grouping : Accessible.ComboBox
 
     ComboBox {
+        font: Theme.bodyFont
         id: combo
         visible: !root.radio
         width: root.controlWidth
@@ -82,6 +83,7 @@ MorphField {
             model: root.options
 
             RadioButton {
+                font: Theme.bodyFont
                 required property int index
                 required property string modelData
                 text: modelData

@@ -277,4 +277,101 @@ private:
     return std::ranges::any_of(texts, [&](std::string const& text) { return fold(text).contains(needle); });
 }
 
+namespace detail::catalogue {
+
+/// @brief A catalog title's parts: a plain string, or the message key of a `{"t": …}` reference and its fallback.
+struct TitleParts {
+    std::optional<std::string> text;      ///< A plain string title.
+    std::optional<std::string> key;       ///< A message reference's key.
+    std::optional<std::string> fallback;  ///< A message reference's fallback.
+};
+
+/// @brief Splits a catalog title into its parts.
+/// @param title The title.
+/// @return Its parts; all empty for a title that is neither a string nor an object.
+[[nodiscard]] inline TitleParts titleParts(Json const& title) {
+    TitleParts parts;
+    if (std::string const* const text = std::get_if<std::string>(&title.data)) {
+        parts.text = *text;
+        return parts;
+    }
+    if (auto const* const object = std::get_if<Json::object_t>(&title.data)) {
+        for (auto const& [name, value] : *object) {
+            std::string const* const text = std::get_if<std::string>(&value.data);
+            if (text == nullptr) {
+                continue;
+            }
+            if (name == "t") {
+                parts.key = *text;
+            } else if (name == "fallback") {
+                parts.fallback = *text;
+            }
+        }
+    }
+    return parts;
+}
+
+/// @brief A message pattern formatted with no arguments.
+/// @param pattern The pattern.
+/// @param locale  The locale.
+/// @return The text, or nothing when the pattern does not parse.
+[[nodiscard]] inline std::optional<std::string> formatPattern(std::string_view pattern, std::string const& locale) {
+    auto parsed = parseMessage(pattern);
+    if (!parsed) {
+        return std::nullopt;
+    }
+    return formatMessage(*parsed, ValueRecord{}, MessageLocale{.locale = locale, .numeric = {}}).text;
+}
+
+}  // namespace detail::catalogue
+
+/// @brief A catalog entry's title in one locale, as a shell's tab or header shows it.
+///
+/// A string title is shown as is. A message reference (`{"t": key, "fallback": …}`) is formatted in @p locale from
+/// @p catalogues — the exact locale's catalogue, then its language's — and is its fallback when no catalogue has the
+/// key. A title that is neither, or a reference with no fallback that no catalogue resolves, is the entry's id.
+/// @param entry      The entry.
+/// @param catalogues The message catalogues, or null for none.
+/// @param locale     The BCP 47 locale to format in.
+/// @return The title.
+[[nodiscard]] inline std::string catalogTitle(CatalogEntry const& entry, MessageCatalogues const* catalogues,
+                                              std::string_view locale) {
+    detail::catalogue::TitleParts const parts = detail::catalogue::titleParts(entry.title);
+    if (parts.text) {
+        return *parts.text;
+    }
+    std::string const where{locale};
+    if (parts.key && catalogues != nullptr) {
+        if (auto const pattern = catalogues->lookup(*parts.key, where)) {
+            if (auto text = detail::catalogue::formatPattern(*pattern, where)) {
+                return std::move(*text);
+            }
+        }
+    }
+    if (parts.fallback) {
+        return detail::catalogue::formatPattern(*parts.fallback, where).value_or(*parts.fallback);
+    }
+    return entry.id;
+}
+
+/// @brief A catalog entry's title in every locale the catalogues hold: what a search over screen titles compares
+///        against.
+///
+/// With @p catalogues, a message reference is `textInEveryLocale` of its key and fallback (the entry's id when it
+/// has none). Without, the one title is a string title as is, else a reference's fallback, else the entry's id.
+/// @param entry      The entry.
+/// @param catalogues The message catalogues, or null for none.
+/// @return The titles; never empty.
+[[nodiscard]] inline std::vector<std::string> catalogTitles(CatalogEntry const& entry,
+                                                            MessageCatalogues const* catalogues) {
+    detail::catalogue::TitleParts const parts = detail::catalogue::titleParts(entry.title);
+    if (parts.text) {
+        return {*parts.text};
+    }
+    if (parts.key && catalogues != nullptr) {
+        return textInEveryLocale(*catalogues, *parts.key, parts.fallback.value_or(entry.id));
+    }
+    return {parts.fallback.value_or(entry.id)};
+}
+
 }  // namespace morph::ui

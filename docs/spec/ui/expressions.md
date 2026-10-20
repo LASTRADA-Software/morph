@@ -104,7 +104,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` |
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
-| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf` |
+| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)` |
 | Display | `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
@@ -117,6 +117,11 @@ arithmetic, and `any` where it depends on data the document does not describe.
   `min` and `max` return the element itself.
 - `any` and `all` are Kleene over the elements: `any([])` is `false`, `all([])` is `true`.
 - `indexOf` is `null` when the value is absent; `includes` is `false`.
+- `concatLists` takes one to 255 lists and answers their elements in order. Each argument must be a
+  list where its type is known; the static type is `list<T>` when every known element type is `T`,
+  else `list<any>`. A `null` argument makes the result `null`, as every strict function's does (a
+  list that is still loading reads `coalesce(q, [])`), and any other value that is not a list is a
+  reported mismatch. `concat` stays strings-only.
 - `parseDecimal` reads text typed in the active locale (its separators, sign and digits, through
   `render::parseDecimal`) as an exact decimal, at `dp` places when given and otherwise at the places
   typed. Text that does not spell a number, or has more fraction digits than `dp`, is `null` and not

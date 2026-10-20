@@ -949,3 +949,29 @@ TEST_CASE("tui slider: a handler run by the focus a press takes may destroy the 
     CHECK(slider == nullptr);
     CHECK(changes.empty());
 }
+
+// Mutation: lay the footer out as the other children (left-aligned), or leave it where it was made (above content
+// that mounted again after it).
+TEST_CASE("tui dialog: the footer is the bottom row, right-aligned, and stays after content mounted again",
+          "[tui][dialog]") {
+    Harness harness{30, 10};
+    Scene scene{harness, {}};
+    auto text = harness.make<TextImpl>(scene.body.get());
+    text->setText("A longer body");
+    ui::ContainerWidget& footer = scene.dialog->footer();
+    auto const save = harness.make<ButtonImpl>(&footer);
+    save->setLabel("OK");
+    scene.dialog->setOpen(true);
+    CHECK(harness.draw() == Rows{"[ Behind ]", "", "", "      ┌─Confirm───────┐", "      │ A longer body │",
+                                 "      │        [ OK ] │", "      └───────────────┘"});
+    // The content goes and comes back, as it does when the dialog closes and opens again.
+    text.reset();
+    scene.body.reset();
+    scene.body = harness.make<StackImpl>(scene.dialog.get(), ui::Axis::Vertical);
+    text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Again");
+    CHECK(&scene.dialog->footer() == &footer);
+    CHECK(harness.draw() == Rows{"[ Behind ]", "", "", "         ┌─Confirm─┐", "         │ Again   │",
+                                 "         │  [ OK ] │", "         └─────────┘"});
+    text.reset();
+}

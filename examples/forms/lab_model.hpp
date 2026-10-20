@@ -415,6 +415,6 @@ BRIDGE_REGISTER_ACTION(LabModel, ListCountries, "ListCountries", morph::model::L
 BRIDGE_REGISTER_ACTION(LabModel, ListCities, "ListCities", morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(LabModel, ShippingAddress, "ShippingAddress")
 BRIDGE_REGISTER_ACTION(LabModel, EditSample, "EditSample")
-BRIDGE_REGISTER_ACTION(LabModel, DeleteSample, "DeleteSample")
+BRIDGE_REGISTER_ACTION(LabModel, DeleteSample, "DeleteLabSample")
 BRIDGE_REGISTER_ACTION(LabModel, CreateSample, "CreateSample")
-BRIDGE_REGISTER_ACTION(LabModel, RegisterSample, "RegisterSample")
+BRIDGE_REGISTER_ACTION(LabModel, RegisterSample, "RegisterLabSample")

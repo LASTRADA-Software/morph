@@ -73,7 +73,8 @@ hands each event to `Session::deliverEvent`. The watch set and the refetches it 
 
 - `ui::Bundle` carries the application's id, the manifest's SHA-256 digest, and every document — the screens, the
   app shell, and the app document (`app`) when there is one — by id, as verified JSON text, and in `themes` the theme
-  index and token files by id ([`theme.md`](theme.md#surfaces)). The document model and
+  index and token files by id ([`theme.md`](theme.md#surfaces)), and in `icons` the theme's icon set, each icon's
+  SVG by its name ([`theme.md`](theme.md#icons)). The document model and
   the interpreter read it; the seam only carries it from the source to the shell. A remote source gets it from
   `ui::UiClient` ([`service.md`](service.md#the-client)), which fills `manifestDigest` with the digest's 64
   hexadecimal digits.

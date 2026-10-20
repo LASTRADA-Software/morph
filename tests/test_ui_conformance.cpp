@@ -283,6 +283,17 @@ TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformanc
     }
 }
 
+// A probe that reads no geometry fails every layout case rather than passing it unmeasured.
+TEST_CASE("ui conformance: a layout case run on a backend that lays nothing out fails", "[ui][conformance]") {
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        RecordingProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(testCase.name);
+        REQUIRE(failure.has_value());
+        CHECK(failure->contains("reads no bounds"));
+    }
+}
+
 // Each fault breaks one part of the contract, and the cases that check that part must say so. Mutation: make
 // `detail::Checks::that` or `detail::Checks::text` record nothing (every fault then passes everything).
 TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", "[ui][conformance]") {

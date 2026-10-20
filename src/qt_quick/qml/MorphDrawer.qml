@@ -14,6 +14,8 @@ MorphWidget {
     property int side: 0
     property bool programmatic: false
     readonly property Item content: column
+    // Where C++ puts the drawer's footer, under the content: a restyle lays it out where it wants.
+    readonly property Item footer: footerArea
     readonly property bool shown: drawer.visible
 
     function show(open: bool) {
@@ -58,9 +60,9 @@ MorphWidget {
 
         contentItem: ColumnLayout {
             Label {
+                font: Theme.strongFont
                 visible: root.title !== ""
                 text: root.title
-                font.bold: true
             }
 
             ColumnLayout {
@@ -70,6 +72,20 @@ MorphWidget {
 
             Item {
                 Layout.fillHeight: true
+            }
+
+            // Shown while the footer holds something: a layout gives no size to what it hides, so its own
+            // implicit size cannot say.
+            ColumnLayout {
+                id: footerArea
+                Layout.fillWidth: true
+                visible: {
+                    for (let i = 0; i < footerArea.children.length; ++i) {
+                        if ((footerArea.children[i] as MorphFooter)?.holding)
+                            return true
+                    }
+                    return false
+                }
             }
         }
     }

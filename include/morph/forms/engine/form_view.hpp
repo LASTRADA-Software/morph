@@ -15,6 +15,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "../../util/datetime.hpp"
 #include "../layout.hpp"
 #include "detail/text.hpp"
+#include "field_layout.hpp"
 #include "field_model.hpp"
 #include "form_session.hpp"
 #include "overrides.hpp"
@@ -40,8 +42,8 @@ struct FormViewOptions {
     int gridColumns = 2;
     /// @brief Columns of the implicit group's grid; unset is 1 while `gridColumns` is 2, else `gridColumns`.
     std::optional<int> flatGridColumns;
-    /// @brief The explicit-mode button's label.
-    std::string submitLabel = "Submit";
+    /// @brief The explicit-mode button's label, which the status line names (`ready: press <label>`).
+    ui::Prop<std::string> submitLabel = "Submit";
     /// @brief The caption of a collection's Add button.
     std::string addLabel = "Add";
     /// @brief The caption of a collection row's Remove button.
@@ -50,6 +52,14 @@ struct FormViewOptions {
     bool showTitle = true;
     /// @brief Whether the status line ("fill the required (*) fields", …) is shown.
     bool showStatus = true;
+    /// @brief A heading over the fields (test id `form_title`) in place of the schema's title; empty shows none.
+    ///        A title given is shown whatever `showTitle` says.
+    ui::Prop<std::string> title;
+    /// @brief Where each cell puts its field's caption: over the control, or beside it.
+    FieldLayout fieldLayout = FieldLayout::Stacked;
+    /// @brief The width of an inline caption, in backend units; at least 1, else `formView` throws
+    ///        `std::invalid_argument`. Read only for `FieldLayout::Inline`.
+    int inlineLabelWidth = 16;
 };
 
 namespace detail::engine {
@@ -58,14 +68,23 @@ namespace detail::engine {
 using ViewOptions = std::shared_ptr<FormViewOptions const>;
 
 /// @brief The status line under a form.
-/// @param session The session.
+/// @param session     The session.
+/// @param submitLabel The explicit-mode button's label, which the line names.
 /// @return The line: what is missing, or how the form submits.
 // NOLINTNEXTLINE(modernize-use-string-view): the line is a bound text property, which holds a string.
-[[nodiscard]] inline std::string statusText(FormSession const& session) {
+[[nodiscard]] inline std::string statusText(FormSession const& session, std::string_view submitLabel) {
     if (!session.ready()) {
         return "fill the required (*) fields";
     }
-    return session.submitMode() == SubmitMode::Explicit ? "ready: press Submit" : "submits as you type";
+    return session.submitMode() == SubmitMode::Explicit ? "ready: press " + std::string{submitLabel}
+                                                        : "submits as you type";
+}
+
+/// @brief Whether a text property says something: bound, or a constant that is not empty.
+/// @param text The property.
+/// @return Whether it is set.
+[[nodiscard]] inline bool isSet(ui::Prop<std::string> const& text) {
+    return text.isBound() || !text.constant().empty();
 }
 
 /// @brief The last reply or failure.
@@ -171,6 +190,9 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             },
         .onOpen = [field] { field->retryOptions(); },
         .style = style,
+        // The cell draws the caption, so the select is told its label and not to show it.
+        .label = [field] { return field->label(); },
+        .showLabel = false,
         .field = fieldState(field),
         .common = controlCommon(field),
     });
@@ -186,7 +208,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 [[nodiscard]] inline ui::Node fieldControl(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState* const field = &state;
     FieldSpec const& spec = state.spec();
-    auto const textInput = [field](ui::TextInputMode mode) {
+    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, int decimals = -1) {
         return ui::textInput(ui::TextInput{
             .value = [field] { return field->text().get(); },
             .onChange = [field](std::string text) { field->text().set(std::move(text)); },
@@ -194,18 +216,28 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .onCommit = {},
             .placeholder = field->placeholder(),
             .mode = mode,
+            .unit = std::move(unit),
+            .decimals = decimals,
+            .label = [field] { return field->label(); },
+            .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
         });
     };
-    auto const unitSuffix = [&](ui::Node input) {
-        if (spec.unit.empty()) {
-            return input;
+    // A number's input shows its unit and knows its entry places: an integer's 0, the entry unit's, a plain
+    // number's display places, a decimal's declared ones; -1 where none is declared.
+    auto const numberInput = [&] {
+        int decimals = -1;
+        if (spec.kind == FieldKind::Integer) {
+            decimals = 0;
+        } else if (!spec.units.empty()) {
+            decimals = static_cast<int>(spec.units.at(spec.entryUnit).decimals);
+        } else if (spec.displayDecimals) {
+            decimals = static_cast<int>(*spec.displayDecimals);
+        } else if (spec.decimalPlaces) {
+            decimals = static_cast<int>(*spec.decimalPlaces);
         }
-        return ui::row(ui::Row{
-            .children = {std::move(input), ui::text(ui::Text{.text = spec.unit, .role = ui::TextRole::Muted})},
-            .gap = 4,
-        });
+        return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
     };
     auto const dateInput = [&](bool date) {
         int const offset = date ? 0 : session.options().displayOffsetMinutes;
@@ -217,6 +249,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 },
             .mode = date ? ui::DateMode::Date : ui::DateMode::DateTime,
             .offsetMinutes = offset,
+            .label = [field] { return field->label(); },
+            .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
         });
@@ -225,11 +259,11 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         return textInput(ui::TextInputMode::Multiline);
     }
     if (spec.kind == FieldKind::Integer || spec.kind == FieldKind::Number || spec.kind == FieldKind::Decimal) {
-        return unitSuffix(textInput(ui::TextInputMode::SingleLine));
+        return numberInput();
     }
     if (spec.kind == FieldKind::Quantity) {
         if (spec.units.size() <= 1) {
-            return unitSuffix(textInput(ui::TextInputMode::SingleLine));
+            return numberInput();
         }
         std::vector<ui::SelectOption> units;
         units.reserve(spec.units.size());
@@ -356,8 +390,57 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     return textInput(ui::TextInputMode::SingleLine);
 }
 
-/// @brief One field's cell: the label (with ` *` while required), the control (an override's, else the built-in)
-///        and the help text; shown while the field is visible.
+/// @brief Space as wide as an inline caption, which lines a Boolean's box or a help text up with the controls.
+/// @param width The caption's width, in backend units.
+/// @return The spacer.
+[[nodiscard]] inline ui::Node captionSpace(int width) {
+    ui::Spacer space{};
+    space.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
+    return ui::spacer(std::move(space));
+}
+
+/// @brief The inline form of a cell's content: a row centred across, the label at the caption's width (a spacer for
+///        a Boolean, whose checkbox carries its label) and the control stretching; the help is a second row under the
+///        control, indented by the caption's width.
+/// @param state   The field.
+/// @param control The control.
+/// @param options The view options.
+/// @param common  The cell's own visibility and test id.
+/// @return The row, or a column of the row and the help's row.
+[[nodiscard]] inline ui::Node inlineCell(FieldState const& state, ui::Node control, ViewOptions const& options,
+                                         ui::Common common) {
+    FieldState const* const field = &state;
+    int const width = options->inlineLabelWidth;
+    ui::Node caption;
+    if (state.spec().kind == FieldKind::Boolean) {
+        caption = captionSpace(width);
+    } else {
+        ui::Text label{.text = [field] { return field->label(); }};
+        label.common.testId = "label_" + state.path();
+        label.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
+        caption = ui::text(std::move(label));
+    }
+    // A column fills its one content child across, so the control takes the width the stretching column is given.
+    ui::Column holder{.children = {std::move(control)}};
+    holder.common.layout = {.width = ui::Sizing::stretch(), .height = {}};
+    ui::Row line{
+        .children = {std::move(caption), ui::column(std::move(holder))}, .gap = 3, .align = ui::Align::Center};
+    if (state.help().empty()) {
+        line.common = std::move(common);
+        return ui::row(std::move(line));
+    }
+    ui::Row help{
+        .children = {captionSpace(width), ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted})},
+        .gap = 3};
+    ui::Column cell{.children = {ui::row(std::move(line)), ui::row(std::move(help))}};
+    cell.common = std::move(common);
+    return ui::column(std::move(cell));
+}
+
+/// @brief One field's cell: the label, the control (an override's, else the built-in) and the help text; shown while
+///        the field is visible. The control marks a required field, so the label carries no mark of its own. The
+///        options' `fieldLayout` puts the label over the control, or beside it (`inlineCell`); an Object's panel and
+///        an ObjectArray's rows are stacked either way, and their members follow the form's layout.
 /// @param session The session.
 /// @param state   The field.
 /// @param options The view options.
@@ -371,9 +454,16 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     } else {
         control = fieldControl(session, state, options);
     }
+    ui::Common common{};
+    common.visible = [field] { return field->visible().get(); };
+    common.testId = "cell_" + state.path();
+    FieldKind const kind = state.spec().kind;
+    if (options->fieldLayout == FieldLayout::Inline && kind != FieldKind::Object && kind != FieldKind::ObjectArray) {
+        return inlineCell(state, std::move(control), options, std::move(common));
+    }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
-        ui::Text label{.text = [field] { return field->label() + (field->required().get() ? " *" : ""); }};
+        ui::Text label{.text = [field] { return field->label(); }};
         label.common.testId = "label_" + state.path();
         children.push_back(ui::text(std::move(label)));
     }
@@ -381,9 +471,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     if (!state.help().empty()) {
         children.push_back(ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted}));
     }
-    ui::Column cell{.children = std::move(children)};
-    cell.common.visible = [field] { return field->visible().get(); };
-    cell.common.testId = "cell_" + state.path();
+    ui::Column cell{.children = std::move(children), .common = std::move(common)};
     return ui::column(std::move(cell));
 }
 
@@ -411,23 +499,32 @@ inline ui::Node FieldView::defaultControl() const {
     return detail::engine::fieldControl(*_session, *_state, _options);
 }
 
-/// @brief Renders @p session: its fields laid out by group (sections as panels, consecutive tab groups as one tab
-///        bar, accordions as collapsible panels, the implicit group as a grid), the status line, the Submit button in
-///        explicit mode, and the last reply or error.
+/// @brief Renders @p session: the title (the options' `title`, else the schema's while `showTitle`), its fields laid
+///        out by group (sections as panels, consecutive tab groups as one tab bar, accordions as collapsible panels,
+///        the implicit group as a grid), the status line, the Submit button in explicit mode, and the last reply or
+///        error.
 ///
 /// The nodes bind to the session and its fields by pointer: mount the result after the session and destroy the
 /// mount before it.
 /// @param session The session.
-/// @param options Overrides, grid columns, the chrome's labels.
+/// @param options Overrides, grid columns, the chrome's labels, the field layout.
 /// @return The view.
+/// @throws std::invalid_argument when `options.inlineLabelWidth` is below 1.
 [[nodiscard]] inline ui::Node formView(FormSession& session, FormViewOptions options = {}) {
     using detail::engine::groupGrid;
+    if (options.inlineLabelWidth < 1) {
+        throw std::invalid_argument{"morph::forms::formView: an inline label is at least one unit wide"};
+    }
     auto const shared = std::make_shared<FormViewOptions const>(std::move(options));
     int const columns = std::max(1, shared->gridColumns);
     int const flatColumns = shared->flatGridColumns.value_or(columns == 2 ? 1 : columns);
     FormSession* const form = &session;
     std::vector<ui::Node> children;
-    if (shared->showTitle) {
+    if (detail::engine::isSet(shared->title)) {
+        ui::Text title{.text = shared->title, .role = ui::TextRole::Heading};
+        title.common.testId = "form_title";
+        children.push_back(ui::text(std::move(title)));
+    } else if (shared->showTitle) {
         children.push_back(
             ui::text(ui::Text{.text = std::string{session.model().title()}, .role = ui::TextRole::Heading}));
     }
@@ -468,7 +565,9 @@ inline ui::Node FieldView::defaultControl() const {
         }
     }
     if (shared->showStatus) {
-        ui::Text status{.text = [form] { return detail::engine::statusText(*form); }, .role = ui::TextRole::Muted};
+        ui::Text status{
+            .text = [form, shared] { return detail::engine::statusText(*form, shared->submitLabel.evaluate()); },
+            .role = ui::TextRole::Muted};
         status.common.testId = "form_status";
         children.push_back(ui::text(std::move(status)));
     }

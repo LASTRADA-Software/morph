@@ -3,6 +3,7 @@
 // A `form` document mounted on the terminal backend: the forms engine's view tree drawn on a headless screen, typed
 // into through key events, submitting the exact body through the model alias.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <core/net/PlatformLoop.hpp>
@@ -12,6 +13,7 @@
 #include <core/tui/Screen.hpp>
 #include <core/tui/Terminal.hpp>
 #include <core/tui/TestHelpers.hpp>
+#include <cstddef>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
@@ -94,9 +96,20 @@ TEST_CASE("tui forms: a form document draws on the terminal and submits what is 
                                            {}, client.backend);
     REQUIRE(screen.has_value());
     client.settle();
-    CHECK(client.shows("Sample *"));
-    CHECK(client.shows("Concentration *"));
+    CHECK(client.shows("Sample"));
+    CHECK(client.shows("Concentration"));
     CHECK(client.shows("Remarks"));
+    // The two required fields are marked once each, by their controls; the labels carry no mark. The status line
+    // names the mark, and is not counted.
+    CHECK_FALSE(client.shows("Sample *"));
+    std::size_t marks = 0;
+    for (std::string const& row : rowsOf(client.screen)) {
+        if (!row.contains("fill the required")) {
+            marks += static_cast<std::size_t>(std::ranges::count(row, '*'));
+        }
+    }
+    INFO(client.drawn());
+    CHECK(marks == 2);
     client.backend.focusFirst();
     client.settle();
     client.type("9007199254740993");
@@ -129,13 +142,13 @@ TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its
     CHECK(client.shows("Samples"));
     CHECK(client.shows("Water"));
     CHECK(client.shows("Delete"));
-    CHECK_FALSE(client.shows("Concentration *"));  // the editor dialog is closed
+    CHECK_FALSE(client.shows("Concentration"));  // the editor dialog is closed
     client.backend.focusFirst();
     client.settle();
     client.key(KeyCode::Enter);
     INFO(client.drawn());
     CHECK(client.shows("9007199254740993"));
-    CHECK(client.shows("Concentration *"));
+    CHECK(client.shows("Concentration"));
 }
 
 TEST_CASE("tui forms: a wizard document steps on to its second step with the prefill", "[tui][forms]") {
@@ -167,4 +180,48 @@ TEST_CASE("tui forms: a wizard document steps on to its second step with the pre
     REQUIRE(client.dispatcher.count("Lims_ConfirmSample") == 1);
     CHECK(client.dispatcher.calls.at(client.dispatcher.last("Lims_ConfirmSample")).body ==
           R"({"sampleId":9007199254740993})");
+}
+
+// Mutation: lower `table` without `empty` (the header bar draws over nothing, and no title).
+TEST_CASE("tui forms: a table's empty state is drawn in its place while its rows are an empty list", "[tui][forms]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "empty", "state": { "rows": { "init": { "lit": [] } } },
+      "view": { "kind": "table", "testId": "list", "rows": { "ref": "rows" },
+                "columns": [ { "id": "name", "label": "Heading" } ],
+                "empty": [ { "kind": "emptyState", "title": "No rows yet" } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("No rows yet"));
+    CHECK_FALSE(client.shows("Heading"));
+}
+
+// Mutation: ignore `fieldLayout` in fieldCell (the label is a row above its control).
+TEST_CASE("tui forms: an inline form draws each label on its control's row", "[tui][forms]") {
+    for (bool const inlined : {true, false}) {
+        TuiClient client;
+        std::string const layout = inlined ? R"("fieldLayout": "inline", )" : "";
+        auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+          "vocab": "ui/1", "id": "capture",
+          "models": { "sample": { "type": "Lims_SampleModel" } },
+          "view": { "kind": "form", )" + layout + R"("model": "sample", "action": "Lims_CaptureConcentration" } })",
+                                                                       ui::testing::corpusCatalog()),
+                                               {}, client.backend);
+        REQUIRE(screen.has_value());
+        client.settle();
+        client.backend.focusFirst();
+        client.settle();
+        client.type("4242");
+        INFO(client.drawn());
+        auto const rows = rowsOf(client.screen);
+        auto const label = std::ranges::find_if(rows, [](std::string const& row) { return row.contains("Sample"); });
+        REQUIRE(label != rows.end());
+        CHECK(label->contains("4242") == inlined);
+        if (inlined) {
+            CHECK(label->find("Sample") < label->find("4242"));
+        }
+    }
 }

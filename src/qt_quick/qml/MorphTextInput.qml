@@ -12,18 +12,25 @@ MorphField {
     property string placeholder: ""
     // Whether the user edited the text since it was last committed.
     property bool edited: false
+    // The unit, drawn muted at the trailing edge inside the field; empty draws none.
+    property string unit: ""
+    // The fraction digits a number is entered with, -1 for an input that holds no number: carried for a kit's
+    // restyle to read; the stock input draws nothing from it.
+    property int decimals: -1
 
     control: field
     accessibleItem: field
     defaultRole: Accessible.EditableText
 
     TextField {
+        font: Theme.bodyFont
         id: field
         width: root.controlWidth
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
         leftPadding: Theme.spaceOf(3)
-        rightPadding: Theme.spaceOf(3)
+        // The text stops before the unit.
+        rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
             scheme: root.scheme
             focused: field.activeFocus
@@ -53,6 +60,17 @@ MorphField {
                 root.edited = false
                 root.fire("commit", text)
             }
+        }
+
+        Label {
+            id: unitLabel
+            objectName: "unit"
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.spaceOf(3)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.unit !== ""
+            text: root.unit
+            color: root.scheme.muted
         }
     }
 }

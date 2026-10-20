@@ -50,6 +50,8 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphSpacer.qml
         qml/MorphPanel.qml
         qml/MorphScroll.qml
+        qml/MorphScrollBar.qml
+        qml/MorphFooter.qml
         qml/MorphSlot.qml
         qml/MorphTabs.qml
         qml/MorphDialog.qml
@@ -57,6 +59,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphBusy.qml
         qml/MorphTable.qml
         qml/MorphTableRow.qml
+        qml/MorphTableRowBackground.qml
         qml/MorphDateTimeInput.qml
         qml/MorphSlider.qml
         qml/MorphFilePicker.qml
@@ -67,6 +70,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphKeyValue.qml
         qml/MorphEmptyState.qml
         qml/MorphSplitter.qml
+        qml/MorphSplitterHandle.qml
         qml/MorphCollapsible.qml
         qml/MorphDropZone.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets

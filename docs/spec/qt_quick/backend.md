@@ -12,6 +12,7 @@ the frontend around it is [`frontend.md`](frontend.md).
 ## Contents
 
 - [Shape](#shape)
+- [Several mounts](#several-mounts)
 - [Packaging](#packaging)
 - [Widgets](#widgets)
 - [User actions](#user-actions)
@@ -43,6 +44,24 @@ auto screen = interpreter.mount(document, params, backend);   // or ui::Mounted{
   width class (`widthClassOf`: below 600 logical pixels `compact`, below 1200 `medium`, else `expanded`) once at
   construction and each time the class changes, so the shell can set `{"env": "widthClass"}`.
 
+## Several mounts
+
+An application with a shell of its own (a tab workspace, a split view) shows several screens in one window: each
+page item of its shell is a `host`, with one `Backend` per page, and every root that backend makes is appended to the
+column it adds to that page.
+
+| Shared by every mount | Per mount |
+|---|---|
+| `ui::Session` (cache, locale, translations), `reactive::Runtime`, `Dispatcher`, `QQmlEngine`, `qt_quick::Components` (restyles, host and bundle components), the `Theme` singleton (one per engine) | `qt_quick::Backend` and its context (the per-type component cache), `ui::DocumentScreenHost` (its interpreter, close guard, application host and `diagnostics` callback), the screens and their handles |
+
+- A restyle is resolved per `Backend` when it first makes the type, so a restyle mapped after a backend made that
+  type reaches only backends made later, and that backend keeps the component it made. Restyles are mapped before
+  the first backend makes anything: in `FrontendConfig::onEngine`, or before the application builds its backends.
+- Every `Backend` is destroyed before the engine, and every `DocumentScreenHost` before the `Session`. Destroying one
+  mount (its screens, its host, its backend) leaves the others working.
+- A mutation on one page applies its effects through the shared session, so a query another page shows refreshes.
+- Nothing new is refused: a `DocumentScreenHost` already needs a backend and a document lookup.
+
 ## Packaging
 
 `morph::qt_quick` is a compiled STATIC library behind `MORPH_BUILD_QT_QUICK` (default off). It needs `MORPH_BUILD_QT`,
@@ -63,7 +82,13 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
   nothing when the item already shows the value, so a re-asserted text keeps its cursor and its input-method
   composition. State the user can change — a field's text, a check mark, a marked option, a slider's value, an open
   overlay — is read back from the control itself, never from a property C++ last wrote, because the user may have
-  changed it since.
+  changed it since. A setter writes only a property the item declares: a name it does not declare would become a
+  dynamic property that no binding reads, so the write is refused and reported once per QML type and name, through
+  the `Components` callback and `failures()` (``MorphText does not declare the property `x`; the write is refused``),
+  or on `std::cerr` for a backend without components. It is reported rather than thrown because writes also run from
+  Qt signal handlers and from a table restriping its rows while one is destroyed, where an exception cannot pass. The
+  placement and scheme a container writes into each child (`fillsWidth`, `fillsHeight`, `inheritedScheme`) are
+  offered instead: every `MorphUi` item declares them, and a custom component takes part only if it does.
 - **is reached through an `ItemBase`.** The common properties of `ui::Widget` (visibility, enablement, layout hints,
   drag key, drop target, accessible name and role, test id as the item's `objectName`, tooltip, surface, chords,
   focus) are one implementation for every kind; `FieldItemWidget` adds `readOnly`, `required`, `errors` and `stale`.
@@ -111,23 +136,24 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 
 | Kind | Component | Shows | Reports |
 |---|---|---|---|
-| Text | `MorphText` | a label in a text role | — |
-| Button | `MorphButton` | a `Button` | click, Space or Enter |
-| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea` | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
+| Text | `MorphText` | a label in a text role: a heading in `Theme.headingFont`, a section in `Theme.strongFont`, the rest in the body font; the colour is `MorphWidget.textColorOf(role)` (the scheme's muted colour for muted and section, error and success theirs, the text colour otherwise), which a restyle reads | — |
+| Button | `MorphButton` | a `Button`; its `icon` drawn as the control's icon when the theme's icon set names it ([`../ui/theme.md`](../ui/theme.md#icons)). `style` 1, a list item: it fills its line (`fillsAcross`), its content an icon and a left-aligned label padded by `Theme.spaceOf(3)`, no border, a clear background that is `scheme.neutral` while hovered or pressed; while `selected`, an accent tint (`Qt.alpha(scheme.accent, 0.12)`), the label in the accent and a 3 px accent bar at its leading edge. `style` and `selected` are part of the button's restyle API | click, Space or Enter |
+| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
 | Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |
 | Menu | `MorphMenu` | a bar of top-level entries; a submenu opens in a popup, one level at a time | the chosen entry's path |
-| Column, Row | `MorphStack` | a `GridLayout` flowing on the axis | — |
-| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan` | — |
+| Column, Row | `MorphStack` | a `GridLayout` flowing on the axis; `align` and `justify` (the `ui::Align` and `ui::Justify` indices) | — |
+| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align` | — |
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
-| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view | — |
+| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
+| Splitter | `MorphSplitter` | a `SplitView` whose handles are made from its `handle` part (`MorphSplitterHandle`); the splitter sets each handle's `axis` and `scheme`, and leaves a handle's implicit extent along the axis between two panes | the panes' sizes once a drag ends |
 | Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
-| Tabs | `MorphTabs` | a `TabBar` over the page slots | the tab clicked |
-| Dialog | `MorphDialog` | a modal `Popup`, centred | Escape or a press outside, as a dismissal |
-| Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open | as a dialog |
-| Busy | `MorphBusy` | a `BusyIndicator` and a label | — |
-| Table | `MorphTable`, rows `MorphTableRow` | column headers over rows | selection and activation, below |
+| Tabs | `MorphTabs` | a `TabBar` over the page slots, `Theme.spaceOf(3)` above them; `barShown` false hides the bar and gives its height to the pages, and its `focusTarget` is then the pages, so a hidden bar never holds the keyboard focus | the tab clicked |
+| Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
+| Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
+| Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
+| Table | `MorphTable`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
@@ -135,10 +161,20 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Collapsible | `MorphCollapsible` | a toggle with the title, the header beside it, the content below while open | the open state asked for |
 | DropZone | `MorphDropZone` | a framed `DropArea` for files | the local paths of a drop it took |
 
+- **Captions.** `MorphField` carries `caption` and `labelShown`; while `labelShown` it draws the caption above its
+  control and moves the control under it, and the field's implicit size takes it in. A text input, select and
+  date-time input write both from `setCaption`. A restyle reads `caption` with `labelShown` false to know its
+  label is drawn elsewhere. (The property is not `label`: `MorphCheckbox` declares `label` for its own text.)
 - **Controlled inputs** behave as the contract says: the control shows the user's action at once, as Qt Quick does,
   and the mount re-asserts the document's value in a later turn. A read-only check box, select or slider takes
   focus and puts its own state back when the user acts; a read-only text field reports no edit, commit or submit.
+- **Icons.** A badge, an empty state, a menu entry and a button draw a node's icon from `Theme.iconSource` when the
+  bundle's icon set names it, and today's text otherwise; a banner draws its tone's framework icon and its close
+  button's, and a collapsible and a panel their chevrons, from the set when it names them. While the bundle declares
+  a set, a node icon outside it is reported once per name (`Context::checkIcon`).
 - **Dialogs and drawers** open and close without a transition, so what the document says is what the window shows.
+  `footer` is part of their restyle API: a kit's dialog places the footer item where it wants, and a restyle that
+  does not declare it is refused.
   A close by `setOpen(false)` reports nothing; Escape or a press outside closes the overlay first and then reports
   the dismissal.
 - **A date-time field** that the user leaves holding text that names no instant reports nothing and shows again what
@@ -164,6 +200,15 @@ click or Enter activates it without toggling the selection. Selection is kept as
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
+`selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
+position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
+else the `ui::Tone` index) and its `scheme`. The row's
+height is the larger of its cells' and the background's `implicitHeight`; the stock background draws the selection
+fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`. A toned
+row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
+the selection colour and keeps the bar.
+
 ## Keys
 
 A `ui::Key` crosses into QML as text — `i:<int64>` or `s:<text>` — and back through `decodeKey`, never as a JavaScript
@@ -180,8 +225,14 @@ it; a widget out of reach takes none.
 ## Layout and theme
 
 A `MorphWidget`'s sizing maps to `QtQuick.Layouts`: content to the implicit size, `fixed(n)` to a preferred size of
-`n` units, `stretch(w)` to fill with stretch factor `w`. A unit is the default font's average character width
-horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`).
+`n` units, `stretch(w)` to fill with stretch factor `w`. The bounds map to `Layout.minimumWidth`, `maximumWidth`,
+`minimumHeight` and `maximumHeight` of `n` units (`MorphWidget`'s `minWidthUnits`, `maxWidthUnits`,
+`minHeightUnits`, `maxHeightUnits`; −1 for none, which resets the layout's default): `QtQuick.Layouts` shares the
+length a capped item leaves among the others, and places a fill item its maximum stops at the start. `showLayout`
+writes a bound given and offers an absent one, so a component that declares no bounds is reported only for a node
+that has one. A unit is the body font's average character width
+horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`): the platform font's, or the
+theme's `font.family` at the body size once a theme names one ([`../ui/theme.md`](../ui/theme.md), "On Qt Quick").
 
 A content-sized dimension fills the container across its axis ([`../ui/backend_contract.md`](../ui/backend_contract.md),
 the cross axis). A QML child cannot see its parent's axis, so the container says: `ContainerCore::adopt` writes the
@@ -190,6 +241,21 @@ height), a splitter and a table row (neither, since they size their own children
 `Layout.fillWidth` to a stretch width, or a content width with `fillsWidth`, and the same for height. Along its axis a
 `MorphStack` whose shown children do not stretch keeps its layout at its natural length, so the children pack at the
 start: a `GridLayout` given more length hands the spare to the gaps between its cells.
+
+**Alignment.** `ContainerCore::adopt` also offers each child `alignAcross` (1 for a column's child, placed
+horizontally; 2 for a row's or a grid's, placed vertically; 0 elsewhere) and `crossAlign`, the container's
+`ui::Align` index; `setAlign` re-offers `crossAlign` to every child already held (`alignChildren`), since a child is
+adopted in its constructor, before its container can be aligned. `showLayout` writes a node's `alignSelf` (−1 for
+none, offered). `MorphWidget` places itself by `alignSelf`, else `crossAlign`: under start, centre or end it sets
+`Layout.alignment` (`AlignLeft`, `AlignHCenter`, `AlignRight` in a column; `AlignTop`, `AlignVCenter`, `AlignBottom`
+in a row or grid) and drops the cross fill of a content-sized dimension, while a `stretch` one keeps its fill and its
+maximum places it. Along the axis, while no shown child stretches, `MorphStack` sizes its layout to its natural length
+and offsets it by `justify`: none, half the spare length or all of it. For `between` the layout keeps the full length
+and its spacing is `max(gap, spare / (shown − 1))`, the spare computed from each shown child's preferred (else
+implicit) length clamped into its `Layout` minimum and maximum, because a `GridLayout` given more length gives it to
+its cells, not its gaps. Its implicit length along the axis is then those lengths and the gaps, not the layout's:
+the layout's includes the spacing taken from the stack's length, which a parent that sizes the stack from its
+implicit length would feed back, widening the stack on every pass.
 
 **Surfaces.** `Theme.scheme(name)` is the colour scheme of a surface (`MorphScheme`: the colour roles, each the
 theme's unless the surface sets it), and the theme itself for the empty name. Every `MorphWidget` draws with
@@ -223,11 +289,28 @@ surface is `Theme.background`.
   in a directory no resource has, so a relative import finds nothing.
 - **Host components** (`addHost(name, version, url)`) are QML the client carries; they load into the backend's own
   engine, so they may import the application's other modules, at the version a document asks for or later.
-- **The restyle map** (`restyle(engine, kind, component)`) names a component for a built-in kind. The component must
-  declare every property and function of the kind's `MorphUi` component — one that extends it does — and one that
-  does not is refused when it is mapped; the kind then keeps its `MorphUi` component. The layout kinds (column, row,
-  grid, spacer, scroll, slot, splitter, drop zone) are not restyled. A text input's restyle replaces its single-line
-  component.
+- **The restyle map** (`restyle(engine, kind, component)`) names a component for a built-in kind or part. The
+  component must declare every property and function of its `MorphUi` base — one that extends it does — and one that
+  does not is refused when it is mapped, naming what it lacks; the kind then keeps its `MorphUi` component. A base's
+  properties are its restyle API, so a property a base gains is one a restyle written from scratch must then declare.
+  There are two kinds of restyle:
+  - **A kind restyle** replaces a kind's whole component. A text input's restyle (`textInput`) replaces its
+    single-line component, and a `textArea` restyle its multi-line one (`MorphTextArea`, whose API is
+    `MorphField`'s field API with `placeholder`, `edited`, `assigning` and `assign(value)`).
+  - **A part restyle** replaces one drawn part inside a component C++ creates, never its layout. The container's
+    component declares the part as a `Component` property, and C++ passes the context's component for the part's
+    type, restyled or not, as an initial property when it makes the container.
+
+  | Restyle kind | `MorphUi` base | What it replaces | Base API (beyond its Qt type's) |
+  |---|---|---|---|
+  | `tableRow` | `MorphTableRowBackground` | a table row's background: selection, hover, focus, zebra, tone, and the row's minimum height | `selected`, `hovered`, `current`, `alternate`, `tone` (−1 none, else a `ui::Tone` index), `scheme` |
+  | `scrollBar` | `MorphScrollBar` (a `ScrollBar`) | the bar a scroll area attaches on its axis | `scheme` |
+  | `splitterHandle` | `MorphSplitterHandle` | the handle between two panes of a splitter | `axis`, `scheme`; the handle reads `SplitHandle.pressed` and `.hovered` |
+
+  A `scrollBar` restyle is a `ScrollBar` subclass: the names checked are every one beyond `QQuickItem`'s, so the
+  base's include all of `ScrollBar`'s. The layout kinds (column, row, grid, spacer, scroll, slot, splitter, drop zone)
+  are not restyled as kinds; what a scroll area and a splitter draw of their own is restyled as their parts, and the
+  refusal says so (`` `scroll` is a layout kind; restyle its bar as `scrollBar` ``).
 - `Backend::createCustom(parent, {name, props, minVersion})` loads a component and checks that it declares every
   prop the document declares. A component reports its events through `host.fire(event, payload)` (`host` a `var`
   property it declares and the backend sets); `CustomWidget::setOnEvent` receives the event's name and the payload
@@ -257,8 +340,19 @@ software scene graph:
   moves the fewest rows and keeps the kept rows' items and focus; a table row keyed above 2^53 is reported exactly;
   spec 5 §7's server-calculated values show in their rows, stale and never blank while a newer request is in flight,
   with the row's error on a failure.
+- **Several mounts:** two backends on two items of one window over one engine, one `Components` with a
+  `textInput` restyle and one session: both pages' inputs are the restyle, a mutation on one page refreshes a query
+  the other shows, each host's diagnostics hold only its screen's, and destroying the first page leaves the second's
+  input editable; a restyle mapped after the first page made its input reaches only the second.
 - **Components:** props and events; a digest mismatch, a compile error, a missing component, an old host component
-  and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused.
+  and a missing prop each leave the fallback, reported once; a restyle that lacks the kind's API is refused; a
+  `tableRow` restyle draws every row's background, sets the row's height, and sees `alternate` follow a move and a
+  destroy; a `textArea` restyle is what a multi-line input is made of, and one without `assign` is refused; a
+  `scrollBar` restyle is the bar a scroll area attaches, and one that is no `ScrollBar` is refused; a `splitterHandle`
+  restyle is every handle, and a 12 px one makes the panes leave 12 px where the stock one leaves 6; `scroll` and
+  `splitter` as kinds are refused naming their part kinds; a write
+  of a property the item does not declare is refused and reported once, and a custom component in a container is
+  offered no placement it does not declare.
 - **Automation conformance:** a generated screen read back through `QAccessible` from the window's interface, as a
   driver reads it, with the accessibility machinery switched on: the document's names and roles, a button's role,
   name and press action, a key-value pair named `"<caption>: <value>"`, the test id as `objectName` and, from Qt
@@ -282,7 +376,6 @@ software scene graph:
 ## Not yet
 
 - The WebAssembly build, its smoke executable and the browser history (spec 3 §10), which come separately.
-- A runtime density from theme tokens; the units come from the default font, not the
-  scale tokens.
+- A runtime density from theme tokens; the units come from the body font, not the scale tokens.
 - A per-template QML generator in place of per-kind components, which needs the interpreter to lower without
   mounting and to number slots per template.

@@ -91,6 +91,8 @@ public:
         _topStart->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topBar->setTestId("shell_topbar");
+        // Centred across the bar, so the principal's text sits level with the sign-out button's label.
+        _topBar->setAlign(Align::Center);
         _title->setRole(TextRole::Heading);
         _title->setLayout({.width = Sizing::stretch(), .height = {}});
         _title->setTestId("shell_title");

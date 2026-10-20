@@ -49,6 +49,8 @@ public:
     void setSelectionMode(ui::SelectionMode mode) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
+    /// The row's cells draw in the tone's style. Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
     void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;

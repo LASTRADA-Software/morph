@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,7 +20,8 @@ namespace morph::tui::detail {
 
 namespace {
 
-::core::tui::Style const& roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
+// A section heading is the muted style, bold: a step below a heading, which is bold body text.
+::core::tui::Style roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
     if (role == ui::TextRole::Muted) {
         return theme.textMuted;
     }
@@ -32,6 +34,11 @@ namespace {
     if (role == ui::TextRole::Success) {
         return theme.success;
     }
+    if (role == ui::TextRole::Section) {
+        ::core::tui::Style section = theme.textMuted;
+        section.bold = true;
+        return section;
+    }
     return theme.textNormal;
 }
 
@@ -41,6 +48,18 @@ namespace {
         return theme.buttonDisabled;
     }
     return focused ? theme.buttonFocused : theme.buttonNormal;
+}
+
+/// A list item's style: disabled while out of the user's reach, else focus first, as a list's cursor row is, then
+/// selection.
+::core::tui::Style const& itemStyle(::core::tui::Theme const& theme, bool reachable, bool focused, bool selected) {
+    if (!reachable) {
+        return theme.buttonDisabled;
+    }
+    if (focused) {
+        return theme.buttonFocused;
+    }
+    return selected ? theme.listItemSelected : theme.textNormal;
 }
 
 /// A checkbox's or a slider's style: muted while out of the user's reach, else by focus.
@@ -73,7 +92,7 @@ void TextImpl::setRole(ui::TextRole role) {
 }
 
 void TextImpl::paint(::core::tui::Canvas& canvas) {
-    auto const& style = roleStyle(canvas.theme(), _role);
+    ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
     int row = 0;
     for (auto const line : splitLines(_text)) {
         if (row >= canvas.height()) {
@@ -97,7 +116,30 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
     refresh();
 }
 
-::core::tui::Size ButtonImpl::naturalSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
+void ButtonImpl::setIcon(std::string_view icon) {
+    _icon = std::string{icon};
+    refresh();
+}
+
+void ButtonImpl::setStyle(ui::ButtonStyle style) {
+    _style = style;
+    refresh();
+}
+
+void ButtonImpl::setSelected(bool selected) {
+    _selected = selected;
+    refresh();
+}
+
+std::string ButtonImpl::caption() const {
+    std::string_view const glyph = ui::iconGlyph(_icon);
+    return glyph.empty() ? _label : std::string{glyph} + " " + _label;
+}
+
+// A push button's brackets and their spaces, or an item's space either side.
+::core::tui::Size ButtonImpl::naturalSize() const {
+    return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : 4), .height = 1};
+}
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     // Primary is bold, danger bold in the error colour; neither changes a disabled button's look.
@@ -108,7 +150,17 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
             style.fg = canvas.theme().error.fg;
         }
     }
-    canvas.putString(0, 0, "[ " + _label + " ]", style);
+    if (_style == ui::ButtonStyle::Item) {
+        // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as
+        // a highlighted row. Focus wins over selection, as the cursor row of a list does.
+        ::core::tui::Theme const& theme = canvas.theme();
+        ::core::tui::Style const& line = itemStyle(theme, actionable(), hasFocus(), _selected);
+        std::string text = " " + caption();
+        text.append(static_cast<std::size_t>(std::max(0, canvas.width() - displayWidth(text))), ' ');
+        canvas.putString(0, 0, text, line);
+        return;
+    }
+    canvas.putString(0, 0, "[ " + caption() + " ]", style);
 }
 
 ::core::tui::EventResult ButtonImpl::key(::core::tui::KeyEvent const& key) {

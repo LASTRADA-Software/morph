@@ -21,6 +21,7 @@ and is its `InterpreterHost` for `navigate`.
 - [The close protocol](#the-close-protocol)
 - [Routes](#routes)
 - [Route history](#route-history)
+- [A shell of its own](#a-shell-of-its-own)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
@@ -30,7 +31,8 @@ and is its `InterpreterHost` for `navigate`.
 |---|---|
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
-| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, and the save seam `canSave()` and `save(done)`. |
+| `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
+| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -77,6 +79,10 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   canonical JSON text. A screen with no `identity`, one whose `identity` reads anything but params (state, a query,
   the session), and one whose identity is `null` answer `std::nullopt`: their identity is known only once mounted,
   through the handle.
+- **`identityKey(identity)`** is that canonical text for a value (`std::nullopt` for `null`), so
+  `identityOf(id, params) == identityKey(handle.identity().peek())` is how a shell of its own decides whether a
+  mounted screen is the one those params would open. `sameIdentity(a, b)` compares two identities by their keys;
+  `null` equals nothing, itself included.
 - **`prefetch(screenId, params)`** starts the screen's `prefetch` queries before it mounts (spec 5 §5).
   - Each named query's body is evaluated over the params alone, and its cache entry is warmed under the token the
     mounted screen's alias will have: `shared:<key>` for a keyed alias, `shared` for a stateless model's.
@@ -99,6 +105,13 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has
   closed, and `dirty()` is then `false`.
+- `head()` of a document screen is its head: the document's `subtitle` as text, its visible `status` badges and its
+  visible `actions`, empty when the document declares none. A host screen's `head()` is null unless its handle
+  overrides it. `run(id)` runs the action's `onClick` as a user event in the screen scope, in one batch, and answers
+  `true`; for an id the head does not hold, or holds hidden or disabled, it answers `false` and reports a diagnostic
+  (`head action <id> is unknown`, `… is hidden`, `… is disabled`). `subtitle()` keeps its last value once the screen
+  has closed, `status()` and `actions()` are then empty, and after a `remount` the head follows the new screen.
+  `HeadBadge` and `HeadAction` are declared in `interpreter.hpp`, since `Screen` answers them.
 
 ## The close protocol
 
@@ -208,6 +221,21 @@ bound to C++. `push` and `replace` are skipped while the address holds a move th
 and the next tick reports it. The generic client passes one in its WebAssembly build. An explicit `--screen` there
 wins over the route the history holds. A move made while a sign-in reloads the catalog, and the link the page was
 opened with, are opened once the reload ends, before any navigation the sign-in asked for.
+
+## A shell of its own
+
+An application that keeps its own shell (its tab strip, page header and status bar) mounts each page's screen through
+a `DocumentScreenHost` of its own over that page's view backend: on Qt Quick, one `qt_quick::Backend` per page item,
+as [`../qt_quick/backend.md`](../qt_quick/backend.md#several-mounts) states.
+
+- The hosts share one `Session` and one `Dispatcher`, so the pages share the cache, the locale and the translations,
+  and a mutation's effects on one page refresh the queries another shows.
+- Each host has its own interpreter, close guard, application host and `diagnostics` callback, which hears only the
+  screens that host mounted.
+- Every host is destroyed before the `Session`, and every screen handle before its host. Destroying one page's host
+  and screens leaves the other pages working.
+- The shell compares a mounted screen with the one some params would open by `identityKey`, and titles its tabs with
+  `catalogTitle` (see `DocumentScreenHost` above, and [`catalogue.md`](catalogue.md#catalog-titles)).
 
 ## Design decisions
 

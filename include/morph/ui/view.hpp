@@ -18,7 +18,9 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
+#include "alignment.hpp"
 #include "button_emphasis.hpp"
+#include "button_style.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -200,6 +202,7 @@ enum class TextRole : std::uint8_t {
     Heading,  ///< A section heading.
     Error,    ///< An error message.
     Success,  ///< A confirmation.
+    Section,  ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
 };
 
 /// @brief How a `TextInput` edits.
@@ -297,15 +300,30 @@ struct Sizing {
     bool operator==(Sizing const&) const = default;
 };
 
-/// @brief A widget's size request in both dimensions.
+/// @brief A widget's size request in both dimensions, and the bounds its extent is clamped into.
+///
+/// A bound clamps the extent the sizing gives, whatever the sizing: a stretch child's share stops at its maximum
+/// and a content or fixed child takes at least its minimum. A negative bound, a minimum above its maximum and a
+/// fixed amount outside its bounds are refused at mount (`std::logic_error`).
 struct LayoutHints {
     /// @brief Along the horizontal axis.
     Sizing width{};
     /// @brief Along the vertical axis.
     Sizing height{};
+    /// @brief The least width, in backend units; `nullopt` for none.
+    std::optional<int> minWidth;
+    /// @brief The most width, in backend units; `nullopt` for none.
+    std::optional<int> maxWidth;
+    /// @brief The least height, in backend units; `nullopt` for none.
+    std::optional<int> minHeight;
+    /// @brief The most height, in backend units; `nullopt` for none.
+    std::optional<int> maxHeight;
+    /// @brief Where the node sits across its row's, column's or grid row's axis; `nullopt` takes the container's
+    ///        `align`.
+    std::optional<Align> alignSelf;
 
     /// @brief Memberwise equality.
-    /// @return Whether both dimensions match.
+    /// @return Whether the sizings, the bounds and the alignment match.
     bool operator==(LayoutHints const&) const = default;
 };
 
@@ -406,6 +424,13 @@ struct Button {
     Action onClick;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The name of an icon in the theme's icon set, drawn beside the caption; empty shows none. Set once.
+    std::string icon;
+    /// @brief A push button or a list entry; set once.
+    ButtonStyle style = ButtonStyle::Push;
+    /// @brief Whether a list entry is the current one. Only an `Item` takes it: the mount refuses a bound or `true`
+    ///        value on a push button.
+    Prop<bool> selected = false;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.
@@ -423,6 +448,18 @@ struct TextInput {
     Prop<std::string> placeholder;
     /// @brief Single-line, multiline or password; set once.
     TextInputMode mode = TextInputMode::SingleLine;
+    /// @brief The unit the input shows beside its text, such as `kg`; empty shows none. Only a single-line or
+    ///        password input shows one: the mount refuses a multiline input with a unit.
+    Prop<std::string> unit;
+    /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
+    ///        not hold a number. Set once; the mount refuses places on a multiline input.
+    int decimals = -1;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -468,6 +505,12 @@ struct Select {
     Action onOpen;
     /// @brief Dropdown or radio; set once.
     SelectStyle style = SelectStyle::Dropdown;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -522,6 +565,10 @@ struct Column {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Where the children sit across the column (horizontally); set once.
+    Align align = Align::Stretch;
+    /// @brief Where the spare height goes while no shown child stretches; set once.
+    Justify justify = Justify::Start;
 };
 
 /// @brief Children laid out left to right.
@@ -532,6 +579,13 @@ struct Row {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief A table row's tone: disengaged when none was given; an engaged `Prop` whose value is `nullopt` has no
+    ///        tone at the moment. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief Where the children sit across the row (vertically); set once.
+    Align align = Align::Stretch;
+    /// @brief Where the spare width goes while no shown child stretches; set once.
+    Justify justify = Justify::Start;
 };
 
 /// @brief One cell of a `Grid`.
@@ -552,6 +606,9 @@ struct Grid {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so
+    ///        there is no spare length to justify.
+    Align align = Align::Stretch;
 };
 
 /// @brief Empty space that takes what its layout hints ask for.
@@ -834,6 +891,12 @@ struct DateTimeInput {
     DateMode mode = DateMode::DateTime;
     /// @brief The display zone's offset from UTC, in minutes; set once.
     int offsetMinutes = 0;
+    /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
+    ///        the input. Empty: none.
+    Prop<std::string> label;
+    /// @brief Whether the input draws `label` as a visible caption itself; set once. A form leaves it false, since
+    ///        its cell draws the caption.
+    bool showLabel = false;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -990,6 +1053,15 @@ struct Drawer {
     Common common{};
 };
 
+/// @brief A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay
+///        `actions` lower to. The mount refuses one anywhere else.
+struct ActionBar {
+    /// @brief The buttons, in order; a null child is skipped.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, layout, drag-and-drop of the row.
+    Common common{};
+};
+
 /// @brief Panes side by side, or stacked, with handles the user drags to share the space between them.
 struct Splitter {
     /// @brief The panes, in order; a null child is skipped.
@@ -1068,7 +1140,7 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar>
         kind;
 };
 
@@ -1215,6 +1287,11 @@ template <typename Kind>
 /// @return The node.
 [[nodiscard]] inline Node drawer(Drawer spec) { return detail::makeNode(std::move(spec)); }
 
+/// @brief An action bar node.
+/// @param spec The bar.
+/// @return The node.
+[[nodiscard]] inline Node actionBar(ActionBar spec) { return detail::makeNode(std::move(spec)); }
+
 /// @brief Panes with handles the user drags.
 /// @param spec The node.
 /// @return The node.
@@ -1326,6 +1403,14 @@ struct TableOptions {
     Common common{};
 };
 
+/// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
+struct TableRowView {
+    /// @brief The cells, one non-null node per column.
+    std::vector<Node> cells;
+    /// @brief The row's tone, bound in the row's own scope; disengaged for none.
+    std::optional<Prop<std::optional<Tone>>> tone;
+};
+
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
 ///
 /// Rows are mounted, updated, unmounted and reordered as `forEach` does. A row whose cells are not exactly one
@@ -1348,18 +1433,46 @@ template <typename RowT>
     if (!rows || !keyOf || !cells) {
         throw std::invalid_argument{"ui::table: the rows, the key function and the cells must not be empty"};
     }
-    std::function<Node(reactive::Signal<RowT> const&)> rowView =
-        [cellsOf = std::move(cells), count = columns.size()](reactive::Signal<RowT> const& entry) {
-            std::vector<Node> rowCells = cellsOf(entry);
-            if (rowCells.size() != count ||
-                std::ranges::any_of(rowCells, [](Node const& cell) { return cell == nullptr; })) {
+    std::function<TableRowView(reactive::Signal<RowT> const&)> rowView =
+        [cellsOf = std::move(cells)](reactive::Signal<RowT> const& entry) {
+            return TableRowView{.cells = cellsOf(entry), .tone = std::nullopt};
+        };
+    return table<RowT>(std::move(columns), std::move(rows), std::move(keyOf), std::move(rowView), std::move(options));
+}
+
+/// @brief A table of keyed rows whose row view gives each row its tone as well as its cells.
+///
+/// As the other `table`, with @p rowView answering a `TableRowView`: the tone binds in the row's own scope, and the
+/// table is told it after the row's key and on every change.
+/// @tparam RowT The row type; copyable.
+/// @param columns The columns, in order.
+/// @param rows Reads the rows; every signal it reads is a dependency.
+/// @param keyOf A row's identity; a later duplicate of a key is reported and refused, and the first one is kept.
+/// @param rowView Builds a row's cells, one per column, and its tone, once, from a signal the mount keeps equal to
+///        the row.
+/// @param options Selection, activation and `Common`.
+/// @return The node.
+/// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
+template <typename RowT>
+[[nodiscard]] Node table(std::vector<TableColumn> columns, std::function<std::vector<RowT>()> rows,
+                         std::function<Key(RowT const&)> keyOf,
+                         std::function<TableRowView(reactive::Signal<RowT> const&)> rowView,
+                         TableOptions options = {}) {
+    if (!rows || !keyOf || !rowView) {
+        throw std::invalid_argument{"ui::table: the rows, the key function and the row view must not be empty"};
+    }
+    std::function<Node(reactive::Signal<RowT> const&)> rowNode =
+        [viewOf = std::move(rowView), count = columns.size()](reactive::Signal<RowT> const& entry) {
+            TableRowView made = viewOf(entry);
+            if (made.cells.size() != count ||
+                std::ranges::any_of(made.cells, [](Node const& cell) { return cell == nullptr; })) {
                 throw std::invalid_argument{"ui::table: a row needs exactly one non-null cell per column"};
             }
-            return row(Row{.children = std::move(rowCells)});
+            return row(Row{.children = std::move(made.cells), .tone = std::move(made.tone)});
         };
     Table spec{
         .rows =
-            std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
+            std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowNode)),
         .selectionMode = options.selectionMode,
     };
     spec.columns = std::move(columns);
