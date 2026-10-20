@@ -237,7 +237,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
   `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
   minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
-  frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
+  frontend, not by its container). On Qt Quick, that sizing caps the overlay at the window less a margin on each
+  axis, and scrolls whatever content does not fit between the title and the footer, which both stay reachable.
+  There is also no bound on a `custom` node (which carries no common properties). A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is

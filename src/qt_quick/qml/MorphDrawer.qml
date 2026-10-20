@@ -51,7 +51,11 @@ MorphWidget {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        width: Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth)
+        // Capped against the window less a margin: Math.min only ever shrinks the natural width down, it does not
+        // stretch a narrow drawer up to the cap. The drawer's height is always the full window height by design
+        // (unlike a dialog, a drawer is a full-height side panel) -- only its width is at issue here.
+        width: Math.min(Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth),
+                        (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
         height: Overlay.overlay ? Overlay.overlay.height : 0
         onAboutToHide: {
             if (!root.programmatic)
@@ -59,19 +63,34 @@ MorphWidget {
         }
 
         contentItem: ColumnLayout {
+            id: contentColumn
+
             Label {
+                id: titleLabel
                 font: Theme.strongFont
                 visible: root.title !== ""
                 text: root.title
             }
 
-            ColumnLayout {
-                id: column
+            // Only the content between the title and the footer scrolls, so both stay reachable however tall the
+            // content is -- the drawer's own height is already fixed to the window (above), so without this, tall
+            // content pushes the footer below the window's bottom edge rather than being itself cut off.
+            // Layout.maximumHeight is computed from the title's and footer's own independent heights, not from the
+            // scroll area's own size, to avoid the circularity deriving its cap from its own content would create;
+            // below the cap, Layout.fillHeight already gives a short drawer just the room it needs. A ScrollView
+            // (not a bare Flickable) correctly lets a plain click on an interactive child pass through to it.
+            ScrollView {
+                id: scroll
                 Layout.fillWidth: true
-            }
-
-            Item {
                 Layout.fillHeight: true
+                Layout.maximumHeight: Math.max(0, drawer.height - titleLabel.height - footerArea.height -
+                                               contentColumn.spacing * 2)
+                clip: true
+
+                ColumnLayout {
+                    id: column
+                    width: scroll.availableWidth
+                }
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own
