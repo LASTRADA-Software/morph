@@ -667,7 +667,7 @@ TEST_CASE("qt_quick widgets: a primary button is accent-filled, a danger one err
 }
 
 // Whether an Item-style button already composes with a trailing Badge inside a row, or whether the button's own
-// fill consumes the row's width first and squeezes or displaces the badge. #1013's premise, checked empirically.
+// fill consumes the row's width first and squeezes or displaces the badge, checked empirically.
 TEST_CASE("qt_quick widgets: an Item-style button composes with a trailing Badge in a stretched row", "[qt_quick]") {
     Scene scene;
     auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
