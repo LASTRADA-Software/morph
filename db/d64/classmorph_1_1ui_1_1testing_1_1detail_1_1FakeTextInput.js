@@ -8,6 +8,7 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput =
     [ "setPlaceholder", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a8329be7b8f20b0da3b2969794fa24206", null ],
     [ "setUnit", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#af48362076821ac99777cfbc06a1201f6", null ],
     [ "setDecimals", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a4180a94cc62059010620e1f06c4d8497", null ],
+    [ "setIcon", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a1095a354e94a1f1a6bac5816919d22c5", null ],
     [ "setCaption", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a87f41af6b53ead75af5c2c657b0dd9ff", null ],
     [ "setOnChange", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a4e6d2e3511b8b7cbb9954ce3188c14ac", null ],
     [ "setOnSubmit", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#ab598b40bcdd6ad0fb7f204e7009b366e", null ],

@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d64/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor.  
+<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -157,6 +157,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:af48362076821ac99777cfbc06a1201f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the unit the input shows, muted, at its trailing edge, inside the field; empty shows none. Called only on a single-line or password input.  <br /></td></tr>
 <tr class="memitem:a4180a94cc62059010620e1f06c4d8497" id="r_a4180a94cc62059010620e1f06c4d8497"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4180a94cc62059010620e1f06c4d8497">setDecimals</a> (int decimals) override</td></tr>
 <tr class="memdesc:a4180a94cc62059010620e1f06c4d8497"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the fraction digits a number is entered with: what a backend or a kit may use to align or format the text. Nothing is required of a backend that draws nothing from it. Called only on a single-line or password input.  <br /></td></tr>
+<tr class="memitem:a1095a354e94a1f1a6bac5816919d22c5" id="r_a1095a354e94a1f1a6bac5816919d22c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1095a354e94a1f1a6bac5816919d22c5">setIcon</a> (std::string_view icon) override</td></tr>
+<tr class="memdesc:a1095a354e94a1f1a6bac5816919d22c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the icon drawn at the field's leading edge; empty shows none. Called once, and only for a single-line or password input that has one.  <br /></td></tr>
 <tr class="memitem:a87f41af6b53ead75af5c2c657b0dd9ff" id="r_a87f41af6b53ead75af5c2c657b0dd9ff"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a87f41af6b53ead75af5c2c657b0dd9ff">setCaption</a> (std::string_view label, bool shown) override</td></tr>
 <tr class="memdesc:a87f41af6b53ead75af5c2c657b0dd9ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="memitem:a4e6d2e3511b8b7cbb9954ce3188c14ac" id="r_a4e6d2e3511b8b7cbb9954ce3188c14ac"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e6d2e3511b8b7cbb9954ce3188c14ac">setOnChange</a> (std::function&lt; void(std::string)&gt; onChange) override</td></tr>
@@ -232,7 +234,7 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor. </p>
 <p>The cursor is a byte offset into the text. A user's edit puts it where the edit left it; <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with the text the field shows leaves it alone, as the contract requires, and <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with another text puts it at the end. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00902">902</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
@@ -520,6 +522,43 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
+<a id="a1095a354e94a1f1a6bac5816919d22c5" name="a1095a354e94a1f1a6bac5816919d22c5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1095a354e94a1f1a6bac5816919d22c5">&#9670;&#160;</a></span>setIcon()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setIcon </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>icon</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the icon drawn at the field's leading edge; empty shows none. Called once, and only for a single-line or password input that has one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">icon</td><td>An icon name of the theme's icon set. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a73b512d9d4b745c52cb3c215764ccd42">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00940">940</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a87f41af6b53ead75af5c2c657b0dd9ff" name="a87f41af6b53ead75af5c2c657b0dd9ff"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a87f41af6b53ead75af5c2c657b0dd9ff">&#9670;&#160;</a></span>setCaption()</h2>
 
@@ -558,7 +597,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a485acba53524dffd9d48ae2cd4fbecb1">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00940">940</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00941">941</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -595,7 +634,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a0e937b2ee04f7d2b402ac6b64157b13f">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00944">944</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00945">945</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -632,7 +671,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aae1eb31ad6bb2c3bcad03efbc830cef6">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00945">945</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00946">946</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -669,7 +708,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00946">946</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00947">947</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

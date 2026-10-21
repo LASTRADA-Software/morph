@@ -152,7 +152,7 @@ Public Member Functions</h2></td></tr>
 <p>Bindings run in owner order. The tree's own bindings are at the depth the mount was given; the content of a <a class="el" href="../../d9/d60/structmorph_1_1ui_1_1Switch.html" title="Shows the case whose key the selector yields; remounts only when that key changes.">Switch</a> case, a <a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> page or a <a class="el" href="../../d2/dc0/structmorph_1_1ui_1_1Dialog.html" title="A modal overlay; its content is mounted only while it is open.">Dialog</a>, and every <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> row, is in a scope one level deeper than the binding that mounted it. So an Effect that removes content runs before the content's own bindings in the same flush, and a binding never evaluates against state its owner is about to take away. A mount placed under an outer scope (a screen's, a row's) takes that scope's depth plus one, so the outer scope's Effects run first too.</p>
 <p>A mount must run to completion: nothing it calls, a backend factory or setter or a binding's evaluation, may destroy this object, its runtime or its backend. <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a> callbacks are events, not part of a mount, and may. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01472">1472</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01479">1479</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ada5da0596e8c64666d48cd15b92ef2b2" name="ada5da0596e8c64666d48cd15b92ef2b2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ada5da0596e8c64666d48cd15b92ef2b2">&#9670;&#160;</a></span>Mounted()</h2>
@@ -212,7 +212,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01481">1481</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01488">1488</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +243,7 @@ Public Member Functions</h2></td></tr>
 <p>The root node's widget. </p>
 <dl class="section return"><dt>Returns</dt><dd>The widget; valid as long as this object. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01497">1497</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01504">1504</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +279,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether a mounted widget has that name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01506">1506</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l01513">1513</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

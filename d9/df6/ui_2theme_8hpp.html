@@ -272,8 +272,8 @@ Variables</h2></td></tr>
 <tr class="memdesc:a2f2fa03b36507a9424d191f5f0a20b0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The types the client checks; a token of another <span class="tt">$type</span> the client still knows is accepted unchecked.  <br /></td></tr>
 <tr class="memitem:a27918f810beaad38837cd35c770ab194" id="r_a27918f810beaad38837cd35c770ab194"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 18 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a27918f810beaad38837cd35c770ab194">morph::ui::detail::kFontWeights</a></td></tr>
 <tr class="memdesc:a27918f810beaad38837cd35c770ab194"><td class="mdescLeft">&#160;</td><td class="mdescRight">The named font weights of DTCG.  <br /></td></tr>
-<tr class="memitem:ace59cc5e2844fc25b20b0c57a3508fc5" id="r_ace59cc5e2844fc25b20b0c57a3508fc5"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a>, 39 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ace59cc5e2844fc25b20b0c57a3508fc5">morph::ui::kThemeTokens</a></td></tr>
-<tr class="memdesc:ace59cc5e2844fc25b20b0c57a3508fc5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The closed <span class="tt">ui-theme/1</span> token set, with the <span class="tt">MorphUi</span> defaults: the colour roles, the opacity and the spacing scale (<span class="tt">space.0</span> to <span class="tt">space.5</span>, one per spacing step) the built-in components read, and the semantic sets (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span> with <span class="tt">bg</span>, <span class="tt">border</span> and <span class="tt">dot</span>).  <br /></td></tr>
+<tr class="memitem:aaa8953723e22531ca13b715c866b1cca" id="r_aaa8953723e22531ca13b715c866b1cca"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a>, 40 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaa8953723e22531ca13b715c866b1cca">morph::ui::kThemeTokens</a></td></tr>
+<tr class="memdesc:aaa8953723e22531ca13b715c866b1cca"><td class="mdescLeft">&#160;</td><td class="mdescRight">The closed <span class="tt">ui-theme/1</span> token set, with the <span class="tt">MorphUi</span> defaults: the colour roles, the opacity and the spacing scale (<span class="tt">space.0</span> to <span class="tt">space.5</span>, one per spacing step) the built-in components read, and the semantic sets (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span> with <span class="tt">bg</span>, <span class="tt">border</span> and <span class="tt">dot</span>).  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Theme tokens (<span class="tt">ui-theme/1</span>, spec 6 §6): DTCG 2025.10 token files read and checked, layered into a variant, their aliases resolved, and the closed <span class="tt">ui-theme/1</span> set filled from them with its defaults. No toolkit: the Qt Quick renderer applies the result (<span class="tt">qt_quick::applyTheme</span>). </p>
@@ -1513,7 +1513,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or nothing when it is not a shadow. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01066">1066</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01068">1068</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -1549,7 +1549,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The names; empty when it is neither. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01097">1097</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01099">1099</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -1590,7 +1590,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or null when the theme does not have it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01119">1119</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01121">1121</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -1631,7 +1631,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The names, in order; empty for none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01130">1130</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -1667,7 +1667,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Every path of the set with its value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01147">1147</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01149">1149</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -1916,8 +1916,8 @@ Variables</h2></td></tr>
 
 </div>
 </div>
-<a id="ace59cc5e2844fc25b20b0c57a3508fc5" name="ace59cc5e2844fc25b20b0c57a3508fc5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ace59cc5e2844fc25b20b0c57a3508fc5">&#9670;&#160;</a></span>kThemeTokens</h2>
+<a id="aaa8953723e22531ca13b715c866b1cca" name="aaa8953723e22531ca13b715c866b1cca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaa8953723e22531ca13b715c866b1cca">&#9670;&#160;</a></span>kThemeTokens</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1926,7 +1926,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;ThemeTokenSpec, 39&gt; morph::ui::kThemeTokens</td>
+          <td class="memname">std::array&lt;ThemeTokenSpec, 40&gt; morph::ui::kThemeTokens</td>
         </tr>
       </table>
   </td>

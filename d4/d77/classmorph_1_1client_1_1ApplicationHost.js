@@ -6,5 +6,7 @@ var classmorph_1_1client_1_1ApplicationHost =
     [ "uploadFor", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a57372d9c6e014f56e5827427f18cf354", null ],
     [ "download", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#ae8b33f4324b983007e8d43799303fb12", null ],
     [ "readFile", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#af1f1ae388616dd25c5ae157159bb194c", null ],
-    [ "saveFile", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a38974752bea20b24ebd3bbedaf6a8b07", null ]
+    [ "saveFile", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a38974752bea20b24ebd3bbedaf6a8b07", null ],
+    [ "setNotifySink", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a1a758fe8d26187e8658ed85f66d3e354", null ],
+    [ "notify", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a16cc7b5bf142001c02b539c4ebe3d530", null ]
 ];

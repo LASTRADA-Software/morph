@@ -17,6 +17,7 @@ var classmorph_1_1tui_1_1Backend =
     [ "createSlot", "d2/d8e/classmorph_1_1tui_1_1Backend.html#ac19c50990d2f70363ea3a18216e29143", null ],
     [ "createTabs", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a73169cbc7377b8fbd2c32ae352ffd1e0", null ],
     [ "createDialog", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a0603d1e612f7b5d6d0c3045222f863d5", null ],
+    [ "createToast", "d2/d8e/classmorph_1_1tui_1_1Backend.html#ae18258859251e90901570e773d3e39e5", null ],
     [ "createBusy", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a031b6e0b1fed07fb3b547d0489f48a10", null ],
     [ "createTable", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a0b40e012891c8da5d07825a61cac5e55", null ],
     [ "createDateTimeInput", "d2/d8e/classmorph_1_1tui_1_1Backend.html#acf6b426cf5ce1c3487001b0b20af19bf", null ],

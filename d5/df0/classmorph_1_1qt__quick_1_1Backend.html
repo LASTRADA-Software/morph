@@ -180,6 +180,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ad02e6d024704733313ea8bf136ed526c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a tab bar.     <br /></td></tr>
 <tr class="memitem:ab7329e576ff9fa9ef8c576b453f0e53f" id="r_ab7329e576ff9fa9ef8c576b453f0e53f"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html">ui::DialogWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab7329e576ff9fa9ef8c576b453f0e53f">createDialog</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:ab7329e576ff9fa9ef8c576b453f0e53f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a modal overlay.     <br /></td></tr>
+<tr class="memitem:a8ba0912762478e81bf26c407bc3cf18a" id="r_a8ba0912762478e81bf26c407bc3cf18a"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../dd/d35/classmorph_1_1ui_1_1ToastWidget.html">ui::ToastWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8ba0912762478e81bf26c407bc3cf18a">createToast</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
+<tr class="memdesc:a8ba0912762478e81bf26c407bc3cf18a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a transient message.     <br /></td></tr>
 <tr class="memitem:aa3ae9cc2dec13254fba4f8a8f2842940" id="r_aa3ae9cc2dec13254fba4f8a8f2842940"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d3/d98/classmorph_1_1ui_1_1BusyWidget.html">ui::BusyWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa3ae9cc2dec13254fba4f8a8f2842940">createBusy</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:aa3ae9cc2dec13254fba4f8a8f2842940"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a progress indicator.     <br /></td></tr>
 <tr class="memitem:ae9c1165ae4d8eb745e3249c6dccde6f4" id="r_ae9c1165ae4d8eb745e3249c6dccde6f4"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html">ui::TableWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae9c1165ae4d8eb745e3249c6dccde6f4">createTable</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -864,6 +866,42 @@ Static Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="a8ba0912762478e81bf26c407bc3cf18a" name="a8ba0912762478e81bf26c407bc3cf18a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8ba0912762478e81bf26c407bc3cf18a">&#9670;&#160;</a></span>createToast()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../dd/d35/classmorph_1_1ui_1_1ToastWidget.html">ui::ToastWidget</a> &gt; morph::qt_quick::Backend::createToast </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a transient message.    </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
+
+<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a08377c1b28b1da169e43f158ad210cd3">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>

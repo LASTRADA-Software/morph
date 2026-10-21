@@ -7,6 +7,7 @@ var structmorph_1_1ui_1_1TextInput =
     [ "placeholder", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#ab1d3ab5d396408e56e1b4a3359564a27", null ],
     [ "mode", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a61594e9c748375608f597daf9ac5475b", null ],
     [ "unit", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a0570964d886b6cd7c2cb15141f0b6c3d", null ],
+    [ "icon", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a3d7f00e7b37827771137b407997586ac", null ],
     [ "decimals", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a0d8e70d2ce1e6dad606d2ff69a03e6f3", null ],
     [ "label", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#af817fd28094dab34c0b68cbcf7add128", null ],
     [ "showLabel", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a139b180f6de1e1078b5af23e919f73e7", null ],

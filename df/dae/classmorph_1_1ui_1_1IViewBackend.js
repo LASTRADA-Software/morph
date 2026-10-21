@@ -14,6 +14,7 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createSlot", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a74f2678fccced2cfe666030403bb6558", null ],
     [ "createTabs", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a68d9c7509883ba521c31319f5f21da2d", null ],
     [ "createDialog", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab", null ],
+    [ "createToast", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a08377c1b28b1da169e43f158ad210cd3", null ],
     [ "createBusy", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aa00c2863b5fcbe9b0ed205a043ec60a0", null ],
     [ "createTable", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a4472eb65b0ce59376d2bc47c48e76d29", null ],
     [ "createDateTimeInput", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2739229e5dbbaba964f65231da91a47a", null ],

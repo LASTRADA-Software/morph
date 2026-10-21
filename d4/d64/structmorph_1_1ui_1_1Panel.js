@@ -1,6 +1,7 @@
 var structmorph_1_1ui_1_1Panel =
 [
     [ "title", "d4/d64/structmorph_1_1ui_1_1Panel.html#a583386e03be98c7d00d97bd48d572676", null ],
+    [ "header", "d4/d64/structmorph_1_1ui_1_1Panel.html#a6411f0f8dc0c06de85cff78091611fbd", null ],
     [ "padding", "d4/d64/structmorph_1_1ui_1_1Panel.html#a15c0ff5d93a5cb06f088e053a6b0053d", null ],
     [ "child", "d4/d64/structmorph_1_1ui_1_1Panel.html#a00998eee7125c1108dfa2b4bd272a7ce", null ],
     [ "collapsible", "d4/d64/structmorph_1_1ui_1_1Panel.html#a8145cb21ac6bb679b95f192de4556cd3", null ],

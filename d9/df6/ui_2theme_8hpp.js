@@ -59,5 +59,5 @@ var ui_2theme_8hpp =
     [ "morph::ui::detail::kPixelsPerRem", "d9/df6/ui_2theme_8hpp.html#aa75d5224e69a0ed975ce8f1494c59cc1", null ],
     [ "morph::ui::detail::kKnownTokenTypes", "d9/df6/ui_2theme_8hpp.html#a2f2fa03b36507a9424d191f5f0a20b0a", null ],
     [ "morph::ui::detail::kFontWeights", "d9/df6/ui_2theme_8hpp.html#a27918f810beaad38837cd35c770ab194", null ],
-    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#ace59cc5e2844fc25b20b0c57a3508fc5", null ]
+    [ "morph::ui::kThemeTokens", "d9/df6/ui_2theme_8hpp.html#aaa8953723e22531ca13b715c866b1cca", null ]
 ];

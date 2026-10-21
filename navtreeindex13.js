@@ -1,5 +1,14 @@
 var NAVTREEINDEX13 =
 {
+"d6/de4/structmorph_1_1ui_1_1author_1_1Self.html":[3,0,0,28,0,8],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html":[1,0,0,1,165],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html":[3,0,0,28,167],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a254d94abed3350c6a43508caa5e49e87":[1,0,0,1,165,2],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a254d94abed3350c6a43508caa5e49e87":[3,0,0,28,167,2],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a434b02070abf88782c571c7ef6aecbd7":[1,0,0,1,165,0],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a434b02070abf88782c571c7ef6aecbd7":[3,0,0,28,167,0],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a7c602752071af0d1f1650c94a9f98fae":[1,0,0,1,165,3],
+"d6/de9/structmorph_1_1ui_1_1PrefSet.html#a7c602752071af0d1f1650c94a9f98fae":[3,0,0,28,167,3],
 "d6/de9/structmorph_1_1ui_1_1PrefSet.html#ab8e1acdd0421305df049544f979115de":[1,0,0,1,165,1],
 "d6/de9/structmorph_1_1ui_1_1PrefSet.html#ab8e1acdd0421305df049544f979115de":[3,0,0,28,167,1],
 "d6/dea/structmorph_1_1model_1_1EffectsRegistrationError.html":[3,0,0,14,6],
@@ -240,14 +249,5 @@ var NAVTREEINDEX13 =
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html":[3,0,0,28,51],
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a00b40637adfabbe60b52937779b7790a":[1,0,0,1,49,3],
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a00b40637adfabbe60b52937779b7790a":[3,0,0,28,51,3],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a5396350b9e44723fa75a76ca53ad7f8d":[1,0,0,1,49,5],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a5396350b9e44723fa75a76ca53ad7f8d":[3,0,0,28,51,5],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a570eb8b858cbedfe5239ffea85b919bf":[1,0,0,1,49,7],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a570eb8b858cbedfe5239ffea85b919bf":[3,0,0,28,51,7],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a7b4ba49fc0be4c9b2637bc73a3f27acd":[1,0,0,1,49,4],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a7b4ba49fc0be4c9b2637bc73a3f27acd":[3,0,0,28,51,4],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ab19f0b5b4e97ba18fb538f366dd3aae0":[1,0,0,1,49,6],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ab19f0b5b4e97ba18fb538f366dd3aae0":[3,0,0,28,51,6],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ac47c728bd6437ea4ff1d00883368db79":[1,0,0,1,49,2],
-"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ac47c728bd6437ea4ff1d00883368db79":[3,0,0,28,51,2]
+"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a5396350b9e44723fa75a76ca53ad7f8d":[1,0,0,1,49,5]
 };

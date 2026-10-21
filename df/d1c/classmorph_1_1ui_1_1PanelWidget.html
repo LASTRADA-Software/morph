@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::PanelWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,324,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; PanelWidget &gt;" shape="rect" coords="0,168,324,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; PanelWidget &gt;" shape="rect" coords="0,224,324,248"/>
-<area href="../../db/de8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePanel.html" title="A fake PanelWidget: properties title, padding, collapsible, collapsed." alt="morph::ui::testing::detail::FakePanel" shape="rect" coords="0,280,324,304"/>
+<area href="../../db/de8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePanel.html" title="A fake PanelWidget: properties title, header (the child&#39;s id), padding, collapsible,..." alt="morph::ui::testing::detail::FakePanel" shape="rect" coords="0,280,324,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -147,8 +147,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a6472f7d9f34549ffd80f9a3c5392b72e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the space between frame and content.  <br /></td></tr>
 <tr class="memitem:adb73de511044a4d3629292965d817305" id="r_adb73de511044a4d3629292965d817305"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#adb73de511044a4d3629292965d817305">setCollapsible</a> (bool collapsible)=0</td></tr>
 <tr class="memdesc:adb73de511044a4d3629292965d817305"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets whether the user can collapse the panel.  <br /></td></tr>
+<tr class="memitem:ad31cc2f8716ff708173ca2f3ed091048" id="r_ad31cc2f8716ff708173ca2f3ed091048"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad31cc2f8716ff708173ca2f3ed091048">setHeader</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;header)=0</td></tr>
+<tr class="memdesc:ad31cc2f8716ff708173ca2f3ed091048"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows one of its children beside the title; called at most once. The header stays visible and usable while the panel is collapsed.  <br /></td></tr>
 <tr class="memitem:a4404da9e2ed2b0c94a7f6692eeeaaa79" id="r_a4404da9e2ed2b0c94a7f6692eeeaaa79"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4404da9e2ed2b0c94a7f6692eeeaaa79">setCollapsed</a> (bool collapsed)=0</td></tr>
-<tr class="memdesc:a4404da9e2ed2b0c94a7f6692eeeaaa79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own collapse control still works. Never calls the <span class="tt">onToggle</span> handler.  <br /></td></tr>
+<tr class="memdesc:a4404da9e2ed2b0c94a7f6692eeeaaa79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own collapse control still works. The header is not part of "its content" for this purpose: it stays shown and usable while collapsed. Never calls the <span class="tt">onToggle</span> handler.  <br /></td></tr>
 <tr class="memitem:a3dccef17042a95c5ddde0a7bcd5d61cd" id="r_a3dccef17042a95c5ddde0a7bcd5d61cd"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a3dccef17042a95c5ddde0a7bcd5d61cd">setOnToggle</a> (std::function&lt; void(bool)&gt; onToggle)=0</td></tr>
 <tr class="memdesc:a3dccef17042a95c5ddde0a7bcd5d61cd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user collapse or expand calls, with the requested state.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
@@ -193,7 +195,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A titled frame around its children, optionally collapsible. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00346">346</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00351">351</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="adf3a3160f892f0ff918d64ea3a714c38" name="adf3a3160f892f0ff918d64ea3a714c38"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adf3a3160f892f0ff918d64ea3a714c38">&#9670;&#160;</a></span>setTitle()</h2>
@@ -300,6 +302,41 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 </div>
 </div>
+<a id="ad31cc2f8716ff708173ca2f3ed091048" name="ad31cc2f8716ff708173ca2f3ed091048"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad31cc2f8716ff708173ca2f3ed091048">&#9670;&#160;</a></span>setHeader()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::PanelWidget::setHeader </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>header</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows one of its children beside the title; called at most once. The header stays visible and usable while the panel is collapsed. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">header</td><td>A child of this widget. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../db/de8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePanel.html#ab2a3579aafa5474d09430c3e3ce048f1">morph::ui::testing::detail::FakePanel</a>.</p>
+
+</div>
+</div>
 <a id="a4404da9e2ed2b0c94a7f6692eeeaaa79" name="a4404da9e2ed2b0c94a7f6692eeeaaa79"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4404da9e2ed2b0c94a7f6692eeeaaa79">&#9670;&#160;</a></span>setCollapsed()</h2>
 
@@ -323,7 +360,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </table>
 </div><div class="memdoc">
 
-<p>Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own collapse control still works. Never calls the <span class="tt">onToggle</span> handler. </p>
+<p>Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own collapse control still works. The header is not part of "its content" for this purpose: it stays shown and usable while collapsed. Never calls the <span class="tt">onToggle</span> handler. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">collapsed</td><td>Whether the content is hidden. </td></tr>

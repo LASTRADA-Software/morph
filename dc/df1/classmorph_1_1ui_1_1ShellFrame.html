@@ -148,6 +148,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a8e9b26e548b154db33cdd2262809685c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows who is signed in, in the top bar.  <br /></td></tr>
 <tr class="memitem:aa275361a61234fe80afea160268a99c0" id="r_aa275361a61234fe80afea160268a99c0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa275361a61234fe80afea160268a99c0">showSignedIn</a> (bool signedIn)</td></tr>
 <tr class="memdesc:aa275361a61234fe80afea160268a99c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the sidebar and the top bar: signed out, the page is all there is.  <br /></td></tr>
+<tr class="memitem:a55cbb1a55d1a868699f768dbbe70153c" id="r_a55cbb1a55d1a868699f768dbbe70153c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a55cbb1a55d1a868699f768dbbe70153c">showToast</a> (std::string_view text, <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)</td></tr>
+<tr class="memdesc:a55cbb1a55d1a868699f768dbbe70153c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The frame around a client's screens. </p>
@@ -228,7 +230,7 @@ Public Member Functions</h2></td></tr>
 <p>The container the client places the workspace in. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +260,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator in the sidebar. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,7 +295,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -328,7 +330,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +365,47 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a55cbb1a55d1a868699f768dbbe70153c" name="a55cbb1a55d1a868699f768dbbe70153c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a55cbb1a55d1a868699f768dbbe70153c">&#9670;&#160;</a></span>showToast()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::showToast </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a></td>          <td class="paramname"><span class="paramname"><em>tone</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The message, UTF-8. </td></tr>
+    <tr><td class="paramname">tone</td><td>The tone, mapped to the backend's theme. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

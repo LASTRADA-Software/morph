@@ -1,5 +1,11 @@
 var NAVTREEINDEX8 =
 {
+"d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html#a3a82f61bc83b893299bbe4033bfc9654":[3,0,0,28,1,50,3],
+"d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html#ad71fc9b1813a07e8cf6238e1ea11c4fa":[1,0,0,1,0,49,0],
+"d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html#ad71fc9b1813a07e8cf6238e1ea11c4fa":[3,0,0,28,1,50,0],
+"d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html#aeca7cd310196b99622a34ec67a8f9fe2":[1,0,0,1,0,49,1],
+"d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html#aeca7cd310196b99622a34ec67a8f9fe2":[3,0,0,28,1,50,1],
+"d4/d6f/classmorph_1_1reactive_1_1Computed.html":[1,0,0,0,1],
 "d4/d6f/classmorph_1_1reactive_1_1Computed.html":[3,0,0,20,2],
 "d4/d6f/classmorph_1_1reactive_1_1Computed.html#a2338b65fe70c7fd70c9d3d84b13c4109":[1,0,0,0,1,2],
 "d4/d6f/classmorph_1_1reactive_1_1Computed.html#a2338b65fe70c7fd70c9d3d84b13c4109":[3,0,0,20,2,2],
@@ -26,6 +32,8 @@ var NAVTREEINDEX8 =
 "d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html#af21c184062fb1ce8f98c5e32d2c3d52f":[1,0,0,1,128,1],
 "d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html#af21c184062fb1ce8f98c5e32d2c3d52f":[3,0,0,28,130,1],
 "d4/d77/classmorph_1_1client_1_1ApplicationHost.html":[3,0,0,4,0],
+"d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a16cc7b5bf142001c02b539c4ebe3d530":[3,0,0,4,0,8],
+"d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a1a758fe8d26187e8658ed85f66d3e354":[3,0,0,4,0,7],
 "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a27329f2fae90f50a71d574f94a29e828":[3,0,0,4,0,2],
 "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a36d576956d954fbc68e5b4541c7c69c3":[3,0,0,4,0,0],
 "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a38974752bea20b24ebd3bbedaf6a8b07":[3,0,0,4,0,6],
@@ -241,13 +249,5 @@ var NAVTREEINDEX8 =
 "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a77f05d0111af4ad491fbce8da0e1b364":[3,0,0,10,66,2],
 "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a8981d90070b4c12ca568eccecb764086":[3,0,0,10,66,5],
 "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a975e483cdc7a0f3f50f42aec42379d88":[3,0,0,10,66,10],
-"d4/df2/classmorph_1_1forms_1_1WizardSession.html#ab6d476d7433973e50431a61e5474a0bd":[3,0,0,10,66,7],
-"d4/df2/classmorph_1_1forms_1_1WizardSession.html#ae6d6f6f2a5fd1bd4b5afcc744c308b31":[3,0,0,10,66,13],
-"d4/df2/classmorph_1_1forms_1_1WizardSession.html#afbcf3b77f561538606dab2c3a3283c67":[3,0,0,10,66,3],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html":[1,0,0,1,133],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html":[3,0,0,28,135],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html#a82f8351540ba2f12a77e8fda25b5d1fe":[1,0,0,1,133,0],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html#a82f8351540ba2f12a77e8fda25b5d1fe":[3,0,0,28,135,0],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html#ac14a09b9c4e2deffaa9098846e5576df":[1,0,0,1,133,1],
-"d4/dfc/classmorph_1_1ui_1_1MenuWidget.html#ac14a09b9c4e2deffaa9098846e5576df":[3,0,0,28,135,1]
+"d4/df2/classmorph_1_1forms_1_1WizardSession.html#ab6d476d7433973e50431a61e5474a0bd":[3,0,0,10,66,7]
 };

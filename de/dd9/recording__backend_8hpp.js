@@ -23,6 +23,7 @@ var recording__backend_8hpp =
     [ "morph::ui::testing::detail::FakeOverlay&lt; Interface &gt;", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html", "d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay" ],
     [ "morph::ui::testing::detail::FakeDialog", "dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html", "dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog" ],
     [ "morph::ui::testing::detail::FakeBanner", "d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html", "d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner" ],
+    [ "morph::ui::testing::detail::FakeToast", "dd/dea/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeToast.html", "dd/dea/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeToast" ],
     [ "morph::ui::testing::detail::FakeBadge", "df/d0f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBadge.html", "df/d0f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBadge" ],
     [ "morph::ui::testing::detail::FakeProgress", "db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress.html", "db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress" ],
     [ "morph::ui::testing::detail::FakeSteps", "db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html", "db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps" ],

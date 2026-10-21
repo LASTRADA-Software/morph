@@ -953,6 +953,11 @@ var hierarchy =
         [ "morph::ui::testing::detail::FakeLeaf< StepsWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
           [ "morph::ui::testing::detail::FakeSteps", "db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html", null ]
         ] ]
+      ] ],
+      [ "morph::ui::ToastWidget", "dd/d35/classmorph_1_1ui_1_1ToastWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< ToastWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeToast", "dd/dea/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeToast.html", null ]
+        ] ]
       ] ]
     ] ],
     [ "morph::ui::Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", null ],

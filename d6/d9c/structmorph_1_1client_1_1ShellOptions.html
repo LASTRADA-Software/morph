@@ -150,7 +150,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a client shell reports, and how it starts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a734be3fed57fb719dc41c3b0b803571b" name="a734be3fed57fb719dc41c3b0b803571b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a734be3fed57fb719dc41c3b0b803571b">&#9670;&#160;</a></span>startScreen</h2>
@@ -166,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen mounted first; empty for the first the source lists. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>The start screen's params. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +202,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with each problem: why the source did not open, a document that did not load, a refused mount, an interpreter diagnostic. Empty ignores them; the shell shows the first three either way. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the id of each screen once it is mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where a screen's <span class="tt">download</span> saves a file, under the name the screen suggests; the working directory when empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>The history the shown screen's route is kept in (spec 3 §10), such as the browser's: back and forward open the route of the entry moved to, and the route it holds at start is opened once the session has the screen. Borrowed: it outlives the shell; null keeps no history. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -274,7 +274,7 @@ Public Attributes</h2></td></tr>
 
 <p>Development mode (spec 5 §12): every second the shell polls the source's <span class="tt">ui-hello</span> digest, and when it changed, remounts every open tab whose document changed, keeping its state. A shell built without the development tools never polls. A production client leaves it off: the digest is then read once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00151">151</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +292,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called after each development reload with the ids of the screens it remounted; empty ignores it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +310,7 @@ Public Attributes</h2></td></tr>
 
 <p>Maps a sign-in mutation's reply to the principal and token the shell installs. Required. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d98/shell_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d5/d98/shell_8hpp_source.html">shell.hpp</a>.</p>
 
 </div>
 </div>

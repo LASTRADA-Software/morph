@@ -24,6 +24,7 @@ var ui_2backend_8hpp =
     [ "morph::ui::SliderWidget", "d4/d7d/classmorph_1_1ui_1_1SliderWidget.html", "d4/d7d/classmorph_1_1ui_1_1SliderWidget" ],
     [ "morph::ui::FilePickerWidget", "d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html", "d4/d2a/classmorph_1_1ui_1_1FilePickerWidget" ],
     [ "morph::ui::BannerWidget", "d6/d9f/classmorph_1_1ui_1_1BannerWidget.html", "d6/d9f/classmorph_1_1ui_1_1BannerWidget" ],
+    [ "morph::ui::ToastWidget", "dd/d35/classmorph_1_1ui_1_1ToastWidget.html", "dd/d35/classmorph_1_1ui_1_1ToastWidget" ],
     [ "morph::ui::BadgeWidget", "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html", "d1/d05/classmorph_1_1ui_1_1BadgeWidget" ],
     [ "morph::ui::ProgressWidget", "d9/d83/classmorph_1_1ui_1_1ProgressWidget.html", "d9/d83/classmorph_1_1ui_1_1ProgressWidget" ],
     [ "morph::ui::StepsWidget", "d1/d8e/classmorph_1_1ui_1_1StepsWidget.html", "d1/d8e/classmorph_1_1ui_1_1StepsWidget" ],

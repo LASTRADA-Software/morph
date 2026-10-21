@@ -14,6 +14,7 @@ var classmorph_1_1ui_1_1testing_1_1RecordingBackend =
     [ "createSlot", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a8194466b2070d7e5d498181e9cb352d3", null ],
     [ "createTabs", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a3e08b89a87132e83082b4249678bd6fd", null ],
     [ "createDialog", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#acafe2bddf8a85a03030710ea2ac09642", null ],
+    [ "createToast", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a34c98f184be7d603b6d257e0b9b13e32", null ],
     [ "createBusy", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ae06f1879e64ee4a3803bc62ab8d341f8", null ],
     [ "createTable", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a82cca3a8a5d6e27000bb00bcb8de9c29", null ],
     [ "createDateTimeInput", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a52ff4ee5dbef7581ba6cd235a08728cc", null ],
