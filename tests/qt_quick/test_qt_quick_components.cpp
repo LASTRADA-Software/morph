@@ -344,8 +344,7 @@ TEST_CASE("qt_quick components: a tableRow restyle draws every row's background,
 
 // Mutation: make the header's background from the stock MorphUi component instead of the context's (the restyle's
 // marker never shows); or stop binding `scheme` on it (a themed table header stays the default colour).
-TEST_CASE("qt_quick components: a tableHeader restyle draws the table's header background",
-          "[qt_quick]") {
+TEST_CASE("qt_quick components: a tableHeader restyle draws the table's header background", "[qt_quick]") {
     std::vector<ComponentFailure> reported;
     Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
     QTemporaryDir const dir;

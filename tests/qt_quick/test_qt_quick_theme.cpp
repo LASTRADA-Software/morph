@@ -178,7 +178,8 @@ TEST_CASE("qt_quick theme: a tone's bg, border and dot reach Theme, its surfaces
 TEST_CASE("qt_quick theme: a table header's colour reaches Theme, a surface's scheme and the table it draws under",
           "[qt_quick]") {
     Scene scene;
-    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "table": {"header": {"$value": "#102030"}}}})");
+    auto const tokens =
+        ui::parseTokens(R"({"color": {"$type": "color", "table": {"header": {"$value": "#102030"}}}})");
     REQUIRE(tokens);
     auto const resolved = ui::resolveTokens({&*tokens});
     REQUIRE(resolved);

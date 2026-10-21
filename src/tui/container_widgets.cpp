@@ -263,7 +263,7 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
                                               .width = std::max(0, size.width - 2),
                                               .height = std::max(0, size.height - 2 - headerHeight)};
         bodyAreas = stackAreas(body(), layout::pad(inside, _paddingRows, _paddingColumns),
-                              StackSpec{.axis = ui::Axis::Vertical});
+                               StackSpec{.axis = ui::Axis::Vertical});
     }
     std::size_t next = 0;
     std::size_t index = 0;

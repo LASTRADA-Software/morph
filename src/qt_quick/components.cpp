@@ -37,21 +37,33 @@ struct KindType {
 // C++ makes draws, and the container keeps its layout. The layout kinds are not restyled as kinds: they place other
 // widgets, and what a scroll area and a splitter draw of their own is restyled as their parts.
 // NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, kind beside type, reads as one.
-constexpr std::array<KindType, 27> kRestylable = {
-    {{"text", "MorphText"},           {"button", "MorphButton"},
-     {"textInput", "MorphTextInput"}, {"checkbox", "MorphCheckbox"},
-     {"select", "MorphSelect"},       {"menu", "MorphMenu"},
-     {"panel", "MorphPanel"},         {"tabs", "MorphTabs"},
-     {"dialog", "MorphDialog"},       {"busy", "MorphBusy"},
-     {"table", "MorphTable"},         {"dateTimeInput", "MorphDateTimeInput"},
-     {"slider", "MorphSlider"},       {"filePicker", "MorphFilePicker"},
-     {"banner", "MorphBanner"},       {"badge", "MorphBadge"},
-     {"progress", "MorphProgress"},   {"steps", "MorphSteps"},
-     {"keyValue", "MorphKeyValue"},   {"emptyState", "MorphEmptyState"},
-     {"drawer", "MorphDrawer"},       {"collapsible", "MorphCollapsible"},
-     {"textArea", "MorphTextArea"},   {"tableRow", "MorphTableRowBackground"},
-     {"scrollBar", "MorphScrollBar"}, {"splitterHandle", "MorphSplitterHandle"},
-     {"tableHeader", "MorphTableHeaderBackground"}}};
+constexpr std::array<KindType, 27> kRestylable = {{{"text", "MorphText"},
+                                                   {"button", "MorphButton"},
+                                                   {"textInput", "MorphTextInput"},
+                                                   {"checkbox", "MorphCheckbox"},
+                                                   {"select", "MorphSelect"},
+                                                   {"menu", "MorphMenu"},
+                                                   {"panel", "MorphPanel"},
+                                                   {"tabs", "MorphTabs"},
+                                                   {"dialog", "MorphDialog"},
+                                                   {"busy", "MorphBusy"},
+                                                   {"table", "MorphTable"},
+                                                   {"dateTimeInput", "MorphDateTimeInput"},
+                                                   {"slider", "MorphSlider"},
+                                                   {"filePicker", "MorphFilePicker"},
+                                                   {"banner", "MorphBanner"},
+                                                   {"badge", "MorphBadge"},
+                                                   {"progress", "MorphProgress"},
+                                                   {"steps", "MorphSteps"},
+                                                   {"keyValue", "MorphKeyValue"},
+                                                   {"emptyState", "MorphEmptyState"},
+                                                   {"drawer", "MorphDrawer"},
+                                                   {"collapsible", "MorphCollapsible"},
+                                                   {"textArea", "MorphTextArea"},
+                                                   {"tableRow", "MorphTableRowBackground"},
+                                                   {"scrollBar", "MorphScrollBar"},
+                                                   {"splitterHandle", "MorphSplitterHandle"},
+                                                   {"tableHeader", "MorphTableHeaderBackground"}}};
 
 struct LayoutKind {
     std::string_view kind;

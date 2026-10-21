@@ -14,10 +14,10 @@
 namespace morph::qt_quick::detail {
 
 TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
-    : ContainerItemWidget{context, QStringLiteral("MorphTable"), parent,
-                         QVariantMap{{QStringLiteral("headerBackground"),
-                                      QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {
-}
+    : ContainerItemWidget{
+          context, QStringLiteral("MorphTable"), parent,
+          QVariantMap{{QStringLiteral("headerBackground"),
+                       QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {}
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     QVariantList list;
@@ -206,23 +206,23 @@ void TableRowImpl::adopted(ItemBase& child) {
     }
     int const columnIndex = static_cast<int>(children().size()) - 1;
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(),
-                      [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex, cellRef = QPointer<QQuickItem>{cell}] {
-                          if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
-                              QMetaObject::invokeMethod(tableRef, "reportCellWidth", Qt::DirectConnection,
-                                                        Q_ARG(int, columnIndex), Q_ARG(qreal, cellRef->implicitWidth()));
-                          }
-                      });
+                     [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex, cellRef = QPointer<QQuickItem>{cell}] {
+                         if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
+                             QMetaObject::invokeMethod(tableRef, "reportCellWidth", Qt::DirectConnection,
+                                                       Q_ARG(int, columnIndex),
+                                                       Q_ARG(qreal, cellRef->implicitWidth()));
+                         }
+                     });
     // A cell's visibility flipping can only be resolved by rescanning its own column: becoming hidden may drop
     // today's widest cell, becoming visible may introduce a wider one. Rescans only this one column, not every
     // column via invalidateAllColumns: every cell in the table carries this connection, so a full-table sweep here
     // costs O(rows) per cell whose visibility ever changes during mount, compounding into O(rows^2) overall.
-    QObject::connect(cell, &QQuickItem::visibleChanged, item(),
-                      [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex] {
-                          if (tableRef != nullptr) {
-                              QMetaObject::invokeMethod(tableRef, "rescanColumn", Qt::DirectConnection,
-                                                        Q_ARG(int, columnIndex));
-                          }
-                      });
+    QObject::connect(
+        cell, &QQuickItem::visibleChanged, item(), [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex] {
+            if (tableRef != nullptr) {
+                QMetaObject::invokeMethod(tableRef, "rescanColumn", Qt::DirectConnection, Q_ARG(int, columnIndex));
+            }
+        });
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }

@@ -885,8 +885,9 @@ TEST_CASE("qt_quick interpreter: a restyle mapped after a page made its input re
 }
 
 // Mutation: lower `table` without `empty` (no empty state is mounted).
-TEST_CASE("qt_quick interpreter: a document-authored column role reaches its default cell, and a custom cell ignores it",
-          "[qt_quick][interpreter]") {
+TEST_CASE(
+    "qt_quick interpreter: a document-authored column role reaches its default cell, and a custom cell ignores it",
+    "[qt_quick][interpreter]") {
     QtHarness harness;
     auto const screen = harness.mount(R"({
       "vocab": "ui/1", "id": "columnRole", "state": { "rows": { "init": { "lit": [ { "id": 1, "note": "n" } ] } } },

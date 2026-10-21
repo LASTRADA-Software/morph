@@ -105,7 +105,9 @@ public:
     [[nodiscard]] bool focusesOnPress() const override { return false; }
     [[nodiscard]] std::string probeText() const override { return _title; }
     [[nodiscard]] bool letsChildrenAct() const override { return !_collapsed; }
-    [[nodiscard]] bool letsChildAct(WidgetBase const& child) const override { return !_collapsed || &child == _header; }
+    [[nodiscard]] bool letsChildAct(WidgetBase const& child) const override {
+        return !_collapsed || &child == _header;
+    }
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
