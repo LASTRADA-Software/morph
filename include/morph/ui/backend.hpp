@@ -210,6 +210,11 @@ public:
     /// @param decimals The places, from 0; -1 when the input does not hold a number.
     virtual void setDecimals(int decimals) = 0;
 
+    /// @brief Sets the icon drawn at the field's leading edge; empty shows none. Called once, and only for a
+    ///        single-line or password input that has one.
+    /// @param icon An icon name of the theme's icon set.
+    virtual void setIcon(std::string_view icon) = 0;
+
     /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
     ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
     /// @param label The label, UTF-8.
@@ -357,8 +362,14 @@ public:
     /// @param collapsible Whether a collapse control is shown.
     virtual void setCollapsible(bool collapsible) = 0;
 
+    /// @brief Shows one of its children beside the title; called at most once. The header stays visible and usable
+    ///        while the panel is collapsed.
+    /// @param header A child of this widget.
+    virtual void setHeader(Widget& header) = 0;
+
     /// @brief Collapses or expands the panel. A collapsed panel hides its content, which takes no input; its own
-    ///        collapse control still works. Never calls the `onToggle` handler.
+    ///        collapse control still works. The header is not part of "its content" for this purpose: it stays
+    ///        shown and usable while collapsed. Never calls the `onToggle` handler.
     /// @param collapsed Whether the content is hidden.
     virtual void setCollapsed(bool collapsed) = 0;
 
@@ -556,6 +567,18 @@ public:
     /// @brief Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+};
+
+/// @brief A passive, transient message outside the normal flow: non-modal, dims nothing, and never takes keyboard
+/// focus. Auto-dismisses after a backend-chosen interval.
+class ToastWidget : public Widget {
+public:
+    /// @brief Shows the message, replacing any shown or dismissing, and (re)starts the dismissal interval regardless
+    ///        of whether the toast is already on-screen — a second call while one is showing replaces its text and
+    ///        tone and restarts the interval, rather than being a no-op or stacking a second message.
+    /// @param text The message, UTF-8.
+    /// @param tone The tone, mapped to the backend's theme.
+    virtual void show(std::string_view text, Tone tone) = 0;
 };
 
 /// @brief A short label marking a state.
@@ -826,6 +849,11 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<DialogWidget> createDialog(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a transient message.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) = 0;
 
     /// @brief Makes a progress indicator.
     /// @param parent The container to append to, or null for a root.

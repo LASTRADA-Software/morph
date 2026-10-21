@@ -885,6 +885,42 @@ TEST_CASE("qt_quick interpreter: a restyle mapped after a page made its input re
 }
 
 // Mutation: lower `table` without `empty` (no empty state is mounted).
+TEST_CASE(
+    "qt_quick interpreter: a document-authored column role reaches its default cell, and a custom cell ignores it",
+    "[qt_quick][interpreter]") {
+    QtHarness harness;
+    auto const screen = harness.mount(R"({
+      "vocab": "ui/1", "id": "columnRole", "state": { "rows": { "init": { "lit": [ { "id": 1, "note": "n" } ] } } },
+      "view": { "kind": "table", "testId": "grid", "rows": { "ref": "rows" },
+                "columns": [
+                  { "id": "note", "label": "Note" },
+                  { "id": "id", "label": "Id", "role": "muted" },
+                  { "label": "Custom", "role": "muted",
+                    "cell": { "kind": "text", "testId": "custom", "text": { "row": "note" } } } ] } })");
+    static_cast<void>(screen);
+    QQuickItem const* const table = QtHarness::widget("grid").item();
+    REQUIRE(table != nullptr);
+    QQuickItem const* const body = table->property("content").value<QQuickItem*>();
+    REQUIRE(body != nullptr);
+    REQUIRE(body->childItems().size() == 1);  // one row
+    QQuickItem const* const row = body->childItems().front();
+    QQuickItem const* const rowContent = row->property("content").value<QQuickItem*>();
+    REQUIRE(rowContent != nullptr);
+    REQUIRE(rowContent->childItems().size() == 3);  // note, id, custom
+    // The first cell (here, "note") is wrapped one level deeper, in interpreter.hpp's own `holding()` column (which
+    // keeps the row's scope alive for as long as it is mounted) -- the second and third columns are not, so they
+    // are checked directly, keeping this test about the role field rather than the unrelated holding() wrapper.
+    // The column with no role given (the common case, every pre-existing document) renders Normal, unchanged.
+    CHECK(rowContent->childItems().at(0)->property("role").toInt() == 0);
+    // The column with role: "muted" and no cell generates a default text cell in that role.
+    CHECK(rowContent->childItems().at(1)->property("role").toInt() == 1);
+    // A column with its own `.cell` has nothing generated for it to apply a role to: the custom cell's own `text`
+    // node controls its own role, unaffected by the column's `role` key.
+    QQuickItem const* const customCell = QtHarness::widget("custom").item();
+    REQUIRE(customCell != nullptr);
+    CHECK(customCell->property("role").toInt() == 0);
+}
+
 TEST_CASE("qt_quick interpreter: a table's empty state is drawn while its rows are an empty list",
           "[qt_quick][interpreter]") {
     QtHarness harness;

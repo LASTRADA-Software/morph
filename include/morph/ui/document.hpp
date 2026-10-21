@@ -719,15 +719,16 @@ inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 9> kTextInputKeys = {{{"value", Shape::Expr},
-                                                           {"placeholder", Shape::Expr},
-                                                           {"mode", Shape::Expr},
-                                                           {"commitOn", Shape::Text},
-                                                           {"label", Shape::Expr},
-                                                           {"showLabel", Shape::Flag},
-                                                           {"onChange", Shape::Commands},
-                                                           {"onCommit", Shape::Commands},
-                                                           {"onSubmit", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 10> kTextInputKeys = {{{"value", Shape::Expr},
+                                                            {"placeholder", Shape::Expr},
+                                                            {"mode", Shape::Expr},
+                                                            {"icon", Shape::Expr},
+                                                            {"commitOn", Shape::Text},
+                                                            {"label", Shape::Expr},
+                                                            {"showLabel", Shape::Flag},
+                                                            {"onChange", Shape::Commands},
+                                                            {"onCommit", Shape::Commands},
+                                                            {"onSubmit", Shape::Commands}}};
 /// @brief The keys of `checkbox`.
 inline constexpr std::array<KeySpec, 4> kCheckboxKeys = {
     {{"label", Shape::Expr}, {"checked", Shape::Expr}, {"onToggle", Shape::Commands}, {"onChange", Shape::Commands}}};
@@ -760,7 +761,8 @@ inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes}
                                                       {"align", Shape::Text},
                                                       {"justify", Shape::Text}}};
 /// @brief The keys of `panel`.
-inline constexpr std::array<KeySpec, 5> kPanelKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kPanelKeys = {{{"title", Shape::Expr},
+                                                       {"header", Shape::Nodes},
                                                        {"padding", Shape::Expr},
                                                        {"collapsible", Shape::Expr},
                                                        {"collapsed", Shape::Expr},
@@ -812,8 +814,11 @@ inline constexpr std::array<KeySpec, 15> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 4> kColumnKeys = {
-    {{"id", Shape::Name}, {"label", Shape::Expr}, {"width", Shape::Expr}, {"cell", Shape::Nodes, {}, kInner}}};
+inline constexpr std::array<KeySpec, 5> kColumnKeys = {{{"id", Shape::Name},
+                                                        {"label", Shape::Expr},
+                                                        {"width", Shape::Expr},
+                                                        {"role", Shape::Expr},
+                                                        {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},

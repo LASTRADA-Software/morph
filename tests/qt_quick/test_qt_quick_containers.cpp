@@ -73,7 +73,10 @@ QQuickItem const* textItemOf(char const* testId, QString const& text) {
     auto const found = std::ranges::find_if(inner, [&text](QQuickItem const* item) {
         return item->inherits("QQuickText") && item->property("text").toString() == text;
     });
-    REQUIRE(found != inner.end());
+    // A bool, not the iterators themselves: Catch2's REQUIRE decomposes a comparison's operands for its failure
+    // message, and stringifying a QList<QQuickItem*>::const_iterator hits a deprecated implicit pointer conversion.
+    bool const isFound = found != inner.end();
+    REQUIRE(isFound);
     return *found;
 }
 
@@ -275,6 +278,43 @@ TEST_CASE("qt_quick containers: a collapsible section keeps its header usable wh
     scene.settle();
     CHECK(toggles == std::vector<bool>{true});
     CHECK(Scene::itemOf(*content).isVisible());
+}
+
+TEST_CASE("qt_quick containers: a panel's header sits beside its title and stays visible while collapsed",
+          "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("More");
+    panel->setCollapsible(true);
+    auto header = scene.backend().createButton(panel.get());
+    panel->setHeader(*header);
+    auto content = scene.backend().createButton(panel.get());
+    panel->setCollapsed(true);
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*content).isVisible());
+    CHECK(Scene::itemOf(*header).isVisible());
+}
+
+TEST_CASE("qt_quick containers: a panel with no title, no header and no collapse control shows no divider",
+          "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
+    REQUIRE(divider != nullptr);
+    CHECK_FALSE(divider->isVisible());
+}
+
+TEST_CASE("qt_quick containers: a panel with only a title shows its header row and a divider", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("More");
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
+    REQUIRE(divider != nullptr);
+    CHECK(divider->isVisible());
 }
 
 TEST_CASE("qt_quick containers: a drop zone takes a drop whole or refuses it whole", "[qt_quick]") {
@@ -530,7 +570,9 @@ TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-o
         QList<QQuickItem*> const inner = widget->item()->findChildren<QQuickItem*>();
         auto const found =
             std::ranges::find_if(inner, [className](QQuickItem const* item) { return item->inherits(className); });
-        REQUIRE(found != inner.end());
+        // A bool, not the iterators themselves: see textItemOf's own note above on why.
+        bool const isFound = found != inner.end();
+        REQUIRE(isFound);
         return **found;
     };
     QQuickItem const& label = *textItemOf("shell_principal", QStringLiteral("alice"));
@@ -599,7 +641,9 @@ TEST_CASE("qt_quick containers: a navigator entry fills the sidebar, and the cur
         QList<QQuickItem*> const inner = itemOf(testId).findChildren<QQuickItem*>();
         auto const button =
             std::ranges::find_if(inner, [](QQuickItem const* item) { return item->inherits("QQuickAbstractButton"); });
-        REQUIRE(button != inner.end());
+        // A bool, not the iterators themselves: see textItemOf's own note above on why.
+        bool const isFound = button != inner.end();
+        REQUIRE(isFound);
         auto* const background = (*button)->property("background").value<QQuickItem*>();
         REQUIRE(background != nullptr);
         return background->property("color").value<QColor>();

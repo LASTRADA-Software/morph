@@ -123,7 +123,7 @@ reorders children, and only through this.
 |---|---|
 | `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
 | `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
-| `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input |
+| `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
@@ -181,17 +181,18 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
 | `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
-| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
+| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
 | `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
-| `PanelWidget` | `setTitle`, `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
+| `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
 | `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
+| `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |

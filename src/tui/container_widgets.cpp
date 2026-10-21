@@ -176,6 +176,11 @@ void PanelImpl::setTitle(std::string_view title) {
     refresh();
 }
 
+void PanelImpl::setHeader(ui::Widget& header) {
+    _header = &WidgetBase::of(header);
+    syncChildren();
+}
+
 void PanelImpl::setPadding(int padding) {
     _paddingRows = layout::stepCells(padding, ui::Axis::Vertical);
     _paddingColumns = layout::stepCells(padding, ui::Axis::Horizontal);
@@ -201,17 +206,35 @@ std::string PanelImpl::heading() const {
     return (_collapsed ? "▸ " : "▾ ") + _title;
 }
 
-void PanelImpl::childAttached(WidgetBase& child) { child.setStructuralVisible(!_collapsed); }
+void PanelImpl::childAttached(WidgetBase& child) { child.setStructuralVisible(!_collapsed || &child == _header); }
+
+void PanelImpl::childForgotten(WidgetBase& child) {
+    if (&child == _header) {
+        _header = nullptr;
+    }
+}
+
+std::vector<WidgetBase*> PanelImpl::body() const {
+    std::vector<WidgetBase*> out;
+    for (auto* child : children()) {
+        if (child != _header) {
+            out.push_back(child);
+        }
+    }
+    return out;
+}
 
 void PanelImpl::syncChildren() {
     for (auto* child : children()) {
-        child->setStructuralVisible(!_collapsed);
+        child->setStructuralVisible(!_collapsed || child == _header);
     }
     auto& shared = context();
     auto const* const focused = shared.screen->focusedComponent();
     refresh();
-    // The focused widget is inside, so out of reach by now: losing the focus commits nothing and runs no handler.
-    if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view())) {
+    // The focused widget is inside, so out of reach by now: losing the focus commits nothing and runs no handler,
+    // unless it is the header, which stays reachable while collapsed.
+    if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view()) &&
+        (_header == nullptr || !isWithin(focused, _header->view()))) {
         static_cast<void>(focusWidget(shared, focusable() ? this : nullptr));
     }
     // Last: a dialog inside that shows again takes the focus, and a field losing it may run a handler that destroys
@@ -220,22 +243,39 @@ void PanelImpl::syncChildren() {
 }
 
 ::core::tui::Size PanelImpl::naturalSize() const {
+    int const headerHeight = (_header != nullptr && _header->shown()) ? requestedSize(*_header).height : 0;
+    int const headerWidth = (_header != nullptr && _header->shown()) ? requestedSize(*_header).width : 0;
     if (_collapsed) {
-        return {.width = displayWidth(heading()), .height = 1};
+        return {.width = std::max(displayWidth(heading()), headerWidth + 2), .height = 1 + headerHeight};
     }
-    auto const inner = stackNaturalSize(children(), ui::Axis::Vertical, 0);
-    return {.width = std::max(inner.width + (2 * _paddingColumns) + 2, displayWidth(heading()) + 4),
-            .height = inner.height + (2 * _paddingRows) + 2};
+    auto const inner = stackNaturalSize(body(), ui::Axis::Vertical, 0);
+    return {.width = std::max({inner.width + (2 * _paddingColumns) + 2, displayWidth(heading()) + 4, headerWidth + 2}),
+            .height = inner.height + (2 * _paddingRows) + 2 + headerHeight};
 }
 
 std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) const {
-    if (_collapsed) {
-        return std::vector<::core::tui::Rect>(children().size());
+    std::vector<::core::tui::Rect> areas(children().size());
+    int const headerHeight = (_header != nullptr && _header->shown()) ? requestedSize(*_header).height : 0;
+    std::vector<::core::tui::Rect> bodyAreas;
+    if (!_collapsed) {
+        auto const inside = ::core::tui::Rect{.x = 1,
+                                              .y = 1 + headerHeight,
+                                              .width = std::max(0, size.width - 2),
+                                              .height = std::max(0, size.height - 2 - headerHeight)};
+        bodyAreas = stackAreas(body(), layout::pad(inside, _paddingRows, _paddingColumns),
+                               StackSpec{.axis = ui::Axis::Vertical});
     }
-    auto const inside = ::core::tui::Rect{
-        .x = 1, .y = 1, .width = std::max(0, size.width - 2), .height = std::max(0, size.height - 2)};
-    return stackAreas(children(), layout::pad(inside, _paddingRows, _paddingColumns),
-                      StackSpec{.axis = ui::Axis::Vertical});
+    std::size_t next = 0;
+    std::size_t index = 0;
+    for (auto const* const child : children()) {
+        if (child == _header) {
+            areas.at(index) = {.x = 1, .y = 1, .width = std::max(0, size.width - 2), .height = headerHeight};
+        } else if (next < bodyAreas.size()) {
+            areas.at(index) = bodyAreas.at(next++);
+        }
+        ++index;
+    }
+    return areas;
 }
 
 // The title is written into a canvas of its own between the corners rather than handed to drawBox, which shortens
@@ -245,6 +285,7 @@ void PanelImpl::paint(::core::tui::Canvas& canvas) {
     auto const& style = hasFocus() ? theme.buttonFocused : theme.textNormal;
     if (_collapsed) {
         canvas.putString(0, 0, heading(), style);
+        placeChildren(childAreas(canvas.size()));
         return;
     }
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, style);

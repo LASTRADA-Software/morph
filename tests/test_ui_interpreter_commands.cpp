@@ -271,7 +271,8 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
         { "kind": "grid", "columns": 2, "gap": 1, "children": [
           { "kind": "spacer", "span": 2, "sizing": { "lit": { "fixed": 3 } } },
           { "kind": "busy", "active": true, "label": "wait", "sizing": { "lit": { "stretch": 2 } } } ] },
-        { "kind": "panel", "title": "P", "padding": 1, "collapsible": true, "collapsed": false, "children": [
+        { "kind": "panel", "title": "P", "header": [ { "kind": "spacer" } ], "padding": 1, "collapsible": true,
+          "collapsed": false, "children": [
           { "kind": "row", "gap": 2, "children": [
             { "kind": "text", "testId": "role", "text": "e", "role": "error" },
             { "kind": "checkbox", "id": "agree", "testId": "agree", "label": "agree",
@@ -315,6 +316,8 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     CHECK(h.text("chart") == "Trend");
     CHECK(h.text("case") == "B");
     CHECK(h.text("agreed") == "false");
+    int const panel = h.backend.all("Panel").front();
+    CHECK(h.backend.hasProp(panel, "header"));
     h.backend.toggle(h.byTestId("Checkbox", "agree"));
     h.settle();
     CHECK(h.text("agreed") == "true");

@@ -451,6 +451,9 @@ struct TextInput {
     /// @brief The unit the input shows beside its text, such as `kg`; empty shows none. Only a single-line or
     ///        password input shows one: the mount refuses a multiline input with a unit.
     Prop<std::string> unit;
+    /// @brief The name of an icon in the theme's icon set, drawn at the field's leading edge; empty shows none. Only
+    ///        a single-line or password input shows one: the mount refuses a multiline input with an icon. Set once.
+    std::string icon;
     /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
     ///        not hold a number. Set once; the mount refuses places on a multiline input.
     int decimals = -1;
@@ -621,6 +624,8 @@ struct Spacer {
 struct Panel {
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief Shown beside the title, collapsed or not; may be null.
+    Node header;
     /// @brief Space between frame and child: a spacing step, 0 to `kMaxSpacingStep`.
     int padding = 0;
     /// @brief The content; may be null.
@@ -860,6 +865,9 @@ struct TableColumn {
     std::string label;
     /// @brief The column's width request.
     Sizing width = Sizing::content();
+    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on a column
+    ///        with its own `.cell`, or on a `Table` constructed directly without going through the interpreter.
+    TextRole role = TextRole::Normal;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one

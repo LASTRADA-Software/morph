@@ -112,6 +112,9 @@ if(MORPH_COMPILER_FAMILY STREQUAL "MSVC")
         /bigobj     # heavy template instantiation (BRIDGE_REGISTER_ACTION chains,
                     # examples/forms/main.cpp) exceeds the default object-file
                     # section limit (C1128) without this
+        /utf-8      # source files are UTF-8 without a BOM; without this, MSVC reads them
+                    # as the active code page and a universal-character-name a narrow
+                    # string literal cannot represent there (C4566) becomes an error under /WX
         /W4
         /permissive-
         /w14062     # enumerator not handled in switch
@@ -135,6 +138,8 @@ if(MORPH_COMPILER_FAMILY STREQUAL "MSVC")
         /w14906     # string literal cast to LPWSTR
         /w14928     # illegal copy-initialization
         /wd4068     # suppress: unknown pragma (e.g. clang pragmas in shared headers)
+        /wd4702     # suppress: unreachable code (a false positive inside Qt's qvariant.h
+                    # QVariant::fromValue, whose if constexpr chain's branches all return)
     )
 
 # ═══════════════════════════════════════════════════════════════════════════

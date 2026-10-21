@@ -3187,6 +3187,9 @@ struct TextInputOptions {
     AnyHandle placeholder;
     /// @brief The input mode, such as `multiline` or `password`.
     AnyHandle mode;
+    /// @brief An icon of the theme's icon map, drawn at the input's leading edge; empty shows none. Refused on a
+    ///        multiline input.
+    AnyHandle icon;
     /// @brief When the draft commits.
     std::optional<Commit> commitOn;
     /// @brief Commands run on every edit.
@@ -3206,7 +3209,8 @@ struct TextInputOptions {
     node.put("value", options.value)
         .put("label", options.label)
         .put("placeholder", options.placeholder)
-        .put("mode", options.mode);
+        .put("mode", options.mode)
+        .put("icon", options.icon);
     if (options.commitOn) {
         node.text("commitOn", kCommits.at(static_cast<std::size_t>(*options.commitOn)));
     }
@@ -3419,6 +3423,8 @@ namespace detail {
 struct PanelOptions {
     /// @brief The title.
     AnyHandle title;
+    /// @brief Nodes shown beside the title.
+    Nodes header;
     /// @brief The padding.
     AnyHandle padding;
     /// @brief Whether the user may collapse it.
@@ -3429,11 +3435,12 @@ struct PanelOptions {
 
 /// @brief A `panel` node.
 /// @param children The children.
-/// @param options  The title and collapsing.
+/// @param options  The title, header and collapsing.
 /// @return The node.
 [[nodiscard]] inline Node panel(Nodes const& children, PanelOptions const& options = {}) {
     return detail::NodeWriter{"panel"}
         .put("title", options.title)
+        .put("header", options.header)
         .put("padding", options.padding)
         .put("collapsible", options.collapsible)
         .put("collapsed", options.collapsed)
@@ -3660,6 +3667,8 @@ struct TableColumn {
     AnyHandle label;
     /// @brief The width.
     AnyHandle width;
+    /// @brief The column's text role; absent writes no key, `Normal`.
+    AnyHandle role;
     /// @brief The cell, read in the row scope.
     Nodes cell;
 };
@@ -3739,6 +3748,9 @@ namespace detail {
             }
             if (column.width.present()) {
                 detail::put(part, "width", column.width.json());
+            }
+            if (column.role.present()) {
+                detail::put(part, "role", column.role.json());
             }
             if (!column.cell.empty()) {
                 detail::put(part, "cell", column.cell.json());

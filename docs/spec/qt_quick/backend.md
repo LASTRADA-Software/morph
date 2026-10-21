@@ -138,9 +138,9 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 |---|---|---|---|
 | Text | `MorphText` | a label in a text role: a heading in `Theme.headingFont`, a section in `Theme.strongFont`, the rest in the body font; the colour is `MorphWidget.textColorOf(role)` (the scheme's muted colour for muted and section, error and success theirs, the text colour otherwise), which a restyle reads | — |
 | Button | `MorphButton` | a `Button`; its `icon` drawn as the control's icon when the theme's icon set names it ([`../ui/theme.md`](../ui/theme.md#icons)). `style` 1, a list item: it fills its line (`fillsAcross`), its content an icon and a left-aligned label padded by `Theme.spaceOf(3)`, no border, a clear background that is `scheme.neutral` while hovered or pressed; while `selected`, an accent tint (`Qt.alpha(scheme.accent, 0.12)`), the label in the accent and a 3 px accent bar at its leading edge. `style` and `selected` are part of the button's restyle API | click, Space or Enter |
-| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
+| TextInput | `MorphTextInput` (single line, password), `MorphTextArea` (multi-line) | a `TextField` / `TextArea`; a single-line field draws its `unit` as a muted trailing label inside the field, its right padding grown by the label's width, draws its `icon` as a leading image inside the field (its left padding grown by the image's width; no themed icon for the name reserves no space), and carries `decimals` for a kit (the stock input draws nothing from it) | each edit's whole text; Enter commits then submits (single line); focus leaving after an edit commits |
 | Checkbox | `MorphCheckbox` | a `CheckBox` | the state toggled to |
-| Select | `MorphSelect` | a `ComboBox`, or `RadioButton`s | the chosen option's index, which C++ turns into its key |
+| Select | `MorphSelect` | a `ComboBox` with a themed chevron indicator (`nav.expand`/`nav.collapse`, flipping with the popup), or `RadioButton`s | the chosen option's index, which C++ turns into its key |
 | Menu | `MorphMenu` | a bar of top-level entries; a submenu opens in a popup, one level at a time | the chosen entry's path |
 | Column, Row | `MorphStack` | a `GridLayout` flowing on the axis; `align` and `justify` (the `ui::Align` and `ui::Justify` indices) | — |
 | Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align` | — |
@@ -152,8 +152,9 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Tabs | `MorphTabs` | a `TabBar` over the page slots, `Theme.spaceOf(3)` above them; `barShown` false hides the bar and gives its height to the pages, and its `focusTarget` is then the pages, so a hidden bar never holds the keyboard focus | the tab clicked |
 | Dialog | `MorphDialog` | a modal `Popup`, centred; its `footer` item, under the content, holds the footer (a `MorphFooter`: its children in a row against the right edge, `Theme.spaceOf(2)` apart), shown only while it holds something | Escape or a press outside, as a dismissal |
 | Drawer | `MorphDrawer` | a modal `Drawer` on the start or end edge; it cannot be swiped open; its `footer` as a dialog's, at the bottom | as a dialog |
+| Toast | `MorphToast` | a non-modal, non-dimming `Popup` near a corner of `Overlay.overlay`, `closePolicy: Popup.NoAutoClose`; `show(text, tone)` is a QML function call, not a property write, so a repeated call with the same text and tone still restarts the dismiss `Timer` and reopens the popup if it closed | — |
 | Busy | `MorphBusy` | a `BusyIndicator` and a label, both shown only while active (inactive, its implicit size is 0×0) | — |
-| Table | `MorphTable`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
+| Table | `MorphTable`, a header over a `MorphTableHeaderBackground`, rows `MorphTableRow` over a `MorphTableRowBackground` | column headers over rows | selection and activation, below |
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
@@ -194,8 +195,11 @@ order) — and each of those is one operation on the Qt side. Nothing re-creates
 **Tables.** A horizontal stack the mount makes inside a table is one of its rows (`MorphTableRow`). A row places its
 cells by column index at the table's column widths — fixed units, the widest of the header and the column's shown cells
 for content (as the terminal backend sizes it), a share of the rest for stretch — so a hidden cell keeps its column
-and the cells after it stay under their headers; a cell's implicit size changing widens its content column and places
-the rows again. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
+and the cells after it stay under their headers. A content column's width is cached per column rather than recomputed
+by rescanning every row on every change: a cell growing only raises its column's cached width; a cell shrinking, a row
+leaving, or a cell's visibility flipping rescans that one column, since the cache alone cannot tell whether the row
+that set its current maximum is still contributing. Either way, every row still places its cells again once a
+column's width actually changes, since a widened column's cells all need their new x/width. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
 click or Enter activates it without toggling the selection. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
@@ -208,6 +212,12 @@ height is the larger of its cells' and the background's `implicitHeight`; the st
 fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`. A toned
 row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
 the selection colour and keeps the bar.
+
+The header row draws its own background part (`headerBackground`, the `tableHeader` part restyle) behind the column
+labels, and hands it only `scheme`: the header has no selection, hover, focus or tone of its own. The stock
+background fills with `scheme.tableHeader` (`color.table.header`, transparent by default), so a table draws no
+header fill until a theme sets one. A document-authored column's `role` (a `TextRole`) styles its default cell's
+text and has no effect on a column with its own `cell`.
 
 ## Keys
 
@@ -304,6 +314,7 @@ surface is `Theme.background`.
   | Restyle kind | `MorphUi` base | What it replaces | Base API (beyond its Qt type's) |
   |---|---|---|---|
   | `tableRow` | `MorphTableRowBackground` | a table row's background: selection, hover, focus, zebra, tone, and the row's minimum height | `selected`, `hovered`, `current`, `alternate`, `tone` (−1 none, else a `ui::Tone` index), `scheme` |
+  | `tableHeader` | `MorphTableHeaderBackground` | a table's header row background | `scheme` |
   | `scrollBar` | `MorphScrollBar` (a `ScrollBar`) | the bar a scroll area attaches on its axis | `scheme` |
   | `splitterHandle` | `MorphSplitterHandle` | the handle between two panes of a splitter | `axis`, `scheme`; the handle reads `SplitHandle.pressed` and `.hovered` |
 

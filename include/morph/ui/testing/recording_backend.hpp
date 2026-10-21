@@ -894,7 +894,7 @@ public:
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `caption`,
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `caption`,
 ///        `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
@@ -937,6 +937,7 @@ public:
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
     void setCaption(std::string_view label, bool shown) override {
         set("caption", formatText(label));
         set("captionShown", formatBool(shown));
@@ -1069,13 +1070,24 @@ public:
     }
 };
 
-/// @brief A fake `PanelWidget`: properties `title`, `padding`, `collapsible`, `collapsed`.
+/// @brief A fake `PanelWidget`: properties `title`, `header` (the child's id), `padding`, `collapsible`, `collapsed`.
 class FakePanel final : public FakeContainer<PanelWidget> {
 public:
     using FakeContainer<PanelWidget>::FakeContainer;
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setPadding(int padding) override { set("padding", std::to_string(padding)); }
     void setCollapsible(bool collapsible) override { set("collapsible", formatBool(collapsible)); }
+
+    /// @brief Records property `header`, the child's id.
+    /// @param header One of this widget's children.
+    /// @throws std::logic_error when @p header is not this widget's child.
+    void setHeader(Widget& header) override {
+        int const headerId = store().idOf(header);
+        if (store().at(headerId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setHeader with a widget that is not this panel's child"};
+        }
+        set("header", std::to_string(headerId));
+    }
     void setCollapsed(bool collapsed) override { set("collapsed", formatBool(collapsed)); }
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };
@@ -1175,6 +1187,21 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
     void setDismissible(bool dismissible) override { set("dismissible", formatBool(dismissible)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+};
+
+/// @brief A fake `ToastWidget`: properties `text`, `tone`, and `shown` (incremented on every `show`, so a test can
+///        tell a replace from a no-op).
+class FakeToast final : public FakeLeaf<ToastWidget> {
+public:
+    using FakeLeaf<ToastWidget>::FakeLeaf;
+    void show(std::string_view text, Tone tone) override {
+        set("text", formatText(text));
+        set("tone", enumName(tone));
+        set("shown", std::to_string(++_shown));
+    }
+
+private:
+    int _shown = 0;
 };
 
 /// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`.
@@ -1532,6 +1559,9 @@ public:
     }
     [[nodiscard]] std::unique_ptr<DialogWidget> createDialog(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeDialog>(_store, "Dialog", parent);
+    }
+    [[nodiscard]] std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeToast>(_store, "Toast", parent);
     }
     [[nodiscard]] std::unique_ptr<BusyWidget> createBusy(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);

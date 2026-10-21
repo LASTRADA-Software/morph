@@ -107,6 +107,16 @@ public:
     bool saveFile(ui::InlineFile const& file, std::string const& option,
                   std::function<void(std::expected<ui::Value, std::string>)> done) override;
 
+    /// @brief Sets what `notify` calls to show a transient message; empty falls through to the base class's `false`.
+    /// @param sink Given the text and the role; returns whether it showed it.
+    void setNotifySink(std::function<bool(std::string const&, std::string const&)> sink);
+
+    /// @brief Calls the notify sink if one is set.
+    /// @param text The message.
+    /// @param role `info`, `success`, `warning` or `error`; empty for the default.
+    /// @return Whether the sink showed it; `false` when none is set.
+    bool notify(std::string const& text, std::string const& role) override;
+
 private:
     Source* _source;
     SignInMapper _signIn;
@@ -114,6 +124,7 @@ private:
     std::function<void(SignedIn)> _signedIn;
     std::function<void()> _signedOut;
     std::function<void(std::string const&)> _onProblem;
+    std::function<bool(std::string const&, std::string const&)> _notifySink;
 };
 
 /// @brief What a client shell reports, and how it starts.

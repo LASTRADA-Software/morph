@@ -41,6 +41,7 @@ public:
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
     void setDecimals(int decimals) override;
+    void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
@@ -170,6 +171,12 @@ public:
     void setLabel(std::string_view label) override;
 };
 
+class ToastImpl final : public ItemWidget<ui::ToastWidget> {
+public:
+    ToastImpl(Context& context, ui::ContainerWidget* parent);
+    void show(std::string_view text, ui::Tone tone) override;
+};
+
 class BannerImpl final : public ItemWidget<ui::BannerWidget> {
 public:
     BannerImpl(Context& context, ui::ContainerWidget* parent);
@@ -269,6 +276,7 @@ class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {
 public:
     PanelImpl(Context& context, ui::ContainerWidget* parent);
     void setTitle(std::string_view title) override;
+    void setHeader(ui::Widget& header) override;
     void setPadding(int padding) override;
     void setCollapsible(bool collapsible) override;
     void setCollapsed(bool collapsed) override;

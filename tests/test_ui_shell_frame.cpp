@@ -55,6 +55,31 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     CHECK(signOuts == 1);
 }
 
+// Mutation: never show the toast the first time (showToast is a no-op), or stop restarting its dismiss interval on
+// a second call (its shown count stops advancing).
+TEST_CASE("shell frame: showToast makes the toast widget on first use, under the main content area", "[ui][shell]") {
+    using morph::ui::Tone;
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    CHECK(backend.all("Toast").empty());
+    frame.showToast("Saved", Tone::Ok);
+    auto const toasts = backend.all("Toast");
+    REQUIRE(toasts.size() == 1);
+    int const toast = toasts.front();
+    CHECK(backend.prop(toast, "text") == "Saved");
+    CHECK(backend.prop(toast, "tone") == "Ok");
+    CHECK(backend.prop(toast, "shown") == "1");
+    // A second call while the first is still showing replaces its text and tone, and restarts the interval (the
+    // shown count advances again) rather than being a no-op.
+    frame.showToast("Saved again", Tone::Warn);
+    CHECK(backend.all("Toast").size() == 1);  // made once, not once per call
+    CHECK(backend.prop(toast, "text") == "Saved again");
+    CHECK(backend.prop(toast, "tone") == "Warn");
+    CHECK(backend.prop(toast, "shown") == "2");
+}
+
 // Mutation: hide only the sidebar (the top bar stays shown signed out).
 TEST_CASE("shell frame: signed out, the sidebar and the top bar are hidden", "[ui][shell]") {
     RecordingBackend backend;

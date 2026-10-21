@@ -163,21 +163,21 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 |---|---|---|
 | `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
 | `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
-| `textInput` | `value`, `placeholder`, `mode`, `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
+| `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
 | `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |
 | `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
 | `grid` | `children`, `gap`, `columns`, `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
-| `panel` | `title`, `padding`, `collapsible`, `collapsed`, `children` | |
+| `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding`, `collapsible`, `collapsed`, `children` | |
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
 | `tabs` | `tabs`: parts `{label, children}`; the node keeps the user's pick, so picking a tab mounts and shows its page | |
 | `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
-| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, cell ⓘ}`, or an expression), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
+| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, cell ⓘ}`, or an expression — `role` styles the column's default cell and has no effect on one with its own `cell`), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
 | `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
@@ -237,7 +237,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
   `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
   minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
-  frontend, not by its container) or on a `custom` node (which carries no common properties). A literal `sizing` is
+  frontend, not by its container). On Qt Quick, that sizing caps the overlay at the window less a margin on each
+  axis, and scrolls whatever content does not fit between the title and the footer, which both stay reachable.
+  There is also no bound on a `custom` node (which carries no common properties). A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is

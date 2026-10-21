@@ -1758,6 +1758,13 @@ private:
 
     /// The functions whose every argument is required: any `null` argument has already made the result `null`.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per function of the library.
+    // GCC's -Wstrict-overflow fires on this whole function at -O3, attributing it to the function's opening line
+    // rather than a specific statement -- a known false positive from its range analysis across the switch's many
+    // checked-arithmetic calls (Rational's own checkedAdd/checkedSub/checkedMul are all free of signed-overflow UB).
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-overflow"
+#endif
     Value strict(Expr const& expr, std::vector<Value> const& args) {
         FormatContext const& context = _env->formatting();
         switch (expr.function) {
@@ -2022,6 +2029,9 @@ private:
                 return Value{};
         }
     }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
     Environment const* _env;
     std::vector<std::pair<std::string, Value>> _locals;

@@ -20,6 +20,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/shell_frame.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <stdexcept>
@@ -179,6 +180,37 @@ TEST_CASE("ApplicationHost: a mapper of the application's own signs in; one answ
     CHECK_THROWS_AS(client::mountShell(context, backend, std::unexpected(ui::ConnectError{}), source,
                                        client::ShellOptions{.signIn = {}}),
                     std::invalid_argument);
+}
+
+// Mutation: have notify call the sink's setVisible(true) as a separate step after writing text/tone, instead of
+// show()'s single call — the replace-while-showing assertion below then sees a no-op on the second notify.
+TEST_CASE("ApplicationHost: notify answers false unwired, and wired shows and replaces through the frame's toast",
+          "[client][sign-in]") {
+    client::LocalSource source{probe::app(), client::LocalSetup{}};
+    std::vector<client::SignedIn> signedIn;
+    auto const record = [&signedIn](client::SignedIn made) { signedIn.push_back(std::move(made)); };
+    client::ApplicationHost host{source, &userAndJwt, {}, record, [] {}};
+    // Unwired: the base class's safe default, never a crash.
+    CHECK_FALSE(host.notify("hello", "info"));
+
+    ui::testing::RecordingBackend backend;
+    ui::ShellFrameOptions options;
+    options.applicationName = "Probe";
+    ui::ShellFrame frame{backend, nullptr, std::move(options)};
+    host.setNotifySink([&frame](std::string const& text, std::string const& role) {
+        frame.showToast(text, role == "error" ? ui::Tone::Err : ui::Tone::Info);
+        return true;
+    });
+    CHECK(host.notify("Saved", "info"));
+    int const toast = backend.all("Toast").front();
+    CHECK(backend.prop(toast, "text") == "Saved");
+    CHECK(backend.prop(toast, "shown") == "1");
+    // A second notify while the first toast is still showing replaces its text, not a no-op.
+    CHECK(host.notify("Failed", "error"));
+    CHECK(backend.all("Toast").size() == 1);
+    CHECK(backend.prop(toast, "text") == "Failed");
+    CHECK(backend.prop(toast, "tone") == "Err");
+    CHECK(backend.prop(toast, "shown") == "2");
 }
 
 // Control: the same host without the application host reports both commands as not supported.

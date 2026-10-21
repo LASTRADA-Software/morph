@@ -50,15 +50,38 @@ MorphWidget {
         }
 
         contentItem: ColumnLayout {
+            id: contentColumn
+            // A document does not know the window size, so the frontend keeps a wide dialog from running past it;
+            // Math.min only ever shrinks, it does not stretch a narrow dialog's own natural width up to the cap.
+            // contentItem is the Popup's root, not a layout's child, so its own width is set directly, not via a
+            // Layout.* attached property (which only affects a layout-managed child, not the layout item itself).
+            width: Math.min(implicitWidth, (popup.Overlay.overlay?.width ?? implicitWidth) - 4 * Theme.unitWidth)
+
             Label {
+                id: titleLabel
                 font: Theme.strongFont
                 visible: root.title !== ""
                 text: root.title
             }
 
-            ColumnLayout {
-                id: column
+            // Only the content between the title and the footer scrolls, so both stay reachable however tall the
+            // content is. Capped directly against the window, less what the title and footer and the Popup's own
+            // margin already take: the one number nothing else needs to derive circularly from the scroll area's
+            // own size, since title and footer are both fixed-height, independent of whatever it does. A ScrollView
+            // (not a bare Flickable) correctly lets a plain click on an interactive child pass through to it, rather
+            // than being claimed by the scroll gesture's own press handling.
+            ScrollView {
+                id: scroll
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.maximumHeight: Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
+                                               titleLabel.height - footerArea.height - contentColumn.spacing * 2)
+                clip: true
+
+                ColumnLayout {
+                    id: column
+                    width: scroll.availableWidth
+                }
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own

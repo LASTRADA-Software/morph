@@ -342,6 +342,37 @@ TEST_CASE("qt_quick components: a tableRow restyle draws every row's background,
     CHECK(reported.size() == 1);  // the refusal above, and nothing since
 }
 
+// Mutation: make the header's background from the stock MorphUi component instead of the context's (the restyle's
+// marker never shows); or stop binding `scheme` on it (a themed table header stays the default colour).
+TEST_CASE("qt_quick components: a tableHeader restyle draws the table's header background", "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    QTemporaryDir const dir;
+    REQUIRE(dir.isValid());
+    components.addHost("BrandHeader", 1,
+                       writeFile(dir, QStringLiteral("BrandHeader.qml"),
+                                 "import QtQuick\nimport MorphUi\n"
+                                 "MorphTableHeaderBackground { property bool brand: true }\n"));
+    components.addHost("PlainHeader", 1,
+                       writeFile(dir, QStringLiteral("PlainHeader.qml"), "import QtQuick\nItem {}\n"));
+    QQmlEngine probeEngine;
+    auto refused = components.restyle(probeEngine, "tableHeader", "PlainHeader");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().name == "tableHeader");
+    CHECK(refused.error().reason.contains("does not declare"));
+    CHECK(refused.error().reason.contains("scheme"));
+    REQUIRE(components.restyle(probeEngine, "tableHeader", "BrandHeader").has_value());
+
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Name"}});
+    scene.settle();
+    auto* const background = Scene::itemOf(*table).property("headerBackgroundItem").value<QObject*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->property("brand").toBool());
+    CHECK(reported.size() == 1);  // the refusal above, and nothing since
+}
+
 // Mutation: drop the `scrollBar` entry from the restylable kinds, or pass the stock part instead of the context's
 // (the restyle's marker never shows on the bar).
 TEST_CASE("qt_quick components: a scrollBar restyle is the bar a scroll area attaches on its axis", "[qt_quick]") {
