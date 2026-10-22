@@ -13,5 +13,7 @@ var searchData=
   ['viewpositions_10',['ViewPositions',['../df/d28/structmorph_1_1table_1_1detail_1_1ViewPositions.html',1,'morph::table::detail']]],
   ['viewregistry_11',['ViewRegistry',['../db/d4f/classmorph_1_1views_1_1ViewRegistry.html',1,'morph::views']]],
   ['viewtraits_12',['ViewTraits',['../db/db9/structmorph_1_1views_1_1ViewTraits.html',1,'morph::views']]],
-  ['visiblewhen_13',['VisibleWhen',['../d8/d10/structmorph_1_1forms_1_1VisibleWhen.html',1,'morph::forms']]]
+  ['virtualization_13',['Virtualization',['../db/ddd/structmorph_1_1ui_1_1Virtualization.html',1,'morph::ui']]],
+  ['visiblerange_14',['VisibleRange',['../d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html',1,'morph::ui::detail']]],
+  ['visiblewhen_15',['VisibleWhen',['../d8/d10/structmorph_1_1forms_1_1VisibleWhen.html',1,'morph::forms']]]
 ];

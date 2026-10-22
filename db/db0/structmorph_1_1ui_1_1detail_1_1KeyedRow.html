@@ -130,17 +130,24 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/db0/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:ad2a406241f29cdb56fce4bbfa9a75331" id="r_ad2a406241f29cdb56fce4bbfa9a75331"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad2a406241f29cdb56fce4bbfa9a75331">key</a></td></tr>
 <tr class="memdesc:ad2a406241f29cdb56fce4bbfa9a75331"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's key.  <br /></td></tr>
-<tr class="memitem:a0fbdc581197943a448b0cdea880ce9fa" id="r_a0fbdc581197943a448b0cdea880ce9fa"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0fbdc581197943a448b0cdea880ce9fa">scope</a></td></tr>
-<tr class="memdesc:a0fbdc581197943a448b0cdea880ce9fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns the row's slot (adopted first) and its widgets and bindings.  <br /></td></tr>
+<tr class="memitem:a85dbcfc460c71df56014e21fbe0a14e2" id="r_a85dbcfc460c71df56014e21fbe0a14e2"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2">stateScope</a></td></tr>
+<tr class="memdesc:a85dbcfc460c71df56014e21fbe0a14e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns the row's slot; made once, for as long as the key is in the data.  <br /></td></tr>
 <tr class="memitem:aa2f7ad43cb5553c837f8feef0458c2b3" id="r_aa2f7ad43cb5553c837f8feef0458c2b3"><td class="memItemLeft"><a class="el" href="../../d2/dd9/classmorph_1_1ui_1_1detail_1_1RowSlot.html">RowSlot</a> *&#160;</td><td class="memItemRight"><a class="el" href="#aa2f7ad43cb5553c837f8feef0458c2b3">slot</a> = nullptr</td></tr>
-<tr class="memdesc:aa2f7ad43cb5553c837f8feef0458c2b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's slot, owned by <span class="tt"><a class="el" href="#a0fbdc581197943a448b0cdea880ce9fa" title="Owns the row&#39;s slot (adopted first) and its widgets and bindings.">scope</a></span>.  <br /></td></tr>
+<tr class="memdesc:aa2f7ad43cb5553c837f8feef0458c2b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's slot, owned by <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span>.  <br /></td></tr>
+<tr class="memitem:a40ef9687b13b0f149aa54a8e530b1f68" id="r_a40ef9687b13b0f149aa54a8e530b1f68"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68">widgetScope</a></td></tr>
+<tr class="memdesc:a40ef9687b13b0f149aa54a8e530b1f68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns the row's widget and its bindings; null while the row is dewindowed or has no view.  <br /></td></tr>
 <tr class="memitem:abf95450de76b5a85032dffb0e893f4e4" id="r_abf95450de76b5a85032dffb0e893f4e4"><td class="memItemLeft"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#abf95450de76b5a85032dffb0e893f4e4">widget</a> = nullptr</td></tr>
-<tr class="memdesc:abf95450de76b5a85032dffb0e893f4e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's widget, owned by <span class="tt"><a class="el" href="#a0fbdc581197943a448b0cdea880ce9fa" title="Owns the row&#39;s slot (adopted first) and its widgets and bindings.">scope</a></span>; null when the row view was a null node.  <br /></td></tr>
+<tr class="memdesc:abf95450de76b5a85032dffb0e893f4e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's widget, owned by <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span>; null exactly when <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> is null.  <br /></td></tr>
+<tr class="memitem:a3ae4a2d372d6c8880a34d59c1d5168a2" id="r_a3ae4a2d372d6c8880a34d59c1d5168a2"><td class="memItemLeft"><a class="el" href="../../de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95">RowWidgetState</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3ae4a2d372d6c8880a34d59c1d5168a2">widgetState</a> = <a class="el" href="../../de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06">RowWidgetState::NullView</a></td></tr>
+<tr class="memdesc:a3ae4a2d372d6c8880a34d59c1d5168a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which of the three states above <span class="tt"><a class="el" href="#abf95450de76b5a85032dffb0e893f4e4" title="The row&#39;s widget, owned by widgetScope; null exactly when widgetScope is null.">widget</a></span> is in.  <br /></td></tr>
+<tr class="memitem:a6e3644fe32970567f0bdb81b1d7379e2" id="r_a6e3644fe32970567f0bdb81b1d7379e2"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a6e3644fe32970567f0bdb81b1d7379e2">viewPosition</a> = 0</td></tr>
+<tr class="memdesc:a6e3644fe32970567f0bdb81b1d7379e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">This row's position in view order, as of the most recent <span class="tt">reconcile</span> pass &ndash; not its position in <span class="tt"><a class="el" href="../../db/d17/structmorph_1_1ui_1_1detail_1_1KeyedRows.html#a4340580891ec268b0b684d0f7c23aab5" title="The rows; those with a widget are in the container&#39;s order.">KeyedRows::list</a></span>, which <span class="tt">reorder</span> groups realized rows ahead of dewindowed ones within (so the container only ever holds the widgets that exist), and so no longer matches view order once any row is dewindowed. <span class="tt">applyWindow</span> compares this against the visible range; <span class="tt">reconcile</span> is the only writer.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One mounted row of a <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a>. </p>
+<p>A row's state (its slot, and the signal it reads) and its widget are owned by two separate scopes so a virtualized table can release a row's widget &ndash; the expensive part of mounting a row &ndash; while its key is still in the data, without losing the row's place: <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span> is made once, when the key first appears, and lives until the key is gone; <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> comes and goes with whether the row is realized. A non-virtualized <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a></span>/<span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> (below its <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1ui_1_1Virtualization.html#ae4a626d58a451b0ccaf116350449c5cc" title="Below this many rows, every row&#39;s widget is realized regardless of scroll position,...">Virtualization::threshold</a></span>, or on a backend that never dewindows a row) always has <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> set alongside <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span>, so this costs nothing when windowing never applies. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ad2a406241f29cdb56fce4bbfa9a75331" name="ad2a406241f29cdb56fce4bbfa9a75331"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad2a406241f29cdb56fce4bbfa9a75331">&#9670;&#160;</a></span>key</h2>
@@ -156,25 +163,25 @@ Public Attributes</h2></td></tr>
 
 <p>The row's key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a0fbdc581197943a448b0cdea880ce9fa" name="a0fbdc581197943a448b0cdea880ce9fa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0fbdc581197943a448b0cdea880ce9fa">&#9670;&#160;</a></span>scope</h2>
+<a id="a85dbcfc460c71df56014e21fbe0a14e2" name="a85dbcfc460c71df56014e21fbe0a14e2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a85dbcfc460c71df56014e21fbe0a14e2">&#9670;&#160;</a></span>stateScope</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::unique_ptr&lt;<a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a>&gt; morph::ui::detail::KeyedRow::scope</td>
+          <td class="memname">std::unique_ptr&lt;<a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a>&gt; morph::ui::detail::KeyedRow::stateScope</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Owns the row's slot (adopted first) and its widgets and bindings. </p>
+<p>Owns the row's slot; made once, for as long as the key is in the data. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,9 +197,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The row's slot, owned by <span class="tt"><a class="el" href="#a0fbdc581197943a448b0cdea880ce9fa" title="Owns the row&#39;s slot (adopted first) and its widgets and bindings.">scope</a></span>. </p>
+<p>The row's slot, owned by <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a40ef9687b13b0f149aa54a8e530b1f68" name="a40ef9687b13b0f149aa54a8e530b1f68"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a40ef9687b13b0f149aa54a8e530b1f68">&#9670;&#160;</a></span>widgetScope</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::unique_ptr&lt;<a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a>&gt; morph::ui::detail::KeyedRow::widgetScope</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Owns the row's widget and its bindings; null while the row is dewindowed or has no view. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -208,9 +233,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The row's widget, owned by <span class="tt"><a class="el" href="#a0fbdc581197943a448b0cdea880ce9fa" title="Owns the row&#39;s slot (adopted first) and its widgets and bindings.">scope</a></span>; null when the row view was a null node. </p>
+<p>The row's widget, owned by <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span>; null exactly when <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> is null. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3ae4a2d372d6c8880a34d59c1d5168a2" name="a3ae4a2d372d6c8880a34d59c1d5168a2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3ae4a2d372d6c8880a34d59c1d5168a2">&#9670;&#160;</a></span>widgetState</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95">RowWidgetState</a> morph::ui::detail::KeyedRow::widgetState = <a class="el" href="../../de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06">RowWidgetState::NullView</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Which of the three states above <span class="tt"><a class="el" href="#abf95450de76b5a85032dffb0e893f4e4" title="The row&#39;s widget, owned by widgetScope; null exactly when widgetScope is null.">widget</a></span> is in. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6e3644fe32970567f0bdb81b1d7379e2" name="a6e3644fe32970567f0bdb81b1d7379e2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6e3644fe32970567f0bdb81b1d7379e2">&#9670;&#160;</a></span>viewPosition</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::detail::KeyedRow::viewPosition = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>This row's position in view order, as of the most recent <span class="tt">reconcile</span> pass &ndash; not its position in <span class="tt"><a class="el" href="../../db/d17/structmorph_1_1ui_1_1detail_1_1KeyedRows.html#a4340580891ec268b0b684d0f7c23aab5" title="The rows; those with a widget are in the container&#39;s order.">KeyedRows::list</a></span>, which <span class="tt">reorder</span> groups realized rows ahead of dewindowed ones within (so the container only ever holds the widgets that exist), and so no longer matches view order once any row is dewindowed. <span class="tt">applyWindow</span> compares this against the visible range; <span class="tt">reconcile</span> is the only writer. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

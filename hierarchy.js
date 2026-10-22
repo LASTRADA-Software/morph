@@ -559,6 +559,7 @@ var hierarchy =
     [ "morph::ui::detail::StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", null ],
     [ "morph::ui::detail::TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", null ],
     [ "morph::ui::detail::TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", null ],
+    [ "morph::ui::detail::VisibleRange", "d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html", null ],
     [ "morph::ui::Dialog", "d2/dc0/structmorph_1_1ui_1_1Dialog.html", null ],
     [ "morph::ui::Dispatcher", "d5/d80/classmorph_1_1ui_1_1Dispatcher.html", [
       [ "morph::ui::BridgeDispatcher", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html", null ],
@@ -768,6 +769,7 @@ var hierarchy =
     [ "morph::ui::UploadRequest", "d9/ddd/structmorph_1_1ui_1_1UploadRequest.html", null ],
     [ "morph::ui::Value", "da/d54/classmorph_1_1ui_1_1Value.html", null ],
     [ "morph::ui::VerifiedCache", "de/dca/classmorph_1_1ui_1_1VerifiedCache.html", null ],
+    [ "morph::ui::Virtualization", "db/ddd/structmorph_1_1ui_1_1Virtualization.html", null ],
     [ "morph::ui::WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", null ],
     [ "morph::ui::Widget", "dc/dcb/classmorph_1_1ui_1_1Widget.html", [
       [ "morph::ui::BadgeWidget", "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html", [

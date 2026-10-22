@@ -553,7 +553,8 @@ var annotated_dup =
           [ "StateSlot", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot.html", "d4/d6d/structmorph_1_1ui_1_1detail_1_1StateSlot" ],
           [ "TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold" ],
           [ "TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState" ],
-          [ "TypedForEach", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ]
+          [ "TypedForEach", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ],
+          [ "VisibleRange", "d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html", "d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange" ]
         ] ],
         [ "testing", null, [
           [ "detail", null, [
@@ -846,6 +847,7 @@ var annotated_dup =
         [ "UploadRequest", "d9/ddd/structmorph_1_1ui_1_1UploadRequest.html", "d9/ddd/structmorph_1_1ui_1_1UploadRequest" ],
         [ "Value", "da/d54/classmorph_1_1ui_1_1Value.html", "da/d54/classmorph_1_1ui_1_1Value" ],
         [ "VerifiedCache", "de/dca/classmorph_1_1ui_1_1VerifiedCache.html", "de/dca/classmorph_1_1ui_1_1VerifiedCache" ],
+        [ "Virtualization", "db/ddd/structmorph_1_1ui_1_1Virtualization.html", "db/ddd/structmorph_1_1ui_1_1Virtualization" ],
         [ "WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", "da/de0/structmorph_1_1ui_1_1WatchDecl" ],
         [ "Widget", "dc/dcb/classmorph_1_1ui_1_1Widget.html", "dc/dcb/classmorph_1_1ui_1_1Widget" ],
         [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", "d6/d77/classmorph_1_1ui_1_1Workspace" ],

@@ -132,6 +132,7 @@ var namespaces_dup =
           [ "TransferHold", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold.html", "d6/d11/classmorph_1_1ui_1_1detail_1_1TransferHold" ],
           [ "TransferState", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html", "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState" ],
           [ "TypedForEach", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ],
+          [ "VisibleRange", "d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html", "d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange" ],
           [ "ConstantConvertible", "d5/d2a/conceptmorph_1_1ui_1_1detail_1_1ConstantConvertible.html", null ],
           [ "KindSet", "d8/d0e/expression_8hpp.html#a607768174eec9fdaf043171aeba4ae8e", null ],
           [ "RowsByKey", "db/d42/interpreter_8hpp.html#afcb4d5d0f21900606ab6bd8ee90a3bc7", null ],
@@ -169,6 +170,11 @@ var namespaces_dup =
           [ "PatchMiss", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3", [
             [ "NoList", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3acb32b7061f4cf64e16eff814f1c08877", null ],
             [ "NoRow", "db/d42/interpreter_8hpp.html#aab6200b5130d91c37e9871b41093d3b3af3c09a96b489f5e3ce6f67adc242b219", null ]
+          ] ],
+          [ "RowWidgetState", "de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95", [
+            [ "Realized", "de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95ab2f385854789d0821fcb8dafa70ac76d", null ],
+            [ "Dewindowed", "de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95a091030917b18cb7d6d1f1683b90830df", null ],
+            [ "NullView", "de/d26/mount_8hpp.html#aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06", null ]
           ] ],
           [ "mustUnderstand", "d0/dab/bundle_8hpp.html#a6ee99c2d7378ecff58bf4154d7b824cd", null ],
           [ "mustUnderstandIn", "d0/dab/bundle_8hpp.html#aa5f6aa7757b6d1a247667f9a8124064d", null ],
@@ -338,7 +344,7 @@ var namespaces_dup =
           [ "kMenuItemKeys", "dd/d39/document_8hpp.html#a29b3581abdce60e5aa2937c128e299c5", null ],
           [ "kContainerKeys", "dd/d39/document_8hpp.html#aa8712bc309281b95acb903d991ec229f", null ],
           [ "kGridKeys", "dd/d39/document_8hpp.html#af286f24ca1751469249ebb08c3e74783", null ],
-          [ "kPanelKeys", "dd/d39/document_8hpp.html#a24f66c134c928394f916ab92936f5523", null ],
+          [ "kPanelKeys", "dd/d39/document_8hpp.html#af8f39e89ceea5176c441d315d8d5b0bc", null ],
           [ "kScrollKeys", "dd/d39/document_8hpp.html#a01ef736ee78c99bd5cccf54dd64ba889", null ],
           [ "kSwitchKeys", "dd/d39/document_8hpp.html#ae60f3f8c540e01697958f981e03c490d", null ],
           [ "kCaseKeys", "dd/d39/document_8hpp.html#aab9ec76feb04bbe47131dcd8c8bac4ea", null ],
@@ -347,7 +353,7 @@ var namespaces_dup =
           [ "kDialogKeys", "dd/d39/document_8hpp.html#a145dc02762f69685d250d3342df1564c", null ],
           [ "kBusyKeys", "dd/d39/document_8hpp.html#a02488fa60e73da25e21e8d02e39b1ac1", null ],
           [ "kForEachKeys", "dd/d39/document_8hpp.html#acbcb92e592d0c1d5b3a04c16e69b5e0c", null ],
-          [ "kTableKeys", "dd/d39/document_8hpp.html#a484be44212491473937ff3d338e79d71", null ],
+          [ "kTableKeys", "dd/d39/document_8hpp.html#ab0f6ab21f2a68e5de79581a9588f2e17", null ],
           [ "kColumnKeys", "dd/d39/document_8hpp.html#a9be85dcbb927d4bca9af1e33f3f594c0", null ],
           [ "kDateTimeKeys", "dd/d39/document_8hpp.html#a30d537141a330bd568d3da7a6ddaad57", null ],
           [ "kSliderKeys", "dd/d39/document_8hpp.html#a3c61f1235fde539d1888fbcb1a75c02f", null ],
@@ -627,6 +633,7 @@ var namespaces_dup =
         [ "UploadRequest", "d9/ddd/structmorph_1_1ui_1_1UploadRequest.html", "d9/ddd/structmorph_1_1ui_1_1UploadRequest" ],
         [ "Value", "da/d54/classmorph_1_1ui_1_1Value.html", "da/d54/classmorph_1_1ui_1_1Value" ],
         [ "VerifiedCache", "de/dca/classmorph_1_1ui_1_1VerifiedCache.html", "de/dca/classmorph_1_1ui_1_1VerifiedCache" ],
+        [ "Virtualization", "db/ddd/structmorph_1_1ui_1_1Virtualization.html", "db/ddd/structmorph_1_1ui_1_1Virtualization" ],
         [ "WatchDecl", "da/de0/structmorph_1_1ui_1_1WatchDecl.html", "da/de0/structmorph_1_1ui_1_1WatchDecl" ],
         [ "Widget", "dc/dcb/classmorph_1_1ui_1_1Widget.html", "dc/dcb/classmorph_1_1ui_1_1Widget" ],
         [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html", "d6/d77/classmorph_1_1ui_1_1Workspace" ],

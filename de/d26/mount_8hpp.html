@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d26/mount_8
 <code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;numeric&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;ranges&gt;</code><br />
 <code>#include &lt;stdexcept&gt;</code><br />
@@ -155,6 +156,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d26/mount_8
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRow" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRow"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/db0/structmorph_1_1ui_1_1detail_1_1KeyedRow.html">morph::ui::detail::KeyedRow</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One mounted row of a <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a>.  <a href="../../db/db0/structmorph_1_1ui_1_1detail_1_1KeyedRow.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AVisibleRange" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AVisibleRange"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html">morph::ui::detail::VisibleRange</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the backend's own scroll position asks a virtualized table to realize next.  <a href="../../d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRows" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRows"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d17/structmorph_1_1ui_1_1detail_1_1KeyedRows.html">morph::ui::detail::KeyedRows</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The mounted rows of one <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a>, in their container's order.  <a href="../../db/d17/structmorph_1_1ui_1_1detail_1_1KeyedRows.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3APages" id="r_morph_3A_3Aui_3A_3Adetail_3A_3APages"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d17/structmorph_1_1ui_1_1detail_1_1Pages.html">morph::ui::detail::Pages</a></td></tr>
@@ -173,6 +176,14 @@ Namespaces</h2></td></tr>
 Typedefs</h2></td></tr>
 <tr class="memitem:a662234e441eac24e4c09d02acde68883" id="r_a662234e441eac24e4c09d02acde68883"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a662234e441eac24e4c09d02acde68883">morph::ui::detail::RowHook</a> = std::function&lt;void(<a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html">reactive::Scope</a>&amp;, <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> const&amp;, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a>&amp;, <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const&amp;)&gt;</td></tr>
 <tr class="memdesc:a662234e441eac24e4c09d02acde68883"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called for each newly mounted row with its widget and key; a <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> tells its widget the row's key.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:aabb38f45fe0ec5dd85e880c3639cdf95" id="r_aabb38f45fe0ec5dd85e880c3639cdf95"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#aabb38f45fe0ec5dd85e880c3639cdf95">morph::ui::detail::RowWidgetState</a> : std::uint8_t { <a class="el" href="#aabb38f45fe0ec5dd85e880c3639cdf95ab2f385854789d0821fcb8dafa70ac76d">Realized</a>
+, <a class="el" href="#aabb38f45fe0ec5dd85e880c3639cdf95a091030917b18cb7d6d1f1683b90830df">Dewindowed</a>
+, <a class="el" href="#aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06">NullView</a>
+ }</td></tr>
+<tr class="memdesc:aabb38f45fe0ec5dd85e880c3639cdf95"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a row's widget is realized, and if not, why &ndash; so the windowing pass of <span class="tt">reconcile</span> never confuses a row that has no widget by design (its view was a null node) with one whose widget is simply not realized right now, which it should realize the next time the row enters the visible range.  <a href="#aabb38f45fe0ec5dd85e880c3639cdf95">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -208,7 +219,42 @@ Variables</h2></td></tr>
 
 <p>Called for each newly mounted row with its widget and key; a Table tells its widget the row's key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="aabb38f45fe0ec5dd85e880c3639cdf95" name="aabb38f45fe0ec5dd85e880c3639cdf95"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aabb38f45fe0ec5dd85e880c3639cdf95">&#9670;&#160;</a></span>RowWidgetState</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#aabb38f45fe0ec5dd85e880c3639cdf95">morph::ui::detail::RowWidgetState</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a row's widget is realized, and if not, why &ndash; so the windowing pass of <span class="tt">reconcile</span> never confuses a row that has no widget by design (its view was a null node) with one whose widget is simply not realized right now, which it should realize the next time the row enters the visible range. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="aabb38f45fe0ec5dd85e880c3639cdf95ab2f385854789d0821fcb8dafa70ac76d" name="aabb38f45fe0ec5dd85e880c3639cdf95ab2f385854789d0821fcb8dafa70ac76d"></a>Realized&#160;</td><td class="fielddoc"><p><span class="tt">widgetScope</span>/<span class="tt">widget</span> are set. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aabb38f45fe0ec5dd85e880c3639cdf95a091030917b18cb7d6d1f1683b90830df" name="aabb38f45fe0ec5dd85e880c3639cdf95a091030917b18cb7d6d1f1683b90830df"></a>Dewindowed&#160;</td><td class="fielddoc"><p>The row's view is not null, but its widget is not realized: out of the visible range. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06" name="aabb38f45fe0ec5dd85e880c3639cdf95a8d3c2862f65577d5d58bb0e2b4449c06"></a>NullView&#160;</td><td class="fielddoc"><p>The row's view is a null node; it never had a widget and never will while that stays true. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +291,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Indexed by target position: whether that widget stays. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +337,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

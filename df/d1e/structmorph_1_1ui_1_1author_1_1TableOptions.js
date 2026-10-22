@@ -2,6 +2,9 @@ var structmorph_1_1ui_1_1author_1_1TableOptions =
 [
     [ "key", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#af51d2d479d8e3cc55b195b9aae5d8345", null ],
     [ "columns", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a4986a92db43e14edbb829e023ece58f6", null ],
+    [ "showHeader", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a199239977d329a77e28c7ad9ac9418b1", null ],
+    [ "virtualizeThreshold", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a2742f92345049f85eb68b8f7df7e9ee6", null ],
+    [ "virtualizeOverscan", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#ae63a9e26ca01300c5e6d95e2a5e780bc", null ],
     [ "selection", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a64a0a1072ada1bd07ca3226196184952", null ],
     [ "mode", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a87dd71e171f3748a58339f7b2912297c", null ],
     [ "sort", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#acdb50d26a19bf170a79536439f1a0987", null ],

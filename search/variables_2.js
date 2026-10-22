@@ -71,7 +71,7 @@ var searchData=
   ['contains_68',['contains',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#a2ccccf9451229e4ed4ef9824b7620d11',1,'morph::table::FilterEntry']]],
   ['contextkey_69',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]],
   ['core_70',['core',['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a27afd48f7c5ebc95060e9bcac804574e',1,'morph::ui::detail::RtScope']]],
-  ['count_71',['count',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#a10c1caacbdba00722c97669145db0817',1,'morph::table::ViewOp']]],
+  ['count_71',['count',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#a10c1caacbdba00722c97669145db0817',1,'morph::table::ViewOp::count'],['../d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html#a192167acae080083e8be8401deb561ff',1,'morph::ui::detail::VisibleRange::count']]],
   ['credential_72',['credential',['../d5/d43/structmorph_1_1ui_1_1author_1_1ActionFacts.html#ad3436a4404734d36202a57f1e68f4ca8',1,'morph::ui::author::ActionFacts::credential'],['../d0/db7/structmorph_1_1ui_1_1ActionInfo.html#ac9b8b302076808d32e7d036ad7497115',1,'morph::ui::ActionInfo::credential']]],
   ['current_73',['current',['../d8/d3b/structmorph_1_1ui_1_1Steps.html#a1a427346d730f4921cf442618a2db31d',1,'morph::ui::Steps']]],
   ['currentsize_74',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]],

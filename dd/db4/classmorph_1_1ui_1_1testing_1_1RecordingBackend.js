@@ -66,6 +66,7 @@ var classmorph_1_1ui_1_1testing_1_1RecordingBackend =
     [ "dropFiles", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aa026db279c23d68dcbcdbe50ca5fda9d", null ],
     [ "selectRows", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49", null ],
     [ "activateRow", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a5062763c427edc06cc036713f66cfb8e", null ],
+    [ "scrollTable", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aa36d22564e07b80ae96043da4e610909", null ],
     [ "setDateTime", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a04b1ecbb022e61b1c07accc8e44d1294", null ],
     [ "slide", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a3acb04a162ad6ebcf50eaddbd1be1594", null ],
     [ "pick", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a2d99de1e9b61ade3677a29892a55f9f1", null ],

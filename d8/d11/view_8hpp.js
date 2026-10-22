@@ -35,6 +35,7 @@ var view_8hpp =
     [ "morph::ui::detail::ForEachSession", "d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html", "d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession" ],
     [ "morph::ui::detail::ForEachModel", "db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel.html", "db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel" ],
     [ "morph::ui::detail::TypedForEach&lt; RowT &gt;", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html", "df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach" ],
+    [ "morph::ui::Virtualization", "db/ddd/structmorph_1_1ui_1_1Virtualization.html", "db/ddd/structmorph_1_1ui_1_1Virtualization" ],
     [ "morph::ui::ForEach", "d2/d58/structmorph_1_1ui_1_1ForEach.html", "d2/d58/structmorph_1_1ui_1_1ForEach" ],
     [ "morph::ui::TableColumn", "df/ddf/structmorph_1_1ui_1_1TableColumn.html", "df/ddf/structmorph_1_1ui_1_1TableColumn" ],
     [ "morph::ui::Table", "de/de3/structmorph_1_1ui_1_1Table.html", "de/de3/structmorph_1_1ui_1_1Table" ],

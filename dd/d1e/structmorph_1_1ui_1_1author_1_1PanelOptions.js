@@ -4,5 +4,6 @@ var structmorph_1_1ui_1_1author_1_1PanelOptions =
     [ "header", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#a3f3e28fe51df5d618bcfcc73415145af", null ],
     [ "padding", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#a6ac5da3505279011fb2fe4a9920b5504", null ],
     [ "collapsible", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#a5e014d48e176ea606b09fa169e87fd24", null ],
-    [ "collapsed", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#ae9256b3bd78a9379ed49d6beb38112c3", null ]
+    [ "collapsed", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#ae9256b3bd78a9379ed49d6beb38112c3", null ],
+    [ "onToggle", "dd/d1e/structmorph_1_1ui_1_1author_1_1PanelOptions.html#a33d8c3b93e1bcfabd96d4b2934a7e8fe", null ]
 ];
