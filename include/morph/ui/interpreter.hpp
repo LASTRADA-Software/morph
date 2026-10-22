@@ -6151,6 +6151,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.child = child("children");
         spec.collapsible = onceBool("collapsible", false);
         spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
+        if (Commands const* const commands = node.event("onToggle")) {
+            spec.onToggle = [this, ctx, commands](bool collapsed) { runEvent(commands, ctx, Value{collapsed}); };
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::panel(std::move(spec));
     }

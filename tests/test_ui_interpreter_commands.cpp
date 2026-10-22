@@ -263,7 +263,8 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     auto screen = h.mount(R"({
       "vocab": "ui/1", "id": "palette",
       "models": { "sample": { "type": "Lims_SampleModel" } },
-      "state": { "on": { "init": "b" }, "tick": { "init": 0 }, "date": { "init": null } },
+      "state": { "on": { "init": "b" }, "tick": { "init": 0 }, "date": { "init": null },
+                 "panelToggled": { "init": false } },
       "components": { "Chart": { "qml": "sha256:4b1e0000000000000000000000000000000000000000000000000000000000aa",
                                  "props": { "title": "string" },
                                  "fallback": { "kind": "text", "testId": "chart", "text": { "ref": "props.title" } } } },
@@ -272,7 +273,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
           { "kind": "spacer", "span": 2, "sizing": { "lit": { "fixed": 3 } } },
           { "kind": "busy", "active": true, "label": "wait", "sizing": { "lit": { "stretch": 2 } } } ] },
         { "kind": "panel", "title": "P", "header": [ { "kind": "spacer" } ], "padding": 1, "collapsible": true,
-          "collapsed": false, "children": [
+          "collapsed": false, "onToggle": [ { "set": "panelToggled", "value": true } ], "children": [
           { "kind": "row", "gap": 2, "children": [
             { "kind": "text", "testId": "role", "text": "e", "role": "error" },
             { "kind": "checkbox", "id": "agree", "testId": "agree", "label": "agree",
@@ -318,6 +319,12 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     CHECK(h.text("agreed") == "false");
     int const panel = h.backend.all("Panel").front();
     CHECK(h.backend.hasProp(panel, "header"));
+    CHECK(readJson(*screen, R"({"ref": "panelToggled"})") == "false");
+    h.backend.collapse(panel, true);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "panelToggled"})") == "true");
+    h.backend.collapse(panel, false);  // re-expand: the checkbox below lives in this panel's content
+    h.settle();
     h.backend.toggle(h.byTestId("Checkbox", "agree"));
     h.settle();
     CHECK(h.text("agreed") == "true");

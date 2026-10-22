@@ -3431,6 +3431,8 @@ struct PanelOptions {
     AnyHandle collapsible;
     /// @brief Whether it is collapsed.
     AnyHandle collapsed;
+    /// @brief Commands run on a collapse or expand.
+    Commands onToggle;
 };
 
 /// @brief A `panel` node.
