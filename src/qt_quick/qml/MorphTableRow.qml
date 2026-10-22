@@ -36,13 +36,16 @@ MorphWidget {
     }
 
     function place() {
+        // Each cell sits inset by the same step as the header label's own leftPadding/rightPadding
+        // (MorphTable.qml), so cell text lines up under its header instead of touching the column's edge.
+        const inset = Theme.spaceOf(2)
         let x = 0
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const w = i < root.widths.length ? root.widths[i] : cell.implicitWidth
-            cell.x = x
-            cell.width = w
+            cell.x = x + inset
+            cell.width = Math.max(0, w - 2 * inset)
             x += w
             tallest = Math.max(tallest, cell.implicitHeight)
         }
