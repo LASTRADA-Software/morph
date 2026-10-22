@@ -452,11 +452,9 @@ TEST_CASE("ui::table: above its threshold, only the window's rows get a widget, 
         return rows;
     }();
     Signal<std::vector<Item>> items{runtime, ten};
-    ui::Mounted const mounted{
-        runtime, backend,
-        ui::table<Item>(
-            {{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
-            {.virtualize = {.threshold = 5, .overscan = 2}})};
+    ui::Mounted const mounted{runtime, backend,
+                              ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+                                              {.virtualize = {.threshold = 5, .overscan = 2}})};
     int const table = backend.idOf(mounted.root());
 
     // Before any scroll is reported, the bootstrap window realizes the first `overscan` rows -- here, 2.

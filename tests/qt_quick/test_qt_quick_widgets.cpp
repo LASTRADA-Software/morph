@@ -479,15 +479,13 @@ TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_q
 TEST_CASE("qt_quick widgets: key-value wraps a long value instead of overflowing a fixed width", "[qt_quick]") {
     Scene scene;
     auto wide = scene.backend().createKeyValue(nullptr);
-    wide->setItems({{.label = "Id",
-                     .value = "f47ac10b-58cc-4372-a567-0e02b2c3d4790e02b2c3d4790e02b2c3d479"}});
+    wide->setItems({{.label = "Id", .value = "f47ac10b-58cc-4372-a567-0e02b2c3d4790e02b2c3d4790e02b2c3d479"}});
     scene.settle();
     double const unconstrainedHeight = Scene::itemOf(*wide).implicitHeight();
 
     auto narrow = scene.backend().createKeyValue(nullptr);
     narrow->setLayout({.width = ui::Sizing::fixed(20), .height = {}});
-    narrow->setItems({{.label = "Id",
-                       .value = "f47ac10b-58cc-4372-a567-0e02b2c3d4790e02b2c3d4790e02b2c3d479"}});
+    narrow->setItems({{.label = "Id", .value = "f47ac10b-58cc-4372-a567-0e02b2c3d4790e02b2c3d4790e02b2c3d479"}});
     scene.settle();
     // A label that only grows past its given width would keep overflowing; wrapping instead grows its height.
     CHECK(Scene::itemOf(*narrow).implicitHeight() > unconstrainedHeight);

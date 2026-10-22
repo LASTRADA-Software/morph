@@ -7063,10 +7063,12 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     TableOptions options;
     options.showHeader = node.prop("showHeader") ? boolOf(once(ctx, node.prop("showHeader")), format) : true;
     if (ExprPtr const threshold = node.prop("virtualizeThreshold")) {
-        options.virtualize.threshold = static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, threshold), 2000)));
+        options.virtualize.threshold =
+            static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, threshold), 2000)));
     }
     if (ExprPtr const overscan = node.prop("virtualizeOverscan")) {
-        options.virtualize.overscan = static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, overscan), 10)));
+        options.virtualize.overscan =
+            static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, overscan), 10)));
     }
     std::string const mode =
         node.prop("selectionMode") ? textOf(once(ctx, node.prop("selectionMode")), format) : std::string{};

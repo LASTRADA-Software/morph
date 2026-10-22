@@ -387,8 +387,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes only the window, reporti
         ui::table<VirtualRow>(
             {{.label = "Name"}}, [&many] { return many; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
             virtualRowCell,
-            {.virtualize = {.threshold = 5, .overscan = 1},
-             .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
     scene.settle();
 
     QQuickItem& tableItem = Scene::itemOf(mounted.root());
@@ -409,8 +408,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes only the window, reporti
     CHECK(scrolledFirst > 0);
 }
 
-TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a wide row dewindows",
-          "[qt_quick]") {
+TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a wide row dewindows", "[qt_quick]") {
     Scene scene;
     std::vector<VirtualRow> const many = [] {
         std::vector<VirtualRow> rows;
@@ -428,8 +426,7 @@ TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a
         ui::table<VirtualRow>(
             {{.label = "Name"}}, [&many] { return many; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
             virtualRowCell,
-            {.virtualize = {.threshold = 5, .overscan = 1},
-             .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
     scene.settle();
 
     QQuickItem& tableItem = Scene::itemOf(mounted.root());

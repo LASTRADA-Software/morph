@@ -21,7 +21,7 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
     relay().on(QStringLiteral("scroll"), [this](QVariant const& payload) {
         QVariantMap const map = payload.toMap();
         scrolled(static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("first")).toLongLong())),
-                static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
+                 static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
     });
 }
 
@@ -150,11 +150,11 @@ std::vector<ui::Key> TableImpl::existingSelection() const {
         // exactly right. Above it, a key can exist in the data with no realized row right now -- it is merely
         // dewindowed, not gone -- and must not be dropped from the selection just because its row is off-screen;
         // _existingKeys (the full key set, realized or not) is what tells the two cases apart.
-        bool const exists = _existingKeys.contains(key) ||
-                            std::ranges::any_of(children(), [&key](ItemBase const* child) {
-                                auto const* const row = dynamic_cast<TableRowImpl const*>(child);
-                                return row != nullptr && row->key() == key;
-                            });
+        bool const exists =
+            _existingKeys.contains(key) || std::ranges::any_of(children(), [&key](ItemBase const* child) {
+                auto const* const row = dynamic_cast<TableRowImpl const*>(child);
+                return row != nullptr && row->key() == key;
+            });
         if (exists) {
             keys.push_back(key);
         }

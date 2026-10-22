@@ -97,6 +97,7 @@ struct VisibleRange {
     std::size_t count = 0;
 
     /// @brief Memberwise equality, so an unchanged range notifies nobody.
+    /// @return Whether both `first` and `count` match.
     bool operator==(VisibleRange const&) const = default;
 };
 
@@ -1170,7 +1171,7 @@ private:
         scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
                       overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay] {
             std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
-            VisibleRange const window = range.peek();  // untracked: a scroll alone must not re-run this Effect
+            VisibleRange const window = range.peek();      // untracked: a scroll alone must not re-run this Effect
             underOverlay(overlay, [&] {
                 _rt->untracked([&] {
                     if (keys.size() < threshold) {
@@ -1266,7 +1267,7 @@ private:
     // starts `Dewindowed`, exactly as if it had been realized once and then released, so `realizeRowWidget` can
     // bring it in later with no special case for "never had a widget" versus "had one and lost it."
     [[nodiscard]] KeyedRow mountRowState(std::size_t depth, ForEachSession& session, Key const& key,
-                                        std::size_t index) {
+                                         std::size_t index) {
         KeyedRow row{.key = key, .stateScope = std::make_unique<reactive::Scope>(*_rt, depth)};
         row.slot = &row.stateScope->adopt(session.makeRow(index));
         row.widgetState = RowWidgetState::Dewindowed;
@@ -1332,7 +1333,7 @@ private:
                    std::vector<Key> const& keys, RowHook const& onRow,
                    std::pair<VisibleRange, std::size_t> const* windowAndOverscan = nullptr) {
         std::vector<std::size_t> const order = firstOccurrences(keys);
-        std::unordered_map<Key, std::size_t> wanted;  // key -> snapshot index
+        std::unordered_map<Key, std::size_t> wanted;          // key -> snapshot index
         std::unordered_map<Key, std::size_t> viewPositionOf;  // key -> position in view order (order's own index)
         for (std::size_t viewPos = 0; viewPos < order.size(); ++viewPos) {
             wanted.emplace(keys.at(order.at(viewPos)), order.at(viewPos));
@@ -1376,7 +1377,7 @@ private:
                 windowAndOverscan == nullptr || (viewPos >= window.first && viewPos < window.first + window.count);
             try {
                 KeyedRow row = inWindow ? mountRow(depth, session, container, keys.at(index), index, onRow)
-                                       : mountRowState(depth, session, keys.at(index), index);
+                                        : mountRowState(depth, session, keys.at(index), index);
                 row.viewPosition = viewPos;
                 rows.push_back(std::move(row));
             } catch (...) {
@@ -1402,7 +1403,8 @@ private:
     void applyWindow(std::size_t depth, std::vector<KeyedRow>& rows, ContainerWidget& container,
                      VisibleRange const& window, std::size_t overscan, RowHook const& onRow) {
         std::size_t const lo = window.first > overscan ? window.first - overscan : 0;
-        std::size_t const hi = window.first + window.count + overscan;  // exclusive; saturates harmlessly past rows.size()
+        std::size_t const hi =
+            window.first + window.count + overscan;  // exclusive; saturates harmlessly past rows.size()
         std::exception_ptr failure;
         for (KeyedRow& row : rows) {
             bool const shouldBeRealized = row.viewPosition >= lo && row.viewPosition < hi;

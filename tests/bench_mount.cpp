@@ -74,7 +74,8 @@ int runsFor(std::size_t rows) {
 }
 
 void printHeader(char const* title) {
-    std::println("\n{}\n\n| scenario | rows | median ms | p10-p90 ms | live nodes |\n|---|---:|---:|---:|---:|", title);
+    std::println("\n{}\n\n| scenario | rows | median ms | p10-p90 ms | live nodes |\n|---|---:|---:|---:|---:|",
+                 title);
 }
 
 void printRow(std::string const& scenario, std::size_t rows, Spread const& spread, std::size_t liveNodes) {
@@ -109,10 +110,9 @@ ui::Node multiCellTable(std::vector<Row> const& data) {
         {{.label = "Picked"}, {.label = "Name"}, {.label = "Description"}}, [data] { return data; },
         [](Row const& row) { return ui::Key{row.id}; },
         [](Signal<Row> const& row) {
-            return std::vector<ui::Node>{
-                ui::checkbox({.checked = [&row] { return row.get().picked; }}),
-                ui::text({.text = [&row] { return row.get().name; }}),
-                ui::text({.text = [&row] { return row.get().description; }})};
+            return std::vector<ui::Node>{ui::checkbox({.checked = [&row] { return row.get().picked; }}),
+                                         ui::text({.text = [&row] { return row.get().name; }}),
+                                         ui::text({.text = [&row] { return row.get().description; }})};
         });
 }
 
@@ -127,7 +127,8 @@ ui::Node minimalCellTable(std::vector<Row> const& data) {
         });
 }
 
-void measureMount(std::string const& scenario, std::size_t rows, std::function<ui::Node(std::vector<Row> const&)> const& build) {
+void measureMount(std::string const& scenario, std::size_t rows,
+                  std::function<ui::Node(std::vector<Row> const&)> const& build) {
     std::vector<Row> const data = rowsOf(rows);
     std::vector<double> samples;
     std::size_t liveNodes = 0;
@@ -158,8 +159,9 @@ TEST_CASE("mount benchmark: #1016's repro shape, re-measured on current master",
 
 TEST_CASE("mount benchmark: a minimal single-cell row, as a proxy for state-only mounting cost",
           "[.benchmark][mount]") {
-    printHeader("Mounting a minimal table (one text cell per row) -- the closest available proxy for "
-               "scope-only cost without a widget-less mount path");
+    printHeader(
+        "Mounting a minimal table (one text cell per row) -- the closest available proxy for "
+        "scope-only cost without a widget-less mount path");
     for (std::size_t const rows : kSizes) {
         measureMount("minimal (1 text cell)", rows, minimalCellTable);
     }
