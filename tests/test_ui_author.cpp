@@ -1225,6 +1225,13 @@ TEST_CASE("options left unset write no key", "[ui][author]") {
           R"({"kind":"table","model":"sample","action":"Lims_ListProjects"})");
 }
 
+TEST_CASE("dateTimeInput's options overload exposes mode, unlike the positional one", "[ui][author]") {
+    CHECK(text(ui::dateTimeInput(ui::ref("choice"), "When")) ==
+          R"({"kind":"dateTimeInput","value":{"ref":"choice"},"label":"When"})");
+    CHECK(text(ui::dateTimeInput({.value = ui::ref("choice"), .label = "When", .mode = "date"})) ==
+          R"({"kind":"dateTimeInput","value":{"ref":"choice"},"label":"When","mode":"date"})");
+}
+
 TEST_CASE("a scope that declares one kind of thing writes it", "[ui][author]") {
     auto const emitted = ui::screen("author.scopes", [](ui::Scope& screen) {
                              auto sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});

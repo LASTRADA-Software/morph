@@ -3866,6 +3866,33 @@ template <typename Action, typename Model>
     return detail::NodeWriter{"dateTimeInput"}.put("value", value).put("label", label).put("onCommit", commit).done();
 }
 
+/// @brief Options of `dateTimeInput`.
+struct DateTimeInputOptions {
+    /// @brief The value.
+    AnyHandle value;
+    /// @brief The label: the accessible name.
+    AnyHandle label;
+    /// @brief The input mode, such as `date` or `time`.
+    AnyHandle mode;
+    /// @brief Commands run on every edit.
+    Commands onChange;
+    /// @brief Commands run on a commit.
+    Commands onCommit;
+};
+
+/// @brief A `dateTimeInput` node.
+/// @param options The input.
+/// @return The node.
+[[nodiscard]] inline Node dateTimeInput(DateTimeInputOptions const& options) {
+    return detail::NodeWriter{"dateTimeInput"}
+        .put("value", options.value)
+        .put("label", options.label)
+        .put("mode", options.mode)
+        .put("onChange", options.onChange)
+        .put("onCommit", options.onCommit)
+        .done();
+}
+
 /// @brief Options of `slider`.
 struct SliderOptions {
     /// @brief The value.
