@@ -249,11 +249,12 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }
 
-TEST_CASE("ui document: a button's emphasis is normal, primary or danger", "[ui][document]") {
+TEST_CASE("ui document: a button's emphasis is normal, primary, danger or ghost", "[ui][document]") {
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "column", "children": [
         {"kind": "button", "label": "a", "emphasis": "primary"},
         {"kind": "button", "label": "b", "emphasis": "danger"},
-        {"kind": "button", "label": "c", "emphasis": "normal"}]}})")
+        {"kind": "button", "label": "c", "emphasis": "normal"},
+        {"kind": "button", "label": "d", "emphasis": "ghost"}]}})")
               .has_value());
     auto const refused = loadDocumentText(
         R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "label": "a", "emphasis": "loud"}})");

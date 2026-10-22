@@ -249,6 +249,8 @@ template <typename T, typename F>
             return "Primary";
         case ButtonEmphasis::Danger:
             return "Danger";
+        case ButtonEmphasis::Ghost:
+            return "Ghost";
         case ButtonEmphasis::Normal:
         default:
             return "Normal";

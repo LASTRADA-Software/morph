@@ -1232,6 +1232,18 @@ TEST_CASE("dateTimeInput's options overload exposes mode, unlike the positional 
           R"({"kind":"dateTimeInput","value":{"ref":"choice"},"label":"When","mode":"date"})");
 }
 
+// ui::button() (not ui::ActionButtonOptions's actionButton()) has its own, separate emphasis-to-string mapping; a
+// ghost button must write "ghost" from this site too, not just from the actionButton()/screen.action() path.
+TEST_CASE("a button's own emphasis is written, including ghost", "[ui][author]") {
+    CHECK(text(ui::button({.label = "Plain"})) == R"({"kind":"button","label":"Plain"})");
+    CHECK(text(ui::button({.label = "Go", .emphasis = morph::ui::ButtonEmphasis::Primary})) ==
+          R"({"kind":"button","emphasis":"primary","label":"Go"})");
+    CHECK(text(ui::button({.label = "Drop", .emphasis = morph::ui::ButtonEmphasis::Danger})) ==
+          R"({"kind":"button","emphasis":"danger","label":"Drop"})");
+    CHECK(text(ui::button({.label = "Remove", .emphasis = morph::ui::ButtonEmphasis::Ghost})) ==
+          R"({"kind":"button","emphasis":"ghost","label":"Remove"})");
+}
+
 TEST_CASE("a scope that declares one kind of thing writes it", "[ui][author]") {
     auto const emitted = ui::screen("author.scopes", [](ui::Scope& screen) {
                              auto sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});

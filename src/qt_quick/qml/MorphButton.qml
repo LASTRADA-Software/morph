@@ -14,14 +14,18 @@ MorphWidget {
     property string label: ""
     // An icon of the theme's icon set, drawn beside the label when the set names it; set once.
     property string icon: ""
-    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled); set once.
+    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled), 3 ghost (no chrome of its own); set
+    // once.
     property int emphasis: 0
     // 0 push, 1 item; set once.
     property int style: 0
     // Whether an item is the current entry of its list; a push button is never told.
     property bool selected: false
-    readonly property color fill: emphasis === 1 ? root.scheme.accent : emphasis === 2 ? root.scheme.error
-                                                                                       : root.scheme.surface
+    readonly property bool ghost: emphasis === 3
+    readonly property color fill: emphasis === 1 ? root.scheme.accent
+                                 : emphasis === 2 ? root.scheme.error
+                                 : ghost ? "transparent"
+                                         : root.scheme.surface
 
     // The widget's item is the one node a driver finds by test id, so it is the button: it carries the role, the
     // label as its name and the press action, and the control inside it is not a second node.
@@ -69,17 +73,18 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
-        leftPadding: root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        rightPadding: root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        palette.buttonText: root.emphasis === 0 ? root.scheme.text : "white"
-        font: root.emphasis === 0 ? Theme.bodyFont : Theme.strongFont
+        leftPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        rightPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        palette.buttonText: root.emphasis === 0 || root.ghost ? root.scheme.text : "white"
+        font: root.emphasis === 0 || root.ghost ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.icon)
         icon.color: "transparent"
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.fill
-            filled: root.emphasis !== 0
+            filled: root.emphasis === 1 || root.emphasis === 2
             item: root.style === 1
+            ghost: root.ghost
             selected: root.selected
             hovered: button.hovered
             pressed: button.down

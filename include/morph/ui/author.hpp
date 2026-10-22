@@ -2463,6 +2463,8 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
         detail::put(json, "emphasis", std::string{"primary"});
     } else if (action.emphasis == ButtonEmphasis::Danger) {
         detail::put(json, "emphasis", std::string{"danger"});
+    } else if (action.emphasis == ButtonEmphasis::Ghost) {
+        detail::put(json, "emphasis", std::string{"ghost"});
     }
     putPresent(json, "enabled", action.enabled);
     putPresent(json, "visible", action.visible);
@@ -3157,6 +3159,8 @@ struct ButtonOptions {
         writer.put("emphasis", std::string{"primary"});
     } else if (options.emphasis == ButtonEmphasis::Danger) {
         writer.put("emphasis", std::string{"danger"});
+    } else if (options.emphasis == ButtonEmphasis::Ghost) {
+        writer.put("emphasis", std::string{"ghost"});
     }
     if (options.style) {
         writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");

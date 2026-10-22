@@ -62,12 +62,14 @@ void ButtonImpl::setIcon(std::string_view icon) {
 }
 
 void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
-    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger.
+    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
     int shown = 0;
     if (emphasis == ui::ButtonEmphasis::Primary) {
         shown = 1;
     } else if (emphasis == ui::ButtonEmphasis::Danger) {
         shown = 2;
+    } else if (emphasis == ui::ButtonEmphasis::Ghost) {
+        shown = 3;
     }
     write("emphasis", shown);
 }

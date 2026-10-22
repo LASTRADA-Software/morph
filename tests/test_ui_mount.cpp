@@ -135,12 +135,14 @@ TEST_CASE("ui::Mounted: a button's emphasis reaches the backend only when it is 
         runtime, backend,
         ui::row({.children = {ui::button({.label = "Plain"}),
                               ui::button({.label = "Go", .emphasis = ui::ButtonEmphasis::Primary}),
-                              ui::button({.label = "Drop", .emphasis = ui::ButtonEmphasis::Danger})}})};
+                              ui::button({.label = "Drop", .emphasis = ui::ButtonEmphasis::Danger}),
+                              ui::button({.label = "Remove", .emphasis = ui::ButtonEmphasis::Ghost})}})};
     CHECK(backend.dump() ==
           "Row#1 gap=0\n"
           "  Button#2 label=Plain\n"
           "  Button#3 emphasis=Primary label=Go\n"
-          "  Button#4 emphasis=Danger label=Drop\n");
+          "  Button#4 emphasis=Danger label=Drop\n"
+          "  Button#5 emphasis=Ghost label=Remove\n");
 }
 
 // Mutation: skip checkLayout (every node below mounts).

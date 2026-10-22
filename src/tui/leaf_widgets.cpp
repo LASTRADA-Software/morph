@@ -142,9 +142,10 @@ std::string ButtonImpl::caption() const {
 }
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
-    // Primary is bold, danger bold in the error colour; neither changes a disabled button's look.
+    // Primary is bold, danger bold in the error colour; ghost falls back to Normal's plain style; neither changes a
+    // disabled button's look.
     ::core::tui::Style style = buttonStyle(canvas.theme(), actionable(), hasFocus());
-    if (actionable() && _emphasis != ui::ButtonEmphasis::Normal) {
+    if (actionable() && _emphasis != ui::ButtonEmphasis::Normal && _emphasis != ui::ButtonEmphasis::Ghost) {
         style.bold = true;
         if (_emphasis == ui::ButtonEmphasis::Danger) {
             style.fg = canvas.theme().error.fg;

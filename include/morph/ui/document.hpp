@@ -2975,7 +2975,7 @@ private:
     // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
     static void checkKindValues(DocNode const& node) {
         if (node.kind == "button") {
-            static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
+            static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
@@ -3062,7 +3062,7 @@ private:
 
     // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
     static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
-        static constexpr std::array<std::string_view, 3> kEmphasis = {"normal", "primary", "danger"};
+        static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
         std::set<std::string_view> ids;
         for (DocNodePtr const& button : buttons) {
             if (!ids.insert(button->id).second) {

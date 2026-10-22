@@ -95,7 +95,7 @@ An `actionButton` part is one button of a list:
 | `id` | name, required | unique within its list |
 | `label` | expression, required | |
 | `icon` | expression | an icon name |
-| `emphasis` | text | `normal`, `primary`, `danger`, as a `button`'s |
+| `emphasis` | text | `normal`, `primary`, `danger`, `ghost`, as a `button`'s |
 | `enabled`, `visible` | conditions | default `true` |
 | `onClick` | commands | run in the scope the list belongs to |
 
@@ -162,7 +162,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
 | `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
-| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
+| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`, `ghost`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
 | `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
