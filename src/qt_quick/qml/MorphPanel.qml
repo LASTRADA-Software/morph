@@ -70,7 +70,7 @@ MorphWidget {
                 objectName: "divider"
                 visible: root.headerRowShown
                 Layout.fillWidth: true
-                height: 1
+                implicitHeight: 1
                 color: root.scheme.border
                 opacity: 0.6
             }

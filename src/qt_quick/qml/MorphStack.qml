@@ -41,8 +41,10 @@ MorphWidget {
     // The shown children's lengths along the axis, as the layout sizes a child that does not stretch.
     readonly property var shownLengths: {
         const lengths = []
-        for (const child of layout.children) {
-            if (!child.visible)
+        for (const object of layout.children) {
+            // `children` is a list of QtObject; the Layout attached type needs an Item.
+            const child = object as Item
+            if (!child || !child.visible)
                 continue
             const preferred = root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
             const implicit = root.axis === 0 ? child.implicitHeight : child.implicitWidth
