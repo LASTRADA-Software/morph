@@ -6534,7 +6534,8 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
         if (text.starts_with("s:")) {
             text.remove_prefix(2);
         }
-        return forms::detail::engine::Json{std::string{text}};
+        // Parentheses: braces would pick the initializer-list constructor and make a one-element array.
+        return forms::detail::engine::Json(std::string{text});
     }
     if (text.starts_with("i:")) {
         text.remove_prefix(2);
@@ -6547,7 +6548,8 @@ inline Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, Elem
                       ((type == "int" || type == "number") && json->is_number()) ||
                       (type == "exact" && (json->is_number() || json->is_string()));
     if (!fits) {
-        return std::unexpected("it is not " + std::string{type == "int" ? "an " : "a "} + std::string{type});
+        bool const vowel = type == "int" || type == "exact";
+        return std::unexpected("it is not " + std::string{vowel ? "an " : "a "} + std::string{type});
     }
     return *std::move(json);
 }
