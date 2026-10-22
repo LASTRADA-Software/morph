@@ -88,7 +88,7 @@ TEST_CASE("ui::table: columns, keyed rows of cells, selection after the rows", "
     Fixture fixture;
     ui::Mounted const mounted{fixture.runtime, fixture.backend, fixture.view()};
     CHECK(fixture.backend.dump() ==
-          "Table#1 columns=[Name:content,Qty:fixed(6)] selection=[] selectionMode=Single\n"
+          "Table#1 columns=[Name:content,Qty:fixed(6)] selection=[] selectionMode=Single showHeader=true\n"
           "  Row#2 gap=0 rowKey=1\n"
           "    Text#3 role=Normal text=apple\n"
           "    Text#4 role=Normal text=3\n"
@@ -194,7 +194,7 @@ TEST_CASE("ui::table: a row whose cells are not one per column is refused and re
             })};
     CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 1);
     CHECK(backend.dump() ==
-          "Table#1 columns=[Name:content,Qty:content] selection=[] selectionMode=None\n"
+          "Table#1 columns=[Name:content,Qty:content] selection=[] selectionMode=None showHeader=true\n"
           "  Row#2 gap=0 rowKey=1\n"
           "    Text#3 role=Normal text=apple\n"
           "    Text#4 role=Normal text=-\n");
@@ -395,7 +395,7 @@ TEST_CASE("ui::table: activating a row may remove it, and a selection may empty 
     backend.selectRows(1, {intKey(3)});
     CHECK(seenAfter == note + "cleared");
     owner.runAll();
-    CHECK(backend.dump() == "Table#1 columns=[Name:content] selection=[] selectionMode=Single\n");
+    CHECK(backend.dump() == "Table#1 columns=[Name:content] selection=[] selectionMode=Single showHeader=true\n");
 }
 
 TEST_CASE("ui::table: a callback may destroy the whole view, its table included", "[ui]") {
@@ -438,4 +438,55 @@ TEST_CASE("ui::table: a callback may destroy the whole view, its table included"
     CHECK_FALSE(backend.exists(second));
     CHECK(seenAfter == note + "1");
     CHECK(runtime.core()->liveNodes() == before);
+}
+
+TEST_CASE("ui::table: above its threshold, only the window's rows get a widget, and a scroll moves it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    std::vector<Item> const ten = [] {
+        std::vector<Item> rows;
+        for (std::int64_t i = 0; i < 10; ++i) {
+            rows.push_back(Item{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    }();
+    Signal<std::vector<Item>> items{runtime, ten};
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::table<Item>(
+            {{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+            {.virtualize = {.threshold = 5, .overscan = 2}})};
+    int const table = backend.idOf(mounted.root());
+
+    // Before any scroll is reported, the bootstrap window realizes the first `overscan` rows -- here, 2.
+    CHECK(backend.exists(table));
+    CHECK(backend.dump().contains("text=row-0"));
+    CHECK(backend.dump().contains("text=row-1"));
+    CHECK_FALSE(backend.dump().contains("text=row-5"));
+    CHECK(backend.prop(table, "realizedWindow") == "0+2/10");
+
+    // A reported scroll realizes the rows now wanted and releases the ones no longer in range (± overscan).
+    backend.scrollTable(table, 5, 2);
+    owner.runAll();
+    std::string const scrolled = backend.dump();
+    CHECK_FALSE(scrolled.contains("text=row-0\n"));
+    CHECK(scrolled.contains("text=row-3"));  // 5 - overscan(2)
+    CHECK(scrolled.contains("text=row-5"));
+    CHECK(scrolled.contains("text=row-6"));
+    CHECK(scrolled.contains("text=row-8"));  // 5 + 2 + overscan(2) - 1
+    CHECK_FALSE(scrolled.contains("text=row-9\n"));
+
+    // A dewindowed row's state keeps tracking data changes: row 0 is not realized, but changing its name and
+    // scrolling back to it shows the new name, not a stale one from before it was dewindowed.
+    items.mutate([](std::vector<Item>& rows) { rows.at(0).name = "renamed"; });
+    owner.runAll();
+    // A pure data change does not disturb the window already in effect.
+    CHECK(backend.prop(table, "realizedWindow") == "3+6/10");
+    backend.scrollTable(table, 0, 2);
+    owner.runAll();
+    // Window {0,2} ± overscan(2): rows 0-3 realized (0 has no lower margin to clamp against).
+    CHECK(backend.prop(table, "realizedWindow") == "0+4/10");
+    CHECK(backend.dump().contains("renamed"));
+    CHECK_FALSE(backend.dump().contains("text=row-0\n"));
 }

@@ -1403,6 +1403,10 @@ public:
             }));
     }
 
+    /// @brief Records property `showHeader`.
+    /// @param shown Whether the header row is drawn.
+    void setShowHeader(bool shown) override { set("showHeader", formatBool(shown)); }
+
     /// @brief Records property `selectionMode`, which `RecordingBackend::selectRows` enforces.
     /// @param mode None, one, or any number.
     void setSelectionMode(SelectionMode mode) override {
@@ -1453,6 +1457,32 @@ public:
     /// @param onActivate The handler.
     void setOnActivate(std::function<void(Key)> onActivate) override { callbacks().activate = std::move(onActivate); }
 
+    /// @brief Records property `realizedWindow` as `<first>+<count>/<total>`.
+    /// @param first The view index of the first realized row.
+    /// @param count How many rows are realized, starting at `first`.
+    /// @param total How many rows the table's data has, realized or not.
+    void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override {
+        set("realizedWindow", std::to_string(first) + "+" + std::to_string(count) + "/" + std::to_string(total));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::scrollTable` calls.
+    /// @param onVisibleRangeChanged The handler.
+    void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override {
+        _onVisibleRangeChanged = std::move(onVisibleRangeChanged);
+    }
+
+    /// @brief Simulates the backend reporting a scroll: calls the handler `setOnVisibleRangeChanged` stored, as a
+    ///        real backend's own scroll callback would. Does nothing if nothing is subscribed (a table below its
+    ///        virtualization threshold never calls `setOnVisibleRangeChanged`, so this is a silent no-op for it,
+    ///        matching a real backend that never virtualizes).
+    /// @param first The view index of the first row now wanted.
+    /// @param count How many rows from `first` are wanted.
+    void scrollTo(std::size_t first, std::size_t count) {
+        if (_onVisibleRangeChanged) {
+            _onVisibleRangeChanged(first, count);
+        }
+    }
+
     /// @brief The selection mode last set.
     /// @return The mode; `None` until `setSelectionMode` runs.
     [[nodiscard]] SelectionMode mode() const noexcept { return _mode; }
@@ -1497,6 +1527,7 @@ private:
     std::map<int, Key> _rowKeys;  // row id -> key, as setRowKey told it
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
+    std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
 };
 
 }  // namespace detail
@@ -2061,6 +2092,25 @@ public:
         if (reachable(_store->at(*rowId))) {
             invoke(record.callbacks.activate, std::move(key));
         }
+    }
+
+    /// @brief Simulates the backend reporting a scroll on a virtualized table, as a real Qt Quick table's own
+    ///        scroll handling would: calls the handler `IViewBackend::TableWidget::setOnVisibleRangeChanged`
+    ///        subscribed, so the mount realizes/releases rows to match. A table whose row count is below its
+    ///        `Virtualization::threshold` never subscribes one, so this call does nothing for it, matching a real
+    ///        backend that never virtualizes a small table.
+    /// @param widgetId The table.
+    /// @param first The view index of the first row now wanted.
+    /// @param count How many rows from `first` are wanted.
+    /// @throws std::logic_error when the widget is not a table.
+    void scrollTable(int widgetId, std::size_t first, std::size_t count) {
+        detail::Record const& record = expectKind(widgetId, "scrollTable", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: scrollTable of Table#" + std::to_string(widgetId) +
+                                   ", which is not a table"};
+        }
+        table->scrollTo(first, count);
     }
 
     /// @brief Enters a date-time, or clears the field with `nullopt`.

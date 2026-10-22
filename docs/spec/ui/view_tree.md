@@ -394,6 +394,23 @@ built, or what a kept row's update touches, is not a dependency of the whole lis
    fewest moves possible. An append or a removal moves nothing; an insert at the front, or moving
    one row, is one move; reversing three rows is two.
 
+**Virtualized rows.** A Table whose `Virtualization::threshold` the row count has crossed realizes a
+widget only for rows at or near the visible range a backend reports (`TableWidget::
+setOnVisibleRangeChanged`), not for every row regardless of scroll position. This narrows point 2's
+"its widget, focus and selection survive" to the rows actually realized: a row's *state* (its slot
+and the signal it reads, kept alive in its own scope for as long as the key exists) survives
+unconditionally, exactly as above, but its *widget* does not — a row outside the realized range has
+no widget at all, and one that scrolls back in is mounted fresh against its already-existing state,
+not resumed. This is a deliberate narrowing, not an unstated exception: a row's widget and its state
+are two separately-owned scopes once virtualization applies, so that releasing the (expensive)
+widget never risks the (cheap) state the row's own signal depends on. A backend that never calls
+`setOnVisibleRangeChanged` (every implementer but a virtualized Qt Quick table) sees no change at
+all — every row it realizes keeps exactly the guarantee point 2 states, with both scopes made and
+torn down together, as if virtualization did not exist. See `docs/superpowers/specs/2026-10-22-table
+-row-virtualization-design.md` for the full design, including the threshold/overscan defaults, the
+column-width and selection consequences specific to the Qt Quick backend, and why a row below
+threshold is completely unaffected.
+
 A Table's `selection` binding is made after its rows. The widget marks a requested key whenever
 its row arrives, so the order only shapes the log: the first `setSelection` already finds the
 rows.

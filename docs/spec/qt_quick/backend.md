@@ -219,6 +219,31 @@ background fills with `scheme.tableHeader` (`color.table.header`, transparent by
 header fill until a theme sets one. A document-authored column's `role` (a `TextRole`) styles its default cell's
 text and has no effect on a column with its own `cell`.
 
+**Virtualized tables.** A table whose row count has crossed its `Virtualization::threshold`
+(`docs/superpowers/specs/2026-10-22-table-row-virtualization-design.md`) realizes a widget only for
+rows the mount's windowing Effect decides are in or near the visible range; `MorphTable.qml` owns its
+own `Flickable`, with leading and trailing spacer items standing in for the rows not realized, sized
+by an estimate (`estimatedRowHeight`) that corrects itself toward the real average height of whichever
+rows are actually realized. A document-authored `table` must therefore have an explicit height
+(`Fixed` or `Stretch` sizing) once it is large enough to virtualize — unlike every other table, which
+grows to its content's full height and relies on an ancestor to scroll it.
+
+Two consequences follow directly from only some rows ever being realized:
+
+- **Column widths become monotonic, not exact.** The width cache (above) can only answer "how wide is
+  the widest *realized* cell," not the widest cell in the whole table; without a rule for that, a
+  content column's cached width would shrink back down whenever the row that set its current maximum
+  scrolls out of the realized range, then grow again if a wider row scrolls back in — jitter on every
+  scroll, not a one-time correction. A virtualized table's column widths therefore only ever grow: a
+  column may stay wider than currently necessary once the row that justified it has scrolled away, in
+  exchange for never visibly narrowing and widening as the user scrolls.
+- **Selection survives a row leaving the realized range.** `existingSelection()`'s ordinary check — is
+  this requested key a currently-realized row's key — would otherwise drop a selected key the moment
+  its row scrolls out of view, since nothing short of the row's own `TableRowImpl` normally proves a
+  key still exists. A virtualized table additionally tracks every key the mount reports as existing in
+  the data at all (`TableWidget::setExistingKeys`), realized or not, and a requested key already in
+  that set is never dropped from the reported selection just because it has no realized row right now.
+
 ## Keys
 
 A `ui::Key` crosses into QML as text — `i:<int64>` or `s:<text>` — and back through `decodeKey`, never as a JavaScript

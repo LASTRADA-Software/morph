@@ -465,6 +465,10 @@ public:
     /// @param columns The columns, in order.
     virtual void setColumns(std::vector<TableColumn> const& columns) = 0;
 
+    /// @brief Sets whether the header row is drawn.
+    /// @param shown `false` suits several tables sharing one visual header.
+    virtual void setShowHeader(bool shown) = 0;
+
     /// @brief Sets how many rows the user can select.
     /// @param mode None, one, or any number.
     virtual void setSelectionMode(SelectionMode mode) = 0;
@@ -491,6 +495,38 @@ public:
     /// @brief Sets what activating a row (Enter or a double click) calls, with its key.
     /// @param onActivate The handler; empty does nothing.
     virtual void setOnActivate(std::function<void(Key)> onActivate) = 0;
+
+    /// @brief Tells the backend how many of the table's rows are realized, where, and how many exist in total, so
+    ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. A
+    ///        backend that never virtualizes (the default for every implementer but a windowed Qt Quick table)
+    ///        never calls `setOnVisibleRangeChanged`, so this is never called either.
+    /// @param first The view index of the first realized row.
+    /// @param count How many rows are realized, starting at `first`.
+    /// @param total How many rows the table's data has, realized or not.
+    virtual void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
+        static_cast<void>(first);
+        static_cast<void>(count);
+        static_cast<void>(total);
+    }
+
+    /// @brief Sets what the backend calls when the user scrolls, asking the mount to realize roughly this range of
+    ///        rows next. A backend that never virtualizes leaves this empty; the mount then never dewindows a row.
+    /// @param onVisibleRangeChanged The handler, with the first view index and how many rows are wanted from there;
+    ///        empty does nothing.
+    virtual void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) {
+        static_cast<void>(onVisibleRangeChanged);
+    }
+
+    /// @brief Tells the backend every key currently in the table's data, realized or not -- called whenever that
+    ///        set changes (a data change, or a scroll that dewindows or re-realizes a row). A virtualized backend
+    ///        needs this to know a selected key still exists in the data when it has no realized row for it right
+    ///        now (`setRowKey` alone cannot say that, since it is only ever called for a realized row): without
+    ///        it, a backend that reconstructs "does this key still exist" purely from its realized children would
+    ///        silently drop a selected key's membership the moment its row scrolls out of view. A backend that
+    ///        never virtualizes may ignore this -- every key it cares about already has a realized row, by
+    ///        definition, so `setRowKey` alone already tells it everything this call would add.
+    /// @param keys Every key currently in the table's data, in no particular order.
+    virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.

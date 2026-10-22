@@ -42,6 +42,11 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     refresh();
 }
 
+void TableImpl::setShowHeader(bool shown) {
+    _showHeader = shown;
+    refresh();
+}
+
 void TableImpl::setSelectionMode(ui::SelectionMode mode) {
     _mode = mode;
     refresh();
@@ -132,7 +137,7 @@ std::vector<int> TableImpl::columnWidths(int width) const {
     auto const widths = naturalWidths();
     int const width = kGutter + std::accumulate(widths.begin(), widths.end(), 0) +
                       (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
-    int height = 1;
+    int height = _showHeader ? 1 : 0;
     for (auto const* row : shownChildren()) {
         height += rowHeight(*row);
     }
@@ -243,7 +248,7 @@ void TableImpl::showCursor(std::span<WidgetBase* const> rows) {
 
 std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) const {
     std::vector<::core::tui::Rect> areas(children().size());
-    int line = 1;
+    int line = _showHeader ? 1 : 0;
     std::size_t place = 0;
     for (auto const [row, area] : std::views::zip(children(), areas)) {
         if (!row->shown()) {
@@ -266,15 +271,17 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     _size = canvas.size();
     auto const widths = columnWidths(canvas.width());
 
-    int left = kGutter;
-    for (auto const [column, width] : std::views::zip(_columns, widths)) {
-        auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
-        label.putString(0, 0, column.label, theme.textBold);
-        left += width + kColumnGap;
+    if (_showHeader) {
+        int left = kGutter;
+        for (auto const [column, width] : std::views::zip(_columns, widths)) {
+            auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
+            label.putString(0, 0, column.label, theme.textBold);
+            left += width + kColumnGap;
+        }
     }
 
     auto const rows = shownChildren();
-    int const room = std::max(0, canvas.height() - 1);
+    int const room = std::max(0, canvas.height() - (_showHeader ? 1 : 0));
     if (room != _rowRoom) {
         _rowRoom = room;
         _follow = true;
