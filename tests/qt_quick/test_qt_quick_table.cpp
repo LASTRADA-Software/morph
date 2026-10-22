@@ -52,6 +52,14 @@ Rows makeTable(Scene& scene, std::vector<ui::Key> const& keys, ui::SelectionMode
     return made;
 }
 
+// What a content column adds to its widest cell: a unit of padding on each side. A unit is the theme font's average
+// character width, so it differs between platforms and fonts.
+qreal columnPadding(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return 2 * theme->property("unitWidth").toReal();
+}
+
 }  // namespace
 
 TEST_CASE("qt_quick table: a row made in a table is a table row, and an int64 key above 2^53 comes back exactly",
@@ -168,11 +176,11 @@ TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and
     }
     scene.settle();
 
-    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& tableItem = Scene::itemOf(*table);
     QQuickItem const& firstCell = Scene::itemOf(*cells.at(0));
     qreal const widthBefore = firstCell.implicitWidth();
     // Sanity: the column's width already fits its widest cell after the initial mount (the cache seeded correctly).
-    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthBefore + 2 * 8);
+    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthBefore + columnPadding(scene));
 
     // `rowScans` is a test-only counter the fix adds to MorphTable.qml, incremented once per row visited inside the
     // full-rescan path. Its absence on unfixed code must fail loudly here, not silently read back 0 for both the
@@ -190,7 +198,7 @@ TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and
     CHECK(delta == 0);  // the grow path never rescans every row
     qreal const widthAfter = firstCell.implicitWidth();
     CHECK(widthAfter > widthBefore);
-    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthAfter + 2 * 8);
+    CHECK(tableItem.property("widths").toList().at(0).toReal() >= widthAfter + columnPadding(scene));
 }
 
 // Mutation: skip the invalidateColumn/reportCellWidth wiring from TableRowImpl::adopted entirely (a cell's width
@@ -219,7 +227,7 @@ TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row
             rows.push_back(std::move(row));
         }
         scene.settle();
-        QQuickItem& tableItem = Scene::itemOf(*table);
+        QQuickItem const& tableItem = Scene::itemOf(*table);
         int const baseline = tableItem.property("rowScans").toInt();
         cells.at(0)->setText("a very very very very very long cell text, toggled");
         scene.settle();
@@ -241,7 +249,7 @@ TEST_CASE("qt_quick table: an empty table resolves a content column to its heade
     auto table = scene.backend().createTable(nullptr);
     table->setColumns({{.label = "A"}, {.label = "B"}});
     scene.settle();
-    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& tableItem = Scene::itemOf(*table);
     QVariantList const widths = tableItem.property("widths").toList();
     REQUIRE(widths.size() == 2);
     CHECK(widths.at(0).toReal() > 0);
@@ -261,14 +269,14 @@ TEST_CASE("qt_quick table: a cell's text shrinking rescans its column and keeps 
     auto cell2 = scene.backend().createText(row2.get());
     cell2->setText("short");
     scene.settle();
-    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& tableItem = Scene::itemOf(*table);
     qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
 
     cell1->setText("short too");
     scene.settle();
     qreal const widthAfter = tableItem.property("widths").toList().at(0).toReal();
     CHECK(widthAfter < widthBefore);
-    CHECK(widthAfter >= Scene::itemOf(*cell1).implicitWidth() + 2 * 8);
+    CHECK(widthAfter >= Scene::itemOf(*cell1).implicitWidth() + columnPadding(scene));
 }
 
 TEST_CASE("qt_quick table: removing a row drops its cell's contribution to the column width", "[qt_quick]") {
@@ -284,7 +292,7 @@ TEST_CASE("qt_quick table: removing a row drops its cell's contribution to the c
     auto cell2 = scene.backend().createText(row2.get());
     cell2->setText("short");
     scene.settle();
-    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& tableItem = Scene::itemOf(*table);
     qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
 
     row1.reset();
@@ -307,7 +315,7 @@ TEST_CASE("qt_quick table: a hidden cell does not count toward the column width,
     auto cell2 = scene.backend().createText(row2.get());
     cell2->setText("short");
     scene.settle();
-    QQuickItem& tableItem = Scene::itemOf(*table);
+    QQuickItem const& tableItem = Scene::itemOf(*table);
     qreal const widthBefore = tableItem.property("widths").toList().at(0).toReal();
 
     cell1->setVisible(false);
@@ -390,7 +398,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes only the window, reporti
             {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
     scene.settle();
 
-    QQuickItem& tableItem = Scene::itemOf(mounted.root());
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
     auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(flick != nullptr);
 
@@ -429,7 +437,7 @@ TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a
             {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
     scene.settle();
 
-    QQuickItem& tableItem = Scene::itemOf(mounted.root());
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
     auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(flick != nullptr);
     qreal const widthWithWideRow = tableItem.property("widths").toList().at(0).toReal();
