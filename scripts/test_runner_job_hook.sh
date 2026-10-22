@@ -3,16 +3,16 @@
 #
 # Self-test for .github/self-hosted-runner/job-started-hook.sh.
 #
-# CompileCache.cmake auto-installs fastcache-cc only when NONE of
-# fastcache-cc/sccache/ccache is already on PATH. Now that one container
-# serves morph, fastcached and Lightweight, a previous job can leave a
+# CompileCache.cmake auto-installs pace-cc only when NONE of
+# pace-cc/sccache/ccache is already on PATH. Now that one container
+# serves morph, Pace and Lightweight, a previous job can leave a
 # compile-cache binary behind -- hendrikmuhs/ccache-action apt-installs
-# ccache; fastcached's own jobs install sccache -- and silently cost the next
-# job its connection to the host fastcached daemon. The loss is invisible:
+# ccache; Pace's own jobs install sccache -- and silently cost the next
+# job its connection to the host pace-kv daemon. The loss is invisible:
 # the build still succeeds, just uncached.
 #
 # The asymmetry is the subtle part and is asserted in both directions:
-# sccache and ccache must go, fastcache-cc must STAY. Removing fastcache-cc
+# sccache and ccache must go, pace-cc must STAY. Removing pace-cc
 # would force a fresh download on every single job.
 #
 # A second asymmetry cuts across the first: sccache is an unpackaged tarball
@@ -40,7 +40,7 @@ trap 'rm -rf "$scratch"' EXIT
 mkdir -p "${scratch}/bin_a" "${scratch}/bin_b"
 
 for f in "${scratch}/bin_a/sccache" "${scratch}/bin_a/ccache" \
-         "${scratch}/bin_a/fastcache-cc" "${scratch}/bin_b/ccache"; do
+         "${scratch}/bin_a/pace-cc" "${scratch}/bin_b/ccache"; do
     printf '#!/bin/sh\nexit 0\n' >"$f"
     chmod +x "$f"
 done
@@ -56,10 +56,10 @@ for gone in "${scratch}/bin_a/sccache" "${scratch}/bin_a/ccache" \
     fi
 done
 
-if [ -e "${scratch}/bin_a/fastcache-cc" ]; then
-    note "fastcache-cc left in place"
+if [ -e "${scratch}/bin_a/pace-cc" ]; then
+    note "pace-cc left in place"
 else
-    fail "fastcache-cc was removed; every job would re-download it"
+    fail "pace-cc was removed; every job would re-download it"
 fi
 
 # A directory that does not exist must not fail the job before it starts.
@@ -83,7 +83,7 @@ fi
 # touching anything, so a surviving file proves rm was never used on it.
 pkg_scratch="${scratch}/pkg"
 mkdir -p "${pkg_scratch}/bin"
-for f in ccache sccache fastcache-cc; do
+for f in ccache sccache pace-cc; do
     printf '#!/bin/sh\nexit 0\n' >"${pkg_scratch}/bin/${f}"
     chmod +x "${pkg_scratch}/bin/${f}"
 done
@@ -129,10 +129,10 @@ else
     note "unowned sccache was removed with rm"
 fi
 
-if [ -e "${pkg_scratch}/bin/fastcache-cc" ]; then
-    note "fastcache-cc untouched on the package-aware path too"
+if [ -e "${pkg_scratch}/bin/pace-cc" ]; then
+    note "pace-cc untouched on the package-aware path too"
 else
-    fail "fastcache-cc was removed on the package-aware path"
+    fail "pace-cc was removed on the package-aware path"
 fi
 
 # ── a failing dpkg must not fail the job ────────────────────────────────────

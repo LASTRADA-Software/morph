@@ -44,7 +44,7 @@ readonly name="${RUNNER_NAME_PREFIX}-${index}"
 readonly gh="${LASTRADA_RUNNER_GH:-gh}"
 readonly docker="${LASTRADA_RUNNER_DOCKER:-docker}"
 
-# Organisation-level, not repo-level: one fleet serves morph, fastcached and
+# Organisation-level, not repo-level: one fleet serves morph, Pace and
 # Lightweight. Needs admin:org on whatever credential gh holds -- and that
 # credential stays on the host, never entering a container.
 token="$("$gh" api -X POST \
@@ -103,7 +103,9 @@ argv=(
     # trap to stand down so removal is never attempted twice, or attempted a
     # second time with a token that is certain to be stale by then.
     -e "RUNNER_SELF_DEREGISTER=0"
-    -e "FASTCACHE_ADDR=${FASTCACHE_ADDR:-}"
+    # A host config written before the rename to Pace still says FASTCACHE_ADDR;
+    # the container only ever gets the PACE_ spelling, the one pace-cc reads.
+    -e "PACE_ADDR=${PACE_ADDR:-${FASTCACHE_ADDR:-}}"
     -e "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
     "${RUNNER_IMAGE}"
 )

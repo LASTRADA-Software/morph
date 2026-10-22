@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Bootstraps a fresh Linux cloud VM (e.g. a Hetzner box) to run BOTH a
-# fastcached compile-cache daemon and N self-hosted GitHub Actions runner
+# pace-kv compile-cache daemon and N self-hosted GitHub Actions runner
 # containers for LASTRADA-Software/morph, sized dynamically from whatever
 # CPU/RAM the machine actually has -- nothing here is a hardcoded "2 workers,
 # 2 CPUs, 4 GB" assumption. Run as root (or with sudo) on a bare Ubuntu/Debian
 # VM; safe to re-run (idempotent: reuses Docker if already installed, rebuilds
-# images, replaces the existing fastcached container by name, reinstalls the
+# images, replaces the existing pace-kv container by name, reinstalls the
 # systemd units that own the runner containers' lifecycle, and then restarts
 # those units one at a time so a rebuilt runner image is actually picked up --
 # never touching an already-written /etc/lastrada-runner/config, so an
@@ -28,17 +28,17 @@
 #
 # Optional env vars (override the dynamic sizing below):
 #   RUNNER_NAME_PREFIX     - defaults to "morph-cloud-$(hostname)"
-#   FASTCACHED_MEMORY_GB   - defaults to 2 (fixed, not scaled with machine size)
-#   FASTCACHED_DISK_GB     - defaults to 10
-#   FASTCACHED_CPUS        - defaults to 1
-#   FASTCACHED_STORAGE_DIR - defaults to /var/lib/fastcached (persistent cache
+#   PACE_KV_MEMORY_GB   - defaults to 2 (fixed, not scaled with machine size)
+#   PACE_KV_DISK_GB     - defaults to 10
+#   PACE_KV_CPUS        - defaults to 1
+#   PACE_KV_STORAGE_DIR - defaults to /var/lib/pace-kv (persistent cache
 #                             storage, survives container recreation)
 #   WORKER_CPUS            - defaults to 2 (each worker gets this many)
 #   OS_RESERVE_MEM_GB      - defaults to max(1, 10% of total RAM), left
 #                             unallocated to any container for the OS/Docker
 #                             daemon/sshd/etc.
 #
-# fastcached's --storage-max-value is fixed at 256m (matches the maintainer's
+# pace-kv's --storage-max-value is fixed at 256m (matches the maintainer's
 # already-tuned Windows daemon config -- debug objects have been observed up
 # to ~122 MB) rather than left at whatever the daemon's own compiled-in
 # default is.
@@ -82,9 +82,9 @@ if ! $SUDO gh api orgs/LASTRADA-Software/actions/runners --jq '.total_count' >/d
 fi
 
 RUNNER_NAME_PREFIX="${RUNNER_NAME_PREFIX:-morph-cloud-$(hostname)}"
-FASTCACHED_MEMORY_GB="${FASTCACHED_MEMORY_GB:-2}"
-FASTCACHED_DISK_GB="${FASTCACHED_DISK_GB:-10}"
-FASTCACHED_CPUS="${FASTCACHED_CPUS:-1}"
+PACE_KV_MEMORY_GB="${PACE_KV_MEMORY_GB:-2}"
+PACE_KV_DISK_GB="${PACE_KV_DISK_GB:-10}"
+PACE_KV_CPUS="${PACE_KV_CPUS:-1}"
 WORKER_CPUS="${WORKER_CPUS:-2}"
 
 # ── 1. Detect this machine's actual resources ──────────────────────────────
@@ -98,16 +98,16 @@ TOTAL_MEM_GB=$(( TOTAL_MEM_KB / 1024 / 1024 ))
 OS_RESERVE_MEM_GB="${OS_RESERVE_MEM_GB:-$(( TOTAL_MEM_GB / 10 > 1 ? TOTAL_MEM_GB / 10 : 1 ))}"
 
 echo "Detected: ${TOTAL_CPUS} CPUs, ${TOTAL_MEM_GB} GiB RAM."
-echo "Reserving: fastcached=${FASTCACHED_CPUS} CPU/${FASTCACHED_MEMORY_GB}GiB, OS/Docker=${OS_RESERVE_MEM_GB}GiB."
+echo "Reserving: pace-kv=${PACE_KV_CPUS} CPU/${PACE_KV_MEMORY_GB}GiB, OS/Docker=${OS_RESERVE_MEM_GB}GiB."
 
 # ── 2. Work out how many workers fit in what's left ────────────────────────
-REMAINING_CPUS=$(( TOTAL_CPUS - FASTCACHED_CPUS ))
-REMAINING_MEM_GB=$(( TOTAL_MEM_GB - FASTCACHED_MEMORY_GB - OS_RESERVE_MEM_GB ))
+REMAINING_CPUS=$(( TOTAL_CPUS - PACE_KV_CPUS ))
+REMAINING_MEM_GB=$(( TOTAL_MEM_GB - PACE_KV_MEMORY_GB - OS_RESERVE_MEM_GB ))
 
 if [ "$REMAINING_CPUS" -lt "$WORKER_CPUS" ]; then
-    echo "ERROR: only ${REMAINING_CPUS} CPU(s) left after fastcached's reservation," >&2
+    echo "ERROR: only ${REMAINING_CPUS} CPU(s) left after pace-kv's reservation," >&2
     echo "       but each worker needs ${WORKER_CPUS}. Lower WORKER_CPUS or" >&2
-    echo "       FASTCACHED_CPUS, or use a bigger machine." >&2
+    echo "       PACE_KV_CPUS, or use a bigger machine." >&2
     exit 1
 fi
 
@@ -128,8 +128,8 @@ if [ "$WORKER_MEM_GB" -lt 1 ]; then
 fi
 
 echo "Plan: ${WORKER_COUNT} worker(s) x ${WORKER_CPUS} CPU / ${WORKER_MEM_GB} GiB RAM each."
-echo "      (uses $(( FASTCACHED_CPUS + WORKER_COUNT * WORKER_CPUS ))/${TOTAL_CPUS} CPUs," \
-     "$(( FASTCACHED_MEMORY_GB + WORKER_COUNT * WORKER_MEM_GB + OS_RESERVE_MEM_GB ))/${TOTAL_MEM_GB} GiB RAM)"
+echo "      (uses $(( PACE_KV_CPUS + WORKER_COUNT * WORKER_CPUS ))/${TOTAL_CPUS} CPUs," \
+     "$(( PACE_KV_MEMORY_GB + WORKER_COUNT * WORKER_MEM_GB + OS_RESERVE_MEM_GB ))/${TOTAL_MEM_GB} GiB RAM)"
 
 # ── 3. Docker ────────────────────────────────────────────────────────────
 if ! command -v docker >/dev/null 2>&1; then
@@ -143,7 +143,7 @@ fi
 # to be fetched standalone (curl, see the README's own quick-start), where
 # there is no surrounding checkout to detect, and a relative-path heuristic
 # would be one more thing to get subtly wrong depending on where it's run
-# from. MORPH_ROOT/FASTCACHED_ROOT still override for anyone who already
+# from. MORPH_ROOT/PACE_ROOT still override for anyone who already
 # has a checkout somewhere specific.
 MORPH_ROOT="${MORPH_ROOT:-$HOME/morph}"
 if [ ! -d "$MORPH_ROOT/.git" ]; then
@@ -152,27 +152,27 @@ else
     git -C "$MORPH_ROOT" pull --ff-only
 fi
 
-FASTCACHED_ROOT="${FASTCACHED_ROOT:-$HOME/fastcached}"
-if [ ! -d "$FASTCACHED_ROOT/.git" ]; then
-    git clone https://github.com/LASTRADA-Software/fastcached.git "$FASTCACHED_ROOT"
+PACE_ROOT="${PACE_ROOT:-$HOME/pace}"
+if [ ! -d "$PACE_ROOT/.git" ]; then
+    git clone https://github.com/LASTRADA-Software/pace.git "$PACE_ROOT"
 else
-    git -C "$FASTCACHED_ROOT" pull --ff-only
+    git -C "$PACE_ROOT" pull --ff-only
 fi
 
-# ── 5. Build and start fastcached ───────────────────────────────────────
-# Built from source (the Dockerfile in fastcached's own repo) rather than
-# downloading the prebuilt release binary used for fastcache-cc: the daemon
+# ── 5. Build and start pace-kv ───────────────────────────────────────
+# Built from source (the Dockerfile in Pace's own repo) rather than
+# downloading the prebuilt release binary used for pace-cc: the daemon
 # needs to keep running as a long-lived container, which is what its own
 # Dockerfile is already set up for, including the runtime-stage slimming.
 echo ""
-echo "=== Building fastcached ==="
-$SUDO docker build -t fastcached:latest "$FASTCACHED_ROOT"
+echo "=== Building pace-kv ==="
+$SUDO docker build -t pace-kv:latest "$PACE_ROOT"
 
-$SUDO docker rm -f fastcached 2>/dev/null || true
-FASTCACHED_STORAGE_DIR="${FASTCACHED_STORAGE_DIR:-/var/lib/fastcached}"
-$SUDO mkdir -p "$FASTCACHED_STORAGE_DIR"
+$SUDO docker rm -f pace-kv 2>/dev/null || true
+PACE_KV_STORAGE_DIR="${PACE_KV_STORAGE_DIR:-/var/lib/pace-kv}"
+$SUDO mkdir -p "$PACE_KV_STORAGE_DIR"
 
-# --metrics: the image's own HEALTHCHECK is `fastcached --healthcheck`,
+# --metrics: the image's own HEALTHCHECK is `pace-kv --healthcheck`,
 # which needs the running daemon to answer on its metrics endpoint --
 # omitting this here means `docker ps` reports the container "(unhealthy)"
 # forever even though the daemon itself is fine (confirmed live: dropping
@@ -181,22 +181,22 @@ $SUDO mkdir -p "$FASTCACHED_STORAGE_DIR"
 # exit 1 on every check). --metrics-bind=0.0.0.0 so the healthcheck can
 # reach it the same way the daemon's cache port is reachable.
 $SUDO docker run -d \
-    --name fastcached \
+    --name pace-kv \
     --restart unless-stopped \
-    --cpus="${FASTCACHED_CPUS}" \
-    --memory="${FASTCACHED_MEMORY_GB}g" \
+    --cpus="${PACE_KV_CPUS}" \
+    --memory="${PACE_KV_MEMORY_GB}g" \
     -p 6674:6674 \
-    -v "${FASTCACHED_STORAGE_DIR}:/data" \
-    fastcached:latest \
+    -v "${PACE_KV_STORAGE_DIR}:/data" \
+    pace-kv:latest \
     --bind=0.0.0.0 \
     --metrics \
     --metrics-bind=0.0.0.0 \
-    --max-memory="${FASTCACHED_MEMORY_GB}g" \
+    --max-memory="${PACE_KV_MEMORY_GB}g" \
     --storage=/data \
-    --storage-max-disk="${FASTCACHED_DISK_GB}g" \
+    --storage-max-disk="${PACE_KV_DISK_GB}g" \
     --storage-max-value=256m
 
-echo "fastcached started: ${FASTCACHED_CPUS} CPU, ${FASTCACHED_MEMORY_GB}GiB RAM, ${FASTCACHED_DISK_GB}GiB disk cap, storage at ${FASTCACHED_STORAGE_DIR}"
+echo "pace-kv started: ${PACE_KV_CPUS} CPU, ${PACE_KV_MEMORY_GB}GiB RAM, ${PACE_KV_DISK_GB}GiB disk cap, storage at ${PACE_KV_STORAGE_DIR}"
 
 # ── 6. Build the runner image ───────────────────────────────────────────
 echo ""
@@ -229,7 +229,7 @@ RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=${WORKER_CPUS}
 RUNNER_MEMORY=${WORKER_MEM_GB}g
 RUNNER_IMAGE=lastrada-runner:latest
-FASTCACHE_ADDR=host.docker.internal:6674
+PACE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=${WORKER_CPUS}
 CONF
     $SUDO chmod 0600 /etc/lastrada-runner/config
@@ -311,7 +311,7 @@ done
 
 echo ""
 echo "=== Done ==="
-echo "fastcached:      docker logs fastcached"
+echo "pace-kv:      docker logs pace-kv"
 echo "workers:         systemctl status 'lastrada-runner@*'"
 echo "worker logs:     journalctl -u 'lastrada-runner@1' -f"
 echo "verify runners:  gh api orgs/LASTRADA-Software/actions/runners --jq '.runners[] | {name,status,busy}'"

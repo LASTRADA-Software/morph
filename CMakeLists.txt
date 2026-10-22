@@ -130,11 +130,11 @@ endif()
 
 include(cmake/compiler_options.cmake)
 
-# Compiler-cache launcher selection: fastcache-cc (when a fastcached daemon
+# Compiler-cache launcher selection: pace-cc (when a pace-kv daemon
 # answers) -> sccache -> ccache -> none. Included before any target or fetched
 # dependency (glaze and core-cpp, through CPM, below) so those get cached too. See
 # cmake/CompileCache.cmake for the full selection logic; it declares its own
-# USE_COMPILER_CACHE/FASTCACHE_ADDR options.
+# USE_COMPILER_CACHE/PACE_ADDR options.
 include(cmake/CompileCache.cmake)
 
 # ── clang-tidy integration ─────────────────────────────────────────────────

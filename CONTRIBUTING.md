@@ -152,7 +152,7 @@ serialising independent rungs behind one file.
   those copies had drifted into describing code that was not there.
 - **Do not trust an absolute path in a test failure when several worktrees
   share one compiler cache.** `__FILE__` is expanded at compile time and baked
-  into the object; Catch2 records it per `TEST_CASE`. `fastcache-cc` serves
+  into the object; Catch2 records it per `TEST_CASE`. `pace-cc` serves
   entries across checkouts — that cross-worktree hit rate is why
   `cmake/CompileCache.cmake` prefers it to `ccache` — so a cache hit hands you
   an object carrying **the path of whichever worktree compiled it**. The
