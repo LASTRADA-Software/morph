@@ -144,7 +144,7 @@ TEMPLATE_TEST_CASE("qt_quick overlays: tall content is capped at the window and 
     scene.settle();
 
     QQuickItem& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
-    QObject* const popup = popupOf(overlayItem);
+    QObject const* const popup = popupOf(overlayItem);
     REQUIRE(popup != nullptr);
     // The window the Scene harness makes is 800x600; the overlay's realized height must not exceed it.
     CHECK(popup->property("height").toReal() <= 600);
@@ -166,7 +166,7 @@ TEST_CASE("qt_quick dialog: short content is not stretched or clipped by the cap
     scene.settle();
 
     QQuickItem& dialogItem = Scene::itemOf(static_cast<ui::Widget&>(*dialog));
-    QObject* const popup = popupOf(dialogItem);
+    QObject const* const popup = popupOf(dialogItem);
     REQUIRE(popup != nullptr);
     QQuickItem const& bodyItem = Scene::itemOf(*body);
     // The dialog's height is driven by its content's natural size, not artificially stretched to any cap.
@@ -186,7 +186,7 @@ TEST_CASE("qt_quick drawer: narrow content is not stretched past its own natural
     scene.settle();
 
     QQuickItem& drawerItem = Scene::itemOf(static_cast<ui::Widget&>(*drawer));
-    QObject* const popup = popupOf(drawerItem);
+    QObject const* const popup = popupOf(drawerItem);
     REQUIRE(popup != nullptr);
     // The drawer's own minimum width (MorphDrawer.qml:54, 30 units) governs here, not any new cap -- the cap must
     // not shrink it below what it already draws as today.
@@ -204,7 +204,7 @@ TEST_CASE("qt_quick drawer: wide content is capped at the window's width", "[qt_
     scene.settle();
 
     QQuickItem& drawerItem = Scene::itemOf(static_cast<ui::Widget&>(*drawer));
-    QObject* const popup = popupOf(drawerItem);
+    QObject const* const popup = popupOf(drawerItem);
     REQUIRE(popup != nullptr);
     CHECK(popup->property("width").toReal() <= 800);
 }

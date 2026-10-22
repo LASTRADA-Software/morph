@@ -443,7 +443,8 @@ private:
                 return;
             }
             Json const* const given = member(params, "arguments");
-            Json arguments = given == nullptr ? Json{Json::object_t{}} : *given;
+            // Parentheses: braces would pick the initializer-list constructor and make `[{}]`.
+            Json arguments = given == nullptr ? Json(Json::object_t{}) : *given;
             if (!std::holds_alternative<Json::object_t>(arguments.data)) {
                 done(std::unexpected(std::string{"the arguments are not an object"}));
                 return;

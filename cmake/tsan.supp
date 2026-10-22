@@ -89,11 +89,11 @@
 # disconnect test is simply the first thing in the tree that exercises the
 # path hard enough to trip it.
 #
-# ── Why these three frames, and why not more ──────────────────────────────
+# ── Why these four frames, and why not more ───────────────────────────────
 #
 # Each names a frame TSan resolves *by symbol* rather than by debug info,
 # which is what makes them survive the runner's stripped `libstdc++.so.6`.
-# All three are confirmed resolvable there: the first two appear by name in
+# All four are confirmed resolvable there: the first two appear by name in
 # the CI report this file was written against
 # (`std::__exception_ptr::exception_ptr::_M_release() <null>
 # (libstdc++.so.6+0xc2f8c)` -- a resolved name with an unresolved file,
@@ -109,6 +109,17 @@
 # `std::runtime_error::~runtime_error` is likewise exported and likewise
 # appears resolved by name in CI's own report.
 #
+# The fourth line is the same shape for the other standard exception base
+# whose message lives in a COW string: `std::logic_error`. CI reported it from
+# `morph_client_only_facade`, whose `LocalBackend` rejects with a
+# `std::logic_error` that a pool thread releases last while the main thread's
+# `onError` has just read its `what()` -- a write stack going straight from
+# `~logic_error`, resolved by name, to `CompletionState::~CompletionState`.
+# A race-free standalone control (one `exception_ptr` copied to a second
+# thread, the main thread reading `what()` and dropping its copy, the other
+# dropping the last one, nothing else ordering them) reproduces that report on
+# Linux with libstdc++.
+#
 # Deliberately *not* suppressed, though an earlier draft had them:
 # `__cxa_free_exception` (in no measured report against this tree) and
 # `std::string::_Rep::_M_dispose` (an inlined libstdc++ internal that would
@@ -118,8 +129,10 @@
 # involving that type.
 #
 # These are narrow on purpose. A genuine race elsewhere in morph does not
-# destroy a `std::runtime_error` or touch `exception_ptr`'s refcount, and a
-# planted control race was confirmed still reported with this file active.
+# destroy a `std::runtime_error` or `std::logic_error`, or touch
+# `exception_ptr`'s refcount, and a planted control race was confirmed still
+# reported with this file active.
 race:std::__exception_ptr::exception_ptr::_M_release
 race:std::__exception_ptr::__dest_thunk
 race:std::runtime_error::~runtime_error
+race:std::logic_error::~logic_error

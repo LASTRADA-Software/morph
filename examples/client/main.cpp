@@ -49,8 +49,10 @@ namespace {
 namespace examples = morph::examples;
 namespace ui = morph::ui;
 
+#if MORPH_CLIENT_HAS_QT_QUICK
 /// How long `--grab` lets the window settle after the first mount.
 constexpr std::chrono::milliseconds kGrabSettle{1000};
+#endif
 
 /// `--grab`: where the window's image goes, and the window, once the Qt Quick frontend made it.
 struct Grab {
@@ -104,6 +106,7 @@ bool saveGrab(Grab const& grab) {
     }
     return true;
 #else
+    static_cast<void>(grab);
     std::cerr << "client: --grab draws the Qt Quick window, and this client is built without it\n";
     return false;
 #endif

@@ -924,8 +924,7 @@ private:
         widget.setOnSelect(inputEvent(spec.onSelect, reassert));
         pages.onSelect = inputEvent(spec.onSelect, std::move(reassert));
         auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs, overlay = _overlay](std::size_t index) {
-            underOverlay(overlay,
-                         [&] { _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); }); });
+            _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index, overlay); });
         };
         if (!spec.selected.isBound()) {
             show(spec.selected.constant());
@@ -939,13 +938,16 @@ private:
     // state (focus, scroll position, half-typed text) across tab switches. A new page is complete before anything
     // else changes: one that fails to mount leaves the previous page shown and selected, and the bar's highlight,
     // which the user's pick may already have moved, goes back to it. The next change of the index mounts again.
+    //
+    // Only the mount runs under the tabs' overlay, and that overlay is put back before a failure is reported:
+    // reporting it may destroy the Mounted, and with it this Mounter.
     void showPage(TabsWidget& widget, reactive::Scope& pageScope, Pages& pages, std::vector<Tab> const& pageSpecs,
-                  std::size_t index) {
+                  std::size_t index, ContainerWidget* overlay) {
         bool const exists = index < pageSpecs.size();
         bool const isNew = exists && pages.pageSlots.at(index) == nullptr;
         if (isNew) {
             try {
-                mountPage(widget, pageScope, pages, pageSpecs.at(index).node, index);
+                underOverlay(overlay, [&] { mountPage(widget, pageScope, pages, pageSpecs.at(index).node, index); });
             } catch (...) {
                 if (pages.shown.has_value()) {
                     restoreSelection(widget, pages, *pages.shown);

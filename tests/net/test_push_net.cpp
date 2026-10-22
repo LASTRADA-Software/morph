@@ -312,6 +312,8 @@ TEST_CASE("net_connect_handler_fires_on_first_and_reconnect", "[push][channel]")
         std::scoped_lock const lock{mtx};
         return seen;
     };
+    // Each step waits on a real connect and handshake, which under Valgrind takes far longer than the default budget.
+    ::morph::testing::WaitBudget const budget{10s};
     CountingExec reconnectExec;
     backend.setConnectHandler([&] { record("connect"); });
     backend.setReconnectHandler([&] { record("reconnect"); }, &reconnectExec);
@@ -319,13 +321,13 @@ TEST_CASE("net_connect_handler_fires_on_first_and_reconnect", "[push][channel]")
     {
         ::morph::net::SocketServer first{*server, port};
         REQUIRE(first.listen());
-        REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 1; }));
+        REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 1; }, budget));
     }
-    REQUIRE(::morph::testing::waitUntil([&] { return !backend.waitForConnected(0ms); }));
+    REQUIRE(::morph::testing::waitUntil([&] { return !backend.waitForConnected(0ms); }, budget));
 
     ::morph::net::SocketServer second{*server, port};
     REQUIRE(second.listen());
-    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 3; }));
+    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 3; }, budget));
     // The connect handler runs before the reconnect handler is posted.
     CHECK(snapshot() == std::vector<std::string>{"connect", "connect", "reconnect"});
 }

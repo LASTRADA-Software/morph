@@ -287,6 +287,11 @@ TEST_CASE("tools_call_runs_and_returns_result_text", "[push][agent]") {
                                  R"({"jsonrpc":"2.0","id":4,"method":"tools/call",)"
                                  R"("params":{"name":"Ag_List","arguments":{}}})"));
     CHECK(std::get<std::string>(listed["result"]["content"][0]["text"].data) == R"([{"id":1,"text":"hello"}])");
+    // No `arguments` member is the same call with none.
+    auto const bare =
+        json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"Ag_List"}})"));
+    REQUIRE(bare.contains("result"));
+    CHECK(std::get<std::string>(bare["result"]["content"][0]["text"].data) == R"([{"id":1,"text":"hello"}])");
 }
 
 // Mutation: run the call without the session (the server refuses an unsigned execute) — or with it, through a path

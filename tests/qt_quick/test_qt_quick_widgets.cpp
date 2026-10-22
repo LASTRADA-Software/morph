@@ -158,7 +158,7 @@ TEST_CASE("qt_quick widgets: a text input draws its icon inside the field, and t
     auto input = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
     input->setIcon("search");
     scene.settle();
-    QQuickItem& control = Scene::controlOf(*input);
+    QQuickItem const& control = Scene::controlOf(*input);
     auto const* const icon = control.findChild<QQuickItem*>(QStringLiteral("icon"));
     REQUIRE(icon != nullptr);
     CHECK(icon->isVisible());
@@ -171,7 +171,7 @@ TEST_CASE("qt_quick widgets: a text input with no icon reserves no leading space
     Scene scene;
     auto plain = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
     scene.settle();
-    QQuickItem& control = Scene::controlOf(*plain);
+    QQuickItem const& control = Scene::controlOf(*plain);
     auto const* const icon = control.findChild<QQuickItem*>(QStringLiteral("icon"));
     REQUIRE(icon != nullptr);
     CHECK_FALSE(icon->isVisible());
@@ -298,7 +298,7 @@ TEST_CASE("qt_quick widgets: a dropdown's indicator is themed, and flips with th
     Scene scene;
     auto select = scene.backend().createSelect(nullptr, ui::SelectStyle::Dropdown);
     scene.settle();
-    QQuickItem& combo = Scene::controlOf(*select);
+    QQuickItem const& combo = Scene::controlOf(*select);
     auto* const indicator = combo.property("indicator").value<QQuickItem*>();
     REQUIRE(indicator != nullptr);
     CHECK(indicator->objectName() == QStringLiteral("indicator"));

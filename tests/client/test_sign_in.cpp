@@ -51,11 +51,12 @@ std::optional<client::SignedIn> userAndJwt(ui::Value const& reply) {
                             .token = jwt != nullptr && jwt->asString() != nullptr ? *jwt->asString() : std::string{}};
 }
 
-/// A screen that signs in through `Probe_Login` and attaches a file inline through `Probe_Attach`.
+/// A screen that signs in through `Probe_Login` and attaches a file inline through `Probe_Attach`. The path goes in
+/// with forward slashes: a Windows path's backslashes would be read as JSON escapes.
 std::string loginDocument(std::filesystem::path const& picked) {
     return R"({"vocab":"ui/1","id":"probe.login","models":{"probe":{"type":"Probe_Model"}},)"
            R"("state":{"picked":{"init":")" +
-           picked.string() +
+           picked.generic_string() +
            R"("}},)"
            R"("mutations":{"login":{"model":"probe","action":"Probe_Login","onSuccess":[{"signIn":{"from":"login"}}]},)"
            R"("attach":{"model":"probe","action":"Probe_Attach"}},)"
