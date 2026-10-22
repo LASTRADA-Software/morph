@@ -172,6 +172,42 @@ TEST_CASE("ui::Mounted: bounds reach the backend, and the loader's bound rules h
     }
 }
 
+// Mutation: skip checkOverlayLayout in mountKind(Dialog)/mountKind(Drawer) (both still mount).
+TEST_CASE("ui::Mounted: a dialog or drawer refuses a stretching width or height, for a C++ tree", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Dialog dialog{.open = true, .title = "D"};
+    dialog.common.testId = "overlay";
+    {
+        ui::Mounted const view{runtime, backend, ui::dialog(dialog)};
+        CHECK(backend.find("Dialog", "testId", "overlay").has_value());
+    }
+    ui::Dialog stretchingWidth = dialog;
+    stretchingWidth.common.layout.width = ui::Sizing::stretch();
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::dialog(stretchingWidth)}),
+                      Catch::Matchers::ContainsSubstring("a dialog is sized by the frontend") &&
+                          Catch::Matchers::ContainsSubstring("width cannot stretch") &&
+                          Catch::Matchers::ContainsSubstring("node `overlay`"));
+    ui::Dialog stretchingHeight = dialog;
+    stretchingHeight.common.layout.height = ui::Sizing::stretch();
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::dialog(stretchingHeight)}),
+                      Catch::Matchers::ContainsSubstring("a dialog is sized by the frontend") &&
+                          Catch::Matchers::ContainsSubstring("height cannot stretch"));
+    ui::Drawer drawer{.open = true, .title = "R"};
+    drawer.common.testId = "side";
+    drawer.common.layout.width = ui::Sizing::stretch();
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::drawer(drawer)}),
+                      Catch::Matchers::ContainsSubstring("a drawer is sized by the frontend") &&
+                          Catch::Matchers::ContainsSubstring("width cannot stretch") &&
+                          Catch::Matchers::ContainsSubstring("node `side`"));
+    // A fixed size, the lever this design actually provides, is unaffected.
+    ui::Dialog fixedWidth = dialog;
+    fixedWidth.common.layout.width = ui::Sizing::fixed(80);
+    ui::Mounted const fixed{runtime, backend, ui::dialog(fixedWidth)};
+    CHECK(backend.find("Dialog", "testId", "overlay").has_value());
+}
+
 // Mutation: never call setAlign/setJustify in mountStack and the grid's mountKind (the first dump loses them).
 TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the default", "[ui]") {
     Owner owner;

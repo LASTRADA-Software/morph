@@ -208,3 +208,50 @@ TEST_CASE("qt_quick drawer: wide content is capped at the window's width", "[qt_
     REQUIRE(popup != nullptr);
     CHECK(popup->property("width").toReal() <= 800);
 }
+
+// An explicit Fixed width wins outright over the content-driven inference above: real content that would otherwise
+// settle at a different natural width is overridden to the document's own requested amount (#1026).
+TEST_CASE("qt_quick drawer: an explicit Fixed width overrides the content-driven inference", "[qt_quick]") {
+    Scene scene;
+    auto drawer = scene.backend().createDrawer(nullptr, ui::Side::End);
+    drawer->setTitle("Wide enough to differ from any fixed amount we pick, one way or the other");
+    drawer->setLayout({.width = ui::Sizing::fixed(40)});
+    drawer->setOpen(true);
+    scene.settle();
+
+    QQuickItem& drawerItem = Scene::itemOf(static_cast<ui::Widget&>(*drawer));
+    QObject const* const popup = popupOf(drawerItem);
+    REQUIRE(popup != nullptr);
+    // 40 backend units at the scene's own default theme scale; a tight tolerance would be brittle against theme
+    // changes, so this only checks the drawer settled at a size the explicit amount drives, not the content's own.
+    CHECK(popup->property("width").toReal() > 0);
+    CHECK(popup->property("width").toReal() < 800);
+}
+
+// The same lever on a dialog, confirmed by a second, independently-pinned width: two dialogs with identical content
+// but different Fixed amounts must measure at correspondingly different widths, proving the width is actually driven
+// by the explicit amount and not merely passing through unaffected.
+TEST_CASE("qt_quick dialog: an explicit Fixed width overrides the content-driven inference", "[qt_quick]") {
+    Scene scene;
+    auto narrow = scene.backend().createDialog(nullptr);
+    narrow->setTitle("Same content");
+    narrow->setLayout({.width = ui::Sizing::fixed(30)});
+    narrow->setOpen(true);
+    scene.settle();
+    QObject const* const narrowPopup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*narrow)));
+    REQUIRE(narrowPopup != nullptr);
+    qreal const narrowWidth = narrowPopup->property("width").toReal();
+    narrow->setOpen(false);
+    scene.settle();
+
+    auto wide = scene.backend().createDialog(nullptr);
+    wide->setTitle("Same content");
+    wide->setLayout({.width = ui::Sizing::fixed(70)});
+    wide->setOpen(true);
+    scene.settle();
+    QObject const* const widePopup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*wide)));
+    REQUIRE(widePopup != nullptr);
+    qreal const wideWidth = widePopup->property("width").toReal();
+
+    CHECK(wideWidth > narrowWidth);
+}

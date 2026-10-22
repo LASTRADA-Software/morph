@@ -3138,12 +3138,41 @@ private:
         return bounds;
     }
 
+    // Whether a literal sizing dimension's value is `{"stretch": w}` (as opposed to `"content"` or `{"fixed": n}`,
+    // which both `sizingDimension` reports the same way -- as "no fixed amount"). An overlay is sized by the
+    // frontend, not by its container, so stretching it would silently change how every *other* sibling in its own
+    // parent layout is justified; checked ahead of `sizingDimension` itself, which does not distinguish the two.
+    static bool isStretch(Value const& value) {
+        ValueRecord const* const record = value.asRecord();
+        return record != nullptr && record->size() == 1 && record->begin()->first == "stretch";
+    }
+
+    // An overlay (`dialog`/`drawer`) refuses a literal `sizing` that stretches either dimension, single-value or
+    // record form: an overlay is sized by the frontend, not by its container, so stretching it would silently change
+    // how every *other* sibling in its own parent layout is justified.
+    static void checkOverlaySizing(DocNode const& node, ExprPtr const& sizing) {
+        if (node.kind != "dialog" && node.kind != "drawer") {
+            return;
+        }
+        ValueRecord const* const record = sizing->literal.asRecord();
+        bool const stretches =
+            isStretch(sizing->literal) ||
+            (record != nullptr && (record->contains("width") || record->contains("height")) &&
+             std::ranges::any_of(*record, [](auto const& entry) { return isStretch(entry.second); }));
+        if (stretches) {
+            refuse(sizing->path,
+                   "an overlay is sized by the frontend, not by its container; give it `{\"fixed\": n}` instead "
+                   "of `{\"stretch\": w}`");
+        }
+    }
+
     // A literal `sizing` is one of its forms, and a fixed amount lies inside its dimension's @p bounds.
     static void checkSizing(DocNode const& node, std::array<std::optional<std::int64_t>, 4> const& bounds) {
         ExprPtr const sizing = node.prop("sizing");
         if (sizing == nullptr || sizing->kind != ExprKind::Literal) {
             return;
         }
+        checkOverlaySizing(node, sizing);
         std::optional<std::int64_t> width;
         std::optional<std::int64_t> height;
         ValueRecord const* const record = sizing->literal.asRecord();

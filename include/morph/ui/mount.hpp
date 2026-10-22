@@ -501,6 +501,26 @@ private:
         check(hints.height, hints.minHeight, hints.maxHeight, "height");
     }
 
+    // A dialog or a drawer is sized by the frontend, not by its container: Stretch sizing on one would silently
+    // change how every *other* sibling in its own parent layout is justified. Covers both the document path's own
+    // computed (non-literal) `sizing` -- resolved to a Sizing only here, at mount time, since the document-level
+    // checkSizing validates only a literal one -- and a C++ author calling ui::dialog()/ui::drawer() directly, both
+    // of which reach this same mountKind overload before either backend ever sees the result.
+    static void checkOverlayLayout(Common const& common, std::string_view kind) {
+        LayoutHints const& hints = common.layout;
+        auto const refuse = [&common, kind](std::string const& axis) {
+            throw std::logic_error{"morph::ui::mount: a " + std::string{kind} +
+                                   " is sized by the frontend, not by its container; its " + axis + " cannot stretch" +
+                                   (common.testId.empty() ? std::string{} : " (node `" + common.testId + "`)")};
+        };
+        if (hints.width.kind == Sizing::Kind::Stretch) {
+            refuse("width");
+        }
+        if (hints.height.kind == Sizing::Kind::Stretch) {
+            refuse("height");
+        }
+    }
+
     // The loader's rule for `alignSelf`, for a view tree built in C++: only a stack's or a grid's child has a cross
     // axis to be placed on.
     static void checkPlacement(Common const& common, ContainerWidget const* parent) {
@@ -1022,12 +1042,14 @@ private:
     // with `open` unchanged re-sends `setOpen`, and mounts content only if none is mounted: once per run while `open`
     // stays true over content that failed.
     Widget& mountKind(reactive::Scope& scope, Dialog const& spec, ContainerWidget* parent) {
+        checkOverlayLayout(spec.common, "dialog");
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
         return mountOverlay(scope, spec, widget);
     }
 
     Widget& mountKind(reactive::Scope& scope, Drawer const& spec, ContainerWidget* parent) {
+        checkOverlayLayout(spec.common, "drawer");
         DrawerWidget& widget = scope.adopt(_backend->createDrawer(parent, spec.side));
         applyCommon(scope, widget, spec.common);
         return mountOverlay(scope, spec, widget);
