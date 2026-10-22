@@ -36,9 +36,9 @@ struct ShellFrameOptions {
 ///
 /// A row filling the window: the sidebar (surface `sidebar`, `kShellSidebarWidth` units wide), holding the
 /// application's name and a `Navigator`, and the main column holding the top bar (surface `toolbar`: the shown
-/// screen's title, the principal and a sign-out button) above the page (surface `page`), where the client places the
-/// workspace. Signed out, the sidebar and the top bar are hidden and the page is all there is. Neither copyable nor
-/// movable; owned by the owner thread of its backend.
+/// screen's title, a slot for its active tab's head row, the principal and a sign-out button) above the page
+/// (surface `page`), where the client places the workspace. Signed out, the sidebar and the top bar are hidden and
+/// the page is all there is. Neither copyable nor movable; owned by the owner thread of its backend.
 class ShellFrame {
 public:
     /// @brief The frame, appended to @p parent.
@@ -59,6 +59,7 @@ public:
           _topBar{backend.createStack(_main.get(), Axis::Horizontal)},
           _topStart{backend.createSpacer(_topBar.get())},
           _title{backend.createText(_topBar.get())},
+          _headSlot{backend.createStack(_topBar.get(), Axis::Horizontal)},
           _principal{backend.createText(_topBar.get())},
           _signOut{backend.createButton(_topBar.get())},
           _topEnd{backend.createSpacer(_topBar.get())},
@@ -97,6 +98,11 @@ public:
         _title->setRole(TextRole::Heading);
         _title->setLayout({.width = Sizing::stretch(), .height = {}});
         _title->setTestId("shell_title");
+        // Its own stretch, independent of whether the row mounted inside it is currently visible: the mounted
+        // content's own visibility (hidden while a screen has no head) must not collapse the slot's width, since
+        // MorphStack.qml reads the *slot's* widthKind to decide whether the bar as a whole stretches or packs.
+        _headSlot->setLayout({.width = Sizing::stretch(), .height = {}});
+        _headSlot->setTestId("shell_head");
         _principal->setRole(TextRole::Muted);
         _principal->setTestId("shell_principal");
         _signOut->setLabel("Sign out");
@@ -130,6 +136,10 @@ public:
     /// @brief The navigator in the sidebar.
     /// @return It.
     [[nodiscard]] Navigator& navigator() noexcept { return *_navigator; }
+
+    /// @brief The container in the top bar a client mounts the active screen's head row into, beside the title.
+    /// @return It.
+    [[nodiscard]] ContainerWidget& headSlot() noexcept { return *_headSlot; }
 
     /// @brief Shows the shown screen's title in the top bar.
     /// @param title The title; empty shows none.
@@ -175,6 +185,7 @@ private:
     std::unique_ptr<StackWidget> _topBar;
     std::unique_ptr<SpacerWidget> _topStart;
     std::unique_ptr<TextWidget> _title;
+    std::unique_ptr<StackWidget> _headSlot;
     std::unique_ptr<TextWidget> _principal;
     std::unique_ptr<ButtonWidget> _signOut;
     std::unique_ptr<SpacerWidget> _topEnd;

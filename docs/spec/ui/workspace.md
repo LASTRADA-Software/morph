@@ -114,6 +114,13 @@ mounted after the screen, since it reads the handle, and moved above it. It read
 tracked read of `tabs()`, so a row mounted while the model is still opening the tab reads the head once the model
 holds it, and one whose handle has gone reads nothing.
 
+`Workspace::headRowForActive()` builds the same row for whichever tab is active, as a public `Node` a host can mount
+somewhere else entirely (a client's own shell chrome, outside the page the in-body row above already sits in) —
+`morph::client::Shell` mounts it into `ShellFrame::headSlot()`, beside the title in the top bar. It reads
+`WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
+the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
+invisible row — never a null `Node` — so a caller mounting it need not handle a null case itself.
+
 ## Captions
 
 A tab's caption is its screen's `title`, followed by ` •` while `dirty` is true. Each tab of the model has an effect

@@ -49,6 +49,11 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     CHECK(backend.prop(backend.find("Text", "testId", "shell_principal").value(), "text") == "alice");
     CHECK(backend.prop(backend.find("Text", "testId", "shell_application").value(), "text") == "Morph Bookmarks");
 
+    // The head slot (#1027): its own stretch, independent of whatever is mounted inside it, so it keeps claiming
+    // room in the top bar even while an active tab's head row is hidden.
+    int const headSlot = backend.find("Row", "testId", "shell_head").value();
+    CHECK(backend.prop(headSlot, "layout") == "stretch(1)/content");
+
     backend.click(backend.find("Button", "testId", "nav_bookmarks.tags").value());
     CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
     backend.click(backend.find("Button", "testId", "shell_signOut").value());

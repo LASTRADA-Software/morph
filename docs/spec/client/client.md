@@ -85,7 +85,9 @@ route the history holds at start, a move back or forward) signs it in the same w
 shell's own fact, not read from the source: a local source's signed-out principal is its `--user` name and its
 signed-out catalog lists the screens, so neither tells signed in from signed out. The navigator lists the catalog's
 screens either way. The top bar's title and the navigator's current entry follow the active tab: each change of the
-workspace sets the title to the tab's caption and `Navigator::setCurrent` to its screen.
+workspace sets the title to the tab's caption and `Navigator::setCurrent` to its screen. The top bar's head slot
+follows the same way, but only re-mounts on a genuine active-tab change (compared by the model's own tab id, not the
+bar's index), since the mounted row is itself reactive to its own content.
 
 ## Sign-in mapping
 

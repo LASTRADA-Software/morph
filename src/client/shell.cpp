@@ -109,7 +109,9 @@ public:
 
     ~Shell() override {
         *_alive = false;
-        // The tabs first, then the frame they sit in.
+        // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
+        // then the tabs, then the frame they sit in.
+        resetHead();
         _workspace.reset();
         _frame.reset();
     }
@@ -293,6 +295,7 @@ private:
     // The frame and its workspace for the catalog the source holds now: the navigator lists its entries, so a new
     // session's catalog gets a new frame. Every tab of the old one is closed.
     void buildFrame() {
+        resetHead();
         _workspace.reset();
         _frame.reset();
         ui::CatalogReply const* const catalog = _source->catalogReply();
@@ -377,6 +380,29 @@ private:
         auto const tabs = _workspace->tabs();
         _frame->setTitle(shown && *shown < tabs.size() ? tabs.at(*shown).caption : std::string{});
         _frame->navigator().setCurrent(activeScreen());
+        showActiveHead();
+    }
+
+    // The top bar's head slot follows the active tab, but only re-mounts on a genuine tab change: onChanged also
+    // fires on title/dirty/identity changes, and the mounted row is itself reactive to a head's own
+    // subtitle/status/actions, so those update in place with no re-mount needed. Comparing the tab's id, not its
+    // index: an index is a position in the tab bar, not an identity, and is unsafe to compare across a close (two
+    // different tabs can share the same index at different times, and the same tab can shift index without
+    // changing).
+    void showActiveHead() {
+        std::optional<ui::WorkspaceTabId> const active = _workspace->model().active().peek();
+        if (active == _headTab) {
+            return;
+        }
+        _headTab = active;
+        _head.emplace(_context->runtime(), *_backend, _workspace->headRowForActive(), &_frame->headSlot());
+    }
+
+    // The head row's own mount and its comparison key, always reset together: resetting one without the other would
+    // leave the guard above comparing against a tab id from a Workspace instance that no longer exists.
+    void resetHead() {
+        _head.reset();
+        _headTab.reset();
     }
 
     // The screen id of the active tab; empty with none.
@@ -607,6 +633,11 @@ private:
     std::unique_ptr<ui::ShellFrame> _frame;
     std::unique_ptr<ui::Workspace> _workspace;
     std::optional<ui::Mounted> _message;
+    // The active tab's head row, mounted into the frame's top-bar slot; reset together with its own comparison key
+    // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
+    // mounted into the ShellFrame.
+    std::optional<ui::Mounted> _head;
+    std::optional<ui::WorkspaceTabId> _headTab;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
     bool _changed = false;
     bool _signedIn = false;
