@@ -3431,6 +3431,8 @@ struct PanelOptions {
     AnyHandle collapsible;
     /// @brief Whether it is collapsed.
     AnyHandle collapsed;
+    /// @brief Commands run on a collapse or expand.
+    Commands onToggle;
 };
 
 /// @brief A `panel` node.
@@ -3444,6 +3446,7 @@ struct PanelOptions {
         .put("padding", options.padding)
         .put("collapsible", options.collapsible)
         .put("collapsed", options.collapsed)
+        .put("onToggle", options.onToggle)
         .put("children", children)
         .done();
 }
@@ -3704,6 +3707,14 @@ struct TableOptions {
     AnyHandle key;
     /// @brief The columns; a model-backed table derives them from the row type when none are given.
     std::vector<TableColumn> columns;
+    /// @brief Whether the header row is drawn. Several tables sharing one visual header set this `false` on every
+    ///        instance but the first.
+    bool showHeader = true;
+    /// @brief Below this many rows, every row's widget stays realized regardless of scroll position; a backend
+    ///        that cannot virtualize ignores this and `virtualizeOverscan` both.
+    std::size_t virtualizeThreshold = 2000;
+    /// @brief How many rows beyond the visible range, on each side, keep a realized widget.
+    std::size_t virtualizeOverscan = 10;
     /// @brief How the selection works.
     std::optional<Selection> selection;
     /// @brief Where a model-backed table works; ignored by a table over rows.
@@ -3762,6 +3773,15 @@ namespace detail {
     }
     if (options.selection) {
         node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selection))});
+    }
+    if (!options.showHeader) {
+        node.raw("showHeader", false);
+    }
+    if (options.virtualizeThreshold != 2000) {
+        node.raw("virtualizeThreshold", static_cast<std::int64_t>(options.virtualizeThreshold));
+    }
+    if (options.virtualizeOverscan != 10) {
+        node.raw("virtualizeOverscan", static_cast<std::int64_t>(options.virtualizeOverscan));
     }
     return node.put("sort", options.sort)
         .put("filters", options.filters)

@@ -17,7 +17,13 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{
           context, QStringLiteral("MorphTable"), parent,
           QVariantMap{{QStringLiteral("headerBackground"),
-                       QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {}
+                       QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {
+    relay().on(QStringLiteral("scroll"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        scrolled(static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("first")).toLongLong())),
+                 static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
+    });
+}
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     QVariantList list;
@@ -28,6 +34,8 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     }
     write("columns", list);
 }
+
+void TableImpl::setShowHeader(bool shown) { write("showHeader", shown); }
 
 void TableImpl::setSelectionMode(ui::SelectionMode mode) { _mode = mode; }
 
@@ -56,6 +64,26 @@ void TableImpl::setOnSelectionChange(std::function<void(std::vector<ui::Key>)> o
 }
 
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
+
+void TableImpl::setExistingKeys(std::vector<ui::Key> const& keys) {
+    _existingKeys = std::unordered_set<ui::Key>{keys.begin(), keys.end()};
+}
+
+void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
+    write("realizedFirst", static_cast<qlonglong>(first));
+    write("realizedCount", static_cast<qlonglong>(count));
+    write("totalRows", static_cast<qlonglong>(total));
+}
+
+void TableImpl::setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) {
+    _onVisibleRangeChanged = std::move(onVisibleRangeChanged);
+}
+
+void TableImpl::scrolled(std::size_t first, std::size_t count) const {
+    if (_onVisibleRangeChanged) {
+        _onVisibleRangeChanged(first, count);
+    }
+}
 
 void TableImpl::adopted(ItemBase& child) {
     static_cast<void>(child);
@@ -117,10 +145,16 @@ void TableImpl::mark() const {
 std::vector<ui::Key> TableImpl::existingSelection() const {
     std::vector<ui::Key> keys;
     for (ui::Key const& key : _requested) {
-        bool const exists = std::ranges::any_of(children(), [&key](ItemBase const* child) {
-            auto const* const row = dynamic_cast<TableRowImpl const*>(child);
-            return row != nullptr && row->key() == key;
-        });
+        // Below a virtualized table's threshold (_existingKeys empty: mount.hpp never calls setExistingKeys
+        // there), every key that exists already has a realized row, so the realized-children check alone is
+        // exactly right. Above it, a key can exist in the data with no realized row right now -- it is merely
+        // dewindowed, not gone -- and must not be dropped from the selection just because its row is off-screen;
+        // _existingKeys (the full key set, realized or not) is what tells the two cases apart.
+        bool const exists =
+            _existingKeys.contains(key) || std::ranges::any_of(children(), [&key](ItemBase const* child) {
+                auto const* const row = dynamic_cast<TableRowImpl const*>(child);
+                return row != nullptr && row->key() == key;
+            });
         if (exists) {
             keys.push_back(key);
         }

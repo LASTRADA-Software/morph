@@ -847,6 +847,19 @@ private:
 
 }  // namespace detail
 
+/// @brief When a keyed row list realizes a widget only for the rows in or near the visible range, instead of for
+///        every row regardless of scroll position. A row's own reactive state (its signal, rebuilt from the
+///        session on every change) is unaffected either way and is never released while its key exists; this
+///        setting only decides whether a row's mounted widget is also kept alive off-screen.
+struct Virtualization {
+    /// @brief Below this many rows, every row's widget is realized regardless of scroll position, matching
+    ///        today's behavior exactly; set once.
+    std::size_t threshold = 2000;
+    /// @brief How many rows beyond the visible range, on each side, keep a realized widget so a small scroll does
+    ///        not have to realize a widget on every frame; set once.
+    std::size_t overscan = 10;
+};
+
 /// @brief One widget per row of a keyed collection, updated in place when a row with the same key changes.
 struct ForEach {
     /// @brief The rows, the key function and the row view, type-erased; null shows no rows.
@@ -877,6 +890,14 @@ struct Table {
     std::vector<TableColumn> columns;
     /// @brief The rows, the key function and the row view, type-erased; null shows no rows.
     std::shared_ptr<detail::ForEachModel const> rows;
+    /// @brief Whether the header row is drawn; set once. `false` suits several tables sharing one header, or a
+    ///        header a document draws itself.
+    bool showHeader = true;
+    /// @brief The row count and margin above which a row's widget is realized only near the visible range; set
+    ///        once. A row's own reactive state is unaffected either way. Only a backend that implements
+    ///        `TableWidget::setOnVisibleRangeChanged` ever dewindows a row; every other backend realizes every
+    ///        row regardless of this setting, exactly as before it existed.
+    Virtualization virtualize{};
     /// @brief How many rows the user can select; set once.
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys. A key with no row selects nothing until such a row appears.
@@ -1399,6 +1420,10 @@ template <typename RowT>
 
 /// @brief Everything about a `table` beyond its columns and rows.
 struct TableOptions {
+    /// @brief Whether the header row is drawn.
+    bool showHeader = true;
+    /// @brief The row count and margin above which a row's widget is realized only near the visible range.
+    Virtualization virtualize{};
     /// @brief How many rows the user can select.
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys.
@@ -1481,6 +1506,8 @@ template <typename RowT>
     Table spec{
         .rows =
             std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowNode)),
+        .showHeader = options.showHeader,
+        .virtualize = options.virtualize,
         .selectionMode = options.selectionMode,
     };
     spec.columns = std::move(columns);

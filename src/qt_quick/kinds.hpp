@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "qt_quick/keys.hpp"
@@ -415,17 +416,23 @@ class TableImpl final : public ContainerItemWidget<ui::TableWidget> {
 public:
     TableImpl(Context& context, ui::ContainerWidget* parent);
     void setColumns(std::vector<ui::TableColumn> const& columns) override;
+    void setShowHeader(bool shown) override;
     void setSelectionMode(ui::SelectionMode mode) override;
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
+    void setExistingKeys(std::vector<ui::Key> const& keys) override;
+    void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
+    void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
 
     /// A click on a row; @p extend for Ctrl+click.
     void tapped(TableRowImpl const& row, bool extend);
     /// A double click on a row, or Enter on it.
     void activated(TableRowImpl const& row) const;
+    /// The Flickable reported a scroll; @p first and @p count are what it wants realized next.
+    void scrolled(std::size_t first, std::size_t count) const;
     /// Whether a row is marked selected.
     [[nodiscard]] static bool marked(ItemBase const& row);
 
@@ -444,6 +451,11 @@ private:
     std::vector<ui::Key> _requested;
     std::function<void(std::vector<ui::Key>)> _onSelectionChange;
     std::function<void(ui::Key)> _onActivate;
+    // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
+    // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
+    // back to realized children alone, which is already exactly every key that exists at that size.
+    std::unordered_set<ui::Key> _existingKeys;
+    std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
 };
 
 /// A row of a table: the horizontal stack the mount makes for it, placing its cells by column.

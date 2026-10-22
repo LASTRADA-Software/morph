@@ -46,6 +46,7 @@ class TableImpl final : public TuiContainer<ui::TableWidget> {
 public:
     explicit TableImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setColumns(std::vector<ui::TableColumn> const& columns) override;
+    void setShowHeader(bool shown) override;
     void setSelectionMode(ui::SelectionMode mode) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
@@ -102,6 +103,7 @@ private:
     void activateRow(ui::Key const& key);
 
     std::vector<ui::TableColumn> _columns;
+    bool _showHeader = true;
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.

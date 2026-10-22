@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -49,16 +50,55 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
 /// @brief Called for each newly mounted row with its widget and key; a Table tells its widget the row's key.
 using RowHook = std::function<void(reactive::Scope&, Node const&, Widget&, Key const&)>;
 
+/// @brief Whether a row's widget is realized, and if not, why -- so the windowing pass of `reconcile` never
+///        confuses a row that has no widget by design (its view was a null node) with one whose widget is simply
+///        not realized right now, which it should realize the next time the row enters the visible range.
+enum class RowWidgetState : std::uint8_t {
+    Realized,    ///< `widgetScope`/`widget` are set.
+    Dewindowed,  ///< The row's view is not null, but its widget is not realized: out of the visible range.
+    NullView,    ///< The row's view is a null node; it never had a widget and never will while that stays true.
+};
+
 /// @brief One mounted row of a ForEach or Table.
+///
+/// A row's state (its slot, and the signal it reads) and its widget are owned by two separate scopes so a
+/// virtualized table can release a row's widget -- the expensive part of mounting a row -- while its key is still
+/// in the data, without losing the row's place: `stateScope` is made once, when the key first appears, and lives
+/// until the key is gone; `widgetScope` comes and goes with whether the row is realized. A non-virtualized
+/// `ForEach`/`Table` (below its `Virtualization::threshold`, or on a backend that never dewindows a row) always
+/// has `widgetScope` set alongside `stateScope`, so this costs nothing when windowing never applies.
 struct KeyedRow {
     /// @brief The row's key.
     Key key;
-    /// @brief Owns the row's slot (adopted first) and its widgets and bindings.
-    std::unique_ptr<reactive::Scope> scope;
-    /// @brief The row's slot, owned by `scope`.
+    /// @brief Owns the row's slot; made once, for as long as the key is in the data.
+    std::unique_ptr<reactive::Scope> stateScope;
+    /// @brief The row's slot, owned by `stateScope`.
     RowSlot* slot = nullptr;
-    /// @brief The row's widget, owned by `scope`; null when the row view was a null node.
+    /// @brief Owns the row's widget and its bindings; null while the row is dewindowed or has no view.
+    std::unique_ptr<reactive::Scope> widgetScope;
+    /// @brief The row's widget, owned by `widgetScope`; null exactly when `widgetScope` is null.
     Widget* widget = nullptr;
+    /// @brief Which of the three states above `widget` is in.
+    RowWidgetState widgetState = RowWidgetState::NullView;
+    /// @brief This row's position in view order, as of the most recent `reconcile` pass -- not its position in
+    ///        `KeyedRows::list`, which `reorder` groups realized rows ahead of dewindowed ones within (so the
+    ///        container only ever holds the widgets that exist), and so no longer matches view order once any row
+    ///        is dewindowed. `applyWindow` compares this against the visible range; `reconcile` is the only writer.
+    std::size_t viewPosition = 0;
+};
+
+/// @brief What the backend's own scroll position asks a virtualized table to realize next.
+struct VisibleRange {
+    /// @brief The view index of the first row the backend wants realized.
+    std::size_t first = 0;
+    /// @brief How many rows from `first` the backend wants realized; 0 (the default) asks for nothing, which a
+    ///        table below its `Virtualization::threshold` never overrides, since its windowing Effect only runs on
+    ///        a backend that calls `setOnVisibleRangeChanged` in the first place.
+    std::size_t count = 0;
+
+    /// @brief Memberwise equality, so an unchanged range notifies nobody.
+    /// @return Whether both `first` and `count` match.
+    bool operator==(VisibleRange const&) const = default;
 };
 
 /// @brief The mounted rows of one ForEach or Table, in their container's order.
@@ -1061,7 +1101,7 @@ private:
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
         applyCommon(scope, widget, spec.common);
         widget.setGap(spacingStep(spec.gap));
-        mountRows(scope, spec.model, widget, {});
+        mountRows(scope, spec.model, widget, {}, nullptr);
         return widget;
     }
 
@@ -1071,19 +1111,22 @@ private:
         TableWidget& widget = scope.adopt(_backend->createTable(parent));
         applyCommon(scope, widget, spec.common);
         widget.setColumns(spec.columns);
+        widget.setShowHeader(spec.showHeader);
         widget.setSelectionMode(spec.selectionMode);
         widget.setOnActivate(event(spec.onActivate));
-        mountRows(scope, spec.rows, widget,
-                  [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
-                      widget.setRowKey(rowWidget, key);
-                      // A row's tone binds in the row's scope, after its key.
-                      Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
-                      if (view != nullptr && view->tone) {
-                          bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
-                              widget.setRowTone(rowWidget, tone);
-                          });
-                      }
-                  });
+        mountRows(
+            scope, spec.rows, widget,
+            [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
+                widget.setRowKey(rowWidget, key);
+                // A row's tone binds in the row's scope, after its key.
+                Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
+                if (view != nullptr && view->tone) {
+                    bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
+                        widget.setRowTone(rowWidget, tone);
+                    });
+                }
+            },
+            &spec.virtualize);
         widget.setOnSelectionChange(inputEvent(
             spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
                 widget.setSelection(keys);
@@ -1091,24 +1134,72 @@ private:
         return widget;
     }
 
-    // The model, then the session, then the rows, then the Effect: destroyed in reverse, so the Effect stops
+    // The model, then the session, then the rows, then the Effect(s): destroyed in reverse, so an Effect stops
     // first, the rows (whose slots point into the session's snapshot) go next, and the model outlives its session.
+    // @p virtualize is null for a ForEach (no backend seam exists yet to dewindow a bare keyed stack); when
+    // non-null but @p container is not also a TableWidget (today, impossible -- only Table passes a non-null
+    // virtualize, and only its mountKind gives it a TableWidget -- kept as a defensive check, not a real case),
+    // virtualization is silently not wired, same as if it were null.
     void mountRows(reactive::Scope& scope, std::shared_ptr<ForEachModel const> const& model,
-                   ContainerWidget& container, RowHook onRow) {
+                   ContainerWidget& container, RowHook onRow, Virtualization const* virtualize) {
         if (!model) {
             return;
         }
         scope.make<std::shared_ptr<ForEachModel const>>(model);
         ForEachSession& session = scope.adopt(model->open(*_rt));
         auto& rows = scope.make<KeyedRows>();
-        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow),
-                      overlay = _overlay] {
-            std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
-            // Untracked: what a row view reads while it is built, or what a kept row's update touches, must not
-            // become a dependency of the whole list.
-            underOverlay(overlay, [&] {
-                _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+        TableWidget* const table = virtualize != nullptr ? dynamic_cast<TableWidget*>(&container) : nullptr;
+        if (table == nullptr) {
+            scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow, overlay = _overlay] {
+                std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
+                // Untracked: what a row view reads while it is built, or what a kept row's update touches, must
+                // not become a dependency of the whole list.
+                underOverlay(overlay, [&] {
+                    _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
+                });
             });
+            return;
+        }
+        // The windowing state: written by the backend's own scroll callback (via widgetEvent, so this is never
+        // written from inside a flush this Effect caused), read by both Effects below -- the rows Effect, so a
+        // brand-new row's very first mount already respects the window instead of needing a later windowing pass
+        // to correct it; the windowing Effect, so a scroll alone realizes/releases without re-running reconcile.
+        auto& range = scope.make<reactive::Signal<VisibleRange>>(*_rt, VisibleRange{});
+        table->setOnVisibleRangeChanged([this, &range](std::size_t first, std::size_t count) {
+            runCallback(*_rt, [&] { range.set({.first = first, .count = count}); });
+        });
+        scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
+                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay] {
+            std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
+            VisibleRange const window = range.peek();      // untracked: a scroll alone must not re-run this Effect
+            underOverlay(overlay, [&] {
+                _rt->untracked([&] {
+                    if (keys.size() < threshold) {
+                        reconcile(depth, session, rows.list, container, keys, onRow);
+                        return;
+                    }
+                    std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
+                    reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
+                    // Only above threshold: a backend's own selection-filtering logic may need to know a key
+                    // still exists even without a realized row for it right now (backend.hpp's setExistingKeys).
+                    // Below threshold every key already has a realized row, so this would add nothing.
+                    table->setExistingKeys(keys);
+                });
+            });
+        });
+        scope.effect([this, &rows, &container, &range, threshold = virtualize->threshold,
+                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay] {
+            VisibleRange const window = range.get();  // tracked: this Effect's own trigger
+            // Below threshold, every row is already realized (reconcile's own unconditional path, §4.4), and
+            // setRealizedWindow is not called at all -- not even once with "everything realized" -- so a table
+            // that never crosses its threshold is indistinguishable, on the backend, from one with no
+            // virtualization machinery at all.
+            if (rows.list.size() < threshold) {
+                return;
+            }
+            underOverlay(overlay, [&] { applyWindow(depth, rows.list, container, window, overscan, onRow); });
+            auto const [first, count] = realizedExtent(rows.list);
+            table->setRealizedWindow(first, count, rows.list.size());
         });
     }
 
@@ -1127,19 +1218,60 @@ private:
         return order;
     }
 
-    // All or nothing: the row is built in a scope of its own, one level deeper than the ForEach's, which the caller
-    // takes only once the mount completed.
+    // All or nothing: the row's state and its widget are each built in a scope of their own, one level deeper than
+    // the ForEach's, which the caller takes only once the mount completed. A new row's widget is realized in the
+    // same pass as its state (so it is eligible for autofocus like any other newly-mounted content); a widget
+    // realized later, on a row whose state already exists, goes through `realizeRowWidget` instead, which is not
+    // its own `mountPass` -- see that function's own comment for why.
     [[nodiscard]] KeyedRow mountRow(std::size_t depth, ForEachSession& session, ContainerWidget& container,
                                     Key const& key, std::size_t index, RowHook const& onRow) {
         return mountPass([&] {
-            KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
-            row.slot = &row.scope->adopt(session.makeRow(index));
-            row.widget = mount(*row.scope, row.slot->view(), &container);
+            KeyedRow row{.key = key, .stateScope = std::make_unique<reactive::Scope>(*_rt, depth)};
+            row.slot = &row.stateScope->adopt(session.makeRow(index));
+            row.widgetScope = std::make_unique<reactive::Scope>(*_rt, depth);
+            row.widget = mount(*row.widgetScope, row.slot->view(), &container);
+            row.widgetState = row.widget != nullptr ? RowWidgetState::Realized : RowWidgetState::NullView;
             if (row.widget != nullptr && onRow) {
-                onRow(*row.scope, row.slot->view(), *row.widget, key);
+                onRow(*row.widgetScope, row.slot->view(), *row.widget, key);
             }
             return row;
         });
+    }
+
+    // Realizes a widget for a row whose state (`stateScope`/`slot`) already exists -- a row re-entering the
+    // visible range after being dewindowed. Deliberately not a `mountPass` of its own: `mountPass` gives the first
+    // `autofocus` widget it mounts the focus once it completes, which is right for a row mounting for the first
+    // time (`mountRow`, inside the ForEach's own outer pass) but wrong here -- a row that already existed and
+    // simply scrolled back into view must not steal focus back from wherever the user's focus already is. `mount`
+    // itself carries no such behavior; only `mountPass` does, so simply not using it is what suppresses it.
+    void realizeRowWidget(std::size_t depth, KeyedRow& row, ContainerWidget& container, RowHook const& onRow) {
+        row.widgetScope = std::make_unique<reactive::Scope>(*_rt, depth);
+        row.widget = mount(*row.widgetScope, row.slot->view(), &container);
+        row.widgetState = row.widget != nullptr ? RowWidgetState::Realized : RowWidgetState::NullView;
+        if (row.widget != nullptr && onRow) {
+            onRow(*row.widgetScope, row.slot->view(), *row.widget, row.key);
+        }
+    }
+
+    // Releases a row's widget, keeping its state: the container sees an ordinary removal (`releasing` fires exactly
+    // as it does for a real removal), but `stateScope`/`slot` are untouched, so the row's signal keeps tracking the
+    // snapshot and is ready for `realizeRowWidget` to mount a fresh widget against it later.
+    static void dewindowRowWidget(KeyedRow& row) {
+        row.widgetScope.reset();
+        row.widget = nullptr;
+        row.widgetState = RowWidgetState::Dewindowed;
+    }
+
+    // Builds only a new key's state -- no widget, no mount, no onRow call -- for a row `reconcile` decides is
+    // outside the current window on its very first appearance (a virtualized table above its threshold). The row
+    // starts `Dewindowed`, exactly as if it had been realized once and then released, so `realizeRowWidget` can
+    // bring it in later with no special case for "never had a widget" versus "had one and lost it."
+    [[nodiscard]] KeyedRow mountRowState(std::size_t depth, ForEachSession& session, Key const& key,
+                                         std::size_t index) {
+        KeyedRow row{.key = key, .stateScope = std::make_unique<reactive::Scope>(*_rt, depth)};
+        row.slot = &row.stateScope->adopt(session.makeRow(index));
+        row.widgetState = RowWidgetState::Dewindowed;
+        return row;
     }
 
     // Moves the widgets into the snapshot's order, and `rows` with them. A move that throws is recorded in `failure`
@@ -1192,37 +1324,62 @@ private:
     // something throws, so a failure costs this run's remaining work and never the bookkeeping of the next one.
     // A row that fails to mount leaves nothing behind and does not stop the other rows; the first failure is
     // rethrown at the end, for the Effect to report, and the next run mounts the row again.
+    // @p window is the virtualization window a new key's widget is realized against on its very first appearance,
+    // or null for a ForEach or a Table below its threshold -- unchanged from before virtualization existed. A new
+    // key outside the window (or when there is no window at all, above threshold with nothing reported yet, taken
+    // as {0, overscan}; see the design's "bootstrap window") gets state only (`mountRowState`), left Dewindowed
+    // for the windowing Effect to realize later if it ever enters the visible range.
     void reconcile(std::size_t depth, ForEachSession& session, std::vector<KeyedRow>& rows, ContainerWidget& container,
-                   std::vector<Key> const& keys, RowHook const& onRow) {
+                   std::vector<Key> const& keys, RowHook const& onRow,
+                   std::pair<VisibleRange, std::size_t> const* windowAndOverscan = nullptr) {
         std::vector<std::size_t> const order = firstOccurrences(keys);
-        std::unordered_map<Key, std::size_t> wanted;  // key -> snapshot index
-        for (std::size_t const index : order) {
-            wanted.emplace(keys.at(index), index);
+        std::unordered_map<Key, std::size_t> wanted;          // key -> snapshot index
+        std::unordered_map<Key, std::size_t> viewPositionOf;  // key -> position in view order (order's own index)
+        for (std::size_t viewPos = 0; viewPos < order.size(); ++viewPos) {
+            wanted.emplace(keys.at(order.at(viewPos)), order.at(viewPos));
+            viewPositionOf.emplace(keys.at(order.at(viewPos)), viewPos);
         }
 
-        // Unmount the gone keys, last first as KeyedRows does, then update the kept ones in place, which keeps their
-        // widgets.
+        // Unmount the gone keys, last first as KeyedRows does, then update the kept ones in place, which keeps
+        // their widgets. A gone key's widget goes first (the Effect stops first within each row, mirroring the
+        // order mountRow itself builds the two scopes in: state first, then widget), then its state.
         for (KeyedRow& row : std::views::reverse(rows)) {
             if (!wanted.contains(row.key)) {
-                row.scope.reset();
+                row.widgetScope.reset();
+                row.stateScope.reset();
             }
         }
-        std::erase_if(rows, [](KeyedRow const& row) { return row.scope == nullptr; });
+        std::erase_if(rows, [](KeyedRow const& row) { return row.stateScope == nullptr; });
         std::unordered_set<Key> kept;
-        for (KeyedRow const& row : rows) {
+        for (KeyedRow& row : rows) {
             kept.insert(row.key);
             row.slot->assign(wanted.at(row.key));
+            row.viewPosition = viewPositionOf.at(row.key);
         }
 
-        // Mount the new keys; each widget is appended to the container, and its row to `rows`.
+        std::size_t const bootstrapFirst = 0;
+        std::size_t const bootstrapCount = windowAndOverscan != nullptr ? windowAndOverscan->second : 0;
+        VisibleRange const window = windowAndOverscan != nullptr && windowAndOverscan->first.count > 0
+                                        ? windowAndOverscan->first
+                                        : VisibleRange{.first = bootstrapFirst, .count = bootstrapCount};
+
+        // Mount the new keys; each realized widget is appended to the container, and every new row (realized or
+        // state-only) to `rows`. `viewPos` is the row's position in view order -- order's own index -- which is
+        // what the window means positions in, not `index` (a position in the raw, possibly-reordered `keys`).
         std::exception_ptr failure;
         rows.reserve(order.size());
-        for (std::size_t const index : order) {
+        for (std::size_t viewPos = 0; viewPos < order.size(); ++viewPos) {
+            std::size_t const index = order.at(viewPos);
             if (kept.contains(keys.at(index))) {
                 continue;
             }
+            bool const inWindow =
+                windowAndOverscan == nullptr || (viewPos >= window.first && viewPos < window.first + window.count);
             try {
-                rows.push_back(mountRow(depth, session, container, keys.at(index), index, onRow));
+                KeyedRow row = inWindow ? mountRow(depth, session, container, keys.at(index), index, onRow)
+                                        : mountRowState(depth, session, keys.at(index), index);
+                row.viewPosition = viewPos;
+                rows.push_back(std::move(row));
             } catch (...) {
                 if (!failure) {
                     failure = std::current_exception();
@@ -1234,6 +1391,72 @@ private:
         if (failure) {
             std::rethrow_exception(failure);
         }
+    }
+
+    // Realizes a widget for every row within `window` (± `overscan`) that does not already have one, and releases
+    // every realized widget outside it. A row's position in view order is its own `viewPosition`, set by the most
+    // recent `reconcile` pass -- not its position in `rows` itself, which groups realized rows ahead of
+    // dewindowed ones (so the container only ever holds the widgets that exist) and so no longer matches view
+    // order once any row is dewindowed. Called only when `rows.size() >= threshold`, from the windowing Effect's
+    // own Signal<VisibleRange>, never from reconcile, so a scroll alone costs O(rows) to scan, not the full
+    // reconciliation pass.
+    void applyWindow(std::size_t depth, std::vector<KeyedRow>& rows, ContainerWidget& container,
+                     VisibleRange const& window, std::size_t overscan, RowHook const& onRow) {
+        std::size_t const lo = window.first > overscan ? window.first - overscan : 0;
+        std::size_t const hi =
+            window.first + window.count + overscan;  // exclusive; saturates harmlessly past rows.size()
+        std::exception_ptr failure;
+        for (KeyedRow& row : rows) {
+            bool const shouldBeRealized = row.viewPosition >= lo && row.viewPosition < hi;
+            if (shouldBeRealized && row.widgetState != RowWidgetState::Realized &&
+                row.widgetState != RowWidgetState::NullView) {
+                try {
+                    realizeRowWidget(depth, row, container, onRow);
+                } catch (...) {
+                    if (!failure) {
+                        failure = std::current_exception();
+                    }
+                }
+            } else if (!shouldBeRealized && row.widgetState == RowWidgetState::Realized) {
+                dewindowRowWidget(row);
+            }
+        }
+        // Realized widgets may now be a different subset of `rows` than before; bring the container back to the
+        // rows' own view order (`viewPosition`), restricted to what is realized -- `reorder` needs `order` as
+        // positions into `keys` in the target (view) order, not `rows`' own current array order, which groups
+        // realized ahead of dewindowed and so is not view order once any row is dewindowed.
+        std::vector<Key> const keys = [&] {
+            std::vector<Key> out;
+            out.reserve(rows.size());
+            for (KeyedRow const& row : rows) {
+                out.push_back(row.key);
+            }
+            return out;
+        }();
+        std::vector<std::size_t> order(rows.size());
+        std::iota(order.begin(), order.end(), std::size_t{0});
+        std::ranges::sort(order, {}, [&rows](std::size_t index) { return rows.at(index).viewPosition; });
+        reorder(rows, container, keys, order, failure);
+        if (failure) {
+            std::rethrow_exception(failure);
+        }
+    }
+
+    // The realized subset's extent in view order: the first realized row's view position and how many rows from
+    // there are realized. Used only to tell the backend what to size a scrollbar against
+    // (`TableWidget::setRealizedWindow`); a gap of dewindowed rows between two realized ones (the overscan margin
+    // straddling a scroll position mid-transition) is not expected in steady state, so this reports the outermost
+    // realized view positions, not a strict contiguous run.
+    [[nodiscard]] static std::pair<std::size_t, std::size_t> realizedExtent(std::vector<KeyedRow> const& rows) {
+        std::optional<std::size_t> first;
+        std::size_t last = 0;
+        for (KeyedRow const& row : rows) {
+            if (row.widgetState == RowWidgetState::Realized) {
+                first = first ? std::min(*first, row.viewPosition) : row.viewPosition;
+                last = std::max(last, row.viewPosition);
+            }
+        }
+        return first ? std::pair{*first, last - *first + 1} : std::pair{std::size_t{0}, std::size_t{0}};
     }
 
     Widget& mountKind(reactive::Scope& scope, Busy const& spec, ContainerWidget* parent) {

@@ -16,8 +16,10 @@ MorphWidget {
     // The icon's URL in the theme's set; without one, the icon's name is drawn before the text, as text.
     readonly property string iconSource: Theme.iconSource(root.icon)
 
-    implicitWidth: content.implicitWidth + Theme.unitWidth * 2
-    implicitHeight: label.implicitHeight + 2
+    // A fixed space step, not a font-metric-derived width: a short label (a status word) still reads as an
+    // oblong pill rather than nearly as wide as it is tall.
+    implicitWidth: content.implicitWidth + Theme.spaceOf(2) * 2
+    implicitHeight: label.implicitHeight + Theme.spaceOf(1) * 2
 
     Rectangle {
         objectName: "fill"

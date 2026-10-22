@@ -9,7 +9,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
+#include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/mount.hpp>
+#include <morph/ui/view.hpp>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -354,4 +357,86 @@ TEST_CASE("qt_quick table: a toned row's background fills with the tone's bg and
     table.table->setRowTone(*table.rows.at(1), std::nullopt);
     scene.settle();
     CHECK_FALSE(part(*table.rows.at(1), "toneBar").isVisible());
+}
+
+namespace {
+
+struct VirtualRow {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+std::vector<ui::Node> virtualRowCell(morph::reactive::Signal<VirtualRow> const& row) {
+    return {ui::text({.text = [&row] { return row.get().name; }})};
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick table: a virtualized table realizes only the window, reporting it to C++ as it scrolls",
+          "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        for (std::int64_t i = 0; i < 20; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    }();
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&many] { return many; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
+            virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+    scene.settle();
+
+    QQuickItem& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+
+    // A real Flickable's height, from the fixed layout height given above, bounds how many rows the bootstrap
+    // window and a later scroll can realize -- unlike RecordingBackend's own virtualization test (test_ui_table
+    // .cpp), which has no real geometry to derive a range from and so only exercises mount.hpp's own windowing
+    // logic against an explicit scrollTable() call, this is the real Qt Quick geometry path end to end.
+    CHECK(tableItem.property("totalRows").toInt() == 20);
+    CHECK(tableItem.property("realizedCount").toInt() < 20);
+
+    // Scrolling moves the window: a position far down the content realizes rows near the end, not the start.
+    flick->setProperty("contentY", flick->property("contentHeight").toReal() * 0.9);
+    scene.settle();
+    int const scrolledFirst = tableItem.property("realizedFirst").toInt();
+    CHECK(scrolledFirst > 0);
+}
+
+TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a wide row dewindows", "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        // Row 0 has by far the widest name; every other row is short. Scrolling away from row 0 must not shrink
+        // the column back down to the short rows' width (the "monotonic, not shrinking" trade-off this design
+        // accepts in exchange for no jitter -- see MorphTable.qml's invalidateAllColumns).
+        rows.push_back(VirtualRow{.id = 0, .name = "a very very very very very very long row name indeed"});
+        for (std::int64_t i = 1; i < 20; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "short"});
+        }
+        return rows;
+    }();
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&many] { return many; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
+            virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+    scene.settle();
+
+    QQuickItem& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    qreal const widthWithWideRow = tableItem.property("widths").toList().at(0).toReal();
+
+    // Scroll far enough that row 0 dewindows.
+    flick->setProperty("contentY", flick->property("contentHeight").toReal() * 0.9);
+    scene.settle();
+    REQUIRE(tableItem.property("realizedFirst").toInt() > 0);
+    CHECK(tableItem.property("widths").toList().at(0).toReal() == widthWithWideRow);
 }

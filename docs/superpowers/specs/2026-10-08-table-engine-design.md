@@ -76,6 +76,16 @@ The same declaration as a document node:
 The `x-table` marker on the body member is how the client knows the action takes a table query and
 sends sort, filters and page in it. The client derives the columns from `ResultRow`'s schema (§4), builds the sort and filter controls,
 fetches pages as the view needs them, and renders the table. Nothing else is written. A node that
+
+> **Not yet built.** This section describes the intended declaration; as of
+> `docs/superpowers/specs/2026-10-22-table-row-virtualization-design.md`'s own audit, a model-backed
+> `table` (`"model"`/`"action"`/`"mode"` in the document, `ui::dataTable<Row>()` in C++) is not lowered
+> by the interpreter yet — only a table over a plain row list (`"rows"`, `ui::table<Row>()`) is. The
+> interpreter reports this explicitly at the one call site that would need it (`ScreenCore::
+> lowerRows`: "a model-backed `table` needs the table engine, which this interpreter does not lower
+> yet") rather than silently rendering something else. `morph::table::Engine` itself (§3 onward) is
+> real, tested and ready to be wired in; this is a gap in the document interpreter's own lowering, not
+> in the engine.
 needs more adds to it (`columns`, `selection`, `onActivate`; §12).
 
 `morph::views::viewSchemaJson<V>()` (the collection view of spec 2 §8) already derives a column list
