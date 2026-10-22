@@ -10,7 +10,7 @@ inside Docker containers, supervised by systemd. Used by `ci.yml`'s
 
 The runners register against the **`LASTRADA-Software` organisation**, not a
 single repository, and belong to the `linux-docker` runner group. The group
-is scoped to `morph`, `fastcached` and `Lightweight` and has
+is scoped to `morph`, `pace` and `Lightweight` and has
 `allows_public_repositories: true` — which it must, because all three are
 public and the organisation's `Default` group does not allow public
 repositories at all.
@@ -100,7 +100,7 @@ gh api orgs/LASTRADA-Software/actions/runners \
 
 It will show up in the organisation under **Settings → Actions →
 Runners**, in the `linux-docker` group, and any workflow (in `morph`,
-`fastcached`, or `Lightweight`) with `runs-on: [self-hosted, ...]` matching
+`pace`, or `Lightweight`) with `runs-on: [self-hosted, ...]` matching
 its labels can pick up jobs on it — see the **Trust boundary** note below
 before wiring one up.
 
@@ -133,15 +133,19 @@ file to match before or after the first install, then re-run
 instance left over above the new `RUNNER_COUNT`).
 
 Working out that sizing by hand is what `bootstrap-cloud-node.sh` automates
-instead — see **Bootstrapping a cloud node with its own fastcached** below,
-which also sets up a local `fastcached` daemon.
+instead — see **Bootstrapping a cloud node with its own pace-kv** below,
+which also sets up a local `pace-kv` daemon.
 
-## Keep the daemon's version equal to the newest fastcached release
+## Keep the daemon's version equal to the newest Pace release
 
 `CompileCache.cmake` has each container auto-install the **newest released**
-`fastcache-cc`, and fastcached's wire versions do not interoperate in either
+`pace-cc`, and Pace's wire versions do not interoperate in either
 direction. So a daemon pinned to an older release rejects the client the
 containers install, and every self-hosted build compiles uncached.
+
+Pace was called fastcached before 0.6.0 (`fastcached` is now `pace-kv`,
+`fastcache-cc` is `pace-cc`, `fastcached_*` metrics are `pace_*`); the output
+quoted below was captured then and keeps the old names.
 
 This has already happened once here. The host daemon was pinned to 0.1.1 on
 2026-09-08; fastcached released 0.2.0 on 2026-09-09; the containers began
@@ -164,13 +168,13 @@ curl -s http://127.0.0.1:9260/metrics | grep -E 'cmd_(get|set)_total|get_(hits|m
 ```
 
 Both counters sitting at zero while self-hosted jobs run means the fleet is
-not using the cache at all. Compare `fastcached --version` against the latest
+not using the cache at all. Compare `pace-kv --version` against the latest
 release and upgrade the daemon to match.
 
-## Bootstrapping a cloud node with its own fastcached
+## Bootstrapping a cloud node with its own pace-kv
 
 `bootstrap-cloud-node.sh` sets up a fresh Linux VM (bare Ubuntu/Debian —
-this is what a Hetzner box ships) with both a `fastcached` daemon and N
+this is what a Hetzner box ships) with both a `pace-kv` daemon and N
 self-hosted runner containers, all sized from the machine's actual
 `nproc`/`/proc/meminfo` at run time — it does not hardcode a worker count
 or per-worker CPU/RAM the way earlier revisions of this doc did. Run as
@@ -193,46 +197,46 @@ every restart, calls `gh` locally via `run-runner.sh`.
 
 ### The sizing rule
 
-- `fastcached` gets a **fixed** 2 GiB RAM / 10 GiB on-disk cap and 1 CPU,
-  regardless of machine size (`FASTCACHED_MEMORY_GB`/`FASTCACHED_DISK_GB`/
-  `FASTCACHED_CPUS` env vars override this) — deliberately not scaled with
+- `pace-kv` gets a **fixed** 2 GiB RAM / 10 GiB on-disk cap and 1 CPU,
+  regardless of machine size (`PACE_KV_MEMORY_GB`/`PACE_KV_DISK_GB`/
+  `PACE_KV_CPUS` env vars override this) — deliberately not scaled with
   the box, unlike the workers below.
 - A small OS/Docker-daemon reserve is held back too: `max(1 GiB, 10% of
   total RAM)`, never handed to any container (`OS_RESERVE_MEM_GB`
   overrides).
-- Whatever CPUs remain after fastcached's 1-CPU reservation are divided
+- Whatever CPUs remain after pace-kv's 1-CPU reservation are divided
   into workers of **2 CPUs each** (`WORKER_CPUS` overrides) —
   `worker_count = floor(remaining_cpus / 2)`. Each worker's RAM is the
-  remaining RAM (after fastcached + the OS reserve) split evenly across
+  remaining RAM (after pace-kv + the OS reserve) split evenly across
   that many workers.
 - The script refuses to proceed rather than start an undersized setup: a
-  box with fewer than 3 CPUs total (1 for fastcached + 2 for one worker)
+  box with fewer than 3 CPUs total (1 for pace-kv + 2 for one worker)
   or where the RAM split would leave a worker under 1 GiB exits with an
   error instead of silently running something too small to compile C++
   in. Confirmed by hand: a 2-CPU/4GiB box is genuinely too small under
-  this scheme (1 fastcached + one 2-CPU worker needs 3 CPUs minimum) —
+  this scheme (1 pace-kv + one 2-CPU worker needs 3 CPUs minimum) —
   provision at least 4 CPUs to get one real worker with headroom.
 
 ### What it does, step by step
 
 1. Installs Docker if not already present (`get.docker.com`).
-2. Clones (or reuses, `git pull --ff-only`) `morph` and `fastcached`
-   checkouts under `$HOME` (`MORPH_ROOT`/`FASTCACHED_ROOT` override).
-3. Builds `fastcached`'s own image from its Dockerfile and starts it,
+2. Clones (or reuses, `git pull --ff-only`) `morph` and `pace`
+   checkouts under `$HOME` (`MORPH_ROOT`/`PACE_ROOT` override).
+3. Builds Pace's own image from its Dockerfile and starts it,
    capped per the sizing rule above, with persistent storage under
-   `/var/lib/fastcached` (`FASTCACHED_STORAGE_DIR` overrides).
+   `/var/lib/pace-kv` (`PACE_KV_STORAGE_DIR` overrides).
 4. Builds this directory's runner image, tagged `lastrada-runner:latest`.
 5. Writes `/etc/lastrada-runner/config` with the computed sizing
    (`GITHUB_ORG=LASTRADA-Software`, `RUNNER_GROUP=linux-docker`,
    `RUNNER_COUNT`, per-worker `RUNNER_CPUS`/`RUNNER_MEMORY`,
-   `FASTCACHE_ADDR=host.docker.internal:6674`) and runs
+   `PACE_ADDR=host.docker.internal:6674`) and runs
    `install-runner-units.sh`, which installs and enables one
    `lastrada-runner@N.service` per worker under systemd. Every worker's
    `run-runner.sh` always passes `--add-host=host.docker.internal:host-gateway`
    — what makes `host.docker.internal` resolve to the Docker host's own IP
    on plain Linux Docker Engine (Docker Desktop provides this
    automatically). This only matters because `ci.yml`'s own job-level
-   `FASTCACHE_ADDR` (see **ci.yml integration** below) always sends the
+   `PACE_ADDR` (see **ci.yml integration** below) always sends the
    literal `host.docker.internal:6674` itself, so that is what actually has
    to resolve on every runner host, cloud or otherwise.
 6. Each unit's `run-runner.sh` mints its own fresh registration token from
@@ -502,38 +506,38 @@ may be executing:
 docker exec -u root lastrada-docker-1 git config --system http.version HTTP/1.1
 ```
 
-## Compiler cache: fastcache-cc
+## Compiler cache: pace-cc
 
 `linux-compilers`, `linux-sanitizers`, `ladder-tests`, and
-`ladder-sanitizers` each set `FASTCACHE_ADDR=host.docker.internal:6674`
+`ladder-sanitizers` each set `PACE_ADDR=host.docker.internal:6674`
 as job-level env — but **only** when `probe-self-hosted` chose the
 self-hosted path; it is left empty on the GitHub-hosted fallback, where
 `host.docker.internal` does not resolve (it isn't a Docker container) and
 morph's `cmake/CompileCache.cmake` has no daemon to reach anyway.
 
-`FASTCACHE_AUTO_INSTALL` is a plain CMake `option()`, not something
+`PACE_AUTO_INSTALL` is a plain CMake `option()`, not something
 `CompileCache.cmake` reads from the environment the way it does
-`FASTCACHE_ADDR` — a job-level env var of that name would be silently
+`PACE_ADDR` — a job-level env var of that name would be silently
 ignored, reaching only `option()`'s CMake-cache default rather than
 CompileCache.cmake's auto-install logic. So `ci.yml` never sets it as env
 at all. Instead each of those five jobs precomputes a same-named job-level
-env var, `MORPH_FASTCACHE_AUTO_INSTALL_FLAG`, whose value on the
-self-hosted path is the literal string `-DFASTCACHE_AUTO_INSTALL=ON` (and
+env var, `MORPH_PACE_AUTO_INSTALL_FLAG`, whose value on the
+self-hosted path is the literal string `-DPACE_AUTO_INSTALL=ON` (and
 empty on the GitHub-hosted fallback), and every Configure step splices
-`$MORPH_FASTCACHE_AUTO_INSTALL_FLAG` directly onto the `cmake --preset`
+`$MORPH_PACE_AUTO_INSTALL_FLAG` directly onto the `cmake --preset`
 command line, so the flag reaches CMake the only way it can take effect.
 
 `host.docker.internal:6674` is the same literal address on every host --
 `ci.yml` hardcodes it, it does not vary by which runner picks up the job --
-which means **every host running these runners needs its own `fastcached`
+which means **every host running these runners needs its own `pace-kv`
 daemon reachable at that address from inside its containers**. There is
 no single shared cache across hosts; each host caches its own compiles.
 How `host.docker.internal` resolves differs by platform:
 
 - **Docker Desktop (Windows/macOS hosts)**: resolves automatically to
   whatever the host's `127.0.0.1` means — i.e. that machine's own
-  `fastcached` service (kept outside this repository). That service must be **running** and its
-  `fastcached.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
+  `pace-kv` service (kept outside this repository). That service must be **running** and its
+  `pace-kv.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
   or a container cannot reach it at all (`127.0.0.1` inside a container
   means the container itself).
 - **Plain Linux Docker Engine (a workstation or a cloud VM)**: does
@@ -541,22 +545,22 @@ How `host.docker.internal` resolves differs by platform:
   Desktop does. `bootstrap-cloud-node.sh` adds it explicitly via
   `--add-host=host.docker.internal:host-gateway` on each worker
   container — confirmed live (`REACHABLE` from inside a worker to
-  `fastcached` on the same box). A worker started without that flag on a
+  `pace-kv` on the same box). A worker started without that flag on a
   Linux host would fail to resolve the address and fall through to
   `sccache` instead (never a hard failure, just a slower cache).
-- **A Linux workstation that already runs `fastcached` for its own
+- **A Linux workstation that already runs `pace-kv` for its own
   builds**: the daemon there is typically bound to `127.0.0.1` and built
   from source, and neither is usable by a container as-is. See the two
   subsections below.
 
-### A workstation that already runs its own fastcached
+### A workstation that already runs its own pace-kv
 
-A developer machine's `fastcached` listens on loopback, which inside a
+A developer machine's `pace-kv` listens on loopback, which inside a
 container means the container itself. Two ways to give the runners a cache
 on such a host; the second is what these runners are set up for:
 
 1. **Add a listener on the Docker bridge gateway** to the existing daemon —
-   `listeners:` in `fastcached.yaml` supersedes `bind`/`port`, so both
+   `listeners:` in `pace-kv.yaml` supersedes `bind`/`port`, so both
    endpoints must be spelled out:
 
    ```yaml
@@ -573,15 +577,15 @@ on such a host; the second is what these runners are set up for:
 
 2. **Run a second daemon, as a host process**, bound to the bridge address
    only and left on a released version, with the personal one untouched on
-   loopback — e.g. as a `systemd --user` unit (`fastcached-ci.service`)
+   loopback — e.g. as a `systemd --user` unit (`pace-kv-ci.service`)
    running the 0.1.1 release binary:
 
    ```yaml
-   # ~/.local/opt/fastcached-0.1.1/fastcached-ci.yaml
+   # ~/.local/opt/pace-0.6.0/pace-kv-ci.yaml
    listeners:
      - address: 172.17.0.1     # the bridge gateway, not the LAN
        port: 6674
-   storage_path: /home/<user>/.local/state/fastcached-ci/cache
+   storage_path: /home/<user>/.local/state/pace-kv-ci/cache
    storage_max_disk: 30g
    storage_max_value: 256m
    max_memory: 8g
@@ -594,7 +598,7 @@ on such a host; the second is what these runners are set up for:
    `host.docker.internal:6674` either way, and a host process is one less
    moving part than a container publishing a port back to its own host. Give
    it **its own `storage_path`** — started without `--config` it would read
-   the personal `fastcached.yaml` and two daemons would write one cache file.
+   the personal `pace-kv.yaml` and two daemons would write one cache file.
 
    The Ubuntu release binary links `libyaml-cpp 0.8`; a distribution that
    ships 0.9 (Arch, for one) can vendor just that library beside the binary
@@ -608,8 +612,8 @@ on such a host; the second is what these runners are set up for:
 
 ### The daemon and the launcher have to be version-compatible
 
-`FASTCACHE_AUTO_INSTALL=ON` fetches the newest **released** `fastcache-cc`
-from the `fastcached` project's GitHub Releases. A daemon built from that
+`PACE_AUTO_INSTALL=ON` fetches the newest **released** `pace-cc`
+from the Pace project's GitHub Releases. A daemon built from that
 project's `master` can be far ahead of its last release and **refuses that
 client**, which is why the daemon serving the runners has to be a release
 build, not whatever from-source one is already on the box.
@@ -628,22 +632,22 @@ The same container against a `fastcached` 0.1.1 release build selects it,
 and a second build from a wiped build directory hits the cache
 (`fastcached_get_hits_total` 0 → 3). Note the last line of the failing run:
 on the self-hosted path `ci.yml` deliberately does not install `sccache`,
-so a rejected `fastcache-cc` is not a slower cache, it is **no cache at
+so a rejected `pace-cc` is not a slower cache, it is **no cache at
 all** — and it says so in the configure log rather than failing, which is
 what makes it easy to miss.
 
-This applies to `bootstrap-cloud-node.sh` too, which builds `fastcached`
+This applies to `bootstrap-cloud-node.sh` too, which builds `pace-kv`
 from a `master` checkout.
 
-If a host has no `fastcached` reachable at all (or `FASTCACHE_ADDR` is
+If a host has no `pace-kv` reachable at all (or `PACE_ADDR` is
 left unset there), the module falls back to `sccache` (already installed
 by every job) with zero other changes needed; see
 `cmake/CompileCache.cmake`'s own header comment for the full
-fastcache-cc → sccache → ccache → none preference order.
+pace-cc → sccache → ccache → none preference order.
 
-`FASTCACHE_AUTO_INSTALL=ON` is what lets this work without prebaking
-`fastcache-cc` into the runner image: on first configure, CMake downloads
-a prebuilt `fastcache-cc` binary from the `fastcached` project's own
+`PACE_AUTO_INSTALL=ON` is what lets this work without prebaking
+`pace-cc` into the runner image: on first configure, CMake downloads
+a prebuilt `pace-cc` binary from the Pace project's own
 GitHub Releases (cached per-user, per-version, so this costs one download
 per container, not per build) — see
 `cmake/CompileCache.cmake`'s "Optional auto-install" section for exactly

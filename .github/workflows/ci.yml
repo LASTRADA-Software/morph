@@ -13,7 +13,7 @@ on:
 #
 # That is not only this repository's problem. GitHub's concurrency allowance is
 # per ACCOUNT, not per repository, so those generations sit in one queue shared
-# with every other repo in the org and starve them: `fastcached` had fifteen
+# with every other repo in the org and starve them: `pace` had fifteen
 # jobs waiting behind this workflow with none running, and the oldest run here
 # had been queued for over five hours.
 #
@@ -66,8 +66,8 @@ env:
   # to hold every job's build. The Windows job overrides it, since MSVC has no
   # equivalent.
   MORPH_DEBUG_INFO: lines
-  # Attributes every fastcache-cc invocation to this one job, so the
-  # "fastcache-cc stats" steps below can report *this* build's hit rate.
+  # Attributes every pace-cc invocation to this one job, so the
+  # "pace-cc stats" steps below can report *this* build's hit rate.
   # Without it they call `--show-stats` bare, which reads the whole
   # invocations log -- a self-hosted runner's lifetime totals across every job
   # it has ever run. A run of `Linux / all optional features (clang)` that
@@ -80,10 +80,10 @@ env:
   # A group id rather than `--zero-stats`: zeroing is a process-wide truncation
   # of a log this runner's other concurrent jobs are also writing to, so it
   # would race them and destroy their numbers as well as the history. The id is
-  # explicitly not part of the cache key (see `fastcache-cc --help`,
-  # FASTCACHE_PREFETCH_GROUP), so this partitions the *statistics* and never
+  # explicitly not part of the cache key (see `pace-cc --help`,
+  # PACE_PREFETCH_GROUP), so this partitions the *statistics* and never
   # the cache itself -- jobs still read each other's entries.
-  FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
+  PACE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   # A UTF-8 locale on every runner. The hosted image sets one and the
   # self-hosted Docker runners do not; under "C", Qt warns that it switched to
   # C.UTF-8, and the ladder's render smokes fail on any Qt warning.
@@ -225,7 +225,7 @@ jobs:
   # Picks a self-hosted lastrada-docker runner for the Linux legs when one is
   # registered, online, and idle; falls back to the GitHub-hosted label
   # otherwise. The runners are ORGANISATION-level (one fleet serves morph,
-  # fastcached and Lightweight), so this queries the org endpoint -- the
+  # Pace and Lightweight), so this queries the org endpoint -- the
   # repo endpoint returns zero for them and every run would silently go
   # GitHub-hosted with no error anywhere.
   #
@@ -296,19 +296,19 @@ jobs:
       # Only set on the self-hosted path: host.docker.internal does not
       # resolve on a GitHub-hosted VM (it is not a Docker container), and an
       # address that is merely unreachable rather than refusing the
-      # connection stalls fastcache-cc's TCP connect for up to ~2m30s per
+      # connection stalls pace-cc's TCP connect for up to ~2m30s per
       # matrix leg (CompileCache.cmake's own measured worst case) instead of
       # failing fast -- so this must stay empty on that path, not just
       # "wrong but harmless".
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      # FASTCACHE_AUTO_INSTALL is a plain CMake option(), not something
+      PACE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      # PACE_AUTO_INSTALL is a plain CMake option(), not something
       # CompileCache.cmake reads from the environment the way it does
-      # FASTCACHE_ADDR -- an env var of this name is silently ignored, only
-      # -DFASTCACHE_AUTO_INSTALL=ON on the cmake command line reaches it
-      # (confirmed live: FASTCACHE_ADDR landed in CMakeCache.txt from the
-      # environment, FASTCACHE_AUTO_INSTALL stayed OFF). This is that flag,
+      # PACE_ADDR -- an env var of this name is silently ignored, only
+      # -DPACE_AUTO_INSTALL=ON on the cmake command line reaches it
+      # (confirmed live: PACE_ADDR landed in CMakeCache.txt from the
+      # environment, PACE_AUTO_INSTALL stayed OFF). This is that flag,
       # precomputed once so every Configure step below can just splice it in.
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
+      MORPH_PACE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DPACE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -373,8 +373,8 @@ jobs:
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
-      # Skipped on the self-hosted path, which caches through fastcache-cc:
-      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # Skipped on the self-hosted path, which caches through pace-cc:
+      # CompileCache.cmake only auto-installs pace-cc when no other
       # launcher is on PATH, so installing sccache there would disable it.
       - name: Set up sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
@@ -382,16 +382,16 @@ jobs:
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
       # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
-      # which prefers fastcache-cc (this job's FASTCACHE_ADDR, set above, only
+      # which prefers pace-cc (this job's PACE_ADDR, set above, only
       # when running self-hosted) and falls back to the sccache install steps
       # above when no daemon answers -- e.g. this exact job on the
-      # GitHub-hosted fallback runner, which never gets a FASTCACHE_ADDR to
+      # GitHub-hosted fallback runner, which never gets a PACE_ADDR to
       # begin with. Setting the launcher explicitly, as every other Linux job
       # still does, would make CompileCache.cmake bail out before it ever
-      # probes for fastcache-cc (see that file's own comment).
+      # probes for pace-cc (see that file's own comment).
       - name: Configure (gcc)
         if: startsWith(matrix.preset, 'gcc-')
-        run: cmake --preset ${{ matrix.preset }} $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+        run: cmake --preset ${{ matrix.preset }} $MORPH_PACE_AUTO_INSTALL_FLAG
 
       - name: Configure (clang)
         if: startsWith(matrix.preset, 'clang-')
@@ -399,7 +399,7 @@ jobs:
           cmake --preset ${{ matrix.preset }} \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+            $MORPH_PACE_AUTO_INSTALL_FLAG
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -415,7 +415,7 @@ jobs:
       # one you have. `|| true` so a stats failure never fails the job.
       #
       # Guarded the same way as the Set up sccache step above:
-      # sccache is never installed on the self-hosted path (fastcache-cc is
+      # sccache is never installed on the self-hosted path (pace-cc is
       # used there instead), so `sccache --show-stats` would just fail
       # "command not found" there.
       - name: sccache stats
@@ -424,7 +424,7 @@ jobs:
 
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # sccache is not the launcher there -- pace-cc is. Nothing replaced
       # it, so those legs ran with no cache reporting at all: exactly the
       # "unfalsifiable" state the sccache step's own comment warns about, where
       # a thrashing cache and a working one look identical from the outside and
@@ -433,30 +433,30 @@ jobs:
       # The line that matters is
       #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
       # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # Configure still prints "Enabling pace-cc at ..." in that case and
       # the build simply takes as long as a cold one, so no other signal in the
       # job would reveal it.
       #
       # Mirror of the sccache step's condition, so exactly one of the two runs.
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
-      - name: fastcache-cc stats
+      - name: pace-cc stats
         if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          FC="$(command -v fastcache-cc || true)"
+          FC="$(command -v pace-cc || true)"
           if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+            FC="$(ls -t "$HOME"/.cache/pace-cc/*/*/pace-cc 2>/dev/null | head -1 || true)"
           fi
           if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            echo "::warning::pace-cc not found on a self-hosted runner -- the build ran uncached."
             exit 0
           fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          echo "launcher: $FC   PACE_ADDR=${PACE_ADDR:-<unset>}"
           # This job's own numbers, not the runner's lifetime totals. The
           # bare form is kept underneath because the whole-runner view is
           # what shows eviction pressure across jobs, which a single job's
           # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          "$FC" --show-stats --prefetch-group "$PACE_PREFETCH_GROUP" || true
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
@@ -472,13 +472,13 @@ jobs:
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
-      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
-      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
-      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # See linux-compilers' identical env block for why PACE_ADDR is
+      # conditional, and why PACE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_PACE_AUTO_INSTALL_FLAG) rather than an env var of that
       # name -- CompileCache.cmake declares it as a plain option(), which
       # CMake never reads from the environment.
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
+      PACE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_PACE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DPACE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -507,8 +507,8 @@ jobs:
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
-      # Skipped on the self-hosted path, which caches through fastcache-cc:
-      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # Skipped on the self-hosted path, which caches through pace-cc:
+      # CompileCache.cmake only auto-installs pace-cc when no other
       # launcher is on PATH, so installing sccache there would disable it.
       - name: Set up sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
@@ -524,7 +524,7 @@ jobs:
       # loop executor are where a terminal application's threading lives.
       #
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers' Configure
-      # steps for why leaving it unset is what lets fastcache-cc be selected.
+      # steps for why leaving it unset is what lets pace-cc be selected.
       - name: Configure
         run: |
           cmake --preset ${{ matrix.preset }} \
@@ -533,7 +533,7 @@ jobs:
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+            $MORPH_PACE_AUTO_INSTALL_FLAG
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -641,7 +641,7 @@ jobs:
 
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # sccache is not the launcher there -- pace-cc is. Nothing replaced
       # it, so those legs ran with no cache reporting at all: exactly the
       # "unfalsifiable" state the sccache step's own comment warns about, where
       # a thrashing cache and a working one look identical from the outside and
@@ -650,30 +650,30 @@ jobs:
       # The line that matters is
       #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
       # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # Configure still prints "Enabling pace-cc at ..." in that case and
       # the build simply takes as long as a cold one, so no other signal in the
       # job would reveal it.
       #
       # Mirror of the sccache step's condition, so exactly one of the two runs.
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
-      - name: fastcache-cc stats
+      - name: pace-cc stats
         if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          FC="$(command -v fastcache-cc || true)"
+          FC="$(command -v pace-cc || true)"
           if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+            FC="$(ls -t "$HOME"/.cache/pace-cc/*/*/pace-cc 2>/dev/null | head -1 || true)"
           fi
           if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            echo "::warning::pace-cc not found on a self-hosted runner -- the build ran uncached."
             exit 0
           fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          echo "launcher: $FC   PACE_ADDR=${PACE_ADDR:-<unset>}"
           # This job's own numbers, not the runner's lifetime totals. The
           # bare form is kept underneath because the whole-runner view is
           # what shows eviction pressure across jobs, which a single job's
           # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          "$FC" --show-stats --prefetch-group "$PACE_PREFETCH_GROUP" || true
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
@@ -930,13 +930,13 @@ jobs:
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
-      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
-      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
-      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # See linux-compilers' identical env block for why PACE_ADDR is
+      # conditional, and why PACE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_PACE_AUTO_INSTALL_FLAG) rather than an env var of that
       # name -- CompileCache.cmake declares it as a plain option(), which
       # CMake never reads from the environment.
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
+      PACE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_PACE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DPACE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1142,15 +1142,15 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Skipped on the self-hosted path, which caches through fastcache-cc:
-      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # Skipped on the self-hosted path, which caches through pace-cc:
+      # CompileCache.cmake only auto-installs pace-cc when no other
       # launcher is on PATH, so installing sccache there would disable it.
       - name: Set up sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: ./.github/actions/sccache-setup
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
-      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # Configure steps for why leaving it unset is what lets pace-cc
       # be selected.
       # Bank is rung 2, so -DMORPH_LADDER_RUNGS=all already adds it through the
       # rung loop; -DMORPH_BUILD_BANK_EXAMPLE=ON asks for it explicitly as
@@ -1176,7 +1176,7 @@ jobs:
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+            $MORPH_PACE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
@@ -1322,7 +1322,7 @@ jobs:
 
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # sccache is not the launcher there -- pace-cc is. Nothing replaced
       # it, so those legs ran with no cache reporting at all: exactly the
       # "unfalsifiable" state the sccache step's own comment warns about, where
       # a thrashing cache and a working one look identical from the outside and
@@ -1331,30 +1331,30 @@ jobs:
       # The line that matters is
       #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
       # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # Configure still prints "Enabling pace-cc at ..." in that case and
       # the build simply takes as long as a cold one, so no other signal in the
       # job would reveal it.
       #
       # Mirror of the sccache step's condition, so exactly one of the two runs.
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
-      - name: fastcache-cc stats
+      - name: pace-cc stats
         if: "always() && steps.filter.outputs.run == 'true' && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          FC="$(command -v fastcache-cc || true)"
+          FC="$(command -v pace-cc || true)"
           if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+            FC="$(ls -t "$HOME"/.cache/pace-cc/*/*/pace-cc 2>/dev/null | head -1 || true)"
           fi
           if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            echo "::warning::pace-cc not found on a self-hosted runner -- the build ran uncached."
             exit 0
           fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          echo "launcher: $FC   PACE_ADDR=${PACE_ADDR:-<unset>}"
           # This job's own numbers, not the runner's lifetime totals. The
           # bare form is kept underneath because the whole-runner view is
           # what shows eviction pressure across jobs, which a single job's
           # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          "$FC" --show-stats --prefetch-group "$PACE_PREFETCH_GROUP" || true
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
@@ -1391,13 +1391,13 @@ jobs:
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
-      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
-      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
-      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # See linux-compilers' identical env block for why PACE_ADDR is
+      # conditional, and why PACE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_PACE_AUTO_INSTALL_FLAG) rather than an env var of that
       # name -- CompileCache.cmake declares it as a plain option(), which
       # CMake never reads from the environment.
-      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
+      PACE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_PACE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DPACE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1480,15 +1480,15 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      # Skipped on the self-hosted path, which caches through fastcache-cc:
-      # CompileCache.cmake only auto-installs fastcache-cc when no other
+      # Skipped on the self-hosted path, which caches through pace-cc:
+      # CompileCache.cmake only auto-installs pace-cc when no other
       # launcher is on PATH, so installing sccache there would disable it.
       - name: Set up sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: ./.github/actions/sccache-setup
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
-      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # Configure steps for why leaving it unset is what lets pace-cc
       # be selected.
       - name: Configure (clang-asan, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
@@ -1499,7 +1499,7 @@ jobs:
             -DMORPH_LADDER_RUNGS=all \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+            $MORPH_PACE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once during the
@@ -1606,7 +1606,7 @@ jobs:
 
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
-      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # sccache is not the launcher there -- pace-cc is. Nothing replaced
       # it, so those legs ran with no cache reporting at all: exactly the
       # "unfalsifiable" state the sccache step's own comment warns about, where
       # a thrashing cache and a working one look identical from the outside and
@@ -1615,30 +1615,30 @@ jobs:
       # The line that matters is
       #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
       # which is how a daemon that is configured but never answering shows up.
-      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # Configure still prints "Enabling pace-cc at ..." in that case and
       # the build simply takes as long as a cold one, so no other signal in the
       # job would reveal it.
       #
       # Mirror of the sccache step's condition, so exactly one of the two runs.
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
-      - name: fastcache-cc stats
+      - name: pace-cc stats
         if: "always() && steps.filter.outputs.run == 'true' && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          FC="$(command -v fastcache-cc || true)"
+          FC="$(command -v pace-cc || true)"
           if [ -z "$FC" ]; then
-            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+            FC="$(ls -t "$HOME"/.cache/pace-cc/*/*/pace-cc 2>/dev/null | head -1 || true)"
           fi
           if [ -z "$FC" ]; then
-            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            echo "::warning::pace-cc not found on a self-hosted runner -- the build ran uncached."
             exit 0
           fi
-          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          echo "launcher: $FC   PACE_ADDR=${PACE_ADDR:-<unset>}"
           # This job's own numbers, not the runner's lifetime totals. The
           # bare form is kept underneath because the whole-runner view is
           # what shows eviction pressure across jobs, which a single job's
           # slice cannot.
-          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          "$FC" --show-stats --prefetch-group "$PACE_PREFETCH_GROUP" || true
           echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
@@ -1875,7 +1875,7 @@ jobs:
       # generated header is likewise a configure_file() (configure-time), not
       # a build-time add_custom_command, so it's already on disk too.
       #
-      # Compiler caching (sccache/fastcache-cc) is not set up here: nothing is
+      # Compiler caching (sccache/pace-cc) is not set up here: nothing is
       # compiled beyond a few generated headers.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |

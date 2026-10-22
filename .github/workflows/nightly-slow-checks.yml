@@ -41,7 +41,7 @@ env:
   # than that leaves the stats step reading a fresh server's zero counters.
   SCCACHE_IDLE_TIMEOUT: "0"
   MORPH_DEBUG_INFO: lines
-  FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
+  PACE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
   CATCH2_VERSION: "3.4.0"
   QT_VERSION: "6.8.1"

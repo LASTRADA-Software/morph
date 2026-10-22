@@ -681,7 +681,7 @@ endfunction()
 # is developed in. -ffile-prefix-map (or -fmacro-prefix-map for __FILE__ alone)
 # is the obvious remedy and it is NOT applied here, for the measured reason
 # above rather than an assumed one. Two directories holding byte-identical
-# sources, compiled through `fastcache-cc clang++` with FASTCACHE_SOURCE_DIR set
+# sources, compiled through `pace-cc clang++` with PACE_SOURCE_DIR set
 # to each in turn, second compile is the measurement:
 #
 #   no flag                         wtA MISS, wtB HIT   <- the cache works
@@ -690,11 +690,11 @@ endfunction()
 #                                   wtB's object bakes in "src/tu.cpp"
 #
 # Two distinct keys for identical sources (fc776d3b… vs d43ea282…), because the
-# flag carries the absolute source root and fastcache-cc's path canonicalisation
+# flag carries the absolute source root and pace-cc's path canonicalisation
 # does not normalise an arbitrary command-line argument the way it normalises
 # the source operand. Reproduced twice. So the flag fixes the paths by
 # destroying the cross-worktree hit rate that is the whole reason
-# cmake/CompileCache.cmake prefers fastcache-cc over ccache here -- a worse
+# cmake/CompileCache.cmake prefers pace-cc over ccache here -- a worse
 # trade than the defect. Treat an absolute path in a multi-lane test failure as
 # untrusted instead; CONTRIBUTING.md's "Quality gates" says how.
 #

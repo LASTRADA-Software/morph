@@ -17,7 +17,7 @@
 # the report while its tests ran and passed.
 #
 # The mechanism, demonstrated directly: compile one translation unit in
-# worktree A through fastcache-cc, then compile the byte-identical unit in
+# worktree A through pace-cc, then compile the byte-identical unit in
 # worktree B, and B's object carries A's paths --
 #
 #     SF:/home/.../T-tests-426-repro/wtA/lib.hpp     <- from B's build

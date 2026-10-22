@@ -55,7 +55,7 @@ RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=2
 RUNNER_MEMORY=6g
 RUNNER_IMAGE=lastrada-runner:latest
-FASTCACHE_ADDR=host.docker.internal:6674
+PACE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=2
 CONF
 
@@ -107,6 +107,26 @@ if printf '%s\n' "$out" | grep -v '^STDIN:' | grep -q 'tok-ABC123'; then
     fail "the token leaked into the docker argv"
 else
     note "token absent from the docker argv"
+fi
+
+# ── the cache address reaches the container as PACE_ADDR ─────────────────────
+if has 'PACE_ADDR=host.docker.internal:6674'; then
+    note "PACE_ADDR passed to the container"
+else
+    fail "PACE_ADDR=host.docker.internal:6674 missing from the docker argv"
+fi
+
+# A config predating the rename names FASTCACHE_ADDR; it must still arrive.
+sed -i 's/^PACE_ADDR=/FASTCACHE_ADDR=/' "${scratch}/config"
+legacy="$(LASTRADA_RUNNER_DRY_RUN=1 \
+         LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+         LASTRADA_RUNNER_GH="${scratch}/gh" \
+         LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
+         bash "$launcher" 3 2>&1)" || legacy=""
+if printf '%s\n' "$legacy" | grep -qxF -- 'PACE_ADDR=host.docker.internal:6674'; then
+    note "a FASTCACHE_ADDR config still reaches the container as PACE_ADDR"
+else
+    fail "a FASTCACHE_ADDR config did not reach the container as PACE_ADDR"
 fi
 
 # ── systemd owns the lifecycle, not Docker ───────────────────────────────────

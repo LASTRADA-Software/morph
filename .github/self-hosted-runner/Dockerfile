@@ -97,7 +97,7 @@ RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test \
     && rm -rf /var/lib/apt/lists/*
 
 # Packages GitHub-hosted ubuntu-24.04 ships that morph's own jobs never
-# needed, but fastcached's and Lightweight's do now that one fleet serves all
+# needed, but Pace's and Lightweight's do now that one fleet serves all
 # three repositories. Each was found absent by auditing those two repos'
 # Linux jobs against this image, not guessed:
 #

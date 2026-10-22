@@ -6,7 +6,7 @@
 # Byte-for-byte core-cpp's cmake/CPM.cmake below this comment, so the two
 # projects load the same CPM and a diff between the copies shows only this
 # header. The pin is 0.40.8 with its SHA-256; the download is bounded when the
-# configure defines FASTCACHED_FETCH_SILENCE_SECONDS and unbounded otherwise,
+# configure defines PACE_FETCH_SILENCE_SECONDS and unbounded otherwise,
 # because an empty INACTIVITY_TIMEOUT would break the argument list.
 #
 # With CPM_SOURCE_CACHE set (CMakeLists.txt defaults it to .cache/cpm) the
@@ -20,8 +20,8 @@
 # configure without this download is to install the dependency that line names
 # and point CMAKE_PREFIX_PATH at it.
 set(_coreCppCpmBound "")
-if(DEFINED FASTCACHED_FETCH_SILENCE_SECONDS)
-    set(_coreCppCpmBound INACTIVITY_TIMEOUT "${FASTCACHED_FETCH_SILENCE_SECONDS}")
+if(DEFINED PACE_FETCH_SILENCE_SECONDS)
+    set(_coreCppCpmBound INACTIVITY_TIMEOUT "${PACE_FETCH_SILENCE_SECONDS}")
 endif()
 
 set(CPM_DOWNLOAD_VERSION 0.40.8)
