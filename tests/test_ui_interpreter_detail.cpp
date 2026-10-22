@@ -379,3 +379,99 @@ TEST_CASE("interpreter: a view node's chord runs its commands", "[ui][interprete
     h.settle();
     CHECK(h.text("hit") == "1");
 }
+
+// Mutation: map a lower-case digit as an upper-case one (`chr - 'A'`), or drop `+` or `/` (each decodes wrongly).
+TEST_CASE("interpreter: inline bytes are base64 text over the whole alphabet, or a list of bytes",
+          "[ui][interpreter][transfer]") {
+    using ui::detail::base64Decode;
+    using ui::detail::inlineBytes;
+    CHECK(base64Decode("TWFu") == std::string{"Man"});
+    CHECK(base64Decode("bWFu") == std::string{"man"});
+    CHECK(base64Decode("MTIz") == std::string{"123"});
+    CHECK(base64Decode("+/8=") == std::string{"\xFB\xFF"});
+    CHECK(base64Decode("TWE=") == std::string{"Ma"});
+    CHECK(base64Decode("") == std::string{});
+    CHECK_FALSE(base64Decode("TWFuT").has_value());  // one digit past a group carries no whole byte
+    CHECK_FALSE(base64Decode("TW-u").has_value());
+
+    CHECK(inlineBytes(Value{"YSxi"}) == std::string{"a,b"});
+    CHECK(inlineBytes(Value{"not base64!"}).error() == "the text is not base64");
+    CHECK(inlineBytes(Value{ValueList{Value{std::int64_t{97}}, Value{std::int64_t{0}}, Value{std::int64_t{255}}}}) ==
+          std::string{"a\0\xFF", 3});
+    CHECK(inlineBytes(Value{ValueList{Value{std::int64_t{256}}}}).error() == "a byte list holds integers 0 to 255");
+    CHECK(inlineBytes(Value{ValueList{Value{std::int64_t{-1}}}}).error() == "a byte list holds integers 0 to 255");
+    CHECK(inlineBytes(Value{ValueList{Value{"a"}}}).error() == "a byte list holds integers 0 to 255");
+    CHECK(inlineBytes(Value{std::int64_t{1}}).error() == "inline bytes are base64 text or a list of bytes");
+}
+
+// Mutation: accept any JSON for a typed prop (a string payload passes as an int).
+TEST_CASE("interpreter: a field component's change is its payload read as the value prop's type",
+          "[ui][interpreter][custom]") {
+    using ui::detail::changeWire;
+    auto const text = [](std::string const& payload, std::string_view type) {
+        auto const wire = changeWire(payload, type);
+        REQUIRE(wire.has_value());
+        REQUIRE(wire->is_string());
+        return wire->get<std::string>();
+    };
+    CHECK(text("s:hello", "string") == "hello");
+    CHECK(text("plain", "string") == "plain");
+    CHECK(text("\"12.50\"", "exact") == "12.50");
+
+    CHECK(changeWire("i:42", "int")->is_number());
+    CHECK(changeWire("4.5", "number")->is_number());
+    CHECK(changeWire("7", "exact")->is_number());
+    CHECK(changeWire("true", "bool")->is_boolean());
+    CHECK(changeWire("null", "int")->is_null());
+    CHECK(changeWire("[1,2]", "json")->is_array());
+
+    CHECK(changeWire("{not", "json").error() == "it is not JSON");
+    CHECK(changeWire("\"x\"", "int").error() == "it is not an int");
+    CHECK(changeWire("\"x\"", "number").error() == "it is not a number");
+    CHECK(changeWire("1", "bool").error() == "it is not a bool");
+    CHECK(changeWire("true", "exact").error() == "it is not an exact");
+}
+
+// Mutation: stop at a record without the key field instead of reading its members as rows (the map's rows are lost).
+TEST_CASE("interpreter: held rows are found and patched in a list, under a member, and as a map's values",
+          "[ui][interpreter]") {
+    using ui::detail::keyedRowsOf;
+    using ui::detail::patchHeldRows;
+    using ui::detail::RowsByKey;
+    Value const byName = record({{"first", row(1, "a")}, {"second", row(2, "b")}, {"note", Value{"not a row"}}});
+    Value const held = record({{"rows", Value{ValueList{row(3, "c")}}}, {"byName", byName}});
+
+    std::vector<Value const*> const found = keyedRowsOf(held, {"rows", "byName", "absent"}, "id");
+    REQUIRE(found.size() == 3);
+    CHECK(*found.at(0) == row(3, "c"));
+    CHECK(keyedRowsOf(Value{"flat"}, {"rows"}, "id").empty());
+
+    Value const newer = row(2, "B");
+    Value const unrelated = row(9, "z");
+    RowsByKey const rows{
+        {ui::detail::canonicalJson(Value{std::int64_t{2}}), &newer},
+        {ui::detail::canonicalJson(Value{std::int64_t{9}}), &unrelated},
+    };
+    std::optional<Value> const patched = patchHeldRows(held, {"rows", "byName", "absent"}, "id", rows);
+    REQUIRE(patched.has_value());
+    CHECK(*patched->field("byName")->field("second") == row(2, "B"));
+    CHECK(*patched->field("byName")->field("first") == row(1, "a"));
+    CHECK(*patched->field("rows") == Value{ValueList{row(3, "c")}});
+
+    RowsByKey const none{{ui::detail::canonicalJson(Value{std::int64_t{9}}), &unrelated}};
+    CHECK_FALSE(patchHeldRows(held, {"rows", "byName", "absent"}, "id", none).has_value());
+    CHECK_FALSE(patchHeldRows(Value{"flat"}, {""}, "id", rows).has_value());
+}
+
+// Mutation: accept a record with a second member (`{"fixed": 3, "stretch": 1}` reads as fixed and hides the slip).
+TEST_CASE("interpreter: a sizing is \"content\", or one fixed or stretch member holding an int", "[ui][interpreter]") {
+    using ui::detail::isSizing;
+    CHECK(isSizing(Value{"content"}));
+    CHECK_FALSE(isSizing(Value{"wide"}));
+    CHECK(isSizing(record({{"fixed", Value{std::int64_t{3}}}})));
+    CHECK(isSizing(record({{"stretch", Value{std::int64_t{2}}}})));
+    CHECK_FALSE(isSizing(record({{"fixed", Value{"3"}}})));
+    CHECK_FALSE(isSizing(record({{"fill", Value{std::int64_t{1}}}})));
+    CHECK_FALSE(isSizing(record({{"fixed", Value{std::int64_t{3}}}, {"stretch", Value{std::int64_t{1}}}})));
+    CHECK_FALSE(isSizing(Value{std::int64_t{3}}));
+}

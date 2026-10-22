@@ -78,8 +78,12 @@ TEST_CASE("LocalSource: opens the linked application's bundle, verified, through
           "[client][source]") {
     FakeAppContext context;
     LocalSource source{probe::app(), LocalSetup{}};
+    CHECK(source.bundle() == nullptr);  // nothing delivered yet
+    CHECK(source.catalogReply() == nullptr);
     Opened const opened = openAndWait(context, source);
     REQUIRE(opened.has_value());
+    CHECK(source.bundle() != nullptr);
+    CHECK(source.catalogReply() != nullptr);
     CHECK(opened->applicationId == "probe");
     CHECK(opened->documents.contains("probe.home"));
     CHECK(opened->documents.contains("probe.other"));

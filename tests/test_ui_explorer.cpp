@@ -117,7 +117,7 @@ struct Fixture {
     std::vector<std::string> opened;
     std::unique_ptr<morph::ui::StackWidget> page = harness.backend.createStack(nullptr, morph::ui::Axis::Vertical);
 
-    std::unique_ptr<Explorer> explorer() {
+    std::unique_ptr<Explorer> explorer(std::function<void(ExplorerOptions&)> const& adjust = {}) {
         ExplorerOptions options;
         options.catalog = twoModels();
         options.facts = corpusCatalog();
@@ -129,6 +129,9 @@ struct Fixture {
             provided.insert_or_assign(screenId, std::move(document));
         };
         options.onOpen = [this](std::string const& screenId) { opened.push_back(screenId); };
+        if (adjust) {
+            adjust(options);
+        }
         auto made = std::make_unique<Explorer>(harness.runtime, harness.backend, *page, std::move(options));
         harness.settle();
         return made;
@@ -282,6 +285,29 @@ TEST_CASE("Explorer: the screens and every model the catalog names, a refused on
           "false");
     CHECK(f.harness.backend.prop(f.byTestId("Button", "explorer_action_Lims_ConfirmSample"), "visible") != "false");
     CHECK(f.harness.backend.prop(f.byTestId("Button", "explorer_screen_samples"), "visible") == "false");
+}
+
+// Mutation: read a localized title's first text instead of its `fallback` (the screen is titled "Proben").
+TEST_CASE("Explorer: a screen is titled by its text, a localized title's fallback, or else its id", "[ui][explorer]") {
+    Fixture f;
+    auto const title = [](std::string_view json) {
+        auto parsed = morph::ui::parseJson(json);
+        REQUIRE(parsed.has_value());
+        return *std::move(parsed);
+    };
+    auto const explorer = f.explorer([&title](ExplorerOptions& options) {
+        options.catalog.entries = {
+            CatalogEntry{.id = "localized", .title = title(R"({"de":"Proben","fallback":"All samples"})")},
+            CatalogEntry{.id = "noFallback", .title = title(R"({"de":"Proben","en":7})")},
+            CatalogEntry{.id = "numbered", .title = title("7")},
+        };
+    });
+    auto const label = [&f](std::string_view testId) {
+        return f.harness.backend.prop(f.byTestId("Button", testId), "label");
+    };
+    CHECK(label("explorer_screen_localized") == "All samples");
+    CHECK(label("explorer_screen_noFallback") == "noFallback");
+    CHECK(label("explorer_screen_numbered") == "numbered");
 }
 
 // Mutation: skip showUses (the "Used by" card is missing).

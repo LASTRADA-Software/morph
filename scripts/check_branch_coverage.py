@@ -100,6 +100,9 @@ import tempfile
 # new to the denominator rather than new to the code. Kept here as the
 # prior data point; the floors below are all from the 2026-09-07 run.
 FLOORS = {
+    # Measured locally over the CI coverage leg's configure (4 branch arms, all taken): only what a source holds
+    # before its first bundle branches.
+    "include/morph/client": (97.0, 100.00),
     "include/morph/core": (94.0, 97.37),
     "include/morph/detail": (97.0, 100.00),
     "include/morph/forms": (91.0, 94.78),
