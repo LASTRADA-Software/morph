@@ -221,6 +221,13 @@ TEST_CASE("interpreter: a channel that is missing or throws fails the query and 
     }
 }
 
+// GCC 15 at -O3 loses track of the variant's index once a list's make_shared is inlined, and reports the
+// string branch of engaged() as reading an uninitialized length on a value that holds a list -- a branch it
+// can never take.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 // Mutation: count an empty list as engaged.
 TEST_CASE("interpreter: engaged is false for null, empty text and an empty list", "[ui][interpreter]") {
     using ui::detail::engaged;
@@ -231,6 +238,9 @@ TEST_CASE("interpreter: engaged is false for null, empty text and an empty list"
     CHECK(engaged(Value{"x"}));
     CHECK(engaged(Value{false}));
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 // Mutation: show a quantity without its unit.
 TEST_CASE("interpreter: a quantity's text is its number and its unit", "[ui][interpreter]") {
