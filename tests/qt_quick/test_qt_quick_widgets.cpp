@@ -372,6 +372,12 @@ TEST_CASE("qt_quick widgets: a date-time input formats in its zone and parses wh
     scene.key(Qt::Key_Return);
     CHECK(changes.size() == 1);
     CHECK(base(*input).shownText() == "2026-10-12 01:15");
+    // A second unparseable edit in a row still shows the held value.
+    scene.key(Qt::Key_A, Qt::ControlModifier);
+    scene.type(QStringLiteral("later"));
+    scene.key(Qt::Key_Return);
+    CHECK(changes.size() == 1);
+    CHECK(base(*input).shownText() == "2026-10-12 01:15");
     // An emptied field is a cleared value.
     scene.key(Qt::Key_A, Qt::ControlModifier);
     scene.key(Qt::Key_Delete);
