@@ -309,7 +309,8 @@ std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::Date
 
 DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes)
     : FieldItemWidget{context, QStringLiteral("MorphDateTimeInput"), parent,
-                      QVariantMap{{QStringLiteral("withTime"), mode == ui::DateMode::DateTime}}},
+                      QVariantMap{{QStringLiteral("withTime"), mode == ui::DateMode::DateTime},
+                                  {QStringLiteral("offsetMinutes"), offsetMinutes}}},
       _mode{mode},
       _offsetMinutes{offsetMinutes} {
     relay().on(QStringLiteral("edit"), [this](QVariant const& payload) {

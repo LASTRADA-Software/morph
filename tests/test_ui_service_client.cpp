@@ -897,5 +897,6 @@ TEST_CASE("parseThemeIndex reads the icon set and refuses a name that is not an 
     CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":{"tone.ok":""}})"));
     CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":["tick"]})"));
     CHECK(morph::ui::iconGlyph("tone.ok") == "✓");
+    CHECK(morph::ui::iconGlyph("date.pick") == "▦");
     CHECK(morph::ui::iconGlyph("mine").empty());
 }
