@@ -1,5 +1,17 @@
 var NAVTREEINDEX32 =
 {
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a3dccef17042a95c5ddde0a7bcd5d61cd":[3,0,0,28,157,5],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a4404da9e2ed2b0c94a7f6692eeeaaa79":[1,0,0,1,155,4],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a4404da9e2ed2b0c94a7f6692eeeaaa79":[3,0,0,28,157,4],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a6472f7d9f34549ffd80f9a3c5392b72e":[1,0,0,1,155,1],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a6472f7d9f34549ffd80f9a3c5392b72e":[3,0,0,28,157,1],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#ad31cc2f8716ff708173ca2f3ed091048":[1,0,0,1,155,3],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#ad31cc2f8716ff708173ca2f3ed091048":[3,0,0,28,157,3],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#adb73de511044a4d3629292965d817305":[1,0,0,1,155,2],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#adb73de511044a4d3629292965d817305":[3,0,0,28,157,2],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#adf3a3160f892f0ff918d64ea3a714c38":[1,0,0,1,155,0],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#adf3a3160f892f0ff918d64ea3a714c38":[3,0,0,28,157,0],
+"df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html":[3,0,0,28,0,51],
 "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a199239977d329a77e28c7ad9ac9418b1":[3,0,0,28,0,51,2],
 "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a2742f92345049f85eb68b8f7df7e9ee6":[3,0,0,28,0,51,3],
 "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html#a4986a92db43e14edbb829e023ece58f6":[3,0,0,28,0,51,1],
@@ -237,17 +249,5 @@ var NAVTREEINDEX32 =
 "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ae48ceaf981ed57991de9490bf0fe67ae":[3,0,0,28,9,3],
 "df/d6a/attributes_8hpp_source.html":[4,0,0,17],
 "df/d6c/structmorph_1_1forms_1_1PendingConfirm.html":[3,0,0,10,45],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a1f706036cd6b6958191a4257c03d60f7":[3,0,0,10,45,2],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a3523c1c68b2e93909fda552a5be4f350":[3,0,0,10,45,0],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a8741b7978db26d3aa9f9bb9a3bab192d":[3,0,0,10,45,1],
-"df/d74/qt__websocket__server_8hpp_source.html":[4,0,0,7,4],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html":[3,0,0,10,11],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a09aa7e61ccbec002acf7ab1802fa515e":[3,0,0,10,11,14],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a26923b7dd468988ecdd8d37a5556d903":[3,0,0,10,11,11],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a2ccad77a02f8542f509f653d633d7dcb":[3,0,0,10,11,6],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a3435f0b1d4435861c815e0fa4bcf5285":[3,0,0,10,11,8],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a39dc20928f5242a7b5fd90618ad7002f":[3,0,0,10,11,4],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a3b4cc38eb5b1ed3ea1fae62524d110f3":[3,0,0,10,11,5],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a42a9b8496e612df8a427d88540623679":[3,0,0,10,11,2],
-"df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a50dd06e3cf766c62732f6c886998075f":[3,0,0,10,11,1]
+"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a1f706036cd6b6958191a4257c03d60f7":[3,0,0,10,45,2]
 };

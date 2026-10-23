@@ -1,5 +1,15 @@
 var NAVTREEINDEX20 =
 {
+"da/d37/structmorph_1_1wire_1_1ProtocolRange.html":[3,0,0,32,2],
+"da/d37/structmorph_1_1wire_1_1ProtocolRange.html#a6190fe5bcb853346f49dc971ad241e25":[3,0,0,32,2,1],
+"da/d37/structmorph_1_1wire_1_1ProtocolRange.html#a74af592f27e1076c920feaabc3915c31":[3,0,0,32,2,2],
+"da/d37/structmorph_1_1wire_1_1ProtocolRange.html#adfa4a6388f9041899122c1ee4dae90f6":[3,0,0,32,2,0],
+"da/d3e/classmorph_1_1table_1_1TextCollator.html":[3,0,0,24,46],
+"da/d3e/classmorph_1_1table_1_1TextCollator.html#a0d97f5ed73c9cafbd634ae5846da4fb1":[3,0,0,24,46,0],
+"da/d3e/classmorph_1_1table_1_1TextCollator.html#a4bdd64198cd38ac88e34bb450a7cc3ec":[3,0,0,24,46,1],
+"da/d3e/classmorph_1_1table_1_1TextCollator.html#ad216fe4a53cc0341fb797a68e0403a6f":[3,0,0,24,46,2],
+"da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html":[1,0,0,1,197],
+"da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html":[3,0,0,28,199],
 "da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html#aa933b38b9f94335ea7ded03a3349a3ed":[1,0,0,1,197,1],
 "da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html#aa933b38b9f94335ea7ded03a3349a3ed":[3,0,0,28,199,1],
 "da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html#adcc05b39a0f8015d3f5deb82e9af5921":[1,0,0,1,197,0],
@@ -239,15 +249,5 @@ var NAVTREEINDEX20 =
 "da/d97/classmorph_1_1ui_1_1Screen.html#a9d170f37684ec1cf1d5f5425b050925d":[1,0,0,1,181,4],
 "da/d97/classmorph_1_1ui_1_1Screen.html#a9d170f37684ec1cf1d5f5425b050925d":[3,0,0,28,183,4],
 "da/d97/classmorph_1_1ui_1_1Screen.html#aa6448a986c4487adb6b1a25159505318":[1,0,0,1,181,11],
-"da/d97/classmorph_1_1ui_1_1Screen.html#aa6448a986c4487adb6b1a25159505318":[3,0,0,28,183,11],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ab7cfaeb476f62ba7f4fbf88293a0bc3d":[1,0,0,1,181,17],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ab7cfaeb476f62ba7f4fbf88293a0bc3d":[3,0,0,28,183,17],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ac7c8b213557228c76d193705c4f593dd":[1,0,0,1,181,16],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ac7c8b213557228c76d193705c4f593dd":[3,0,0,28,183,16],
-"da/d97/classmorph_1_1ui_1_1Screen.html#aca33fb8c36c66cbf6db6b7b864a5ccfb":[1,0,0,1,181,7],
-"da/d97/classmorph_1_1ui_1_1Screen.html#aca33fb8c36c66cbf6db6b7b864a5ccfb":[3,0,0,28,183,7],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ad1bf04a0719e46b540ec763128aa8bf0":[1,0,0,1,181,1],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ad1bf04a0719e46b540ec763128aa8bf0":[3,0,0,28,183,1],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ad7d732df306cffca3f3c35d5c7b35366":[1,0,0,1,181,12],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ad7d732df306cffca3f3c35d5c7b35366":[3,0,0,28,183,12]
+"da/d97/classmorph_1_1ui_1_1Screen.html#aa6448a986c4487adb6b1a25159505318":[3,0,0,28,183,11]
 };

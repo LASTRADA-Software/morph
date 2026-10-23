@@ -1,5 +1,15 @@
 var NAVTREEINDEX18 =
 {
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a467dfe85db54cb37a1743459806ef03e":[3,0,0,28,6,0],
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a8918ac51da490991a7c185ede85d2edf":[1,0,0,1,4,1],
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a8918ac51da490991a7c185ede85d2edf":[3,0,0,28,6,1],
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#af0dced928debec4dc806b622d91aba21":[1,0,0,1,4,2],
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#af0dced928debec4dc806b622d91aba21":[3,0,0,28,6,2],
+"d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html":[3,0,0,10,46],
+"d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#acace8089d2ec9c984a06fd8a6b0a2313":[3,0,0,10,46,0],
+"d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html":[1,0,0,1,110],
+"d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html":[3,0,0,28,112],
+"d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html#a1c4209574379528197633ae10235830f":[1,0,0,1,110,1],
 "d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html#a1c4209574379528197633ae10235830f":[3,0,0,28,112,1],
 "d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html#a6c4b3425aba56e6b094811b68c408ba7":[1,0,0,1,110,2],
 "d9/d2a/classmorph_1_1ui_1_1IPreferencesStore.html#a6c4b3425aba56e6b094811b68c408ba7":[3,0,0,28,112,2],
@@ -239,15 +249,5 @@ var NAVTREEINDEX18 =
 "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad15b505cce09406de9f918cb1f8c641c":[4,0,0,15,13,7,3],
 "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad359c6df99b25183d81f7d728b71de0e":[1,0,0,1,292,2],
 "d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad359c6df99b25183d81f7d728b71de0e":[4,0,0,15,13,7,2],
-"d9/da5/explorer_8hpp.html#aeb941be12f35506a7ea9530ba3d5f3af":[1,0,0,1,343],
-"d9/da5/explorer_8hpp.html#aeea66fab5e4e1dd398f5b1ccce7be4de":[1,0,0,1,257],
-"d9/da5/explorer_8hpp_source.html":[4,0,0,15,13],
-"d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html":[3,0,0,8,4],
-"d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057":[3,0,0,8,4,1],
-"d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a8cc0d37645e4c7e0e7a3f0d2725cc351":[3,0,0,8,4,3],
-"d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#ab3b2f3ea1e73b4cc34cc07c0d98dbf09":[3,0,0,8,4,0],
-"d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6":[3,0,0,8,4,2],
-"d9/db7/socket__backend_8hpp_source.html":[4,0,0,5,1],
-"d9/db8/quantity_8hpp.html":[4,0,0,16,1],
-"d9/db8/quantity_8hpp.html#a63ce497b2022a0d494169870ad16fda1":[4,0,0,16,1,13]
+"d9/da5/explorer_8hpp.html#aeb941be12f35506a7ea9530ba3d5f3af":[1,0,0,1,343]
 };

@@ -478,6 +478,7 @@ var annotated_dup =
           [ "ForEachOptions", "dd/d09/structmorph_1_1ui_1_1author_1_1ForEachOptions.html", "dd/d09/structmorph_1_1ui_1_1author_1_1ForEachOptions" ],
           [ "TableColumn", "db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html", "db/de2/structmorph_1_1ui_1_1author_1_1TableColumn" ],
           [ "TableOptions", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions.html", "df/d1e/structmorph_1_1ui_1_1author_1_1TableOptions" ],
+          [ "DateTimeInputOptions", "d3/d93/structmorph_1_1ui_1_1author_1_1DateTimeInputOptions.html", "d3/d93/structmorph_1_1ui_1_1author_1_1DateTimeInputOptions" ],
           [ "SliderOptions", "d3/dc8/structmorph_1_1ui_1_1author_1_1SliderOptions.html", "d3/dc8/structmorph_1_1ui_1_1author_1_1SliderOptions" ],
           [ "FilePickerOptions", "d8/d21/structmorph_1_1ui_1_1author_1_1FilePickerOptions.html", "d8/d21/structmorph_1_1ui_1_1author_1_1FilePickerOptions" ],
           [ "ActionPart", "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart.html", "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart" ],

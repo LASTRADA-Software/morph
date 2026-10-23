@@ -413,6 +413,7 @@ var hierarchy =
     [ "morph::ui::author::ComponentRef", "da/dee/classmorph_1_1ui_1_1author_1_1ComponentRef.html", null ],
     [ "morph::ui::author::ContainerOptions", "d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html", null ],
     [ "morph::ui::author::CustomOptions", "d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html", null ],
+    [ "morph::ui::author::DateTimeInputOptions", "d3/d93/structmorph_1_1ui_1_1author_1_1DateTimeInputOptions.html", null ],
     [ "morph::ui::author::DeclScope", "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html", [
       [ "morph::ui::author::Scope", "d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html", null ]
     ] ],

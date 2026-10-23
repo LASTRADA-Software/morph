@@ -18,6 +18,7 @@ var classmorph_1_1ui_1_1Workspace =
     [ "active", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ae818ab3fa0bd893cba6a6d5485213e7c", null ],
     [ "handleOf", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a0c05abb39feb16f73b579d7632c318d5", null ],
     [ "activeHandle", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a83bb553575e38fc48442a7eeba61ffd8", null ],
+    [ "headRowForActive", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a38c3117886453a987f73cb47a07838b5", null ],
     [ "forceCloseAll", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a2de906de11c865c7a7cc724bb7235b05", null ],
     [ "tabs", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a8f8c64f7fbce706b574150d9c7cf216c", null ]
 ];

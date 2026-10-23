@@ -172,6 +172,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0c05abb39feb16f73b579d7632c318d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen handle of a tab: what a client remounts for development reload and inspects.  <br /></td></tr>
 <tr class="memitem:a83bb553575e38fc48442a7eeba61ffd8" id="r_a83bb553575e38fc48442a7eeba61ffd8"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a83bb553575e38fc48442a7eeba61ffd8">activeHandle</a> () const</td></tr>
 <tr class="memdesc:a83bb553575e38fc48442a7eeba61ffd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's screen handle.  <br /></td></tr>
+<tr class="memitem:a38c3117886453a987f73cb47a07838b5" id="r_a38c3117886453a987f73cb47a07838b5"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a38c3117886453a987f73cb47a07838b5">headRowForActive</a> () const</td></tr>
+<tr class="memdesc:a38c3117886453a987f73cb47a07838b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's head row, the same reactive content <span class="tt">headRow</span> builds for the body-embedded rendering, for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row stands in for "no active tab" rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting this may not expect to handle one.  <br /></td></tr>
 <tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2de906de11c865c7a7cc724bb7235b05">forceCloseAll</a> ()</td></tr>
 <tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving.  <br /></td></tr>
 <tr class="memitem:a8f8c64f7fbce706b574150d9c7cf216c" id="r_a8f8c64f7fbce706b574150d9c7cf216c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">WorkspaceTab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f8c64f7fbce706b574150d9c7cf216c">tabs</a> () const</td></tr>
@@ -806,6 +808,36 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a38c3117886453a987f73cb47a07838b5" name="a38c3117886453a987f73cb47a07838b5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a38c3117886453a987f73cb47a07838b5">&#9670;&#160;</a></span>headRowForActive()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> morph::ui::Workspace::headRowForActive </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The active tab's head row, the same reactive content <span class="tt">headRow</span> builds for the body-embedded rendering, for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row stands in for "no active tab" rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting this may not expect to handle one. </p>
+<dl class="section return"><dt>Returns</dt><dd>The row, reactive to the active tab changing and to its head's own content changing. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a2de906de11c865c7a7cc724bb7235b05" name="a2de906de11c865c7a7cc724bb7235b05"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2de906de11c865c7a7cc724bb7235b05">&#9670;&#160;</a></span>forceCloseAll()</h2>
 
@@ -831,7 +863,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -861,7 +893,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

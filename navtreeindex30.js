@@ -1,5 +1,17 @@
 var NAVTREEINDEX30 =
 {
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a28c5e3b9b0506758bafaf7db26f463f2":[3,0,0,28,67,1],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#ab39ab95b1b516cc499cdfa34e30bcf27":[1,0,0,1,65,4],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#ab39ab95b1b516cc499cdfa34e30bcf27":[3,0,0,28,67,4],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#afb86cab7af4e8f624446e35ae0484509":[1,0,0,1,65,0],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#afb86cab7af4e8f624446e35ae0484509":[3,0,0,28,67,0],
+"de/d85/structmorph_1_1ui_1_1Grid.html":[1,0,0,1,87],
+"de/d85/structmorph_1_1ui_1_1Grid.html":[3,0,0,28,89],
+"de/d85/structmorph_1_1ui_1_1Grid.html#a2d0ea87670d01e45b9974f5da6800214":[1,0,0,1,87,4],
+"de/d85/structmorph_1_1ui_1_1Grid.html#a2d0ea87670d01e45b9974f5da6800214":[3,0,0,28,89,4],
+"de/d85/structmorph_1_1ui_1_1Grid.html#a602c5b97741e477cba1889200bbf38b0":[1,0,0,1,87,1],
+"de/d85/structmorph_1_1ui_1_1Grid.html#a602c5b97741e477cba1889200bbf38b0":[3,0,0,28,89,1],
+"de/d85/structmorph_1_1ui_1_1Grid.html#ab0bae6331ef08a6def0bbc840d35b0c9":[1,0,0,1,87,3],
 "de/d85/structmorph_1_1ui_1_1Grid.html#ab0bae6331ef08a6def0bbc840d35b0c9":[3,0,0,28,89,3],
 "de/d85/structmorph_1_1ui_1_1Grid.html#adbd54d46363cd90a8d1dc0b59a1b2f11":[1,0,0,1,87,2],
 "de/d85/structmorph_1_1ui_1_1Grid.html#adbd54d46363cd90a8d1dc0b59a1b2f11":[3,0,0,28,89,2],
@@ -237,17 +249,5 @@ var NAVTREEINDEX30 =
 "de/ddc/classmorph_1_1reactive_1_1Effect.html#a55174ea34b70f852a7523752e20c1a78":[3,0,0,20,3,0],
 "de/de0/coroutine_8hpp.html":[4,0,0,1,9],
 "de/de0/coroutine_8hpp_source.html":[4,0,0,1,9],
-"de/de3/structmorph_1_1ui_1_1Table.html":[1,0,0,1,216],
-"de/de3/structmorph_1_1ui_1_1Table.html":[3,0,0,28,218],
-"de/de3/structmorph_1_1ui_1_1Table.html#a2395be1fb03a09a87c97bdabc10a6ab9":[1,0,0,1,216,1],
-"de/de3/structmorph_1_1ui_1_1Table.html#a2395be1fb03a09a87c97bdabc10a6ab9":[3,0,0,28,218,1],
-"de/de3/structmorph_1_1ui_1_1Table.html#a42676e9a7f87733023ce16447d575eba":[1,0,0,1,216,4],
-"de/de3/structmorph_1_1ui_1_1Table.html#a42676e9a7f87733023ce16447d575eba":[3,0,0,28,218,4],
-"de/de3/structmorph_1_1ui_1_1Table.html#a67a560b650bdcbde8aa080a74285114d":[1,0,0,1,216,8],
-"de/de3/structmorph_1_1ui_1_1Table.html#a67a560b650bdcbde8aa080a74285114d":[3,0,0,28,218,8],
-"de/de3/structmorph_1_1ui_1_1Table.html#a6bfa9edf4a13152ee1ac4aaed8b25069":[1,0,0,1,216,2],
-"de/de3/structmorph_1_1ui_1_1Table.html#a6bfa9edf4a13152ee1ac4aaed8b25069":[3,0,0,28,218,2],
-"de/de3/structmorph_1_1ui_1_1Table.html#aa4ecb394ff70268027e512451328aea7":[1,0,0,1,216,7],
-"de/de3/structmorph_1_1ui_1_1Table.html#aa4ecb394ff70268027e512451328aea7":[3,0,0,28,218,7],
-"de/de3/structmorph_1_1ui_1_1Table.html#ab468e8742c42ea70ad5b59b45d7a98d1":[1,0,0,1,216,6]
+"de/de3/structmorph_1_1ui_1_1Table.html":[1,0,0,1,216]
 };
