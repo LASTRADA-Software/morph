@@ -215,6 +215,22 @@ public:
         return shown ? handleOf(*shown) : nullptr;
     }
 
+    /// @brief The active tab's head row, the same reactive content `headRow` builds for the body-embedded rendering,
+    ///        for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row
+    ///        stands in for "no active tab" rather than a null `Node`, since a caller mounting this may not expect to
+    ///        handle one.
+    /// @return The row, reactive to the active tab changing and to its head's own content changing.
+    [[nodiscard]] Node headRowForActive() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().peek();
+        if (tab) {
+            return ui::row(buildHeadRow(*tab));
+        }
+        Row empty{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+        empty.common.testId = "head";
+        empty.common.visible = false;
+        return ui::row(std::move(empty));
+    }
+
     /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
     ///        screen of the principal who is leaving.
     void forceCloseAll() { _model->forceCloseAll(); }
@@ -327,9 +343,12 @@ private:
         return handle == nullptr ? nullptr : handle->head();
     }
 
-    // The head row above a tab's screen: the subtitle (muted), the badges, a spacer and the actions as buttons. It is
-    // hidden while the head has none of them, so a screen without a head looks as it would without the row.
-    [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
+    // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
+    // badges, a spacer and the actions as buttons. Hidden while the head has none of them, so a screen without a
+    // head looks as it would without the row. Factored out of headRow() so a caller needing to set additional
+    // layout fields on the row -- which a Node, once built, can no longer be mutated to carry -- can do so on the
+    // still-mutable Row this returns, before wrapping it itself.
+    [[nodiscard]] Row buildHeadRow(WorkspaceTabId tab) const {
         auto const subtitle = [this, tab] {
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::string{} : head->subtitle().get();
@@ -387,8 +406,11 @@ private:
                 return ui::button(std::move(button));
             },
             Axis::Horizontal, 1));
-        return ui::row(std::move(row));
+        return row;
     }
+
+    // The head row above a tab's screen, exactly as buildHeadRow() builds it, wrapped into a Node.
+    [[nodiscard]] Node headRow(WorkspaceTabId tab) const { return ui::row(buildHeadRow(tab)); }
 
     // The model changed: the bar shows its tabs in order, with their captions, and the active tab's page.
     void showTabs() {

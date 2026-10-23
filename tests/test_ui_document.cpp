@@ -249,14 +249,30 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }
 
-TEST_CASE("ui document: a button's emphasis is normal, primary or danger", "[ui][document]") {
+TEST_CASE("ui document: a button's emphasis is normal, primary, danger or ghost", "[ui][document]") {
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "column", "children": [
         {"kind": "button", "label": "a", "emphasis": "primary"},
         {"kind": "button", "label": "b", "emphasis": "danger"},
-        {"kind": "button", "label": "c", "emphasis": "normal"}]}})")
+        {"kind": "button", "label": "c", "emphasis": "normal"},
+        {"kind": "button", "label": "d", "emphasis": "ghost"}]}})")
               .has_value());
     auto const refused = loadDocumentText(
         R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "label": "a", "emphasis": "loud"}})");
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().message() == "document e at /view/emphasis: `loud` is not one of the values of `emphasis`");
+}
+
+TEST_CASE("ui document: a dialog or drawer's literal sizing accepts fixed but refuses stretch", "[ui][document]") {
+    CHECK(loadDocumentText(
+              R"({"vocab": "ui/1", "id": "e", "view": {"kind": "dialog", "sizing": {"lit": {"fixed": 80}}}})")
+              .has_value());
+    auto const stretchingWidth = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "e", "view": {"kind": "dialog", "sizing": {"lit": {"stretch": 1}}}})");
+    REQUIRE_FALSE(stretchingWidth.has_value());
+    CHECK(stretchingWidth.error().message().contains("an overlay is sized by the frontend"));
+    auto const stretchingHeight = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "e", "view": {"kind": "drawer",
+            "sizing": {"lit": {"width": "content", "height": {"stretch": 1}}}}})");
+    REQUIRE_FALSE(stretchingHeight.has_value());
+    CHECK(stretchingHeight.error().message().contains("an overlay is sized by the frontend"));
 }

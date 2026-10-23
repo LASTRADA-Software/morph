@@ -5806,6 +5806,8 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
             model.emphasis = ButtonEmphasis::Primary;
         } else if (part->name("emphasis") == "danger") {
             model.emphasis = ButtonEmphasis::Danger;
+        } else if (part->name("emphasis") == "ghost") {
+            model.emphasis = ButtonEmphasis::Ghost;
         }
         if (Commands const* const commands = part->event("onClick")) {
             model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
@@ -5922,6 +5924,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             spec.emphasis = ButtonEmphasis::Primary;
         } else if (node.name("emphasis") == "danger") {
             spec.emphasis = ButtonEmphasis::Danger;
+        } else if (node.name("emphasis") == "ghost") {
+            spec.emphasis = ButtonEmphasis::Ghost;
         }
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;

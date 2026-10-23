@@ -37,6 +37,15 @@ MorphWidget {
     focusTarget: column
     implicitWidth: 0
     implicitHeight: 0
+    // root is only a zero-sized placeholder for the Drawer overlay below, which is reparented to the Overlay; without
+    // these, MorphWidget's own Layout.preferredWidth/Height (bound from widthKind/heightKind) would make this
+    // invisible placeholder claim real space in whatever layout holds the drawer node, independent of the overlay's
+    // own on-screen width -- which a document setting `sizing` to get the explicit-width lever below would otherwise
+    // trigger silently.
+    Layout.preferredWidth: -1
+    Layout.fillWidth: false
+    Layout.preferredHeight: -1
+    Layout.fillHeight: false
 
     Drawer {
         id: drawer
@@ -51,11 +60,15 @@ MorphWidget {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        // Capped against the window less a margin: Math.min only ever shrinks the natural width down, it does not
-        // stretch a narrow drawer up to the cap. The drawer's height is always the full window height by design
-        // (unlike a dialog, a drawer is a full-height side panel) -- only its width is at issue here.
-        width: Math.min(Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth),
-                        (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
+        // An explicit width (widthKind Fixed) wins outright over the circular inference below, which reports back
+        // roughly the width it was just given rather than what its children need. Capped against the window less a
+        // margin either way: Math.min only ever shrinks the natural width down, it does not stretch a narrow drawer
+        // up to the cap. The drawer's height is always the full window height by design (unlike a dialog, a drawer
+        // is a full-height side panel) -- only its width is at issue here.
+        width: root.widthKind === 1
+            ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
+            : Math.min(Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth),
+                       (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
         height: Overlay.overlay ? Overlay.overlay.height : 0
         onAboutToHide: {
             if (!root.programmatic)

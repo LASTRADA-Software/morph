@@ -660,28 +660,42 @@ TEST_CASE("qt_quick widgets: a widget's width class follows the host's width", "
     CHECK(classes == std::vector<std::string>{"compact", "medium", "expanded", "compact"});
 }
 
-TEST_CASE("qt_quick widgets: a primary button is accent-filled, a danger one error-filled", "[qt_quick]") {
+TEST_CASE(
+    "qt_quick widgets: a primary button is accent-filled, a danger one error-filled, a ghost one transparent "
+    "and narrower",
+    "[qt_quick]") {
     Scene scene;
     auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto plain = scene.backend().createButton(column.get());
     auto primary = scene.backend().createButton(column.get());
     auto danger = scene.backend().createButton(column.get());
+    auto ghost = scene.backend().createButton(column.get());
     plain->setLabel("Plain");
     primary->setLabel("Go");
     primary->setEmphasis(ui::ButtonEmphasis::Primary);
     danger->setLabel("Drop");
     danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    ghost->setLabel("X");
+    ghost->setEmphasis(ui::ButtonEmphasis::Ghost);
     scene.settle();
-    auto const background = [](ui::ButtonWidget& button) {
+    auto const backgroundItem = [](ui::ButtonWidget& button) {
         QQuickItem const* const control = Scene::itemsOf(Scene::itemOf(button), "QQuickButton").value(0);
         REQUIRE(control != nullptr);
         auto* const fill = control->property("background").value<QQuickItem*>();
         REQUIRE(fill != nullptr);
-        return fill->property("color").value<QColor>();
+        return fill;
+    };
+    auto const background = [&backgroundItem](ui::ButtonWidget& button) {
+        return backgroundItem(button)->property("color").value<QColor>();
     };
     CHECK(background(*plain) == QColor{"#ffffff"});
     CHECK(background(*primary) == QColor{"#1565c0"});
     CHECK(background(*danger) == QColor{"#c62828"});
+    CHECK(background(*ghost) == QColor{"transparent"});
+    // Confirms the implicitWidth floor is lifted for Ghost, not merely that its padding shrank: a plain button keeps
+    // its 8-unit background floor regardless of its one-character label, so a ghost button of the same label must
+    // measure visibly narrower, not just differently padded within the same floor.
+    CHECK(Scene::itemOf(*ghost).implicitWidth() < Scene::itemOf(*plain).implicitWidth());
 }
 
 // Whether an Item-style button already composes with a trailing Badge inside a row, or whether the button's own

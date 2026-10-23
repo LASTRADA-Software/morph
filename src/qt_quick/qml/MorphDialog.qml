@@ -37,6 +37,15 @@ MorphWidget {
     focusTarget: column
     implicitWidth: 0
     implicitHeight: 0
+    // root is only a zero-sized placeholder for the Popup overlay below, which is reparented to the Overlay; without
+    // these, MorphWidget's own Layout.preferredWidth/Height (bound from widthKind/heightKind) would make this
+    // invisible placeholder claim real space in whatever layout holds the dialog node, independent of the overlay's
+    // own on-screen width -- which a document setting `sizing` to get the explicit-width lever below would otherwise
+    // trigger silently.
+    Layout.preferredWidth: -1
+    Layout.fillWidth: false
+    Layout.preferredHeight: -1
+    Layout.fillHeight: false
 
     Popup {
         id: popup
@@ -44,6 +53,13 @@ MorphWidget {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // An explicit width (widthKind Fixed) wins outright over the Popup's own default sizing. The fallback branch
+        // evaluates to `undefined`, not a captured number, so it resets rather than sets the Popup's own `hasWidth`
+        // state -- a bound value here, even one equal to the Popup's own implicitWidth, would otherwise silently
+        // disable QQuickPopupPositioner's window-edge clamping for every dialog, not just ones using the new lever.
+        width: root.widthKind === 1
+            ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
+            : undefined
         onAboutToHide: {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
@@ -55,7 +71,13 @@ MorphWidget {
             // Math.min only ever shrinks, it does not stretch a narrow dialog's own natural width up to the cap.
             // contentItem is the Popup's root, not a layout's child, so its own width is set directly, not via a
             // Layout.* attached property (which only affects a layout-managed child, not the layout item itself).
-            width: Math.min(implicitWidth, (popup.Overlay.overlay?.width ?? implicitWidth) - 4 * Theme.unitWidth)
+            // With an explicit width, Qt's own resizeContent() only re-asserts contentItem's width from specific
+            // trigger points (not from a plain change of contentItem's own implicit size), so this must track the
+            // Popup's own availableWidth directly rather than keep deriving from its own (by then stale) implicit
+            // size, or later content changes would silently drift out of sync with the pinned width.
+            width: root.widthKind === 1
+                ? popup.availableWidth
+                : Math.min(implicitWidth, (popup.Overlay.overlay?.width ?? implicitWidth) - 4 * Theme.unitWidth)
 
             Label {
                 id: titleLabel

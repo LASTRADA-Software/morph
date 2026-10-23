@@ -14,6 +14,7 @@ enum class ButtonEmphasis : std::uint8_t {
     Normal,   ///< An ordinary action.
     Primary,  ///< The screen's main action.
     Danger,   ///< An action that destroys or cannot be undone.
+    Ghost,    ///< An action embedded in other content, with no chrome of its own.
 };
 
 }  // namespace morph::ui

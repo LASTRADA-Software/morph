@@ -445,6 +445,37 @@ TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "
     CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
 }
 
+// Mutation: build headRowForActive() from Workspace::active()'s index rather than the model's own tab id (would
+// desync across a close that reindexes a later tab). Also covers: no tab open gives a defined, invisible row, never
+// a null Node (headRowForActive() must never throw inside Mounted's own null check).
+TEST_CASE("workspace: headRowForActive mounts the active tab's own head row, separately from the in-body one",
+          "[ui][workspace]") {
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+
+    // No tab open: a defined, invisible row, not a null Node.
+    {
+        Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
+        CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
+    }
+
+    REQUIRE(shell.open("headed", {}) == 0U);
+    harness.settle();
+    Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
+    harness.settle();
+    // Two renderings of the same tab's head, both present -- confirming headRowForActive() reads the live active
+    // tab's own data, the same way the in-body headRow() does, not a stale snapshot.
+    std::string const dump = harness.backend.dump();
+    std::size_t rows = 0;
+    for (std::size_t at = dump.find("head_subtitle"); at != std::string::npos;
+         at = dump.find("head_subtitle", at + 1)) {
+        ++rows;
+    }
+    CHECK(rows == 2);
+}
+
 namespace {
 
 using morph::ui::WorkspaceModel;

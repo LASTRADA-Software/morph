@@ -2463,6 +2463,8 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
         detail::put(json, "emphasis", std::string{"primary"});
     } else if (action.emphasis == ButtonEmphasis::Danger) {
         detail::put(json, "emphasis", std::string{"danger"});
+    } else if (action.emphasis == ButtonEmphasis::Ghost) {
+        detail::put(json, "emphasis", std::string{"ghost"});
     }
     putPresent(json, "enabled", action.enabled);
     putPresent(json, "visible", action.visible);
@@ -3157,6 +3159,8 @@ struct ButtonOptions {
         writer.put("emphasis", std::string{"primary"});
     } else if (options.emphasis == ButtonEmphasis::Danger) {
         writer.put("emphasis", std::string{"danger"});
+    } else if (options.emphasis == ButtonEmphasis::Ghost) {
+        writer.put("emphasis", std::string{"ghost"});
     }
     if (options.style) {
         writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
@@ -3864,6 +3868,33 @@ template <typename Action, typename Model>
 /// @return The node.
 [[nodiscard]] inline Node dateTimeInput(AnyHandle const& value, AnyHandle const& label, Commands const& commit = {}) {
     return detail::NodeWriter{"dateTimeInput"}.put("value", value).put("label", label).put("onCommit", commit).done();
+}
+
+/// @brief Options of `dateTimeInput`.
+struct DateTimeInputOptions {
+    /// @brief The value.
+    AnyHandle value;
+    /// @brief The label: the accessible name.
+    AnyHandle label;
+    /// @brief The input mode, such as `date` or `time`.
+    AnyHandle mode;
+    /// @brief Commands run on every edit.
+    Commands onChange;
+    /// @brief Commands run on a commit.
+    Commands onCommit;
+};
+
+/// @brief A `dateTimeInput` node.
+/// @param options The input.
+/// @return The node.
+[[nodiscard]] inline Node dateTimeInput(DateTimeInputOptions const& options) {
+    return detail::NodeWriter{"dateTimeInput"}
+        .put("value", options.value)
+        .put("label", options.label)
+        .put("mode", options.mode)
+        .put("onChange", options.onChange)
+        .put("onCommit", options.onCommit)
+        .done();
 }
 
 /// @brief Options of `slider`.

@@ -134,10 +134,13 @@ reorders children, and only through this.
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
 `space.<step>` in px on Qt Quick, cells by axis on the terminal.
 
-**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary` or `Danger`; the mount
-calls it only for another value than `Normal`, so a document without the `emphasis` key (`normal`, `primary`,
-`danger`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error colour;
-the terminal draws both bold, a danger one in the error colour.
+**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary`, `Danger` or `Ghost`; the
+mount calls it only for another value than `Normal`, so a document without the `emphasis` key (`normal`, `primary`,
+`danger`, `ghost`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error
+colour, and draws a ghost button with no border or fill, minimal padding, and a faint neutral tint on hover or press
+— for an action embedded in other content (a table row's remove, a disclosure chevron) where full button chrome would
+read as a second control beside it rather than part of it. The terminal draws `Primary`/`Danger` bold, a danger one
+in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
 
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its

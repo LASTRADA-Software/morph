@@ -623,8 +623,9 @@ TEST_CASE("tui widgets: a press that reaches no widget ends a press that lost it
     CHECK(clicks == 1);
 }
 
-TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error colour", "[tui][widgets]") {
-    Harness harness{30, 3};
+TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error colour, a ghost one plain",
+          "[tui][widgets]") {
+    Harness harness{30, 4};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
     auto const plain = harness.make<ButtonImpl>(column.get());
     plain->setLabel("Plain");
@@ -634,12 +635,16 @@ TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error
     auto const danger = harness.make<ButtonImpl>(column.get());
     danger->setLabel("Drop");
     danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    auto const ghost = harness.make<ButtonImpl>(column.get());
+    ghost->setLabel("Remove");
+    ghost->setEmphasis(ui::ButtonEmphasis::Ghost);
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
     CHECK_FALSE(buffer.at(0, 2).style.bold);
     CHECK(buffer.at(1, 2).style.bold);
     CHECK(buffer.at(2, 2).style.bold);
     CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(3, 2).style.bold);
 }
 
 // Mutation: map Section to Normal in roleStyle (the section is neither bold nor muted).
