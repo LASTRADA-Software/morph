@@ -10,7 +10,10 @@
 #include <morph/ui/value.hpp>
 // clang-format on
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -20,6 +23,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
@@ -242,4 +246,78 @@ TEST_CASE("ApplicationHost: a hand-built document host runs a document's sign-in
         CHECK(built.problems.at(0).contains("not supported"));
         CHECK(built.problems.at(1) == "`upload` is not supported by the host");
     }
+}
+
+namespace {
+
+/// A public screen that signs in and declares a head action: signed in, the shell's top bar shows it once.
+constexpr std::string_view kHeadedLogin = R"({
+  "vocab": "ui/1", "id": "probe.headed",
+  "models": { "probe": { "type": "Probe_Model" } },
+  "mutations": { "login": { "model": "probe", "action": "Probe_Login",
+                            "onSuccess": [ { "signIn": { "from": "login" } } ] } },
+  "actions": [ { "id": "refresh", "label": "Refresh", "onClick": [] } ],
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "login", "label": "Log in", "onClick": [ { "run": "login" } ] },
+    { "kind": "text", "testId": "headed", "text": "headed" } ] } })";
+
+/// The bundle of that one screen.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> headedBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.headed";
+    entry.isPublic = true;
+    if (auto added = served.addScreen(std::move(entry), std::string{kHeadedLogin}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// Whether @p node is @p ancestor or one of its descendants.
+// NOLINTNEXTLINE(misc-no-recursion): a widget tree, walked down.
+bool descendsFrom(ui::testing::RecordingBackend const& backend, int ancestor, int node) {
+    if (ancestor == node) {
+        return true;
+    }
+    return std::ranges::any_of(backend.children(ancestor),
+                               [&](int const child) { return descendsFrom(backend, child, node); });
+}
+
+}  // namespace
+
+// Control: the shell mounts the head in the page as well (the action shows twice).
+TEST_CASE("Client shell: a screen's head action shows once, in the shell's head slot", "[client][sign-in][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &headedBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    client::ShellOptions options{.startScreen = "probe.headed", .signIn = &userAndJwt};
+    {
+        auto shell = client::mountShell(context, backend, std::move(*opened), source, std::move(options));
+        auto const login = backend.find("Button", "testId", "login");
+        REQUIRE(login.has_value());
+        backend.click(*login);
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Button", "testId", "head_action_refresh").has_value(); }));
+        // Drain what is still queued: the shell's own head already satisfies the wait above, so a second head row's
+        // effect would otherwise still be pending when the actions are counted.
+        context.owner().runFor(std::chrono::milliseconds{50});
+        // Exactly one head action, and it sits in the shell's own head slot, not in a page.
+        std::vector<int> actions;
+        for (int const id : backend.all("Button")) {
+            if (backend.prop(id, "testId") == "head_action_refresh") {
+                actions.push_back(id);
+            }
+        }
+        REQUIRE(actions.size() == 1);
+        auto const slot = backend.find("Row", "testId", "shell_head");
+        REQUIRE(slot.has_value());
+        CHECK(descendsFrom(backend, *slot, actions.front()));
+    }
+    source.close();
 }

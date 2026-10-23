@@ -719,3 +719,42 @@ TEST_CASE("qt_quick containers: a row whose width its column gives spreads its c
     CHECK(end <= scene.window().width() + 1.0);
     CHECK(end >= scene.window().width() - 4.0);
 }
+
+// Mutation: drop the spacer's stretch (the row packs, so the actions stop right after the subtitle).
+TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge", "[qt_quick]") {
+    Scene scene;
+    // The slot a host gives the row: the window, 600 wide.
+    scene.window().resize(600, 600);
+    scene.settle();
+    ui::Text subtitle{.text = "Editing", .role = ui::TextRole::Muted};
+    subtitle.common.testId = "head_subtitle";
+    ui::Spacer filler;
+    filler.common.layout.width = ui::Sizing::stretch();
+    ui::Button action{.label = "Save"};
+    action.common.testId = "head_action_save";
+    ui::Row head{
+        .children = {ui::text(std::move(subtitle)), ui::spacer(std::move(filler)), ui::button(std::move(action))},
+        .gap = 2};
+    head.common.testId = "head";
+    head.common.layout.width = ui::Sizing::stretch();
+    ui::Column slot{.children = {ui::row(std::move(head))}};
+    slot.common.testId = "head_slot";
+    ui::Mounted const view{scene.runtime(), scene.backend(), ui::column(std::move(slot))};
+    scene.settle();
+
+    detail::ItemBase const* const slotWidget = detail::findWidget(QStringLiteral("head_slot"));
+    REQUIRE(slotWidget != nullptr);
+    QQuickItem const& slotItem = *slotWidget->item();
+    detail::ItemBase const* const actionWidget = detail::findWidget(QStringLiteral("head_action_save"));
+    REQUIRE(actionWidget != nullptr);
+    QQuickItem const& actionItem = *actionWidget->item();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal gap = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 2)));
+    qreal const slotRight = slotItem.mapToScene(QPointF{slotItem.width(), 0}).x();
+    qreal const actionRight = actionItem.mapToScene(QPointF{actionItem.width(), 0}).x();
+    INFO("slot ends at " << slotRight << ", the last action at " << actionRight << ", a gap is " << gap);
+    CHECK(actionRight <= slotRight + 0.5);
+    CHECK(actionRight >= slotRight - gap - 0.5);
+}

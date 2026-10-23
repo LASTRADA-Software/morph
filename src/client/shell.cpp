@@ -360,8 +360,9 @@ private:
         };
         tabs.onChanged = [this] { showActiveTitle(); };
         tabs.hosts = &_hosts;
-        _workspace =
-            std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page());
+        // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
+        _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
+                                                     &_frame->page(), ui::HeadPlacement::External);
     }
 
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
