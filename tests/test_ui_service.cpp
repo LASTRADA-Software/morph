@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <memory>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
@@ -413,10 +414,17 @@ TEST_CASE("ui-fetch serves a file by its hash, behind its gate", "[ui-service][f
         REQUIRE(reply.message == "unauthorized");
     }
     SECTION("a screen that is not public, before sign-in") {
-        Envelope const reply =
-            ask(service, *authorizer, request("ui-fetch", "", fetchBody(hashOf("screen", "lims.results"))));
+        std::vector<std::string> lines;
+        morph::log::ScopedLoggerOverride const logs{
+            [&lines](morph::log::LogLevel, std::string_view message) { lines.emplace_back(message); }};
+        std::string const hash = hashOf("screen", "lims.results");
+        Envelope const reply = ask(service, *authorizer, request("ui-fetch", "", fetchBody(hash)));
         REQUIRE(reply.kind == "err");
         REQUIRE(reply.message == "unauthorized");
+        // A refused fetch is logged at debug, with the hash and the reason.
+        REQUIRE(std::ranges::any_of(lines, [&hash](std::string const& line) {
+            return line.starts_with("[ui-fetch]") && line.contains(hash) && line.contains("refused: unauthorized");
+        }));
     }
     SECTION("a screen, signed in") {
         Envelope const reply =
