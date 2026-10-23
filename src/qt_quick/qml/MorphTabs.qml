@@ -58,7 +58,14 @@ MorphWidget {
                     width: implicitWidth
                     leftPadding: Theme.spaceOf(4)
                     rightPadding: Theme.spaceOf(4)
-                    palette.buttonText: tab.checked ? root.scheme.accent : root.scheme.muted
+                    contentItem: Text {
+                        text: tab.text
+                        font: tab.font
+                        color: tab.checked ? root.scheme.accent : root.scheme.muted
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
                     background: Rectangle {
                         color: "transparent"
 
