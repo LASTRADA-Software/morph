@@ -58,4 +58,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen stabilityScreen();
 
+/// @brief Design 07: a 96-well plate's layout, samples dragged into wells or filled into the selected ones.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen plateScreen();
+
 }  // namespace lims_gallery

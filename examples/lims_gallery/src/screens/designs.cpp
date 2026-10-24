@@ -45,7 +45,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.plate",
          .title = "Plate layout",
          .summary = "Drag samples into wells, or select wells and assign",
-         .make = nullptr},
+         .make = &plateScreen},
         {.number = "08",
          .id = "lims-gallery.results",
          .title = "Result entry",

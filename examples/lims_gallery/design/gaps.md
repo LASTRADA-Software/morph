@@ -1,7 +1,7 @@
 # LIMS gallery gap log: what the ten designs need that ui/1 cannot express, and the defects found building them
 
 ### G1: `{"env": "widthClass"}` is never set (defect)
-- **Design(s):** 01, 02, 03, 04, 05, 06
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07
 - **Needs:** every design switches between an expanded (≥ 1200 px) and a compact (< 600 px) layout on the window's
   width class.
 - **ui/1 today:** the expression exists (`docs/spec/ui/expressions.md:42`) and `Session::setEnvironment` holds it
@@ -19,7 +19,7 @@
 - **Weight:** High
 
 ### G2: Monospace text for identifiers
-- **Design(s):** 01, 02, 03, 04, 05
+- **Design(s):** 01, 02, 03, 04, 05, 07
 - **Needs:** record, lot, sample, equipment and investigation ids (`WS-2026-0412`, `L-26-0381`, `OOS-2026-031`) set
   in a monospace face, the LIMS convention that makes ids scannable and unambiguous (0/O, 1/l).
 - **ui/1 today:** a `text` node's `role` is `normal`, `muted`, `heading`, `section`, `error` or `success`
@@ -50,7 +50,7 @@
 - **Weight:** Medium
 
 ### G5: Touch-sized controls on compact
-- **Design(s):** 01, 02, 03, 04, 05, 06
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07
 - **Needs:** 44 px controls and touch targets in the compact layout (30 px when expanded).
 - **ui/1 today:** one global `control.height` token (`docs/spec/ui/theme.md:128`); a runtime density choice is listed
   under "Not yet" (`docs/spec/ui/theme.md:221`), and no node or width class can ask for a larger control. Inferred
@@ -233,14 +233,16 @@
 - **Weight:** Medium
 
 ### G23: Grid columns of different widths
-- **Design(s):** 03
+- **Design(s):** 03, 07
 - **Needs:** a two-column list with a fixed label or timestamp column and a filling text column (`130px
-  minmax(0, 1fr)`), as the design's details and recent events use.
+  minmax(0, 1fr)`), as the design's details and recent events use; a plate's 22 px row-letter column beside twelve
+  44 px well columns (`22px repeat(12, 44px)`), with the column numbers centred over the wells.
 - **ui/1 today:** a `grid` takes a column count (`docs/spec/ui/document.md:171`) and its columns share the width
   (`docs/spec/ui/backend_contract.md:174`); there are no column tracks. `keyValue` lays out label and value itself.
   Verified by trying: the events in a two-column grid drew with the text misplaced.
 - **Workaround used:** `keyValue` for the details; each event as a `row` of a `fixed(18)` timestamp and a stretched
-  text.
+  text. The plate is a 13-column grid whose letter column is as wide as a well's; its headers sit at the start of
+  their cells, as `alignSelf` places a grid cell only across the row (verified in a grab, 1280 × 900).
 - **Weight:** Low
 
 ### G24: Label-over-value pairs
@@ -253,7 +255,7 @@
 - **Weight:** Low
 
 ### G25: `forEach` drops its own common properties (defect)
-- **Design(s):** 04, 05, 06
+- **Design(s):** 04, 05, 06, 07
 - **Needs:** a `forEach` with a `testId`, `visible`, `sizing` or `a11y`, as `document.md` says every node takes
   (`docs/spec/ui/document.md:150-157`).
 - **ui/1 today:** the interpreter lowers `forEach` without calling `commonOf` (`include/morph/ui/interpreter.hpp:7066-7085`;
@@ -267,7 +269,7 @@
 - **Weight:** Medium
 
 ### G26: Toolbar controls in the screen head
-- **Design(s):** 04, 05, 07 (07 from reading its design; not built)
+- **Design(s):** 04, 05, 07
 - **Needs:** the head row's search field ("Search record, field or reason", "Sample, lot or product") and filter
   selects ("Status: open", "Priority: any", "Template: HCP 96, 8 standards") beside the title and its buttons.
 - **ui/1 today:** a screen head has `title`, `subtitle`, `status` badges and `actions`, which are buttons
@@ -285,13 +287,14 @@
 - **Weight:** Low
 
 ### G28: Paging a table over rows
-- **Design(s):** 04, 05
-- **Needs:** "1–25 of 57" with previous and next page, and a rows-per-page select (05), or "Load 25 more" (compact).
+- **Design(s):** 04, 05, 07
+- **Needs:** "1–25 of 57" with previous and next page, and a rows-per-page select (05), or "Load 25 more" (compact);
+  the first five samples to place and "+ 9 more" (07).
 - **ui/1 today:** a `table` over `rows` shows every row; paging belongs to the model-backed table engine (`mode`,
   `docs/spec/ui/document.md:175`), and there is no list slicing function to page by hand
   (`docs/spec/ui/expressions.md:99-107`: `first`, no `take`/`slice`). Inferred from reading.
 - **Workaround used:** the design's page text as a literal, with disabled previous and next buttons; the gallery holds
-  one page.
+  one page. 07 lists all fourteen samples to place.
 - **Weight:** Medium
 
 ### G29: A table's selection cannot be bound or set
@@ -330,15 +333,18 @@
 - **Weight:** Medium
 
 ### G32: `surface` cannot follow the data
-- **Design(s):** 05
+- **Design(s):** 05, 07
 - **Needs:** a compact sample card tinted while its sample has a result out of specification, the tint the table row
-  gets from `rowTone`.
+  gets from `rowTone`; a plate well drawn by what it holds, a solid outline while it holds a sample and a dashed one
+  while it is empty.
 - **ui/1 today:** `surface` is a literal string on every node (`docs/spec/ui/document.md:156`), set once
   (`docs/spec/ui/view_tree.md:147`; `author::Node::surface(std::string const&)`), and there is no tone on a panel or
   card. Custom surfaces do work: the gallery's theme declares `selected` and `outOfSpec` surfaces, and a panel on
   `selected` draws its tint on Qt Quick (verified in a grab of the bulk bar; `outOfSpec` is used only on compact, which the client cannot show, G1). Inferred from reading for the binding.
 - **Workaround used:** each card twice, one on the `outOfSpec` surface and one plain, shown by `visible` on the row's
-  tone.
+  tone. In 07 the standards, controls and blank are fixed by the template, so their wells take literal `standard`,
+  `control` and `blank` surfaces (verified: they draw blue, amber and grey on Qt Quick); a sample well and an empty
+  one differ only by their label, `S12` or `·`.
 - **Weight:** Low
 
 ### G33: An outlined tag
@@ -373,7 +379,7 @@
   | Lot = `180 needed, 150 in stock`; Product = `Paracetamol 500 mg`; First pull = `03-Dec-2026 (40 °C, 1 m)` | no |
   | Product = `Paracetamol 500 mg` then Containers = `x` | yes |
 
-  Inferred from reading `src/qt_quick/qml/MorphKeyValue.qml:28-45`, not verified: the value column's
+  Inferred from reading `src/qt_quick/qml/MorphKeyValue.qml:31-48`, not verified: the value column's
   `Layout.maximumWidth` is `grid.width - labelColumnWidth - columnSpacing`, and with the widget sized to its content
   that is the widest value's own width, so a fractional pixel of rounding can make the cap a hair narrower than the
   text. The value then wraps, the grid's implicit width changes, and the cap is recomputed inside the polish, for
@@ -443,4 +449,51 @@
   (seen in a grab of the conditions matrix and of the tests table, 1280 × 900, offscreen). Verified by trying; not
   checked on the terminal frontend.
 - **Workaround used:** none.
+- **Weight:** Low
+
+### G41: A selectable cell that keeps its own look
+- **Design(s):** 07
+- **Needs:** a plate well as a 40 px circle, outlined, that draws a thick accent ring while it is selected; clicking
+  it selects it.
+- **ui/1 today:** a button's `selected` is a condition only with `style: item` (`docs/spec/ui/document.md:165`),
+  which draws an unframed list entry with an accent tint and a bar at its leading edge
+  (`src/qt_quick/qml/MorphButtonBackground.qml:4-6`); a push button has no selected or pressed state, `emphasis` is a
+  literal in the author API (`author::ButtonOptions::emphasis`), and there is no shape or size per node beyond
+  `sizing`. Verified by trying: the sample wells draw unframed, with the tint and bar while selected (grab, 1280 ×
+  900).
+- **Workaround used:** a sample well is a `style: item` button with `selected` bound to the selection; the template
+  wells are push buttons on their surfaces (G32). No circles.
+- **Weight:** Medium
+
+### G42: Enter on a focused button may never reach the button's own key binding on Qt Quick (defect, inferred)
+- **Design(s):** 07
+- **Needs:** Enter on the focused well opens Assign for it, while a click selects the well.
+- **ui/1 today:** a node's `keys` are chords handled while focus is inside the node (`docs/spec/ui/view_tree.md:148`).
+  The screen binds `Enter` on each sample well, and `RecordingBackend::press` delivers it (the plate test opens the
+  dialog with it). On Qt Quick the binding is `Keys.onPressed` on the widget's root (`src/qt_quick/qml/MorphWidget.qml:187-190`),
+  but focus is on the `Button` inside it, whose `Keys.onReturnPressed` and `Keys.onEnterPressed` fire the click
+  (`src/qt_quick/qml/MorphButton.qml:95-96`) and, by Qt's default, accept the event, so it would not propagate to the
+  root. Inferred from reading only: not reproduced, since the offscreen render smoke sends no keys. If it holds,
+  Enter selects the well instead of opening Assign, and the two backends disagree.
+- **Workaround used:** none; the binding is kept as the design asks.
+- **Weight:** Medium
+
+### G43: A click cannot tell its modifiers
+- **Design(s):** 07
+- **Needs:** Shift-click selects the range of wells from the last one clicked.
+- **ui/1 today:** `onClick` carries no `event` payload and no modifiers (`docs/spec/ui/document.md:165`); a chord
+  binding takes keys, not clicks (`docs/spec/ui/view_tree.md:148`). Inferred from reading.
+- **Workaround used:** a click adds or removes one well; Shift with an arrow key adds the neighbouring well and moves
+  focus to it, so a range is built from the keyboard. The page's help line says so in place of the design's "Shift-click
+  selects a range".
+- **Weight:** Low
+
+### G44: Grouping a list into runs
+- **Design(s):** 07
+- **Needs:** on compact, consecutive empty wells as one line, "A5–A8 · Empty, 4 wells" with one Assign button, and
+  rows D to H folded into one section.
+- **ui/1 today:** the list functions are `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `first`, `includes`,
+  `indexOf` and `concatLists` (`docs/spec/ui/expressions.md:107`), with `map` and `filter`; nothing groups adjacent
+  elements. Inferred from reading.
+- **Workaround used:** one line per well, twelve per row, and one section per row.
 - **Weight:** Low

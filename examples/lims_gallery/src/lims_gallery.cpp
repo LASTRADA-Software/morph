@@ -19,11 +19,13 @@ namespace {
 namespace ui = morph::ui::author;
 
 // The theme index: the designs' green accent and neutrals in one base layer, the tinted surfaces the screens mark
-// a selection or a result out of specification with, and the icons the screens draw.
+// a selection, a result out of specification and a plate's template wells with, and the icons the screens draw.
 constexpr char const* kThemeIndex = R"({
   "vocab": "ui-theme/1",
   "base": "theme/base.tokens.json",
-  "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json" },
+  "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json",
+                "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
+                "blank": "theme/blank.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -58,6 +60,22 @@ constexpr char const* kSelectedSurface = R"({
 // A record with a result out of specification: the err tone's pale tint.
 constexpr char const* kOutOfSpecSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFF5F5" }, "border": { "$value": "#F2C0C0" } }
+})";
+
+// A plate's template wells: standards blue, controls amber, the blank grey, so they read apart from the samples.
+constexpr char const* kStandardSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#E6ECFF" }, "border": { "$value": "#5B7BE0" },
+             "text": { "$value": "#1F3FA8" } }
+})";
+
+constexpr char const* kControlSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#FFF1D6" }, "border": { "$value": "#D19100" },
+             "text": { "$value": "#6B4100" } }
+})";
+
+constexpr char const* kBlankSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#EEF0F3" }, "border": { "$value": "#7A828F" },
+             "text": { "$value": "#363C46" } }
 })";
 
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
@@ -112,6 +130,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/base.tokens.json", kThemeBase},
                                        std::tuple{"theme", "theme/selected.tokens.json", kSelectedSurface},
                                        std::tuple{"theme", "theme/out-of-spec.tokens.json", kOutOfSpecSurface},
+                                       std::tuple{"theme", "theme/standard.tokens.json", kStandardSurface},
+                                       std::tuple{"theme", "theme/control.tokens.json", kControlSurface},
+                                       std::tuple{"theme", "theme/blank.tokens.json", kBlankSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));

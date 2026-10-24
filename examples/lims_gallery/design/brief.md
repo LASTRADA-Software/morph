@@ -6,15 +6,16 @@
 |---|---|
 | 01 E-signature, 02 Sample receipt, 03 Instrument record | done |
 | 04 Audit trail, 05 Sample list | done |
-| 06 Stability study setup | **WIP**: committed but not registered. With it registered, the Qt Quick render smoke hits the `keyValue` polish loop (G34). Steps 1, 3 and 4 are placeholders. To resume, re-add its `designs.cpp` entry, its `screens.hpp` declaration and its two CMake lines. |
-| 07 Plate layout, 08 Result entry, 09 Review and approval, 10 Lab operations console | not started |
+| 06 Stability study setup, 07 Plate layout | done |
+| 08 Result entry, 09 Review and approval, 10 Lab operations console | not started |
 
 **Next steps:**
-1. Finish 06 and 07, then 08 to 10, one lane at a time.
+1. Build 08 to 10, one lane at a time.
 2. Group `gaps.md` into a few large framework batches. Each batch gets one design, one review, then implementation on this same branch.
 3. The gallery screens drop their workarounds.
 
-The library defects in `gaps.md` also get filed as issues (AGENTS.md): G1, G7, G12, G19, G21, G22, G25, G29 and G34.
+The library defects in `gaps.md` also get filed as issues (AGENTS.md): G1, G7, G12, G19, G21, G22, G25, G29, G34
+and G42 (G42 inferred from reading; reproduce it before filing).
 
 The mockups in `mockups/` open as Design Component pages; the canvas they came from is a private artifact.
 
