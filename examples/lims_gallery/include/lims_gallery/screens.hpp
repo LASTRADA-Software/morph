@@ -42,4 +42,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen receiptScreen();
 
+/// @brief Design 03: an instrument's record, with its status, tabs and actions.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen instrumentScreen();
+
 }  // namespace lims_gallery

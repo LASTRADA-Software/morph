@@ -25,7 +25,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.instrument",
          .title = "Instrument record",
          .summary = "Record with status, tabs and actions",
-         .make = nullptr},
+         .make = &instrumentScreen},
         {.number = "04",
          .id = "lims-gallery.audit",
          .title = "Audit trail",
