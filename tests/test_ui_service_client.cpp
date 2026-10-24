@@ -21,6 +21,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/envelope_transport.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
@@ -169,6 +170,28 @@ void flipOneBit(std::string& bytes) {
     middle = static_cast<char>(middle ^ 0x01);
 }
 
+/// Captures every log record at debug level while it is alive.
+struct CapturedLogs {
+    // Mutable: the sink appends to a capture that a test holds const once it only reads it.
+    mutable std::vector<std::pair<morph::log::LogLevel, std::string>> lines;
+    morph::log::ScopedLoggerOverride guard{[this](morph::log::LogLevel level, std::string_view message) {
+                                               lines.emplace_back(level, std::string{message});
+                                           },
+                                           morph::log::LogLevel::debug};
+
+    /// @brief Whether some record at @p level contains both @p first and @p second.
+    /// @param level  The level to look at.
+    /// @param first  One substring.
+    /// @param second Another substring.
+    /// @return Whether one record contains both.
+    [[nodiscard]] bool has(morph::log::LogLevel level, std::string_view first, std::string_view second) const {
+        return std::ranges::any_of(lines, [&](auto const& line) {
+            return line.first == level && line.second.find(first) != std::string::npos &&
+                   line.second.find(second) != std::string::npos;
+        });
+    }
+};
+
 /// The hash a `ui-fetch` request asks for.
 std::string fetched(Envelope const& request) {
     auto const parsed = morph::ui::parseFetchRequest(request.body);
@@ -183,9 +206,12 @@ std::string fetched(Envelope const& request) {
 // ── A new client and a new server ───────────────────────────────────────────
 
 TEST_CASE("UiClient opens a verified bundle filtered for the principal", "[ui-service][client]") {
+    CapturedLogs const logs;
     Harness harness;
     OpenResult const opened = Harness::open(harness.client(), as("tech"));
     REQUIRE(opened);
+    // The fetch path says what it is fetching at debug.
+    REQUIRE(logs.has(morph::log::LogLevel::debug, "[ui-fetch]", "fetching "));
     morph::ui::Bundle const& bundle = opened->bundle;
     REQUIRE(bundle.applicationId == "lims");
     REQUIRE("sha256:" + bundle.manifestDigest == uiservice::bundle()->digest);
@@ -448,33 +474,45 @@ TEST_CASE("Compatibility: an unknown must-understand key is refused", "[ui-servi
 // ── Security (spec 5 §14, §13) ──────────────────────────────────────────────
 
 TEST_CASE("Security: one changed byte in a served file refuses the bundle", "[ui-service][security]") {
+    CapturedLogs const logs;
     Harness harness;
     std::string const results = hashOf("screen", "lims.results");
-    harness.tamper = [&results](Envelope const& request, Envelope& reply) {
+    std::string actual;
+    harness.tamper = [&results, &actual](Envelope const& request, Envelope& reply) {
         if (request.kind == "ui-fetch" && fetched(request) == results) {
             flipOneBit(reply.body);
+            actual = morph::ui::contentHash(reply.body);
         }
     };
     OpenResult const opened = Harness::open(harness.client(), as("tech"));
     REQUIRE_FALSE(opened);
     REQUIRE(opened.error().kind == ConnectError::Kind::Unverified);
-    REQUIRE(opened.error().message == "the screen `lims.results` does not match its hash");
+    REQUIRE(opened.error().message ==
+            "the screen `lims.results` does not match its hash (expected " + results + ", got " + actual + ")");
+    // One warn line names both hashes.
+    REQUIRE(logs.has(morph::log::LogLevel::warn, results, actual));
     // Nothing unverified is kept, and the bundle is not recorded as the last verified one.
     REQUIRE_FALSE(harness.store->get(results));
     REQUIRE_FALSE(harness.store->lastDigest("lims"));
 }
 
 TEST_CASE("Security: one changed byte in the manifest refuses the bundle", "[ui-service][security]") {
+    CapturedLogs const logs;
     Harness harness;
-    harness.tamper = [](Envelope const& request, Envelope& reply) {
-        if (request.kind == "ui-fetch" && fetched(request) == uiservice::bundle()->digest) {
+    std::string const digest = uiservice::bundle()->digest;
+    std::string actual;
+    harness.tamper = [&digest, &actual](Envelope const& request, Envelope& reply) {
+        if (request.kind == "ui-fetch" && fetched(request) == digest) {
             flipOneBit(reply.body);
+            actual = morph::ui::contentHash(reply.body);
         }
     };
     OpenResult const opened = Harness::open(harness.client(), as("tech"));
     REQUIRE_FALSE(opened);
     REQUIRE(opened.error().kind == ConnectError::Kind::Unverified);
-    REQUIRE(opened.error().message == "the manifest does not match its hash");
+    REQUIRE(opened.error().message ==
+            "the manifest does not match its hash (expected " + digest + ", got " + actual + ")");
+    REQUIRE(logs.has(morph::log::LogLevel::warn, digest, actual));
     REQUIRE(harness.sent == std::vector<std::string>{"ui-hello", "ui-fetch"});
 }
 
@@ -493,14 +531,18 @@ TEST_CASE("Security: a served file larger than the bound is refused", "[ui-servi
 }
 
 TEST_CASE("Security: a cached file that no longer verifies is fetched again", "[ui-service][security]") {
+    CapturedLogs logs;
     Harness harness;
     REQUIRE(Harness::open(harness.client(), as("tech")));
     std::string const results = hashOf("screen", "lims.results");
     harness.store->put(results, "tampered on disk");
     harness.store->put(uiservice::bundle()->digest, "{}");
     harness.sent.clear();
+    logs.lines.clear();
     OpenResult const opened = Harness::open(harness.client(), as("tech"));
     REQUIRE(opened);
+    // The cache says which file it dropped and why.
+    REQUIRE(logs.has(morph::log::LogLevel::warn, "[ui-cache]", results));
     REQUIRE(opened->bundle.documents.at("lims.results") == uiservice::kResults);
     REQUIRE(harness.sent == std::vector<std::string>{"ui-hello", "ui-fetch", "ui-catalog", "ui-fetch"});
     REQUIRE(harness.store->get(results) == uiservice::kResults);
@@ -668,9 +710,13 @@ TEST_CASE("Security: two changed files refuse the bundle once, naming the first"
     Harness harness;
     std::string const results = hashOf("screen", "lims.results");
     std::string const theme = hashOf("theme", "default");
-    harness.tamper = [&results, &theme](Envelope const& request, Envelope& reply) {
+    std::string actual;
+    harness.tamper = [&results, &theme, &actual](Envelope const& request, Envelope& reply) {
         if (request.kind == "ui-fetch" && (fetched(request) == results || fetched(request) == theme)) {
             flipOneBit(reply.body);
+            if (fetched(request) == results) {
+                actual = morph::ui::contentHash(reply.body);
+            }
         }
     };
     int calls = 0;
@@ -683,7 +729,8 @@ TEST_CASE("Security: two changed files refuse the bundle once, naming the first"
     REQUIRE(result.has_value());
     REQUIRE_FALSE(*result);
     REQUIRE(result->error().kind == ConnectError::Kind::Unverified);
-    REQUIRE(result->error().message == "the screen `lims.results` does not match its hash");
+    REQUIRE(result->error().message ==
+            "the screen `lims.results` does not match its hash (expected " + results + ", got " + actual + ")");
 }
 
 TEST_CASE("UiClient fetches a public screen the catalog lists disabled", "[ui-service][client]") {
@@ -850,5 +897,6 @@ TEST_CASE("parseThemeIndex reads the icon set and refuses a name that is not an 
     CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":{"tone.ok":""}})"));
     CHECK_FALSE(morph::ui::parseThemeIndex(R"({"vocab":"ui-theme/1","base":"b","icons":["tick"]})"));
     CHECK(morph::ui::iconGlyph("tone.ok") == "✓");
+    CHECK(morph::ui::iconGlyph("date.pick") == "▦");
     CHECK(morph::ui::iconGlyph("mine").empty());
 }

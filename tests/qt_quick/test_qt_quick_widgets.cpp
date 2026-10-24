@@ -6,12 +6,17 @@
 // text field snapping back.
 
 #include <QColor>
+#include <QDate>
+#include <QDateTime>
+#include <QObject>
+#include <QPointF>
 #include <QQuickItem>
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
@@ -37,6 +42,20 @@ detail::ItemBase& base(ui::Widget const& widget) {
     detail::ItemBase* const found = detail::baseOf(widget);
     REQUIRE(found != nullptr);
     return *found;
+}
+
+/// The first item named @p name under @p root, depth first: a popup's content sits under the window's overlay.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* findNamed(QQuickItem& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = findNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -372,6 +391,12 @@ TEST_CASE("qt_quick widgets: a date-time input formats in its zone and parses wh
     scene.key(Qt::Key_Return);
     CHECK(changes.size() == 1);
     CHECK(base(*input).shownText() == "2026-10-12 01:15");
+    // A second unparseable edit in a row still shows the held value.
+    scene.key(Qt::Key_A, Qt::ControlModifier);
+    scene.type(QStringLiteral("later"));
+    scene.key(Qt::Key_Return);
+    CHECK(changes.size() == 1);
+    CHECK(base(*input).shownText() == "2026-10-12 01:15");
     // An emptied field is a cleared value.
     scene.key(Qt::Key_A, Qt::ControlModifier);
     scene.key(Qt::Key_Delete);
@@ -380,6 +405,131 @@ TEST_CASE("qt_quick widgets: a date-time input formats in its zone and parses wh
     CHECK_FALSE(changes.at(1).has_value());
     input->setValue(std::nullopt);
     CHECK(base(*input).shownText().empty());
+}
+
+TEST_CASE("qt_quick widgets: a date input offers a calendar unless it is read-only", "[qt_quick]") {
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    CHECK(button->isVisible());
+    input->setReadOnly(true);
+    scene.settle();
+    CHECK_FALSE(button->isVisible());
+}
+
+TEST_CASE("qt_quick widgets: a calendar day reports the date once, and a later blur reports nothing", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0);
+    auto other = scene.backend().createButton(column.get());
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    DateTime const chosen{year{2026}, month{3}, day{15}, hours{0}, minutes{0}, seconds{0}};
+    input->setValue(morph::time::Timestamp{chosen});
+    scene.settle();
+
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    auto const* const popup = scene.window().contentItem()->findChild<QObject*>(QStringLiteral("datePickerPopup"));
+    REQUIRE(popup != nullptr);
+    CHECK(popup->property("visible").toBool());
+    QQuickItem const* const cell = findNamed(*scene.window().contentItem(), QStringLiteral("day_2026-2-20"));
+    REQUIRE(cell != nullptr);
+    scene.click(*cell);
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.at(0).has_value());
+    CHECK(changes.at(0)->value->toIso8601() == "2026-03-20T00:00:00.000Z");
+    CHECK(base(*input).shownText() == "2026-03-20");
+    // The pick reported its own change: a blur afterwards reports nothing.
+    scene.click(Scene::itemOf(*other));
+    CHECK(changes.size() == 1);
+}
+
+TEST_CASE("qt_quick widgets: a calendar day keeps a date-time input's time of day in its zone", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::DateTime, 120);
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    DateTime const instant{year{2026}, month{3}, day{15}, hours{12}, minutes{30}, seconds{0}};
+    input->setValue(morph::time::Timestamp{instant});
+    scene.settle();
+    CHECK(base(*input).shownText() == "2026-03-15 14:30");
+
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const cell = findNamed(*scene.window().contentItem(), QStringLiteral("day_2026-2-20"));
+    REQUIRE(cell != nullptr);
+    scene.click(*cell);
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.at(0).has_value());
+    CHECK(changes.at(0)->value->toIso8601() == "2026-03-20T12:30:00.000Z");
+    CHECK(base(*input).shownText() == "2026-03-20 14:30");
+}
+
+// Mutation: place the popup by the field's scene position. The popup is placed in its parent's coordinates, so a
+// scene position puts it off by the field's own offset as soon as the placement is recomputed, here on a new width.
+TEST_CASE("qt_quick widgets: a calendar opens under its field, wherever the field sits", "[qt_quick]") {
+    Scene scene;
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto before = scene.backend().createButton(row.get());
+    before->setLabel("Before");
+    auto input = scene.backend().createDateTimeInput(row.get(), ui::DateMode::Date, 0);
+    scene.settle();
+
+    QQuickItem const& field = Scene::itemOf(*input);
+    REQUIRE(field.mapToScene(QPointF{0, 0}).x() > 0.0);  // the field sits right of another widget
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    auto const* const popup = scene.window().contentItem()->findChild<QObject*>(QStringLiteral("datePickerPopup"));
+    REQUIRE(popup != nullptr);
+    REQUIRE(popup->property("visible").toBool());
+    auto* const background = popup->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    auto const check = [&] {
+        QPointF const fieldBottomRight = field.mapToScene(QPointF{field.width(), field.height()});
+        QPointF const topRight = background->mapToScene(QPointF{background->width(), 0});
+        INFO("field bottom-right " << fieldBottomRight.x() << "," << fieldBottomRight.y() << ", popup top-right "
+                                   << topRight.x() << "," << topRight.y());
+        CHECK(std::abs(topRight.y() - fieldBottomRight.y()) <= 1.0);
+        CHECK(std::abs(topRight.x() - fieldBottomRight.x()) <= 1.0);
+    };
+    check();
+    // A new width places the calendar again.
+    input->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
+    scene.settle();
+    check();
+}
+
+TEST_CASE("qt_quick widgets: a calendar opens on the field's month, not today's", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    QDate const expected = QDateTime::currentDateTimeUtc().date().addMonths(-2);
+    DateTime const value{year{expected.year()},
+                         month{static_cast<unsigned>(expected.month())},
+                         day{static_cast<unsigned>(expected.day())},
+                         hours{0},
+                         minutes{0},
+                         seconds{0}};
+    input->setValue(morph::time::Timestamp{value});
+    scene.settle();
+
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const grid = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerGrid"));
+    REQUIRE(grid != nullptr);
+    CHECK(grid->property("year").toInt() == expected.year());
+    CHECK(grid->property("month").toInt() == expected.month() - 1);
 }
 
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {

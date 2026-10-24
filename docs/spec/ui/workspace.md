@@ -105,18 +105,23 @@ A refused mount answers its `MountError` and opens nothing; its page is destroye
 
 ## The head row
 
-Above each tab's screen, in its page, the shell mounts a row over the handle's `head()`: the subtitle (muted), the
-badges, a spacer and the actions as buttons, with test ids `head`, `head_subtitle`, `head_status_<n>` (the badge's
-place among the visible ones) and `head_action_<id>`. A button is disabled while its action is, and a click runs the
-action through `ScreenHead::run`. The row is hidden while the head has no subtitle, badges or actions, so a screen
-without them looks as it would without the row; a handle without a head (a host screen) gets no row. The row is
-mounted after the screen, since it reads the handle, and moved above it. It reads the head through the model, a
-tracked read of `tabs()`, so a row mounted while the model is still opening the tab reads the head once the model
-holds it, and one whose handle has gone reads nothing.
+With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
+screen, in its page: the subtitle (muted), the badges, a spacer and the actions as buttons, with test ids `head`,
+`head_subtitle`, `head_spacer`, `head_status_<n>` (the badge's place among the visible ones) and `head_action_<id>`. A button is
+disabled while its action is, and a click runs the action through `ScreenHead::run`. The row is hidden while the head
+has no subtitle, badges or actions, so a screen without them looks as it would without the row; a handle without a
+head (a host screen) gets no row. The row is mounted after the screen, since it reads the handle, and moved above it.
+It reads the head through the model, a tracked read of `tabs()`, so a row mounted while the model is still opening
+the tab reads the head once the model holds it, and one whose handle has gone reads nothing.
+
+With `HeadPlacement::External`, `mountPage` mounts no head row and a page holds only its screen: the host mounts
+`headRowForActive()` where it chooses. The row stretches to the full width it is given and its spacer stretches with
+it, so the actions sit at the trailing edge in either placement.
 
 `Workspace::headRowForActive()` builds the same row for whichever tab is active, as a public `Node` a host can mount
-somewhere else entirely (a client's own shell chrome, outside the page the in-body row above already sits in) —
-`morph::client::Shell` mounts it into `ShellFrame::headSlot()`, beside the title in the top bar. It reads
+somewhere else entirely (a client's own shell chrome) — `morph::client::Shell` constructs its `Workspace` with
+`HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, beside the title in the top bar, so the
+head shows once. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
 the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
 invisible row — never a null `Node` — so a caller mounting it need not handle a null case itself.

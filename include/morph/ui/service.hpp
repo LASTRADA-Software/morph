@@ -302,6 +302,85 @@ public:
     /// @param text  The document's JSON text, served byte for byte.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> addScreen(CatalogEntry entry, std::string text) {
+        std::string const screenId = entry.id;
+        std::size_t const size = text.size();
+        auto added = addScreenImpl(std::move(entry), std::move(text));
+        if (added) {
+            ::morph::log::logDebug("[ui-serve] added the screen `{}` ({} bytes)", screenId, size);
+        } else {
+            ::morph::log::logWarn("[ui-serve] refused a screen: {}", added.error().message());
+        }
+        return added;
+    }
+
+    /// @brief Lists an entry that has no document: a host screen (`host`), or one the application has not built
+    ///        (`available: false`).
+    ///
+    /// Refused on the same entry rules as `addScreen`, and when the entry is neither a host screen nor unavailable.
+    /// @param entry The catalog entry.
+    /// @return Nothing, or the refusal.
+    std::expected<void, Refusal> addEntry(CatalogEntry entry) {
+        std::string const entryId = entry.id;
+        auto added = addEntryImpl(std::move(entry));
+        if (added) {
+            ::morph::log::logDebug("[ui-serve] added the entry `{}`", entryId);
+        } else {
+            ::morph::log::logWarn("[ui-serve] refused an entry: {}", added.error().message());
+        }
+        return added;
+    }
+
+    /// @brief Adds a file that is not a screen: the app document (`app`, whose id is `app`), a theme (`theme`), a
+    ///        message catalogue (`messages`), a delivered component (`component`) or an icon (`icon`).
+    ///
+    /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
+    /// an app document that load-time validation refuses or whose id is not `app`, a message catalogue whose id is
+    /// not `i18n/LOCALE.json`, that `parseCatalogue` refuses, or that has a pattern outside the `ui/1` subset, and a
+    /// theme file that is neither a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes, and an
+    /// icon that is not SVG text or is larger than `kMaxIconBytes`.
+    /// @param file The file.
+    /// @return Nothing, or the refusal.
+    std::expected<void, Refusal> addFile(BundleFile file) {
+        std::string const kind = file.kind;
+        std::string const fileId = file.id;
+        std::size_t const size = file.bytes.size();
+        auto added = addFileImpl(std::move(file));
+        if (added) {
+            ::morph::log::logDebug("[ui-serve] added the {} `{}` ({} bytes)", kind, fileId, size);
+        } else {
+            ::morph::log::logWarn("[ui-serve] refused a file: {}", added.error().message());
+        }
+        return added;
+    }
+
+    /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
+    ///        client that does not speak it is refused at `ui-hello`.
+    /// @param vocabulary The vocabulary.
+    void requireVocabulary(std::string vocabulary) { _vocabularies.insert(std::move(vocabulary)); }
+
+    /// @brief Builds the bundle.
+    ///
+    /// Refused when a screen names a delivered component (`qml`) whose hash no `component` file has, when the
+    /// bundle holds more than `kMaxBundleFiles` files or entries, and when it needs more than `kMaxListItems`
+    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`.
+    /// @return The bundle, or the refusal.
+    [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, Refusal> build() const {
+        auto built = buildImpl();
+        if (built) {
+            ::morph::log::logDebug("[ui-serve] built the bundle of `{}`: {} files, digest {}", _application.id,
+                                   (*built)->files.size(), (*built)->digest);
+        } else {
+            ::morph::log::logWarn("[ui-serve] refused to build: {}", built.error().message());
+        }
+        return built;
+    }
+
+private:
+    /// @brief Registers a screen; the public `addScreen` logs its outcome.
+    /// @param entry The catalog entry.
+    /// @param text  The document's JSON text.
+    /// @return Nothing, or the refusal.
+    std::expected<void, Refusal> addScreenImpl(CatalogEntry entry, std::string text) {
         if (auto refusal = checkNewEntry(entry)) {
             return std::unexpected(std::move(*refusal));
         }
@@ -340,13 +419,10 @@ public:
         return {};
     }
 
-    /// @brief Lists an entry that has no document: a host screen (`host`), or one the application has not built
-    ///        (`available: false`).
-    ///
-    /// Refused on the same entry rules as `addScreen`, and when the entry is neither a host screen nor unavailable.
+    /// @brief Registers an entry that has no document; the public `addEntry` logs its outcome.
     /// @param entry The catalog entry.
     /// @return Nothing, or the refusal.
-    std::expected<void, Refusal> addEntry(CatalogEntry entry) {
+    std::expected<void, Refusal> addEntryImpl(CatalogEntry entry) {
         if (auto refusal = checkNewEntry(entry)) {
             return std::unexpected(std::move(*refusal));
         }
@@ -361,17 +437,10 @@ public:
         return {};
     }
 
-    /// @brief Adds a file that is not a screen: the app document (`app`, whose id is `app`), a theme (`theme`), a
-    ///        message catalogue (`messages`), a delivered component (`component`) or an icon (`icon`).
-    ///
-    /// Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve,
-    /// an app document that load-time validation refuses or whose id is not `app`, a message catalogue whose id is
-    /// not `i18n/LOCALE.json`, that `parseCatalogue` refuses, or that has a pattern outside the `ui/1` subset, and a
-    /// theme file that is neither a theme index `parseThemeIndex` takes nor a token file `parseTokens` takes, and an
-    /// icon that is not SVG text or is larger than `kMaxIconBytes`.
+    /// @brief Adds a file; the public `addFile` logs its outcome.
     /// @param file The file.
     /// @return Nothing, or the refusal.
-    std::expected<void, Refusal> addFile(BundleFile file) {
+    std::expected<void, Refusal> addFileImpl(BundleFile file) {
         if (file.kind != kAppFile && file.kind != kThemeFile && file.kind != kMessagesFile &&
             file.kind != kComponentFile && file.kind != kIconFile) {
             return refuse(file.id,
@@ -399,18 +468,9 @@ public:
         return {};
     }
 
-    /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
-    ///        client that does not speak it is refused at `ui-hello`.
-    /// @param vocabulary The vocabulary.
-    void requireVocabulary(std::string vocabulary) { _vocabularies.insert(std::move(vocabulary)); }
-
-    /// @brief Builds the bundle.
-    ///
-    /// Refused when a screen names a delivered component (`qml`) whose hash no `component` file has, when the
-    /// bundle holds more than `kMaxBundleFiles` files or entries, and when it needs more than `kMaxListItems`
-    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`.
+    /// @brief Builds the bundle; the public `build` logs its outcome.
     /// @return The bundle, or the refusal.
-    [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, Refusal> build() const {
+    [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, Refusal> buildImpl() const {
         if (auto refusal = checkBuildable()) {
             return std::unexpected(std::move(*refusal));
         }
@@ -424,7 +484,6 @@ public:
         return bundle;
     }
 
-private:
     /// @brief Checks every theme index: each combination of its variants, densities and surfaces over `base`
     ///        resolves from the bundle's token files (`checkTheme`).
     /// @return The refusal, naming the index and the combination, or nothing.
@@ -799,20 +858,51 @@ private:
         return ::morph::wire::encode(::morph::wire::makeErr(std::move(message), request.callId));
     }
 
+    /// @brief An encoded reply and the fields the service's log line carries: what was asked for, and the outcome.
+    struct Answer {
+        /// @brief The encoded reply.
+        std::string encoded;
+        /// @brief The hash or application the request named.
+        std::string subject;
+        /// @brief `ok`, or the refusal the reply carries.
+        std::string outcome;
+    };
+
     [[nodiscard]] static bool gate(::morph::session::IAuthorizer const& authorizer,
                                    ::morph::wire::Envelope const& request, std::string_view action) {
         return authorizer.authorize(request.session, kServiceModel, action);
     }
 
+    /// @brief Answers a `ui-hello` and logs the outcome at debug.
+    /// @param request    The envelope.
+    /// @param authorizer The server's authoriser.
+    /// @param facts      The facts of the connection the request arrived on.
+    /// @return The encoded reply.
     [[nodiscard]] std::string hello(::morph::wire::Envelope const& request,
                                     ::morph::session::IAuthorizer const& authorizer,
                                     ::morph::backend::ConnectionFacts& facts) const {
+        Answer answer = helloAnswer(request, authorizer, facts);
+        ::morph::log::logDebug("[ui-hello] `{}`: {}", answer.subject, answer.outcome);
+        return std::move(answer.encoded);
+    }
+
+    /// @brief Answers a `ui-hello` without logging it.
+    /// @param request    The envelope.
+    /// @param authorizer The server's authoriser.
+    /// @param facts      The facts of the connection the request arrived on.
+    /// @return The reply and its log fields.
+    [[nodiscard]] Answer helloAnswer(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& authorizer,
+                                     ::morph::backend::ConnectionFacts& facts) const {
+        std::string const application = _bundle->application.id;
         if (!gate(authorizer, request, kHelloAction)) {
-            return err(request, "unauthorized");
+            return Answer{
+                .encoded = err(request, "unauthorized"), .subject = application, .outcome = "refused: unauthorized"};
         }
         auto client = parseHelloRequest(request.body);
         if (!client) {
-            return err(request, std::move(client.error()));
+            std::string const reason = std::move(client.error());
+            return Answer{.encoded = err(request, reason), .subject = application, .outcome = "refused: " + reason};
         }
         std::string missing;
         for (std::string const& vocabulary : _bundle->vocabularies) {
@@ -821,16 +911,19 @@ private:
             }
         }
         if (!missing.empty()) {
-            return err(request, "missing vocabulary: " + missing);
+            std::string const reason = "missing vocabulary: " + missing;
+            return Answer{.encoded = err(request, reason), .subject = application, .outcome = "refused: " + reason};
         }
         if (client->events) {
             facts.events = true;
         }
-        return ok(request, detail::writeMessage(HelloReply{.application = _bundle->application.id,
-                                                           .version = _bundle->application.version,
-                                                           .vocabularies = _bundle->vocabularies,
-                                                           .digest = _bundle->digest,
-                                                           .events = client->events}));
+        return Answer{.encoded = ok(request, detail::writeMessage(HelloReply{.application = _bundle->application.id,
+                                                                             .version = _bundle->application.version,
+                                                                             .vocabularies = _bundle->vocabularies,
+                                                                             .digest = _bundle->digest,
+                                                                             .events = client->events})),
+                      .subject = application,
+                      .outcome = "ok, digest " + _bundle->digest};
     }
 
     /// @brief Evaluates the action body @p request carries (spec 5 §7): decoded, reconciled and recomputed, never
@@ -917,10 +1010,27 @@ private:
         return ok(request, detail::writeMessage(reply));
     }
 
+    /// @brief Answers a `ui-catalog` and logs the outcome at debug.
+    /// @param request    The envelope.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply.
     [[nodiscard]] std::string catalog(::morph::wire::Envelope const& request,
                                       ::morph::session::IAuthorizer const& authorizer) const {
+        Answer answer = catalogAnswer(request, authorizer);
+        ::morph::log::logDebug("[ui-catalog] `{}`: {}", answer.subject, answer.outcome);
+        return std::move(answer.encoded);
+    }
+
+    /// @brief Answers a `ui-catalog` without logging it.
+    /// @param request    The envelope.
+    /// @param authorizer The server's authoriser.
+    /// @return The reply and its log fields.
+    [[nodiscard]] Answer catalogAnswer(::morph::wire::Envelope const& request,
+                                       ::morph::session::IAuthorizer const& authorizer) const {
+        std::string const application = _bundle->application.id;
         if (!gate(authorizer, request, kCatalogAction)) {
-            return err(request, "unauthorized");
+            return Answer{
+                .encoded = err(request, "unauthorized"), .subject = application, .outcome = "refused: unauthorized"};
         }
         CatalogReply reply;
         Fetchable const fetchable = listEntries(reply, request.session, authorizer);
@@ -959,7 +1069,9 @@ private:
         };
         documents(_bundle->views, reply.views);
         documents(_bundle->wizards, reply.wizards);
-        return ok(request, detail::writeMessage(reply));
+        return Answer{.encoded = ok(request, detail::writeMessage(reply)),
+                      .subject = application,
+                      .outcome = std::format("ok, {} entries", reply.entries.size())};
     }
 
     /// @brief Lists the entries the principal sees into @p reply.
@@ -994,31 +1106,55 @@ private:
         return fetchable;
     }
 
+    /// @brief Answers a `ui-fetch` and logs the outcome at debug.
+    /// @param request    The envelope; its body is a `FetchRequest`.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply.
     [[nodiscard]] std::string fetch(::morph::wire::Envelope const& request,
                                     ::morph::session::IAuthorizer const& authorizer) const {
+        Answer answer = fetchAnswer(request, authorizer);
+        ::morph::log::logDebug("[ui-fetch] {}: {}", answer.subject, answer.outcome);
+        return std::move(answer.encoded);
+    }
+
+    /// @brief Answers a `ui-fetch` without logging it.
+    /// @param request    The envelope; its body is a `FetchRequest`.
+    /// @param authorizer The server's authoriser.
+    /// @return The reply and its log fields.
+    [[nodiscard]] Answer fetchAnswer(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& authorizer) const {
         auto wanted = parseFetchRequest(request.body);
         if (!wanted) {
-            return err(request, std::move(wanted.error()));
+            std::string const reason = std::move(wanted.error());
+            return Answer{.encoded = err(request, reason), .subject = "<unreadable>", .outcome = "refused: " + reason};
         }
-        auto const found = _bundle->files.find(wanted->hash);
+        std::string const& hash = wanted->hash;
+        auto const found = _bundle->files.find(hash);
         bool const isPublic = found != _bundle->files.end() &&
                               std::ranges::any_of(found->second.holders,
                                                   [](ServedFile::Holder const& holder) { return holder.isPublic; });
         if (isPublic) {
-            return gate(authorizer, request, kHelloAction) ? ok(request, found->second.bytes)
-                                                           : err(request, "unauthorized");
+            return gate(authorizer, request, kHelloAction)
+                       ? Answer{.encoded = ok(request, found->second.bytes), .subject = hash, .outcome = "ok"}
+                       : Answer{.encoded = err(request, "unauthorized"),
+                                .subject = hash,
+                                .outcome = "refused: unauthorized"};
         }
         // The fetch gate comes before the lookup's answer, so a caller it refuses cannot learn which hashes exist.
         if (!gate(authorizer, request, kFetchAction)) {
-            return err(request, "unauthorized");
+            return Answer{
+                .encoded = err(request, "unauthorized"), .subject = hash, .outcome = "refused: unauthorized"};
         }
         if (found == _bundle->files.end()) {
-            return err(request, "not found");
+            return Answer{.encoded = err(request, "not found"), .subject = hash, .outcome = "refused: not found"};
         }
         bool const admitted = std::ranges::any_of(found->second.holders, [&](ServedFile::Holder const& holder) {
             return !holder.screen || screenAdmits(_bundle->screens.at(*holder.screen), request.session, authorizer);
         });
-        return admitted ? ok(request, found->second.bytes) : err(request, "unauthorized");
+        return admitted
+                   ? Answer{.encoded = ok(request, found->second.bytes), .subject = hash, .outcome = "ok"}
+                   : Answer{
+                         .encoded = err(request, "unauthorized"), .subject = hash, .outcome = "refused: unauthorized"};
     }
 
     /// @brief Whether the principal may fetch @p screen's document: it is available, and the catalog lists it as

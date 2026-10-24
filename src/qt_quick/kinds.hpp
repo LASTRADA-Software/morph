@@ -94,7 +94,10 @@ public:
     [[nodiscard]] std::string shownText() const override;
 
 private:
-    void show(QString const& text) const;
+    /// @brief Shows @p text, unless the control already shows it.
+    /// @param text  The text to show.
+    /// @param force Whether to write it even when the control already shows it.
+    void show(QString const& text, bool force = false) const;
 
     ui::DateMode _mode;
     int _offsetMinutes;

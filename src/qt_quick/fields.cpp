@@ -309,7 +309,8 @@ std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::Date
 
 DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes)
     : FieldItemWidget{context, QStringLiteral("MorphDateTimeInput"), parent,
-                      QVariantMap{{QStringLiteral("withTime"), mode == ui::DateMode::DateTime}}},
+                      QVariantMap{{QStringLiteral("withTime"), mode == ui::DateMode::DateTime},
+                                  {QStringLiteral("offsetMinutes"), offsetMinutes}}},
       _mode{mode},
       _offsetMinutes{offsetMinutes} {
     relay().on(QStringLiteral("edit"), [this](QVariant const& payload) {
@@ -323,10 +324,9 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
         }
         std::optional<morph::time::DateTime> const parsed = parseDateTime(text, _mode, _offsetMinutes);
         if (!parsed) {
-            // Text that names no instant is not a request: the field shows its value again.
-            QString const shown = _shown;
-            _shown.clear();
-            show(shown);
+            // Text that names no instant is not a request: the field shows its value again. Forced, because the
+            // user's text may already read the same as the held value, and the held value stays for the next edit.
+            show(_shown, true);
             return;
         }
         _shown = text;
@@ -336,9 +336,9 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
     });
 }
 
-void DateTimeImpl::show(QString const& text) const {
+void DateTimeImpl::show(QString const& text, bool force) const {
     QObject* const control = part("control");
-    if (control != nullptr && control->property("text").toString() != text) {
+    if (control != nullptr && (force || control->property("text").toString() != text)) {
         control->setProperty("text", text);
     }
 }

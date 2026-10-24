@@ -20,6 +20,7 @@
 #include "../core/completion.hpp"
 #include "../core/envelope_transport.hpp"
 #include "../core/executor.hpp"
+#include "../core/logger.hpp"
 #include "../core/wire.hpp"
 #include "../session/session.hpp"
 #include "../ui/frontend.hpp"
@@ -163,6 +164,7 @@ public:
     [[nodiscard]] std::optional<std::string> get(std::string const& hash) {
         auto bytes = _store->get(hash);
         if (bytes && contentHash(*bytes) != hash) {
+            ::morph::log::logWarn("[ui-cache] dropped {}: the stored bytes do not hash to it", hash);
             _store->remove(hash);
             return std::nullopt;
         }
@@ -446,6 +448,7 @@ private:
     }
 
     static void fail(std::shared_ptr<Run> const& run, ConnectError error) {
+        ::morph::log::logWarn("[ui-fetch] {}", error.message);
         run->done(std::unexpected(std::move(error)));
     }
 
@@ -479,9 +482,10 @@ private:
                 .kind = ConnectError::Kind::Unverified,
                 .message = expected.what + " is larger than " + std::to_string(kMaxFileBytes) + " bytes"});
         }
-        if (contentHash(*body) != expected.hash) {
+        if (std::string const actual = contentHash(*body); actual != expected.hash) {
             return std::unexpected(ConnectError{.kind = ConnectError::Kind::Unverified,
-                                                .message = expected.what + " does not match its hash"});
+                                                .message = expected.what + " does not match its hash (expected " +
+                                                           expected.hash + ", got " + actual + ")"});
         }
         return body;
     }
@@ -513,9 +517,15 @@ private:
             }
         }
         if (run->unchanged && hello->digest == run->knownDigest) {
+            ::morph::log::logDebug("[ui-fetch] polling `{}`: digest {}, known {}, manifest unchanged",
+                                   hello->application, hello->digest, run->knownDigest);
             run->unchanged();
             return;
         }
+        ::morph::log::logDebug("[ui-fetch] {} `{}`: digest {}, known {}, manifest {}",
+                               run->unchanged ? "polling" : "opening", hello->application, hello->digest,
+                               run->knownDigest.empty() ? std::string{"<none>"} : run->knownDigest,
+                               hello->digest == run->knownDigest ? "unchanged" : "changed");
         run->loaded.hello = std::move(*hello);
         std::string const& digest = run->loaded.hello.digest;
         if (auto cached = run->shared->cache.get(digest)) {
@@ -564,7 +574,9 @@ private:
             if (auto cached = run->shared->cache.get(file.hash)) {
                 run->loaded.files.insert_or_assign(file.hash, std::move(*cached));
             } else {
-                missing.push_back(Expected{.hash = file.hash, .what = "the " + file.kind + " `" + file.id + "`"});
+                Expected expected{.hash = file.hash, .what = "the " + file.kind + " `" + file.id + "`"};
+                ::morph::log::logDebug("[ui-fetch] fetching {} ({})", expected.hash, expected.what);
+                missing.push_back(std::move(expected));
             }
         }
         // One count for each fetch and one for this loop, so a synchronous exchange that answers every fetch

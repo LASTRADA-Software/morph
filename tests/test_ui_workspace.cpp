@@ -476,6 +476,31 @@ TEST_CASE("workspace: headRowForActive mounts the active tab's own head row, sep
     CHECK(rows == 2);
 }
 
+// Mutation: mount the in-page head even for External (a page holds a head row the host also mounts).
+TEST_CASE("workspace: an external head placement leaves the page without a head row", "[ui][workspace]") {
+    using morph::ui::HeadPlacement;
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, HeadPlacement::External};
+    REQUIRE(shell.open("headed", {}) == 0U);
+    harness.settle();
+    // The page holds the screen only: no head row of its own.
+    CHECK_FALSE(harness.backend.find("Row", "testId", "head").has_value());
+    // The row the host mounts itself shows the active tab's subtitle and its action.
+    Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
+    harness.settle();
+    CHECK(harness.text("head_subtitle") == "Editing");
+    CHECK(harness.backend.find("Button", "testId", "head_action_save").has_value());
+    // The row and its spacer stretch, so a host's wide slot puts the actions at the trailing edge.
+    std::optional<int> const row = harness.backend.find("Row", "testId", "head");
+    std::optional<int> const spacer = harness.backend.find("Spacer", "testId", "head_spacer");
+    REQUIRE(row);
+    REQUIRE(spacer);
+    CHECK(harness.backend.prop(*row, "layout").starts_with("stretch"));
+    CHECK(harness.backend.prop(*spacer, "layout").starts_with("stretch"));
+}
+
 namespace {
 
 using morph::ui::WorkspaceModel;

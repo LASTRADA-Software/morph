@@ -56,6 +56,10 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - **Read-only.** A field made read-only by `setReadOnly(true)` shows its value, takes focus and
   lets its text be selected, and reports no edit, submit or commit; `setReadOnly(false)` makes it
   editable again.
+- **Date inputs.** A graphical backend offers a calendar beside the typed date field, opening on
+  the field's date or on today in the display zone. A day chosen produces the same text an edit
+  would and reaches `onChange` the same way, so the field's text is the one source of the value.
+  The terminal offers typed text only. A read-only date input shows no calendar.
 - **Menus.** `setItems` replaces the whole tree of `MenuEntry{label, icon, keys, checked, enabled,
   items}`. `keys` is only shown beside the label; `checked` engaged shows a check mark that only
   `setItems` moves; an entry with `items` opens its submenu. `onActivate` receives the chosen

@@ -53,10 +53,18 @@ ui::ThemeValues brandTheme() {
 }
 
 /// The colour of the label inside a text widget's item: the descendant whose `text` is @p text.
+///
+/// Walks the item tree rather than the QObject tree: a view's delegates, a tab button's content among them, are
+/// QQuickItem children of the view but not QObject children of the widget.
 QColor labelColor(QQuickItem const& item, QString const& text) {
-    for (QObject const* const child : item.findChildren<QObject*>()) {
-        if (child->property("text").toString() == text && child->property("color").isValid()) {
-            return child->property("color").value<QColor>();
+    QList<QQuickItem const*> pending{&item};
+    while (!pending.isEmpty()) {
+        QQuickItem const* const node = pending.takeLast();
+        if (node->property("text").toString() == text && node->property("color").isValid()) {
+            return node->property("color").value<QColor>();
+        }
+        for (QQuickItem const* const child : node->childItems()) {
+            pending.append(child);
         }
     }
     FAIL("no label with the text " << text.toStdString());
@@ -87,6 +95,19 @@ TEST_CASE("qt_quick theme: a token set reaches a generated screen's widget and f
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     scene.settle();
     CHECK(labelColor(item, QStringLiteral("Samples")) == QColor{"#1d1d1f"});
+}
+
+TEST_CASE("qt_quick theme: a tab's label takes the scheme colour under every style", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::tabs({.tabs = {{.label = "First", .node = ui::text({.text = "one"})},
+                                                 {.label = "Second", .node = ui::text({.text = "two"})}},
+                                        .selected = std::size_t{0}})};
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(mounted.root());
+    CHECK(labelColor(item, QStringLiteral("First")) == QColor{"#aa0055"});
+    CHECK(labelColor(item, QStringLiteral("Second")) == QColor{"#6e6e73"});
 }
 
 TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing token takes the default", "[qt_quick]") {

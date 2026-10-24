@@ -43,8 +43,17 @@ struct WorkspaceTab {
     std::string caption;
 };
 
+/// @brief Where a workspace draws the active screen's head row.
+enum class HeadPlacement : std::uint8_t {
+    /// @brief Above each page, inside the workspace.
+    InPage,
+    /// @brief Nowhere: the host mounts `headRowForActive()` where it chooses, and a page holds only its screen.
+    External,
+};
+
 /// @brief Tabs over screens: a tab bar over a `WorkspaceModel`, one screen instance per tab, mounted into the tab's
-///        page through `DocumentScreenHost::mountInto`, with the screen's head row above it.
+///        page through `DocumentScreenHost::mountInto`, with the screen's head row above it or, when the placement is
+///        `External`, mounted by the host instead.
 ///
 /// The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open
 /// tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol
@@ -59,16 +68,19 @@ public:
     /// @param host    What mounts the screens. Borrowed; it outlives the shell.
     /// @param options The screens' catalog facts.
     /// @param parent  The container the shell is appended to; null makes it a backend root.
+    /// @param headPlacement Where the active screen's head row is drawn. `External` leaves the host to mount
+    ///        `headRowForActive()` itself, so a shell with its own top bar shows the head once.
     Workspace(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND,
               DocumentScreenHost& host MORPH_LIFETIMEBOUND, WorkspaceOptions options = {},
-              ContainerWidget* parent = nullptr)
+              ContainerWidget* parent = nullptr, HeadPlacement headPlacement = HeadPlacement::InPage)
         : _runtime{&runtime},
           _backend{&backend},
           _host{&host},
           _bar{backend.createTabs(parent)},
           _hosts{options.hosts},
           _screens{options.screens},
-          _onChanged{std::move(options.onChanged)} {
+          _onChanged{std::move(options.onChanged)},
+          _headPlacement{headPlacement} {
         // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
         _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _bar->setTabs({});
@@ -325,7 +337,7 @@ private:
         if (!handle) {
             return handle;
         }
-        if ((*handle)->head() != nullptr) {
+        if (_headPlacement == HeadPlacement::InPage && (*handle)->head() != nullptr) {
             // Mounted after the screen, since it reads the handle, and moved above it.
             page->head.emplace(*_runtime, *_backend, headRow(tab), page->slot.get());
             page->slot->moveChild(page->head->root(), 0);
@@ -363,6 +375,8 @@ private:
         };
         Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
         row.common.testId = "head";
+        // Full width, so the actions sit at the trailing edge in either placement.
+        row.common.layout.width = Sizing::stretch();
         row.common.visible = Prop<bool>{
             [subtitle, status, actions] { return !subtitle().empty() || !status().empty() || !actions().empty(); }};
         Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
@@ -387,7 +401,11 @@ private:
                 return ui::badge(std::move(badge));
             },
             Axis::Horizontal, 1));
-        row.children.push_back(ui::spacer());
+        // The spacer stretches, which is what makes the row lay out at full width and pushes the actions to the end.
+        Spacer filler;
+        filler.common.testId = "head_spacer";
+        filler.common.layout.width = Sizing::stretch();
+        row.children.push_back(ui::spacer(std::move(filler)));
         row.children.push_back(ui::forEach<HeadAction>(
             actions, [](HeadAction const& action) { return Key{action.id}; },
             [this, tab](reactive::Signal<HeadAction> const& action) {
@@ -455,6 +473,7 @@ private:
     ScreenHostRegistry const* _hosts = nullptr;
     std::function<WorkspaceScreen(std::string_view)> _screens;
     std::function<void()> _onChanged;
+    HeadPlacement _headPlacement = HeadPlacement::InPage;
     std::map<std::uint64_t, std::unique_ptr<Page>> _pages;
     // The pages in the bar's order.
     std::vector<WorkspaceTabId> _shownOrder;
