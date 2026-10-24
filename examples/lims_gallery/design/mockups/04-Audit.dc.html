@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Audit trail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:#17784A;padding:0 4px}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.input.lg{height:44px;font-size:14px}
+.lbl{font-size:12px;font-weight:500;color:#363C46;display:block;margin-bottom:4px}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap}
+.t-neu{background:#EEF0F3;color:#363C46}.t-info{background:#E6ECFF;color:#1F3FA8}.t-err{background:#FDE7E7;color:#9B1C1C}
+.fh{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#4D5461;margin:0 0 6px}
+.ck{display:flex;align-items:center;gap:8px;padding:3px 0}
+.ck input{width:15px;height:15px;accent-color:#17784A;margin:0}
+.ck .n{margin-left:auto;color:#4D5461}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC;vertical-align:bottom}
+td{padding:7px 8px;border-bottom:1px solid #EDF0F3;vertical-align:top;line-height:1.4}
+.old{color:#8A1C1C}.new{color:#17602F}
+.chip{display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #C3C9D2;border-radius:4px;padding:0 0 0 8px;height:26px}
+.chip button{border:none;background:none;width:26px;height:24px;color:#4D5461;cursor:pointer;font-size:14px}
+.entry{padding:10px 12px;border-top:1px solid #EDF0F3;line-height:1.45}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1000px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · facets beside a read-only table</p>
+    <div class="win" style="width: 1000px; height: 880px; display: flex">
+      <aside aria-label="Filters" style="width: 220px; flex: none; background: #fff; border-right: 1px solid #E1E5EA; padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">Filters</h2><button class="btn ghost" style="height: 26px">Clear all</button></div>
+        <div><p class="fh">Record type</p>
+          <label class="ck"><input type="checkbox" checked>Result<span class="n">412</span></label>
+          <label class="ck"><input type="checkbox" checked>Sample<span class="n">96</span></label>
+          <label class="ck"><input type="checkbox">Specification<span class="n">8</span></label>
+          <label class="ck"><input type="checkbox">User account<span class="n">3</span></label>
+        </div>
+        <div><p class="fh">Action</p>
+          <label class="ck"><input type="checkbox" checked>Modified<span class="n">57</span></label>
+          <label class="ck"><input type="checkbox">Created<span class="n">380</span></label>
+          <label class="ck"><input type="checkbox">Signed<span class="n">71</span></label>
+          <label class="ck"><input type="checkbox">Deleted<span class="n">0</span></label>
+        </div>
+        <div><label class="lbl" for="us">User</label><select class="input" id="us"><option>Any user</option></select></div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div><label class="lbl" for="fr">From</label><input class="input" id="fr" value="20-Oct-2026 00:00"></div>
+          <div><label class="lbl" for="to">To</label><input class="input" id="to" value="24-Oct-2026 23:59"></div>
+        </div>
+      </aside>
+      <main style="flex: 1; min-width: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Audit trail</h1>
+          <input class="input" aria-label="Search audit trail" placeholder="Search record, field or reason" style="width: 240px">
+          <button class="btn">Export CSV</button><button class="btn primary">Export PDF for inspection</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+          <span class="muted" style="margin-right: 4px">57 entries · times in CEST (UTC+2)</span>
+          <span class="chip">Result<button aria-label="Remove Result">×</button></span><span class="chip">Sample<button aria-label="Remove Sample">×</button></span><span class="chip">Modified<button aria-label="Remove Modified">×</button></span><span class="chip">20–24 Oct 2026<button aria-label="Remove dates">×</button></span>
+        </div>
+        <div class="card" style="overflow: hidden">
+          <table>
+            <thead><tr><th style="width: 128px">When</th><th>User</th><th>Record</th><th>Field</th><th>Old value</th><th>New value</th><th style="width: 190px">Reason</th></tr></thead>
+            <tbody>
+              <tr><td>24-Oct-2026<br>09:40:12</td><td>ameyer</td><td class="mono">WS-2026-0412</td><td>Status</td><td class="old">In review</td><td class="new">Approved (signed)</td><td>Results within specification except Impurity B; OOS-2026-031 closed as lab error.</td></tr>
+              <tr><td>24-Oct-2026<br>09:12:47</td><td>mkaur</td><td class="mono">S-26-104170<br>Impurity B</td><td>Result</td><td class="old">0.12 %</td><td class="new">0.21 %</td><td>Transcription error: peak 7 integrated with the wrong baseline.</td></tr>
+              <tr><td>24-Oct-2026<br>09:07:03</td><td>jruiz</td><td class="mono">S-26-104217</td><td>Received at</td><td class="old">(empty)</td><td class="new">24-Oct-2026 09:07</td><td class="muted">—</td></tr>
+              <tr><td>23-Oct-2026<br>17:55:31</td><td>mkaur</td><td class="mono">S-26-104176</td><td>Storage location</td><td class="old">Fridge F-02 · shelf 1</td><td class="new">Fridge F-03 · shelf 2</td><td>F-02 out of range during defrost cycle.</td></tr>
+              <tr><td>23-Oct-2026<br>16:20:09</td><td>ameyer</td><td class="mono">SPEC-ASSAY-07</td><td>Upper limit</td><td class="old">105.0 %</td><td class="new">103.0 %</td><td>Change control CC-2026-118, effective 23-Oct-2026.</td></tr>
+            </tbody>
+          </table>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px" class="muted"><span style="flex: 1">1–25 of 57</span><button class="btn" aria-label="Previous page" disabled>‹</button><button class="btn" aria-label="Next page">›</button></div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · entries stack, nothing shortened</p>
+    <div class="win" style="width: 390px; height: 880px; background: #fff; display: flex; flex-direction: column">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #E1E5EA; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px"><h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Audit trail</h1><button class="btn primary lg">Export PDF</button></div>
+        <div style="display: flex; gap: 8px"><button class="btn lg" style="flex: 1">Filters · 4</button><button class="btn lg" style="flex: 1">Export CSV</button></div>
+        <span class="muted">57 entries · times in CEST (UTC+2)</span>
+      </div>
+      <div class="entry" style="border-top: none"><div style="display: flex; justify-content: space-between"><b>24-Oct-2026 09:40:12</b><span>ameyer</span></div><div class="mono" style="margin: 2px 0">WS-2026-0412 · Status</div><div><span class="old">In review</span> → <span class="new">Approved (signed)</span></div><div class="muted">Reason: Results within specification except Impurity B; OOS-2026-031 closed as lab error.</div></div>
+      <div class="entry"><div style="display: flex; justify-content: space-between"><b>24-Oct-2026 09:12:47</b><span>mkaur</span></div><div class="mono" style="margin: 2px 0">S-26-104170 · Impurity B · Result</div><div><span class="old">0.12 %</span> → <span class="new">0.21 %</span></div><div class="muted">Reason: Transcription error: peak 7 integrated with the wrong baseline.</div></div>
+      <div class="entry"><div style="display: flex; justify-content: space-between"><b>24-Oct-2026 09:07:03</b><span>jruiz</span></div><div class="mono" style="margin: 2px 0">S-26-104217 · Received at</div><div><span class="old">(empty)</span> → <span class="new">24-Oct-2026 09:07</span></div></div>
+      <div class="entry"><div style="display: flex; justify-content: space-between"><b>23-Oct-2026 17:55:31</b><span>mkaur</span></div><div class="mono" style="margin: 2px 0">S-26-104176 · Storage location</div><div><span class="old">Fridge F-02 · shelf 1</span> → <span class="new">Fridge F-03 · shelf 2</span></div><div class="muted">Reason: F-02 out of range during defrost cycle.</div></div>
+      <div style="padding: 12px 16px; border-top: 1px solid #EDF0F3"><button class="btn lg" style="width: 100%">Load 25 more</button></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
