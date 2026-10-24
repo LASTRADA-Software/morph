@@ -50,4 +50,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen auditScreen();
 
+/// @brief Design 05: the sample list, a dense table with bulk actions over the selected rows.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen samplesScreen();
+
 }  // namespace lims_gallery

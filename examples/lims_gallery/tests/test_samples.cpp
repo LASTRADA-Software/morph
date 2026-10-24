@@ -1,0 +1,101 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include <catch2/catch_test_macros.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+
+#include "gallery_harness.hpp"
+
+using lims_gallery::testing::GalleryScreen;
+
+namespace {
+
+constexpr char const* kScreen = "lims-gallery.samples";
+
+// The check box that selects @p sample.
+std::optional<int> selectBox(GalleryScreen& screen, std::string_view sample) {
+    return screen.backend().find("Checkbox", "a11yName", "Select " + std::string{sample});
+}
+
+bool showsText(GalleryScreen& screen, std::string_view text) {
+    return screen.backend().find("Text", "text", text).has_value();
+}
+
+}  // namespace
+
+TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows selected", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.requireNoProblems();
+    CHECK(screen.shows("Table", "samples"));
+    CHECK(screen.prop("Table", "samples", "columns") ==
+          "[:fixed(4),Sample:fixed(12),Product · lot:stretch(1),Tests:fixed(16),Priority:fixed(8),Status:fixed(12),"
+          "Due ▲:fixed(13),Specification:fixed(14)]");
+    CHECK(showsText(screen, "Paracetamol 500 mg · L-26-0377"));
+    CHECK(showsText(screen, "22 min overdue"));
+    auto const first = selectBox(screen, "S-26-104170");
+    REQUIRE(first.has_value());
+    CHECK(screen.backend().prop(*first, "checked") == "true");
+    CHECK(screen.backend().prop(*selectBox(screen, "S-26-104198"), "checked") == "false");
+    CHECK(screen.shows("Panel", "bulk"));
+    CHECK(screen.text("selected") == "3 selected on this page");
+    CHECK(screen.prop("Button", "select-all", "label") == "Select all 312");
+    CHECK(screen.prop("Button", "head_action_register", "label") == "Register samples");
+    CHECK(screen.find("Row", "pager").has_value());
+}
+
+TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing priority applies to them",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.click("clear");
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
+    screen.backend().toggle(*selectBox(screen, "S-26-104198"));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "1 selected on this page"; }));
+    screen.click("change-priority");
+    REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "new-priority").has_value(); }));
+    screen.choose("new-priority", "STAT");
+    screen.click("action_apply");
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
+    // Two STAT tags now: the first sample's and the one just changed.
+    CHECK(screen.waitFor([&screen] { return screen.backend().all("Badge").size() > 0; }));
+    std::size_t stat = 0;
+    for (int const badge : screen.backend().all("Badge")) {
+        stat += screen.backend().prop(badge, "text") == "STAT" ? 1U : 0U;
+    }
+    CHECK(stat == 2);
+    screen.toggle("select-page");
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "8 selected on this page"; }));
+    screen.click("select-all");
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected"; }));
+    screen.requireNoProblems();
+}
+
+TEST_CASE("samples, expanded: a filter with no match shows the empty state", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.choose("priority-filter", "Urgent");
+    CHECK(screen.waitFor([&screen] { return !showsText(screen, "Paracetamol 500 mg · L-26-0377"); }));
+    CHECK(showsText(screen, "Lactose monohydrate · RM-0912"));
+    screen.edit("search", "no such sample");
+    CHECK(screen.waitFor([&screen] { return screen.shows("EmptyState", "no-samples"); }));
+    screen.requireNoProblems();
+}
+
+TEST_CASE("samples, compact: rows become cards with the same selection, the bar at the bottom", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.requireNoProblems();
+    CHECK(screen.find("Column", "cards").has_value());
+    CHECK_FALSE(screen.shows("Table", "samples"));
+    CHECK(showsText(screen, "Paracetamol 500 mg · Assay, impurities"));
+    CHECK(screen.text("selected") == "3 selected");
+    CHECK(screen.find("Menu", "more-bulk").has_value());
+    CHECK(screen.prop("Button", "head_action_register", "label") == "Register");
+    CHECK(screen.prop("Button", "open-filters", "label") == "Filters · 0");
+    screen.backend().toggle(*selectBox(screen, "S-26-104170"));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "2 selected"; }));
+    screen.click("assign");
+    REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "worksheet").has_value(); }));
+    screen.click("action_assign");
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
+    CHECK(screen.waitFor([&screen] { return screen.backend().find("Badge", "text", "Assigned").has_value(); }));
+    screen.requireNoProblems();
+}

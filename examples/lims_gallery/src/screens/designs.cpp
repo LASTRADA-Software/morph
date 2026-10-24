@@ -35,7 +35,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.samples",
          .title = "Sample list",
          .summary = "A dense table with bulk actions",
-         .make = nullptr},
+         .make = &samplesScreen},
         {.number = "06",
          .id = "lims-gallery.stability",
          .title = "Stability study setup",

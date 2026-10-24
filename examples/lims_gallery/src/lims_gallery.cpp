@@ -18,10 +18,12 @@ namespace {
 
 namespace ui = morph::ui::author;
 
-// The theme index: the designs' green accent and neutrals in one base layer, and the icons the screens draw.
+// The theme index: the designs' green accent and neutrals in one base layer, the tinted surfaces the screens mark
+// a selection or a result out of specification with, and the icons the screens draw.
 constexpr char const* kThemeIndex = R"({
   "vocab": "ui-theme/1",
   "base": "theme/base.tokens.json",
+  "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -46,6 +48,16 @@ constexpr char const* kThemeBase = R"({
     "table": { "header": { "$value": "#FAFBFC" } } },
   "radius": { "$type": "dimension",
     "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } }
+})";
+
+// A bar that acts on selected rows: the accent's pale tint.
+constexpr char const* kSelectedSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#EAF5EE" }, "border": { "$value": "#BCDFC9" } }
+})";
+
+// A record with a result out of specification: the err tone's pale tint.
+constexpr char const* kOutOfSpecSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#FFF5F5" }, "border": { "$value": "#F2C0C0" } }
 })";
 
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
@@ -96,9 +108,11 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             return std::unexpected(std::move(added.error()));
         }
     }
-    for (auto [kind, fileId, bytes] :
-         {std::tuple{"theme", "theme/index.json", kThemeIndex},
-          std::tuple{"theme", "theme/base.tokens.json", kThemeBase}, std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
+    for (auto [kind, fileId, bytes] : {std::tuple{"theme", "theme/index.json", kThemeIndex},
+                                       std::tuple{"theme", "theme/base.tokens.json", kThemeBase},
+                                       std::tuple{"theme", "theme/selected.tokens.json", kSelectedSurface},
+                                       std::tuple{"theme", "theme/out-of-spec.tokens.json", kOutOfSpecSurface},
+                                       std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));
         }
