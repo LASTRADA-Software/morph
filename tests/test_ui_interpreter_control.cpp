@@ -642,3 +642,26 @@ TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][
     }
     CHECK(texts == 2);
 }
+
+// Mutation: leave `sizes` unbound (the splitter records `sizes=[]`).
+TEST_CASE("interpreter control: a splitter's sizes reach the splitter", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "split",
+      "state": { "wide": { "init": 50 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "splitter", "testId": "given", "sizes": { "lit": [ 37, 96 ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] },
+        { "kind": "splitter", "testId": "computed",
+          "sizes": { "list": [ { "fn": "div", "args": [ 59, 2 ] }, { "ref": "wide" } ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] },
+        { "kind": "splitter", "testId": "wrong", "sizes": { "list": [ "a", 2 ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Splitter", "given"), "sizes") == "[37,96]");
+    // Each size is read as an integer property is: a decimal truncates toward zero.
+    CHECK(h.backend.prop(h.byTestId("Splitter", "computed"), "sizes") == "[29,50]");
+    // A value that is not a list of numbers is reported and shares the space equally.
+    CHECK(h.backend.prop(h.byTestId("Splitter", "wrong"), "sizes") == "[]");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason.contains("sizes is a list of numbers"));
+}

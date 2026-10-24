@@ -187,7 +187,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `steps` | `items`, `current` | |
 | `keyValue` | `items` | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |
-| `splitter` | `orientation`, `sizes`, `children` | |
+| `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length shares the space equally), `children` | |
 | `collapsible` | `title`, `open`, `header`, `children`, `onToggle` | |
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |

@@ -65,14 +65,14 @@ TEST_CASE("review: returning a worksheet needs a reason, and takes it out of the
     screen.requireNoProblems();
 }
 
-// `sizes` is written into the document and never reaches the splitter.
-TEST_CASE("review: the splitter's sizes are dropped by the lowering", "[lims-gallery][gap]") {
+// `sizes` is written into the document and reaches the splitter.
+TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
     CHECK(text.find(R"("sizes":{"lit":[37,96]})") != std::string::npos);
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[]");
+    CHECK(screen.prop("Splitter", "split", "sizes") == "[37,96]");
 }
 
 // The generic client opens every `navigate` as a tab: the signature opens beside the review, not over it.

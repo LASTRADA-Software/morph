@@ -302,6 +302,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
 - **`switch`** selects the first case whose `when` equals `on` (structurally), else `default`.
+- **`splitter`** binds `sizes`, each item read as an integer property is. A value that is not a list of numbers is
+  reported once for its path and lowers to an empty list, which shares the space equally. The document has no
+  `onResize`, so a user's drag stays the splitter's own.
 - **Action parts.** `ScreenCore::lowerActionParts(parts, ctx)` lowers a list of `actionButton` parts into
   `ActionModels`: the label, icon, `enabled` and `visible` bound in `ctx`'s scope, the emphasis, and a run function
   that runs the part's `onClick` there as a user event, in one batch.

@@ -5597,6 +5597,25 @@ namespace detail {
     return Tone::Neutral;
 }
 
+/// @brief A splitter's `sizes`: a list of numbers, each read as `intOf` reads it.
+/// @param value The value.
+/// @return The sizes; `nullopt` for anything but a list whose every item is an `int` or a decimal.
+[[nodiscard]] inline std::optional<std::vector<int>> splitterSizesOf(Value const& value) {
+    ValueList const* const items = value.asList();
+    if (items == nullptr) {
+        return std::nullopt;
+    }
+    std::vector<int> sizes;
+    sizes.reserve(items->size());
+    for (Value const& item : *items) {
+        if (item.asInt() == nullptr && item.asDecimal() == nullptr) {
+            return std::nullopt;
+        }
+        sizes.push_back(static_cast<int>(intOf(item, 0)));
+    }
+    return sizes;
+}
+
 /// @brief A sizing by its document form: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
 /// @param value The value.
 /// @return The sizing.
@@ -6393,6 +6412,18 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                       .orientation = orientation && axisOf(once(ctx, orientation)) == Axis::Vertical
                                          ? Axis::Vertical
                                          : Axis::Horizontal};
+        // No `onResize`: a user's drag stays the splitter's own, and the document's sizes are where it starts.
+        if (ExprPtr const sizes = node.prop("sizes")) {
+            spec.sizes = bindProp<std::vector<int>>(
+                ctx, sizes, {}, [this, path = sizes->path](Value const& value, FormatContext const& /*format*/) {
+                    std::optional<std::vector<int>> read = splitterSizesOf(value);
+                    if (!read) {
+                        report(path,
+                               "sizes is " + canonicalJson(value) + "; sizes is a list of numbers, one per pane");
+                    }
+                    return std::move(read).value_or(std::vector<int>{});
+                });
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::splitter(std::move(spec));
     }
