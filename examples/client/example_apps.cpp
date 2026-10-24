@@ -4,6 +4,7 @@
 
 #include <forms_screens.hpp>
 #include <gallery/gallery.hpp>
+#include <lims_gallery/lims_gallery.hpp>
 #include <morph/client/source.hpp>
 #include <string>
 #include <vector>
@@ -34,7 +35,7 @@
 namespace morph::examples::client {
 
 std::vector<::morph::client::LocalApp> localApps() {
-    std::vector<::morph::client::LocalApp> apps{gallery::localApp()};
+    std::vector<::morph::client::LocalApp> apps{gallery::localApp(), lims_gallery::localApp()};
     apps.push_back(::morph::client::LocalApp{.name = "forms", .bundle = &lab::screens::bundle, .setUp = {}});
 #if MORPH_CLIENT_HAS_BANK
 #ifdef __EMSCRIPTEN__

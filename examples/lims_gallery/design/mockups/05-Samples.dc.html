@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample list</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:#17784A;padding:0 4px}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap;border:1px solid transparent}
+.t-err{background:#FDE7E7;color:#9B1C1C}.t-warn{background:#FFF1D6;color:#7A4A00}.t-ok{background:#E2F4E8;color:#17602F}.t-neu{background:#EEF0F3;color:#363C46}.t-info{background:#E6ECFF;color:#1F3FA8}
+.pri{background:#fff}.p-stat{color:#9B1C1C;border-color:#D98C8C}.p-urg{color:#7A4A00;border-color:#D9B36A}.p-rou{color:#4D5461;border-color:#C3C9D2}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC;white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid #EDF0F3;white-space:nowrap;height:20px}
+tr.oos td{background:#FFF5F5}
+tr.sel td:first-child{box-shadow:inset 3px 0 0 #17784A}
+input[type=checkbox]{width:15px;height:15px;accent-color:#17784A;margin:0;vertical-align:middle}
+.od{color:#9B1C1C;font-weight:600}
+.rc{padding:10px 12px;border-top:1px solid #EDF0F3;display:flex;gap:10px;align-items:flex-start}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1000px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · a dense table with bulk actions</p>
+    <div class="win" style="width: 1000px; height: 880px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Samples</h1>
+        <input class="input" aria-label="Search samples" placeholder="Sample, lot or product" style="width: 220px">
+        <select class="input" aria-label="Status" style="width: 140px"><option>Status: open</option></select>
+        <select class="input" aria-label="Priority" style="width: 130px"><option>Priority: any</option></select>
+        <button class="btn primary">Register samples</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; background: #EAF5EE; border: 1px solid #BCDFC9; border-radius: 6px; padding: 5px 6px 5px 12px" role="region" aria-label="Bulk actions">
+        <span style="flex: 1"><b>3 selected</b> on this page · <button class="btn ghost" style="height: 24px">Select all 312</button></span>
+        <button class="btn">Assign to worksheet…</button><button class="btn">Change priority…</button><button class="btn">Print labels</button>
+        <button class="btn ghost" style="height: 24px">Clear</button>
+      </div>
+      <div class="card" style="overflow: hidden">
+        <table>
+          <thead><tr><th style="width: 22px"><input type="checkbox" aria-label="Select all on this page"></th><th>Sample</th><th>Product · lot</th><th>Tests</th><th>Priority</th><th>Status</th><th aria-sort="ascending">Due ▲</th><th>Specification</th></tr></thead>
+          <tbody>
+            <tr class="sel oos"><td><input type="checkbox" checked aria-label="Select S-26-104170"></td><td class="mono">S-26-104170</td><td>Paracetamol 500 mg · <span class="mono">L-26-0377</span></td><td>Assay, impurities</td><td><span class="tag pri p-stat">STAT</span></td><td><span class="tag t-info">In review</span></td><td><span class="od">22 min overdue</span></td><td><span class="tag t-err">Out of spec · 1</span></td></tr>
+            <tr><td><input type="checkbox" aria-label="Select S-26-104198"></td><td class="mono">S-26-104198</td><td>Lactose monohydrate · <span class="mono">RM-0912</span></td><td>Water (KF)</td><td><span class="tag pri p-urg">Urgent</span></td><td><span class="tag t-neu">Queued</span></td><td>24-Oct 10:30</td><td class="muted">—</td></tr>
+            <tr class="sel"><td><input type="checkbox" checked aria-label="Select S-26-104221"></td><td class="mono">S-26-104221</td><td>Purified water · loop 3</td><td>TOC, conductivity</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-neu">Queued</span></td><td>24-Oct 14:00</td><td class="muted">—</td></tr>
+            <tr class="sel"><td><input type="checkbox" checked aria-label="Select S-26-104176"></td><td class="mono">S-26-104176</td><td>Ibuprofen 400 mg · <span class="mono">L-26-0381</span></td><td>Dissolution</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-info">Measured</span></td><td>24-Oct 16:00</td><td><span class="tag t-ok">Within spec</span></td></tr>
+            <tr class="oos"><td><input type="checkbox" aria-label="Select S-26-104159"></td><td class="mono">S-26-104159</td><td>Ibuprofen 400 mg · <span class="mono">L-26-0379</span></td><td>Assay</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-warn">Investigation</span></td><td>25-Oct 09:00</td><td><span class="tag t-err">Out of spec · 1</span></td></tr>
+            <tr><td><input type="checkbox" aria-label="Select S-26-104150"></td><td class="mono">S-26-104150</td><td>Microcrystalline cellulose · <span class="mono">RM-0907</span></td><td>Identity (IR)</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-neu">Registered</span></td><td>25-Oct 12:00</td><td class="muted">—</td></tr>
+            <tr><td><input type="checkbox" aria-label="Select S-26-104148"></td><td class="mono">S-26-104148</td><td>Paracetamol 500 mg · <span class="mono">L-26-0376</span></td><td>Stability T6, assay</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-info">In progress</span></td><td>26-Oct 08:00</td><td><span class="tag t-warn">Out of trend</span></td></tr>
+            <tr><td><input type="checkbox" aria-label="Select S-26-104131"></td><td class="mono">S-26-104131</td><td>Purified water · loop 1</td><td>Micro, TAMC</td><td><span class="tag pri p-rou">Routine</span></td><td><span class="tag t-info">Incubating</span></td><td>28-Oct 08:00</td><td class="muted">—</td></tr>
+          </tbody>
+        </table>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px" class="muted"><span style="flex: 1">1–25 of 312</span><label for="ps">Rows</label><select class="input" id="ps" style="width: 64px"><option>25</option></select><button class="btn" aria-label="Previous page" disabled>‹</button><button class="btn" aria-label="Next page">›</button></div>
+      </div>
+      <p class="muted" style="margin: 0; font-size: 12px">Rows with a tinted background have a result out of specification. The blue bar at the start of a row marks it as selected.</p>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · rows become cards, same selection</p>
+    <div class="win" style="width: 390px; height: 880px; display: flex; flex-direction: column">
+      <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; background: #fff; border-bottom: 1px solid #E1E5EA">
+        <div style="display: flex; gap: 8px; align-items: center"><h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Samples</h1><button class="btn primary lg">Register</button></div>
+        <input class="input" aria-label="Search samples" placeholder="Sample, lot or product" style="height: 44px; width: 100%">
+        <div style="display: flex; gap: 8px"><button class="btn lg" style="flex: 1">Filters · 2</button><button class="btn lg" style="flex: 1">Sort: due, earliest first</button></div>
+      </div>
+      <div class="card" style="margin: 10px 12px 0; overflow: hidden">
+        <div class="rc" style="border-top: none; background: #FFF5F5; box-shadow: inset 3px 0 0 #17784A"><input type="checkbox" checked aria-label="Select S-26-104170" style="width: 22px; height: 22px"><div style="flex: 1; min-width: 0"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600; font-size: 13px">S-26-104170</span><span class="od">22 min overdue</span></div><div style="margin: 2px 0 6px">Paracetamol 500 mg · Assay, impurities</div><div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="tag pri p-stat">STAT</span><span class="tag t-info">In review</span><span class="tag t-err">Out of spec · 1</span></div></div></div>
+        <div class="rc"><input type="checkbox" aria-label="Select S-26-104198" style="width: 22px; height: 22px"><div style="flex: 1; min-width: 0"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600; font-size: 13px">S-26-104198</span><span>24-Oct 10:30</span></div><div style="margin: 2px 0 6px">Lactose monohydrate · Water (KF)</div><div style="display: flex; gap: 4px"><span class="tag pri p-urg">Urgent</span><span class="tag t-neu">Queued</span></div></div></div>
+        <div class="rc" style="box-shadow: inset 3px 0 0 #17784A"><input type="checkbox" checked aria-label="Select S-26-104221" style="width: 22px; height: 22px"><div style="flex: 1; min-width: 0"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600; font-size: 13px">S-26-104221</span><span>24-Oct 14:00</span></div><div style="margin: 2px 0 6px">Purified water · TOC, conductivity</div><div style="display: flex; gap: 4px"><span class="tag pri p-rou">Routine</span><span class="tag t-neu">Queued</span></div></div></div>
+        <div class="rc" style="box-shadow: inset 3px 0 0 #17784A"><input type="checkbox" checked aria-label="Select S-26-104176" style="width: 22px; height: 22px"><div style="flex: 1; min-width: 0"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600; font-size: 13px">S-26-104176</span><span>24-Oct 16:00</span></div><div style="margin: 2px 0 6px">Ibuprofen 400 mg · Dissolution</div><div style="display: flex; gap: 4px"><span class="tag pri p-rou">Routine</span><span class="tag t-info">Measured</span><span class="tag t-ok">Within spec</span></div></div></div>
+        <div style="padding: 10px 12px; border-top: 1px solid #EDF0F3"><button class="btn lg" style="width: 100%">Load more · 25 of 312</button></div>
+      </div>
+      <div style="margin-top: auto; background: #fff; border-top: 1px solid #BCDFC9; padding: 10px 12px; display: flex; gap: 8px; align-items: center" role="region" aria-label="Bulk actions">
+        <span style="flex: 1"><b>3 selected</b></span>
+        <button class="btn lg">Assign to worksheet</button>
+        <button class="btn lg" aria-label="More bulk actions" style="width: 44px; padding: 0">⋯</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

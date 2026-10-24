@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include <catch2/catch_test_macros.hpp>
+#include <optional>
+#include <string>
+
+#include "gallery_harness.hpp"
+
+using lims_gallery::testing::GalleryScreen;
+
+namespace {
+
+constexpr char const* kScreen = "lims-gallery.esignature";
+
+}  // namespace
+
+TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the refused attempt", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.requireNoProblems();
+    CHECK(screen.find("Text", "signing-at").has_value());
+    CHECK(screen.text("signing-at") == "Signing at 24-Oct-2026 09:40 CEST as Approved.");
+    CHECK(screen.shows("Banner", "refused"));
+    CHECK(screen.prop("Banner", "refused", "text") ==
+          "Password incorrect. 3 of 5 attempts left before the account locks.");
+    CHECK(screen.backend().all("Dialog").size() == 1);
+    CHECK(screen.backend().all("KeyValue").size() == 1);
+    CHECK(screen.shows("Panel", "record"));
+    CHECK(screen.prop("TextInput", "signer", "readonly") == "true");
+    CHECK(screen.prop("TextInput", "password", "errors") == "[Password incorrect.]");
+    CHECK(screen.find("Select", "meaning").has_value());
+    CHECK(screen.find("TextInput", "reason").has_value());
+    // The footer's sign button waits for a password.
+    screen.edit("password", "");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Button", "action_sign", "enabled") == "false"; }));
+    CHECK(screen.prop("TextInput", "password", "errors") == "[Required]");
+}
+
+TEST_CASE("e-signature, expanded: a wrong password costs an attempt, the right one signs", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.choose("meaning", "reviewed");
+    CHECK(screen.waitForText("signing-at", "Signing at 24-Oct-2026 09:40 CEST as Reviewed."));
+
+    // The field holds the refused attempt; signing it again costs another.
+    screen.click("action_sign");
+    CHECK(screen.waitFor([&screen] {
+        return screen.prop("Banner", "refused", "text") ==
+               "Password incorrect. 2 of 5 attempts left before the account locks.";
+    }));
+    CHECK(screen.shows("Banner", "refused"));
+    CHECK(screen.prop("TextInput", "password", "value") == "");
+
+    screen.edit("password", "meyer-2026");
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "refused"); }));
+    REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "action_sign", "enabled") != "false"; }));
+    screen.click("action_sign");
+    CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "signed"); }));
+    CHECK_FALSE(screen.find("TextInput", "password").has_value());
+    CHECK_FALSE(screen.shows("Button", "open-signature"));
+    screen.requireNoProblems();
+}
+
+TEST_CASE("e-signature, compact: the same fields as a sheet, signed from the bottom button", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.requireNoProblems();
+    CHECK(screen.backend().all("Dialog").empty());
+    CHECK(screen.shows("Button", "cancel"));
+    CHECK(screen.shows("Banner", "refused"));
+    CHECK(screen.find("TextInput", "signer").has_value());
+    CHECK(screen.find("Select", "meaning").has_value());
+    CHECK(screen.find("TextInput", "reason").has_value());
+    CHECK(screen.text("signing-at") == "Signing at 24-Oct-2026 09:40 CEST as Approved.");
+
+    screen.edit("password", "meyer-2026");
+    REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "sign", "enabled") != "false"; }));
+    screen.click("sign");
+    CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "signed"); }));
+    CHECK_FALSE(screen.find("TextInput", "password").has_value());
+    screen.requireNoProblems();
+}
+
+TEST_CASE("e-signature, compact: Cancel closes the sheet, and Sign… opens it again", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.click("cancel");
+    CHECK(screen.waitFor([&screen] { return screen.shows("Button", "open-signature"); }));
+    CHECK_FALSE(screen.find("TextInput", "password").has_value());
+    screen.click("open-signature");
+    CHECK(screen.waitFor([&screen] { return screen.find("TextInput", "password").has_value(); }));
+    screen.requireNoProblems();
+}

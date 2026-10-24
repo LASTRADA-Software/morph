@@ -1175,6 +1175,7 @@ endif()
 # Quick or the terminal).
 if(MORPH_BUILD_EXAMPLES)
     add_subdirectory(examples/gallery)
+    add_subdirectory(examples/lims_gallery)
     add_subdirectory(examples/forms/screens)
     if(TARGET bank_lib OR TARGET bank_memory_lib)
         add_subdirectory(examples/bank/screens)
