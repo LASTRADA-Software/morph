@@ -575,3 +575,6 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
 ## License
 
 Apache-2.0.
+
+
+<!-- Automated fix for issue #1056: ui: {"env": "locale"}, "platform" and "online" are never set, and "backend" only after a switch -->
