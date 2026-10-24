@@ -40,7 +40,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.stability",
          .title = "Stability study setup",
          .summary = "Conditions × timepoints grid and a live summary",
-         .make = nullptr},
+         .make = &stabilityScreen},
         {.number = "07",
          .id = "lims-gallery.plate",
          .title = "Plate layout",

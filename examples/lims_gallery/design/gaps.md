@@ -130,7 +130,7 @@
 - **Weight:** Medium
 
 ### G13: A date and time display format
-- **Design(s):** 02, 04
+- **Design(s):** 02, 04, 06
 - **Needs:** "24-Oct-2026 09:41": the unambiguous day-month-name-year form regulated labs use.
 - **ui/1 today:** `dateTimeInput` takes `value`, `mode`, `label`, `showLabel` and events, no format
   (`docs/spec/ui/document.md:181`); on Qt Quick it shows `2026-10-24 09:41` (seen in the grab). The `date` and
@@ -351,18 +351,37 @@
   only.
 - **Weight:** Low
 
-### G34: Qt Quick `keyValue` reports a polish loop (defect)
+### G34: Qt Quick `keyValue` reports a polish loop for some caption and value widths (defect)
 - **Design(s):** 06
 - **Needs:** the stability study's summary as a `keyValue` (Product, Lot, Protocol, Pulls, First pull, Last pull,
   Containers), whose values follow the conditions.
-- **ui/1 today:** reproduced with `lims_gallery_render_smoke` (offscreen) on this branch with the stability screen
-  registered: it fails with, verbatim, `Qt: qrc:/qt/qml/MorphUi/qml/MorphKeyValue.qml:17:5: QML GridLayout: possible
-  QQuickItem::polish() loop` and `GridLayout called polish() inside updatePolish() of GridLayout`, repeated. Not
-  caused by the summary's 33-unit fixed width (a `minWidth` in its place fails the same) nor by the compact
-  collapsible's copy (replacing it with a text fails the same). Not isolated further: which of the screen's
-  `keyValue`s loops, and whether its bound values or its two-column grid's width does it, is unknown. The instrument
-  screen's `keyValue` (design 03) does not report it. Unverified on any other platform.
-- **Workaround used:** none found in time; design 06 is committed as WIP and not registered.
+- **ui/1 today:** reproduced on revision 842701f0d plus this branch, Qt 6.12.0 (Arch `qt6-base 6.12.0-3`,
+  `qt6-declarative 6.12.0-1`), offscreen, the default font resolving to Nimbus Sans. The smallest document found is a
+  screen whose whole view is one `keyValue` with one pair, built as
+  `ui::keyValue(ui::list({ui::obj({{"label", "Containers"}, {"value", "needed"}})}))`. Mounted by
+  `lims_gallery_render_smoke`, it fails with, verbatim and repeated, `Qt: qrc:/qt/qml/MorphUi/qml/MorphKeyValue.qml:17:5:
+  QML GridLayout: possible QQuickItem::polish() loop` and `GridLayout called polish() inside updatePolish() of
+  GridLayout`. Whether it loops depends on the text widths alone, not on the container: the same pair loops bare, in
+  a column, in a row beside a stretched column, and in a `fixed(33)` or `fixed(60)` panel. Pairs measured, one per
+  run:
+
+  | Pair | Loops |
+  |---|---|
+  | Containers = `needed`, `180 needed`, `180 needed, 150`, `180 needed, 150 in stock`, `xxxxxxxxxx` | yes |
+  | Containers = `180`, `a b`, `x` | no |
+  | Container, Lot number, Lot numbers, Location = `180 needed` | no |
+  | Lot = `180 needed, 150 in stock`; Product = `Paracetamol 500 mg`; First pull = `03-Dec-2026 (40 °C, 1 m)` | no |
+  | Product = `Paracetamol 500 mg` then Containers = `x` | yes |
+
+  Inferred from reading `src/qt_quick/qml/MorphKeyValue.qml:28-45`, not verified: the value column's
+  `Layout.maximumWidth` is `grid.width - labelColumnWidth - columnSpacing`, and with the widget sized to its content
+  that is the widest value's own width, so a fractional pixel of rounding can make the cap a hair narrower than the
+  text. The value then wraps, the grid's implicit width changes, and the cap is recomputed inside the polish, for
+  ever. That would explain why it follows the widths and not the layout. The instrument screen's `keyValue`
+  (design 03) does not loop with its values. Not checked on any other Qt version, font or platform.
+- **Workaround used:** design 06 draws its summary, and the product and review panels of its other steps, as rows of
+  a muted `fixed(13)` caption beside a stretched `text` (`pair` in `stability.cpp`). Unlike `keyValue`, that row lets
+  the containers value take the `error` role (G39).
 - **Weight:** Medium
 
 ### G35: A command cannot name an element inside a `switch` case from outside it
@@ -410,5 +429,18 @@
 - **Needs:** the summary's "Containers: 180 needed, 150 in stock" in red, bold, while stock is short.
 - **ui/1 today:** `keyValue` takes `items` of `{label, value}` (`docs/spec/ui/document.md:188`); no tone or role per
   value. Inferred from reading.
-- **Workaround used:** none; the field error and the banner carry the warning.
+- **Workaround used:** the summary is not a `keyValue` (G34) but rows of a caption and a `text`, and the containers
+  value takes the `error` role while stock is short: red, not bold.
+- **Weight:** Low
+
+### G40: Table cells sit at the top of a taller row
+- **Design(s):** 06
+- **Needs:** a table row's text centred against the controls beside it: the condition's name level with its row of
+  check boxes, the test's name level with its "When" select.
+- **ui/1 today:** a table sizes and places its cells itself (`docs/spec/ui/backend_contract.md:156-162`), and a
+  cell takes no `alignSelf` (`docs/spec/ui/document.md:252-254`, G15). On Qt Quick a `text` cell draws at the top of
+  its row while a `checkbox` or `select` cell beside it is taller, so the text sits above the controls' centre line
+  (seen in a grab of the conditions matrix and of the tests table, 1280 × 900, offscreen). Verified by trying; not
+  checked on the terminal frontend.
+- **Workaround used:** none.
 - **Weight:** Low

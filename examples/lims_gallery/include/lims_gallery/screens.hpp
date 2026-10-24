@@ -54,4 +54,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen samplesScreen();
 
+/// @brief Design 06: setting up a stability study, its conditions × timepoints grid beside a live summary.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen stabilityScreen();
+
 }  // namespace lims_gallery
