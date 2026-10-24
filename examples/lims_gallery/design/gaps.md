@@ -1,7 +1,7 @@
 # LIMS gallery gap log: what the ten designs need that ui/1 cannot express, and the defects found building them
 
 ### G1: `{"env": "widthClass"}` is never set (defect) — filed as #1046
-- **Design(s):** 01, 02, 03, 04, 05, 06, 07
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08
 - **Needs:** every design switches between an expanded (≥ 1200 px) and a compact (< 600 px) layout on the window's
   width class.
 - **ui/1 today:** the expression exists (`docs/spec/ui/expressions.md:42`) and `Session::setEnvironment` holds it
@@ -19,7 +19,7 @@
 - **Weight:** High
 
 ### G2: Monospace text for identifiers
-- **Design(s):** 01, 02, 03, 04, 05, 07
+- **Design(s):** 01, 02, 03, 04, 05, 07, 08
 - **Needs:** record, lot, sample, equipment and investigation ids (`WS-2026-0412`, `L-26-0381`, `OOS-2026-031`) set
   in a monospace face, the LIMS convention that makes ids scannable and unambiguous (0/O, 1/l).
 - **ui/1 today:** a `text` node's `role` is `normal`, `muted`, `heading`, `section`, `error` or `success`
@@ -50,7 +50,7 @@
 - **Weight:** Medium
 
 ### G5: Touch-sized controls on compact
-- **Design(s):** 01, 02, 03, 04, 05, 06, 07
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08
 - **Needs:** 44 px controls and touch targets in the compact layout (30 px when expanded).
 - **ui/1 today:** one global `control.height` token (`docs/spec/ui/theme.md:128`); a runtime density choice is listed
   under "Not yet" (`docs/spec/ui/theme.md:221`), and no node or width class can ask for a larger control. Inferred
@@ -59,7 +59,7 @@
 - **Weight:** Medium
 
 ### G6: A dialog's description line
-- **Design(s):** 01
+- **Design(s):** 01, 08
 - **Needs:** a muted line under the dialog's title ("Your signature is stored with the record and cannot be
   removed."), part of the dialog's head, divided from the body.
 - **ui/1 today:** `dialog` has `title` and no subtitle or description (`docs/spec/ui/document.md:177`), though a
@@ -80,7 +80,7 @@
 - **Weight:** Medium
 
 ### G8: The required mark sits beside the control, not the caption
-- **Design(s):** 01, 02
+- **Design(s):** 01, 02, 08
 - **Needs:** "Meaning \*": the mark after the field's caption.
 - **ui/1 today:** `required` draws a mark the frontend places (`docs/spec/ui/view_tree.md:158`); on Qt Quick it is a
   red asterisk in a gutter right of the control, below the caption's line (seen in the grab above). No placement
@@ -89,22 +89,27 @@
 - **Weight:** Low
 
 ### G9: A unit beside a free input
-- **Design(s):** 02, 06
-- **Needs:** "Temperature on arrival" with `°C` drawn inside the field's trailing edge.
+- **Design(s):** 02, 06, 08
+- **Needs:** "Temperature on arrival" with `°C` drawn inside the field's trailing edge; a result field with `%` inside
+  it (08, compact).
 - **ui/1 today:** the view tree's `TextInput` has `unit` and `decimals` (`docs/spec/ui/view_tree.md:106`), but only
   the forms engine sets them; the document's `textInput` keys are `value`, `placeholder`, `mode`, `icon`, `commitOn`,
   `label`, `showLabel` and its events, with no `unit` (`docs/spec/ui/document.md:166`), and `author::TextInputOptions`
   has none (`include/morph/ui/author.hpp:3185`). Inferred from reading.
-- **Workaround used:** the unit in the caption: "Temperature on arrival, °C".
+- **Workaround used:** the unit in the caption: "Temperature on arrival, °C". 08 puts the unit in its own table
+  column (expanded) or in the field's caption (compact).
 - **Weight:** Medium
 
 ### G10: Help text under an input
-- **Design(s):** 02
+- **Design(s):** 02, 08
 - **Needs:** a muted line tied to a field ("Required range 2–8 °C"; "The field keeps focus after every scan. Press
-  Enter to look up a typed ID."), announced with it (`aria-describedby`).
+  Enter to look up a typed ID."), announced with it (`aria-describedby`); a result field tied to its evaluation
+  ("Out of spec: above 0.20", 08), the field outlined red while it is out of specification.
 - **ui/1 today:** inputs carry `label`, `placeholder` and `errors` (`docs/spec/ui/document.md:159-166`); there is no
   hint or description key, and `a11y` has only `name` and `role`. Inferred from reading.
 - **Workaround used:** a muted `text` under the input, in a column with it; not associated for assistive technology.
+  08 draws the evaluation as a tag beside the field and tints the row (`rowTone`); the field itself is outlined only
+  while its text cannot be read, through `errors`, since an out-of-specification message there would repeat the tag.
 - **Weight:** Medium
 
 ### G11: A scanner field that stands out
@@ -159,7 +164,7 @@
 - **Weight:** Low
 
 ### G16: A bottom action bar that stays in view on compact
-- **Design(s):** 02, 05, 06
+- **Design(s):** 02, 05, 06, 08
 - **Needs:** "Reject…" and "Receive, next" pinned to the bottom of the phone screen while the form above scrolls.
 - **ui/1 today:** no screen-level footer or sticky region; the only footer is a dialog's or drawer's (`actions`,
   `docs/spec/ui/document.md:177`; `ActionBar` mounts only inside one, `docs/spec/ui/view_tree.md:131`). Inferred
@@ -391,7 +396,7 @@
 - **Weight:** Medium
 
 ### G35: A command cannot name an element inside a `switch` case from outside it
-- **Design(s):** 06
+- **Design(s):** 06, 08
 - **Needs:** the wizard footer's Continue, outside the step's content, moving focus to the field that blocks it
   (Containers per pull).
 - **ui/1 today:** a switch case is a scope (`docs/spec/ui/document.md:271-273`), and an element belongs to the scope
@@ -400,6 +405,10 @@
   wizard's page has to be a `switch` on the step, so every field of a step is out of the footer's reach.
 - **Workaround used:** Continue only shows the error banner; the banner's own action, inside the case, focuses the
   field.
+- **Also (08):** "Enter moves to the next result". A result field is a table cell, declared once in the row scope, so
+  each row has its own element and no command in one row names the next row's; `focus` takes an element name, not a
+  row key (`docs/spec/ui/document.md:267-269`). Inferred from reading; not tried. 08 leaves focus where it is after
+  Enter and drops the sentence from its help line.
 - **Weight:** Medium
 
 ### G36: A field of a computed value cannot be read
@@ -440,14 +449,15 @@
 - **Weight:** Low
 
 ### G40: Table cells sit at the top of a taller row
-- **Design(s):** 06
+- **Design(s):** 06, 08
 - **Needs:** a table row's text centred against the controls beside it: the condition's name level with its row of
   check boxes, the test's name level with its "When" select.
 - **ui/1 today:** a table sizes and places its cells itself (`docs/spec/ui/backend_contract.md:156-162`), and a
   cell takes no `alignSelf` (`docs/spec/ui/document.md:252-254`, G15). On Qt Quick a `text` cell draws at the top of
   its row while a `checkbox` or `select` cell beside it is taller, so the text sits above the controls' centre line
   (seen in a grab of the conditions matrix and of the tests table, 1280 × 900, offscreen). Verified by trying; not
-  checked on the terminal frontend.
+  checked on the terminal frontend. 08's worksheet shows the same: the peak area, unit and specification sit
+  above the centre of the result field beside them (grab of `lims-gallery.results`, 1280 × 900).
 - **Workaround used:** none.
 - **Weight:** Low
 
@@ -496,4 +506,50 @@
   `indexOf` and `concatLists` (`docs/spec/ui/expressions.md:107`), with `map` and `filter`; nothing groups adjacent
   elements. Inferred from reading.
 - **Workaround used:** one line per well, twelve per row, and one section per row.
+- **Weight:** Low
+
+### G45: No square root, so no standard deviation or RSD
+- **Design(s):** 08
+- **Needs:** "Assay, mean · RSD 0.28 %": the relative standard deviation of the preparations, calculated as they are
+  typed.
+- **ui/1 today:** the arithmetic functions are `add`, `sub`, `mul`, `div`, `neg` and `round`, and the list functions
+  `count`, `sum`, `mean`, `min`, `max` (`docs/spec/ui/expressions.md:104-107`): no `sqrt`, `abs`, `stdev` or
+  power. Numbers are exact rationals (`expressions.md:71-74`), so a root would also need a rounding rule. Inferred
+  from reading.
+- **Workaround used:** with exactly two preparations the standard deviation is |a − b| / √2, so the screen computes
+  |a − b| × 70.7107 / mean, the constant being 100 / √2 at four places, and |a − b| as `cond(a > b, a − b, b − a)`.
+  It shows 0.28 % for 99.6 and 99.2, as the design does; it would be wrong for three or more preparations.
+- **Weight:** Medium
+
+### G46: A table's group heading rows
+- **Design(s):** 08
+- **Needs:** "S-26-104176 · lot L-26-0381" as a heading row across every column of the worksheet, between the
+  results of one sample and the next.
+- **ui/1 today:** a table's rows all take the same columns (`columns` parts `{id, label, width, role, cell}`,
+  `docs/spec/ui/document.md:180`); there is no row kind, no grouping key and no cell spanning columns. Inferred from
+  reading.
+- **Workaround used:** the heading is a row of the same list with `kind: group`: its sample id in the Sample column
+  (section role), its lot in the Analyte column, and its result, evaluation and change cells hidden. It reads as a
+  row, not as a heading across the table.
+- **Weight:** Low
+
+### G47: Numeric columns aligned to the end
+- **Design(s):** 08
+- **Needs:** the Peak area and Result columns right-aligned, header and cells, so the digits line up.
+- **ui/1 today:** a column part has no alignment (`docs/spec/ui/document.md:180`; `author::TableColumn` has `name`,
+  `label`, `width`, `role` and `cell`, `include/morph/ui/author.hpp:3670-3681`), and a `textInput` has none either.
+  Inferred from reading; the grab shows the header labels at the start of their columns.
+- **Workaround used:** the peak area cell is a `row` with `justify: end` around its text, which puts the number at
+  the cell's end (seen in the grab); the header label and the result field's text stay at the start.
+- **Weight:** Low
+
+### G48: A read-only field looks like an editable one on Qt Quick
+- **Design(s):** 08
+- **Needs:** the calculated mean and total drawn as read-only fields, on a grey fill, so they do not invite typing.
+- **ui/1 today:** `readonly` is a condition on every input (`docs/spec/ui/document.md:159-160`) and reaches the Qt Quick
+  field as `readOnly` (`src/qt_quick/qml/MorphTextInput.qml:41`), but its background is given only the scheme and the
+  focus (`MorphTextInput.qml:37-40`; `MorphInputBackground.qml:8-9` declares no other property). Seen in the grab of
+  `lims-gallery.results`, 1280 × 900: the mean's field (99.4) is drawn exactly as the preparations' fields beside it.
+  Whether this is a defect depends on whether a read-only field should look different, which the specs do not say.
+- **Workaround used:** the analyte cell adds a muted "calculated".
 - **Weight:** Low

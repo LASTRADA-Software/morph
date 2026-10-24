@@ -62,4 +62,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen plateScreen();
 
+/// @brief Design 08: result entry on a worksheet, each change asked for its reason.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen resultsScreen();
+
 }  // namespace lims_gallery

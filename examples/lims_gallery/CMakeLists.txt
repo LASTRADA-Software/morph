@@ -15,6 +15,7 @@ add_library(lims_gallery_screens STATIC
     src/screens/samples.cpp
     src/screens/stability.cpp
     src/screens/plate.cpp
+    src/screens/results.cpp
     src/screens/layout.hpp
     include/lims_gallery/lims_gallery.hpp
     include/lims_gallery/screens.hpp)
@@ -39,7 +40,8 @@ if(MORPH_BUILD_TESTS)
         tests/test_audit.cpp
         tests/test_samples.cpp
         tests/test_stability.cpp
-        tests/test_plate.cpp)
+        tests/test_plate.cpp
+        tests/test_results.cpp)
     target_link_libraries(lims_gallery_tests PRIVATE lims_gallery_screens morph_test_main)
     # The screen harness is the ladder testkit's.
     target_include_directories(lims_gallery_tests PRIVATE ${PROJECT_SOURCE_DIR}/examples/common)

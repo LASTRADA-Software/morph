@@ -50,7 +50,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.results",
          .title = "Result entry",
          .summary = "A worksheet grid, change reason on edit",
-         .make = nullptr},
+         .make = &resultsScreen},
         {.number = "09",
          .id = "lims-gallery.review",
          .title = "Review and approval",
