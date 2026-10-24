@@ -7,10 +7,11 @@
 | 01 E-signature, 02 Sample receipt, 03 Instrument record | done |
 | 04 Audit trail, 05 Sample list | done |
 | 06 Stability study setup, 07 Plate layout | done |
-| 08 Result entry, 09 Review and approval, 10 Lab operations console | not started |
+| 08 Result entry | done |
+| 09 Review and approval, 10 Lab operations console | not started (lane 4 stopped on request; G49–G51 logged from reading 09) |
 
 **Next steps:**
-1. Build 08 to 10, one lane at a time.
+1. Build 09 and 10, one lane at a time.
 2. Group `gaps.md` into a few large framework batches. Each batch gets one design, one review, then implementation on this same branch.
 3. The gallery screens drop their workarounds.
 

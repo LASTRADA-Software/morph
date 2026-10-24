@@ -553,3 +553,39 @@
   Whether this is a defect depends on whether a read-only field should look different, which the specs do not say.
 - **Workaround used:** the analyte cell adds a muted "calculated".
 - **Weight:** Low
+
+### G49: A `splitter`'s `sizes` is accepted and ignored (defect, inferred)
+- **Design(s):** 09
+- **Needs:** the review queue as a 280 px pane beside the worksheet, resizable, with the queue's width as the
+  starting size.
+- **ui/1 today:** `splitter` takes `orientation`, `sizes` and `children` (`docs/spec/ui/document.md:190`), and the
+  view tree's `Splitter` has `sizes` and `onResize` (`include/morph/ui/view.hpp:1097-1109`), which the Qt Quick
+  splitter applies (`src/qt_quick/qml/MorphSplitter.qml:19-35`). The interpreter's lowering sets only `children` and
+  `orientation` (`include/morph/ui/interpreter.hpp:6379-6386`), so `sizes` is loaded and dropped with no report, and
+  a stretched splitter shares its width equally. Inferred from reading only; not reproduced (design 09 was stopped
+  before its screen was built). Reproduce on `RecordingBackend` (a `Splitter` widget with no `sizes` prop) before
+  filing.
+- **Workaround used:** none yet.
+- **Weight:** Medium
+
+### G50: `navigate` with `as: dialog` opens a tab in the generic client
+- **Design(s):** 09
+- **Needs:** "Approve and sign…" opening design 01's e-signature dialog over the review screen, and the review
+  learning that it was signed.
+- **ui/1 today:** `navigate` takes `as` (`tab`, `dialog`, `drawer`, `window`) and `onResult`/`onCancel`
+  (`include/morph/ui/author.hpp:2800-2820`); a host that shows dialogs overrides `onNavigate(NavigateRequest)` to read
+  `as` (`docs/spec/ui/host.md:95-97`). The generic client's host overrides only `onNavigate(screenId, params)`
+  (`src/client/shell.cpp:55-57`), and its spec says every `navigate` opens a tab (`docs/spec/client/client.md:76-77`),
+  so `as` is dropped without a report. A document also cannot reuse a dialog another screen declares, and design 01
+  never `return`s, so `onResult` could not fire. Inferred from reading; not tried.
+- **Workaround used:** none yet (design 09 not built).
+- **Weight:** Medium
+
+### G51: A tab label cannot follow the data
+- **Design(s):** 09
+- **Needs:** "Audit trail · 3", "Comments · 1" counting the selected worksheet's entries.
+- **ui/1 today:** the lowering evaluates each tab's `label` once (`include/morph/ui/interpreter.hpp:6268-6275`), and
+  the view tree's `Tab::label` is a plain string, "set once" (`include/morph/ui/view.hpp:674-676`). Inferred from
+  reading; not tried.
+- **Workaround used:** none yet (design 09 not built).
+- **Weight:** Low
