@@ -70,4 +70,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen reviewScreen();
 
+/// @brief Design 10: the lab operations console, its dashboard and worklist beside a sample pane.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen consoleScreen();
+
 }  // namespace lims_gallery

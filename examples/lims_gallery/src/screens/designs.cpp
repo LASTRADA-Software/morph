@@ -60,7 +60,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.console",
          .title = "Lab operations console",
          .summary = "Shell, dashboard, worklist beside a non-modal sample pane",
-         .make = nullptr},
+         .make = &consoleScreen},
     }};
     return kDesigns;
 }

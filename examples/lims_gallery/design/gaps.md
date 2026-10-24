@@ -554,7 +554,7 @@
 - **Workaround used:** the analyte cell adds a muted "calculated".
 - **Weight:** Low
 
-### G49: A `splitter`'s `sizes` is accepted and ignored (defect)
+### G49: A `splitter`'s `sizes` is accepted and ignored (defect) — filed as #1055
 - **Design(s):** 09
 - **Needs:** the review queue as a 280 px pane beside the worksheet, resizable, with the queue's width as the
   starting size.
@@ -629,3 +629,19 @@
   frontend. Whether a stretched column has a minimum width is not in `docs/spec/ui/backend_contract.md:156-162`.
 - **Workaround used:** narrower fixed columns and a stretched Change column, which fit at 1280 px.
 - **Weight:** Low
+
+### G55: No chart, and no way for a document to bring one
+- **Design(s):** 10
+- **Needs:** a Levey-Jennings control chart, meaning the last 20 runs plotted against the mean and ±1/2/3 SD lines, with the run that broke a rule marked. The same need covers trend charts on stability and result review.
+- **ui/1 today:** charts are not in the palette (`docs/spec/ui/view_tree.md:546`). A `custom` node needs a host-provided component, and the generic client passes none, so a document served to it can't draw one. The gallery couldn't supply one without changing `include/morph` or `src`. Read in the code; the lane's report says it checked that the client provides no components.
+- **Workaround used:** a `grid` of text cells, with the runs across and the seven control lines down. Each run is a `●` in the line nearest its SD, and a run beyond 3 SD gets the error role. A text line beneath names the violation, and the grid has an `a11y` description (`controlChart()` in `console.cpp`). It shows which rule broke, but not the values.
+- **Weight:** High
+- **Logged by the coordinator from the code.** The lane stopped before writing its own entries for design 10.
+
+### G56: A screen's own navigation beside the shell's
+- **Design(s):** 10
+- **Needs:** the console's sidebar, which is grouped sections (Lab, Quality, Admin) with entries carrying counts (Review 4, Instruments 1) and the open screen marked. On compact it moves into a menu.
+- **ui/1 today:** the shell's `Navigator` lists catalog screens (`include/morph/ui/navigator.hpp`). A screen cannot add entries, group them or attach a count to them. Read in the code, not tried.
+- **Workaround used:** the screen draws its own sidebar from item-style buttons (`ButtonStyle::Item`, `selected`), on the `sidebar` surface, beside the shell's navigator. On compact it uses a `menu` of the same entries. The counts are left out.
+- **Weight:** Medium
+- **Logged by the coordinator from the code.**

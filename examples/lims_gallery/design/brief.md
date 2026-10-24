@@ -8,15 +8,15 @@
 | 04 Audit trail, 05 Sample list | done |
 | 06 Stability study setup, 07 Plate layout | done |
 | 08 Result entry | done |
-| 09 Review and approval, 10 Lab operations console | not started (lane 4 stopped on request; G49–G51 logged from reading 09) |
+| 09 Review and approval | done |
+| 10 Lab operations console | done (the chart is approximated, G55) |
 
 **Next steps:**
-1. Build 09 and 10, one lane at a time.
+1. All ten designs are built.
 2. Group `gaps.md` into a few large framework batches. Each batch gets one design, one review, then implementation on this same branch.
 3. The gallery screens drop their workarounds.
 
-The library defects in `gaps.md` also get filed as issues (AGENTS.md): G1, G7, G12, G19, G21, G22, G25, G29, G34
-and G42 (G42 inferred from reading; reproduce it before filing).
+The library defects in `gaps.md` are filed as #1046 to #1055, and each entry names its issue. G42 (Enter on a plate well) is inferred from reading the code; reproduce it before filing it.
 
 The mockups in `mockups/` open as Design Component pages; the canvas they came from is a private artifact.
 
